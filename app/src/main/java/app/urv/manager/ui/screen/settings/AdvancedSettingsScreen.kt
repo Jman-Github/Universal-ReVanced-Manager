@@ -1266,42 +1266,6 @@ fun AdvancedSettingsScreen(
                         enabled = splitMergeAutoExpandExclusiveEnabled
                     )
                 }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
-                    targetKey = R.string.merged_apk_name_format,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsConfigurableItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.merged_apk_name_format),
-                        supportingContentSlot = {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Text(
-                                    text = stringResource(R.string.merged_apk_name_format_description),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.export_name_format_current, mergedApkExportFormat),
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        },
-                        secondaryActionLabel = stringResource(R.string.reset),
-                        onSecondaryAction = { viewModel.resetMergedApkExportFormat() },
-                        secondaryActionEnabled = mergedApkExportFormat != viewModel.prefs.mergedApkExportFormat.default,
-                        primaryActionLabel = stringResource(R.string.edit),
-                        onPrimaryAction = { showMergedApkExportFormatDialog = true }
-                    )
-                }
             }
 
             GroupHeader(
@@ -2251,6 +2215,42 @@ fun AdvancedSettingsScreen(
                         secondaryActionEnabled = exportFormat != viewModel.prefs.patchedAppExportFormat.default,
                         primaryActionLabel = stringResource(R.string.edit),
                         onPrimaryAction = { showExportFormatDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.merged_apk_name_format,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.merged_apk_name_format),
+                        supportingContentSlot = {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = stringResource(R.string.merged_apk_name_format_description),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.export_name_format_current, mergedApkExportFormat),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        },
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = { viewModel.resetMergedApkExportFormat() },
+                        secondaryActionEnabled = mergedApkExportFormat != viewModel.prefs.mergedApkExportFormat.default,
+                        primaryActionLabel = stringResource(R.string.edit),
+                        onPrimaryAction = { showMergedApkExportFormatDialog = true }
                     )
                 }
             }

@@ -19,6 +19,7 @@
 - Standardized installer log filename and timestamp formatting with other exported logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/558
 - Improved dialog text consistency and added clearer save confirmations for patched and merged APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/555 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/553 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/552
 - Plugin notifications no longer remain after opening the Download or Patcher Runtimes settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/556
+- Moved “Merged APK filename format” under “Export filename format” in Advanced system settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/551
 
 
 # Bug fixes

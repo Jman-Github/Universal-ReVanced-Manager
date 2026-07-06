@@ -157,6 +157,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.universal_patches_safeguard,
                     R.string.restore_official_bundle,
                     R.string.export_name_format,
+                    R.string.merged_apk_name_format,
                     R.string.debug_logs_export,
                     R.string.about_device
                 )
@@ -427,7 +428,6 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.merge_split_auto_collapse_steps, R.string.merge_split_auto_collapse_steps_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.merge_split_auto_expand_steps, R.string.merge_split_auto_expand_steps_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.merge_split_auto_expand_running_steps_exclusive, R.string.merge_split_auto_expand_running_steps_exclusive_description, R.string.merge_split_flow_section, Settings.Patcher),
-            SearchEntry(R.string.merged_apk_name_format, R.string.merged_apk_name_format_description, R.string.merge_split_flow_section, Settings.Patcher),
             SearchEntry(R.string.patcher_saved_apps_title, R.string.patcher_saved_apps_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_apps_disable_overwrite_title, R.string.saved_apps_disable_overwrite_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.saved_apps_show_bundle_update_badges_title, R.string.saved_apps_show_bundle_update_badges_description, R.string.patcher_category, Settings.Patcher),
@@ -444,6 +444,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.patch_profile_action_order_title, R.string.patch_profile_action_order_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patch_profile_action_visibility_title, R.string.patch_profile_action_visibility_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.export_name_format, R.string.export_name_format_description, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.merged_apk_name_format, R.string.merged_apk_name_format_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.debug_logs_export, null, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.about_device, null, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.battery_optimization_banner_title, R.string.battery_optimization_banner_description, R.string.developer_options, Settings.Developer),
