@@ -109,6 +109,10 @@ fun PatcherRuntimePluginsSettingsScreen(
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
     var showImportUrlDialog by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(viewModel) {
+        viewModel.acknowledgeNewPlugins()
+    }
+
     if (showImportUrlDialog) {
         ImportRuntimeSourceDialog(
             onDismiss = { showImportUrlDialog = false },

@@ -79,6 +79,10 @@ class DownloadsViewModel(
         reloadPlugins()
     }
 
+    fun acknowledgeNewPlugins() = viewModelScope.launch {
+        downloaderPluginRepository.acknowledgeAllNewPlugins()
+    }
+
     fun importPluginSource(url: String) = viewModelScope.launch {
         remoteSourceBusyState = RemoteSourceBusyState.Importing
         runCatching {

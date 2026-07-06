@@ -142,6 +142,11 @@ fun DownloadsSettingsScreen(
     var sourceIdPendingDeletion by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdPendingTrustRevoke by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdInSettings by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.acknowledgeNewPlugins()
+    }
+
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
             if (granted) {

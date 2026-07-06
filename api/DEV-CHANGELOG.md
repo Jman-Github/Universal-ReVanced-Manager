@@ -18,7 +18,7 @@
 - Adjusted the supported versions dialog so it is not become too wide when opened from patch search https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/559
 - Standardized installer log filename and timestamp formatting with other exported logs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/558
 - Improved dialog text consistency and added clearer save confirmations for patched and merged APKs https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/555 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/553 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/552
-- Fixed issues with the split APK merger during corrupting and breaking some APKs
+- Plugin notifications no longer remain after opening the Download or Patcher Runtimes settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/556
 
 
 # Bug fixes
@@ -33,6 +33,7 @@
 - Fixed the Tools screen briefly appearing when holding Back after merging or saving a split APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/560
 - Fixed rooted mounted apps sometimes starting without patches after reboot https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/578
 - Fixed patcher and split APK merger progress bars appearing partially filled before progress begins https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/569
+- Fixed issues with the split APK merger during corrupting and breaking some APKs
 
 
 # v1.8.1-dev.19 (2026-06-14)

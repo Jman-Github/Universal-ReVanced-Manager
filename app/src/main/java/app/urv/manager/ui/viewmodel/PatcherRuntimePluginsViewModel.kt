@@ -42,6 +42,10 @@ class PatcherRuntimePluginsViewModel(
         reloadPlugins()
     }
 
+    fun acknowledgeNewPlugins() = viewModelScope.launch {
+        runtimePluginRepository.acknowledgeAllNewPlugins()
+    }
+
     fun importPluginSource(url: String) = viewModelScope.launch {
         remoteSourceBusyState = RemoteSourceBusyState.Importing
         runCatching {
