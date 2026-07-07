@@ -35,6 +35,7 @@
 - Fixed rooted mounted apps sometimes starting without patches after reboot https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/578
 - Fixed patcher and split APK merger progress bars appearing partially filled before progress begins https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/569
 - Fixed issues with the split APK merger during corrupting and breaking some APKs
+- Fixed bundle update labels not appearing when a saved app's patch bundle was imported again through settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/581
 
 
 # v1.8.1-dev.19 (2026-06-14)

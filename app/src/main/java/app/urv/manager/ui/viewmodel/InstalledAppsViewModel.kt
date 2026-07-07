@@ -17,6 +17,7 @@ import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.bundles.PatchBundleSource
+import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.repository.InstalledAppRepository
@@ -647,17 +648,25 @@ class InstalledAppsViewModel(
         sourceMap: Map<Int, PatchBundleSource>
     ): List<AppBundleSummary> {
         val payloadBundles = app.selectionPayload?.bundles.orEmpty()
+        val sourceByEndpoint = sourceMap.values.mapNotNull { source ->
+            source.asRemoteOrNull?.endpoint
+                ?.trim()
+                ?.takeIf(String::isNotBlank)
+                ?.let { it to source }
+        }.toMap()
         val summaries = mutableListOf<AppBundleSummary>()
         val processed = mutableSetOf<Int>()
 
         selection.keys.forEach { uid ->
             processed += uid
-            buildSummaryEntry(uid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+            buildSummaryEntry(uid, payloadBundles, bundleInfo, sourceMap, sourceByEndpoint)
+                ?.let(summaries::add)
         }
 
         payloadBundles.forEach { bundle ->
             if (bundle.bundleUid in processed) return@forEach
-            buildSummaryEntry(bundle.bundleUid, payloadBundles, bundleInfo, sourceMap)?.let(summaries::add)
+            buildSummaryEntry(bundle.bundleUid, payloadBundles, bundleInfo, sourceMap, sourceByEndpoint)
+                ?.let(summaries::add)
         }
 
         return summaries
@@ -667,11 +676,15 @@ class InstalledAppsViewModel(
         uid: Int,
         payloadBundles: List<PatchProfilePayload.Bundle>,
         bundleInfo: Map<Int, PatchBundleInfo.Global>,
-        sourceMap: Map<Int, PatchBundleSource>
+        sourceMap: Map<Int, PatchBundleSource>,
+        sourceByEndpoint: Map<String, PatchBundleSource>
     ): AppBundleSummary? {
-        val info = bundleInfo[uid]
-        val source = sourceMap[uid]
         val payloadBundle = payloadBundles.firstOrNull { it.bundleUid == uid }
+        val payloadEndpoint = payloadBundle?.sourceEndpoint
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+        val source = payloadEndpoint?.let(sourceByEndpoint::get) ?: sourceMap[uid]
+        val info = bundleInfo[source?.uid ?: uid] ?: bundleInfo[uid]
 
         val title = source?.displayTitle
             ?: payloadBundle?.displayName
