@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ExitToApp
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.FileDownload
@@ -888,35 +889,52 @@ fun PatcherScreen(
                 },
                 floatingActionButton = {
                     AnimatedVisibility(visible = canInstall) {
-                        HapticExtendedFloatingActionButton(
-                            text = {
-                                Text(
-                                    stringResource(if (viewModel.installedPackageName == null) R.string.install_app else R.string.open_app)
-                                )
-                            },
-                            icon = {
-                                viewModel.installedPackageName?.let {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            HapticExtendedFloatingActionButton(
+                                text = { Text(stringResource(R.string.done)) },
+                                icon = {
                                     Icon(
-                                        Icons.AutoMirrored.Outlined.OpenInNew,
-                                        stringResource(R.string.open_app)
+                                        Icons.Outlined.Check,
+                                        stringResource(R.string.done)
                                     )
-                                } ?: Icon(
-                                    Icons.Outlined.FileDownload,
-                                    stringResource(R.string.install_app)
-                                )
-                            },
-                            onClick = {
-                                if (viewModel.installedPackageName == null) {
-                                    if (chooseInstallerPerInstall) {
-                                        showInstallerPicker = true
+                                },
+                                onClick = ::onPageBackToDashboard,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                            HapticExtendedFloatingActionButton(
+                                text = {
+                                    Text(
+                                        stringResource(if (viewModel.installedPackageName == null) R.string.install_app else R.string.open_app)
+                                    )
+                                },
+                                icon = {
+                                    viewModel.installedPackageName?.let {
+                                        Icon(
+                                            Icons.AutoMirrored.Outlined.OpenInNew,
+                                            stringResource(R.string.open_app)
+                                        )
+                                    } ?: Icon(
+                                        Icons.Outlined.FileDownload,
+                                        stringResource(R.string.install_app)
+                                    )
+                                },
+                                onClick = {
+                                    if (viewModel.installedPackageName == null) {
+                                        if (chooseInstallerPerInstall) {
+                                            showInstallerPicker = true
+                                        } else {
+                                            viewModel.install()
+                                        }
                                     } else {
-                                        viewModel.install()
+                                        viewModel.open()
                                     }
-                                } else {
-                                    viewModel.open()
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             )

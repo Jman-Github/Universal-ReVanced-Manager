@@ -1466,6 +1466,7 @@ Details: %2$s</string>
     <string name="reinstall_app_fail">Failed to reinstall app: %s</string>
     <string name="uninstall_app_fail">Failed to uninstall app: %s</string>
     <string name="open_app">Open</string>
+    <string name="done">Done</string>
     <string name="save_apk">Save APK</string>
     <string name="save_apk_success">Patched APK saved</string>
     <string name="saved_app_export_success">Exported patched app</string>
