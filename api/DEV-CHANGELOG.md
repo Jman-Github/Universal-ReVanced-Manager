@@ -21,6 +21,7 @@
 - Plugin notifications no longer remain after opening the Download or Patcher Runtimes settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/556
 - Moved “Merged APK filename format” under “Export filename format” in Advanced system settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/551
 - Added a Done button to the patcher screen after patching completes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/580
+- Added Shevery support for Shizuku-based installs, including detection, manager launching, installer icons, and updated installer labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/585
 
 
 # Bug fixes

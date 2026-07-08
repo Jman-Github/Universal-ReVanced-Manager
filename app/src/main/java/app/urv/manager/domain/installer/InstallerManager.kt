@@ -435,7 +435,7 @@ class InstallerManager(
             label = app.getString(R.string.installer_shizuku_name),
             description = app.getString(R.string.installer_shizuku_description),
             availability = availabilityFor(Token.Shizuku, target, checkRoot),
-            icon = if (shizukuInstaller.isInstalled()) loadInstallerIcon(ShizukuInstaller.PACKAGE_NAME) else null
+            icon = shizukuInstaller.installedManagerPackageName()?.let(::loadInstallerIcon)
         )
 
         Token.ShizukuGooglePlay -> Entry(
@@ -443,7 +443,7 @@ class InstallerManager(
             label = app.getString(R.string.installer_shizuku_google_play_name),
             description = app.getString(R.string.installer_shizuku_google_play_description),
             availability = availabilityFor(Token.ShizukuGooglePlay, target, checkRoot),
-            icon = if (shizukuInstaller.isInstalled()) loadInstallerIcon(ShizukuInstaller.PACKAGE_NAME) else null
+            icon = shizukuInstaller.installedManagerPackageName()?.let(::loadInstallerIcon)
         )
 
         is Token.Component -> {

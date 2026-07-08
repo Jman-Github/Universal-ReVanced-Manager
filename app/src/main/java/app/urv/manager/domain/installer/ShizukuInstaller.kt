@@ -54,17 +54,21 @@ class ShizukuInstaller(private val app: Application) {
 
     fun isInstalled(): Boolean {
         if (Sui.isSui()) return true
-        return runCatching {
-            app.packageManager.getPackageInfo(PACKAGE_NAME, 0)
-        }.isSuccess
+        return installedManagerPackageName() != null
     }
 
+    fun installedManagerPackageName(): String? =
+        MANAGER_PACKAGE_NAMES.firstOrNull(::isPackageInstalled)
+
     fun launchApp(): Boolean {
-        val intent = app.packageManager.getLaunchIntentForPackage(PACKAGE_NAME)
-            ?: return false
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        app.startActivity(intent)
-        return true
+        MANAGER_PACKAGE_NAMES.forEach { packageName ->
+            val intent = app.packageManager.getLaunchIntentForPackage(packageName)
+                ?: return@forEach
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            app.startActivity(intent)
+            return true
+        }
+        return false
     }
 
     suspend fun install(
@@ -158,6 +162,11 @@ class ShizukuInstaller(private val app: Application) {
 
     private fun currentUserId(): Int = Process.myUid() / 100000
 
+    private fun isPackageInstalled(packageName: String): Boolean =
+        runCatching {
+            app.packageManager.getPackageInfo(packageName, 0)
+        }.isSuccess
+
     class InstallerOperationException(val status: Int, override val message: String?) : Exception(message)
 
     companion object {
@@ -165,6 +174,8 @@ class ShizukuInstaller(private val app: Application) {
         private const val SHELL_PACKAGE = "com.android.shell"
         private const val BASE_APK_NAME = "base.apk"
         internal const val PACKAGE_NAME = "moe.shizuku.privileged.api"
+        internal const val SHEVERY_PACKAGE_NAME = "com.hamondev.shevery"
+        private val MANAGER_PACKAGE_NAMES = listOf(PACKAGE_NAME, SHEVERY_PACKAGE_NAME)
     }
 }
 
