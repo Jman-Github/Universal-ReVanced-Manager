@@ -205,6 +205,7 @@
 - Moved “Merged APK filename format” under “Export filename format” in Advanced system settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/551
 - Added a Done button to the patcher screen after patching completes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/580
 - Added Shevery support for Shizuku-based installs, including detection, manager launching, installer icons, and updated installer labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/585
+- Added suggested version dropdowns to app search results on the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/586
 
 
 # Bug fixes

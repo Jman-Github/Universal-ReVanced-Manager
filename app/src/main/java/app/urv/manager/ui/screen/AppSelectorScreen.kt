@@ -264,7 +264,14 @@ fun AppSelectorScreen(
                             patchCount = app.patches,
                             onClick = { onSelect(app.packageName) },
                             modifier = Modifier.fillMaxWidth()
-                        )
+                        ) {
+                            SuggestedVersionsDropdown(
+                                packageName = app.packageName,
+                                bundleSuggestions = bundleSuggestionsByApp[app.packageName].orEmpty(),
+                                bundleRecommendationsEnabled = bundleRecommendationsEnabled,
+                                searchEngineHost = searchEngineHost
+                            )
+                        }
                     }
                 }
             } else if (appList.isEmpty()) {
@@ -681,6 +688,108 @@ private fun AppSelectorCard(
             }
             content?.invoke()
         }
+    }
+}
+
+@Composable
+private fun SuggestedVersionsDropdown(
+    packageName: String,
+    bundleSuggestions: List<BundleVersionSuggestion>,
+    bundleRecommendationsEnabled: Boolean,
+    searchEngineHost: String,
+    modifier: Modifier = Modifier
+) {
+    if (bundleSuggestions.isEmpty()) return
+
+    var expanded by rememberSaveable(packageName) { mutableStateOf(false) }
+    var dialogBundleUid by remember { mutableStateOf<Int?>(null) }
+
+    LaunchedEffect(bundleRecommendationsEnabled) {
+        if (!bundleRecommendationsEnabled) {
+            expanded = false
+            dialogBundleUid = null
+        }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        val toggleLabel = stringResource(
+            if (expanded) R.string.hide_suggested_versions
+            else R.string.show_suggested_versions
+        )
+        TextButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.align(Alignment.Start),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+        ) {
+            Icon(
+                imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ChevronRight,
+                contentDescription = null
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = toggleLabel,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (bundleRecommendationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (!bundleRecommendationsEnabled) {
+                    SafeguardHintCard(
+                        title = stringResource(R.string.bundle_version_dialog_locked_title),
+                        description = stringResource(R.string.bundle_version_dialog_locked_hint),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                bundleSuggestions.forEach { suggestion ->
+                    BundleSuggestionCard(
+                        suggestion = suggestion,
+                        packageName = packageName,
+                        searchEngineHost = searchEngineHost,
+                        enabled = bundleRecommendationsEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 560.dp)
+                            .alpha(if (bundleRecommendationsEnabled) 1f else 0.6f),
+                        onShowOtherVersions = {
+                            if (bundleRecommendationsEnabled) {
+                                dialogBundleUid = suggestion.bundleUid
+                            }
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    if (dialogBundleUid != null && bundleRecommendationsEnabled) {
+        bundleSuggestions
+            .firstOrNull { it.bundleUid == dialogBundleUid }
+            ?.let { suggestion ->
+                OtherSupportedVersionsInfoDialog(
+                    bundleName = suggestion.bundleName,
+                    packageName = packageName,
+                    recommendedVersion = suggestion.recommendedVersion,
+                    recommendedVersionExperimental = suggestion.recommendedVersionExperimental,
+                    otherVersions = suggestion.otherSupportedVersions,
+                    supportsAllVersions = suggestion.supportsAllVersions,
+                    searchEngineHost = searchEngineHost,
+                    onDismissRequest = { dialogBundleUid = null }
+                )
+            }
+    } else if (dialogBundleUid != null) {
+        dialogBundleUid = null
     }
 }
 
