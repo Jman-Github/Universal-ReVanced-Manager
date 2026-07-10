@@ -23,9 +23,13 @@ import kotlinx.coroutines.withContext
 class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver() {
     private val activeProcessLock = Any()
     private var activeProcess: Process? = null
+    private var activeCancellationRequested = false
 
     fun cancelActiveExecution() {
-        val process = synchronized(activeProcessLock) { activeProcess } ?: return
+        val process = synchronized(activeProcessLock) {
+            activeCancellationRequested = true
+            activeProcess
+        } ?: return
         destroyProcess(process)
     }
 
@@ -38,6 +42,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         memoryLimitMb: Int? = MemoryLimitConfig.maxLimitMb(context),
         onProgress: (String) -> Unit,
         onSubSteps: (List<String>) -> Unit,
+        onLog: (String) -> Unit = {},
         onMemoryUsage: (PatcherMemoryUsage) -> Unit = {}
     ): File = coroutineScope {
         workspace.mkdirs()
@@ -108,34 +113,44 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         }
         synchronized(activeProcessLock) {
             activeProcess = process
+            activeCancellationRequested = false
         }
         val stdoutJob = launch(Dispatchers.IO) {
-            process.inputStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    when {
-                        line.startsWith(PROGRESS_PREFIX) -> onProgress(line.removePrefix(PROGRESS_PREFIX))
-                        line.startsWith(SUBSTEP_PREFIX) -> {
-                            subSteps += line.removePrefix(SUBSTEP_PREFIX)
-                            onSubSteps(subSteps.toList())
-                        }
+            try {
+                process.inputStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        when {
+                            line.startsWith(PROGRESS_PREFIX) -> onProgress(line.removePrefix(PROGRESS_PREFIX))
+                            line.startsWith(LOG_PREFIX) -> onLog(line.removePrefix(LOG_PREFIX))
+                            line.startsWith(SUBSTEP_PREFIX) -> {
+                                subSteps += line.removePrefix(SUBSTEP_PREFIX)
+                                onSubSteps(subSteps.toList())
+                            }
 
-                        line.startsWith(MEMORY_PREFIX) -> {
-                            parseMemoryUsageSample(line.removePrefix(MEMORY_PREFIX))
-                                ?.let(onMemoryUsage)
-                        }
+                            line.startsWith(MEMORY_PREFIX) -> {
+                                parseMemoryUsageSample(line.removePrefix(MEMORY_PREFIX))
+                                    ?.let(onMemoryUsage)
+                            }
 
-                        line.isNotBlank() -> Log.d(tag, "[split-merge process] $line")
+                            line.isNotBlank() -> Log.d(tag, "[split-merge process] $line")
+                        }
                     }
                 }
+            } catch (error: IOException) {
+                if (!isCancellationRequested(process)) throw error
             }
         }
         val stderrJob = launch(Dispatchers.IO) {
-            process.errorStream.bufferedReader().useLines { lines ->
-                lines.forEach { line ->
-                    if (line.isNotBlank()) {
-                        Log.w(tag, "[split-merge process] $line")
+            try {
+                process.errorStream.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        if (line.isNotBlank()) {
+                            Log.w(tag, "[split-merge process] $line")
+                        }
                     }
                 }
+            } catch (error: IOException) {
+                if (!isCancellationRequested(process)) throw error
             }
         }
 
@@ -143,6 +158,11 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             val exitCode = try {
                 runInterruptible(Dispatchers.IO) { process.waitFor() }
             } catch (error: CancellationException) {
+                synchronized(activeProcessLock) {
+                    if (activeProcess === process) {
+                        activeCancellationRequested = true
+                    }
+                }
                 destroyProcess(process)
                 throw error
             }
@@ -160,11 +180,6 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             }
             output
         } finally {
-            synchronized(activeProcessLock) {
-                if (activeProcess === process) {
-                    activeProcess = null
-                }
-            }
             withContext(NonCancellable) {
                 destroyProcess(process)
                 runCatching { process.outputStream.close() }
@@ -175,9 +190,20 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                 runCatching { stdoutJob.join() }
                 runCatching { stderrJob.join() }
             }
+            synchronized(activeProcessLock) {
+                if (activeProcess === process) {
+                    activeProcess = null
+                    activeCancellationRequested = false
+                }
+            }
             runCatching { selectedModulesFile.delete() }
         }
     }
+
+    private fun isCancellationRequested(process: Process): Boolean =
+        synchronized(activeProcessLock) {
+            activeProcess === process && activeCancellationRequested
+        }
 
     private fun parseMemoryUsageSample(raw: String): PatcherMemoryUsage? {
         val parts = raw.trim().split(':')
@@ -213,6 +239,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
 
     companion object {
         const val PROGRESS_PREFIX = "URV_SPLIT_PROGRESS:"
+        const val LOG_PREFIX = "URV_SPLIT_LOG:"
         const val SUBSTEP_PREFIX = "URV_SPLIT_SUBSTEP:"
         const val MEMORY_PREFIX = "URV_SPLIT_MEMORY_MB:"
         private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
@@ -260,6 +287,13 @@ object SplitMergeProcess {
                         steps.forEach { step ->
                             println("${SplitMergeProcessRuntime.SUBSTEP_PREFIX}$step")
                         }
+                    },
+                    onLog = { message ->
+                        message.lineSequence()
+                            .filter(String::isNotBlank)
+                            .forEach { line ->
+                                println("${SplitMergeProcessRuntime.LOG_PREFIX}$line")
+                            }
                     }
                 )
 

@@ -11,7 +11,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 
 private class ApkEditorLogger(
-    private val onProgress: ((String) -> Unit)? = null
+    private val onProgress: ((String) -> Unit)? = null,
+    private val onLog: ((String) -> Unit)? = null
 ) : APKLogger {
     private companion object {
         const val TAG = "APKEditor"
@@ -20,16 +21,31 @@ private class ApkEditorLogger(
 
     override fun logMessage(msg: String) {
         Log.i(TAG, msg)
+        emitRawLog(msg)
         emitMergeProgress(msg)
     }
 
     override fun logError(msg: String, tr: Throwable?) {
         Log.e(TAG, msg, tr)
+        emitRawLog(
+            buildString {
+                append(msg)
+                tr?.message?.takeIf { it.isNotBlank() }?.let { append(": ").append(it) }
+            }
+        )
     }
 
     override fun logVerbose(msg: String) {
         Log.v(TAG, msg)
+        emitRawLog(msg)
         emitMergeProgress(msg)
+    }
+
+    private fun emitRawLog(message: String) {
+        message.lineSequence()
+            .map(String::trimEnd)
+            .filter(String::isNotBlank)
+            .forEach { onLog?.invoke(it) }
     }
 
     private fun emitMergeProgress(message: String) {
@@ -57,11 +73,12 @@ internal object Merger {
         outputApk: File,
         skipModules: Set<String> = emptySet(),
         onProgress: ((String) -> Unit)? = null,
+        onLog: ((String) -> Unit)? = null,
         sortApkEntries: Boolean = false
     ) {
         val mergeContext = coroutineContext
         mergeContext.ensureActive()
-        val logger = ApkEditorLogger(onProgress)
+        val logger = ApkEditorLogger(onProgress, onLog)
         runInterruptible(Dispatchers.IO) {
             ApkEditorMergeProcess.merge(
                 apkDir.toFile(),

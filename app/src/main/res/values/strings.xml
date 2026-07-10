@@ -1332,6 +1332,14 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="downloaded_apps_export">Export selected apps</string>
     <string name="downloaded_apps_export_success">Exported %1$d app(s)</string>
     <string name="downloaded_apps_export_failed">Failed to export downloaded apps</string>
+    <string name="downloaded_app_install_success">Downloaded app installed</string>
+    <string name="downloaded_app_install_permission_required">Allow app installs in Android settings, then tap Install again.</string>
+    <string name="downloaded_app_install_merging">Merging split APK…</string>
+    <string name="downloaded_app_install_cancelling">Stopping merge…</string>
+    <string name="downloaded_app_install_signing">Signing merged APK…</string>
+    <string name="downloaded_app_install_installing">Installing…</string>
+    <string name="downloaded_app_install_merge_log">APK merge log</string>
+    <string name="downloaded_app_install_merge_log_waiting">Waiting for APK merge output…</string>
     <string name="downloaded_apps_delete_title">Delete downloaded apps</string>
     <string name="downloaded_apps_delete_description">Remove the selected downloaded apps and their stored APK files from the manager?</string>
     <string name="already_patched">Already patched</string>
@@ -1376,7 +1384,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_primary_title">Primary installer</string>
     <string name="installer_fallback_title">Fallback installer</string>
     <string name="installer_choose_per_install_title">Choose installer per install</string>
-    <string name="installer_choose_per_install_description">When enabled, the patcher screen and saved patched app screen will ask which installer to use each time. Primary and fallback installer settings below are disabled while this is on.</string>
+    <string name="installer_choose_per_install_description">When enabled, the patcher, saved patched app, and downloaded apps screens will ask which installer to use each time. Primary and fallback installer settings below are disabled while this is on.</string>
     <string name="installer_choose_for_this_install_title">Choose installer for this install</string>
     <string name="installer_fallback_prompt_title">Try fallback installer?</string>
     <string name="installer_fallback_prompt_failure_label">Primary installer failed</string>

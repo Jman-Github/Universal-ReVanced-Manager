@@ -61,6 +61,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -73,8 +74,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.universal.revanced.manager.R
+import app.urv.manager.data.room.apps.downloaded.DownloadedApp
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.downloader.DownloaderPluginSourceState
@@ -88,6 +91,7 @@ import app.urv.manager.ui.component.SettingsSectionIcons
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
@@ -118,7 +122,9 @@ fun DownloadsSettingsScreen(
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val autoSaveDownloaderApks by prefs.autoSaveDownloaderApks.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
+    val installProgress by viewModel.installProgress.collectAsStateWithLifecycle()
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.downloaderPluginSourceStates.collectAsStateWithLifecycle(emptyMap())
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
@@ -129,6 +135,7 @@ fun DownloadsSettingsScreen(
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
     val fs: Filesystem = koinInject()
+    val installerManager: InstallerManager = koinInject()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     var pendingExportState by remember { mutableStateOf<DownloadedAppsExportState?>(null) }
@@ -142,6 +149,7 @@ fun DownloadsSettingsScreen(
     var sourceIdPendingDeletion by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdPendingTrustRevoke by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdInSettings by rememberSaveable { mutableStateOf<String?>(null) }
+    var appPendingInstallerChoice by remember { mutableStateOf<DownloadedApp?>(null) }
 
     LaunchedEffect(viewModel) {
         viewModel.acknowledgeNewPlugins()
@@ -226,8 +234,35 @@ fun DownloadsSettingsScreen(
             }
         )
     }
-    if (remoteSourceBusyState != null) {
-        TransparentLoadingDialog()
+    appPendingInstallerChoice?.let { app ->
+        InstallerPickerDialog(
+            title = stringResource(R.string.installer_choose_for_this_install_title),
+            options = installerManager.listEntries(
+                target = InstallerManager.InstallTarget.SAVED_APP,
+                includeNone = false
+            ),
+            onDismiss = { appPendingInstallerChoice = null },
+            onConfirm = { token -> viewModel.installApp(app, token) },
+            onOpenShizuku = installerManager::openShizukuApp
+        )
+    }
+    when {
+        installProgress != null -> {
+            val progress = requireNotNull(installProgress)
+            TransparentLoadingDialog(
+                message = progress.status,
+                cancelButtonText = stringResource(R.string.cancel),
+                onCancel = viewModel::cancelInstall,
+                logTitle = if (progress.showMergeLog) {
+                    stringResource(R.string.downloaded_app_install_merge_log)
+                } else {
+                    null
+                },
+                logLines = progress.logLines,
+                emptyLogMessage = stringResource(R.string.downloaded_app_install_merge_log_waiting)
+            )
+        }
+        remoteSourceBusyState != null -> TransparentLoadingDialog()
     }
     sourceIdPendingDeletion
         ?.let(sourceStates::get)
@@ -462,7 +497,9 @@ fun DownloadsSettingsScreen(
                 }
             )
         },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier
+            .blur(if (installProgress != null) 12.dp else 0.dp)
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         PullToRefreshBox(
             onRefresh = viewModel::refreshPlugins,
@@ -835,6 +872,7 @@ fun DownloadsSettingsScreen(
                 }
                 items(downloadedApps, key = { it.packageName to it.version }) { app ->
                     val selected = app in viewModel.appSelection
+                    val isInstalling = viewModel.installingApp == app
 
                     ExpressiveSettingsCard(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -855,6 +893,24 @@ fun DownloadsSettingsScreen(
                                     onCheckedChange = { viewModel.toggleApp(app) }
                                 )
                             }).takeIf { viewModel.appSelection.isNotEmpty() },
+                            trailingContent = {
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (chooseInstallerPerInstall) {
+                                            appPendingInstallerChoice = app
+                                        } else {
+                                            viewModel.installApp(app)
+                                        }
+                                    },
+                                    enabled = viewModel.installingApp == null
+                                ) {
+                                    Text(
+                                        stringResource(
+                                            if (isInstalling) R.string.loading else R.string.install_app
+                                        )
+                                    )
+                                }
+                            },
                             onClick = { viewModel.toggleApp(app) }
                         )
                     }
