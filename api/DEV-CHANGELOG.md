@@ -23,6 +23,7 @@
 - Added a Done button to the patcher screen after patching completes https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/580
 - Added Shevery support for Shizuku-based installs, including detection, manager launching, installer icons, and updated installer labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/585
 - Added suggested version dropdowns to app search results on the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/586
+- Added split ordering options to the split APK merge selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/582
 
 
 # Bug fixes

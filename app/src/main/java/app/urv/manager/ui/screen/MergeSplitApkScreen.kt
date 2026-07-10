@@ -31,13 +31,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.outlined.Cancel
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
@@ -56,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -96,6 +101,7 @@ import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import app.urv.manager.ui.component.CenteredDialogTitle
 
@@ -110,6 +116,7 @@ fun MergeSplitApkScreen(
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
@@ -118,6 +125,10 @@ fun MergeSplitApkScreen(
     val useExclusiveAutoExpand =
         splitMergeAutoExpandRunningSteps && splitMergeAutoExpandRunningStepsExclusive
     val storageRoots = remember { fs.storageRoots() }
+    val splitMergeModuleSortMode = remember(splitMergeModuleSortModePref) {
+        SplitMergeModuleSortMode.fromStorage(splitMergeModuleSortModePref)
+    }
+    val coroutineScope = rememberCoroutineScope()
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
     var showOutputPicker by rememberSaveable { mutableStateOf(false) }
@@ -258,11 +269,17 @@ fun MergeSplitApkScreen(
             initialModules = state.selectionIncludedModules,
             initialStripNativeLibs = state.selectionStripNativeLibs,
             initialPresetKey = state.selectionPresetKey,
+            initialSortMode = splitMergeModuleSortMode,
             onDismissRequest = {
                 vm.clearSplitMergeState()
                 onBackClick()
             },
             onFilterSelectionChanged = vm::rememberSplitMergeFilterState,
+            onSortModeChanged = { mode ->
+                coroutineScope.launch {
+                    prefs.splitMergeModuleSortMode.update(mode.storageValue)
+                }
+            },
             onConfirm = { includedModules, stripNativeLibs ->
                 vm.confirmSplitMergeSelection(
                     includedModules = includedModules,
@@ -853,6 +870,27 @@ private data class SplitMergePresetOption(
     val modules: Set<String>
 )
 
+private enum class SplitMergeModuleSortMode(
+    val storageValue: String,
+    @StringRes val labelRes: Int
+) {
+    DEFAULT("DEFAULT", R.string.merge_split_apk_sort_default),
+    NAME_ASC("NAME_ASC", R.string.merge_split_apk_sort_name_asc),
+    NAME_DESC("NAME_DESC", R.string.merge_split_apk_sort_name_desc);
+
+    fun sort(modules: List<SplitApkPreparer.SplitArchiveModule>): List<SplitApkPreparer.SplitArchiveModule> =
+        when (this) {
+            DEFAULT -> modules
+            NAME_ASC -> modules.sortedBy { it.name.lowercase() }
+            NAME_DESC -> modules.sortedByDescending { it.name.lowercase() }
+        }
+
+    companion object {
+        fun fromStorage(value: String?): SplitMergeModuleSortMode =
+            values().firstOrNull { it.storageValue == value } ?: DEFAULT
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SplitMergeSelectionDialog(
@@ -860,8 +898,10 @@ private fun SplitMergeSelectionDialog(
     initialModules: Set<String>,
     initialStripNativeLibs: Boolean,
     initialPresetKey: String,
+    initialSortMode: SplitMergeModuleSortMode,
     onDismissRequest: () -> Unit,
     onFilterSelectionChanged: (String, Boolean, Boolean, Boolean) -> Unit,
+    onSortModeChanged: (SplitMergeModuleSortMode) -> Unit,
     onConfirm: (Set<String>, Boolean) -> Unit
 ) {
     val requiredModules = remember(selection) {
@@ -982,6 +1022,9 @@ private fun SplitMergeSelectionDialog(
     var selectedPresetKey by remember(selection, rememberedInitialPresetKey) {
         mutableStateOf<String?>(rememberedInitialPresetKey)
     }
+    var sortMode by remember(selection, initialSortMode) { mutableStateOf(initialSortMode) }
+    var showSortMenu by rememberSaveable { mutableStateOf(false) }
+    val sortedModules = remember(selection.modules, sortMode) { sortMode.sort(selection.modules) }
     val selectedModuleCount by remember(selectedModules, requiredModules) {
         derivedStateOf { (selectedModules + requiredModules).size }
     }
@@ -1055,7 +1098,46 @@ private fun SplitMergeSelectionDialog(
                 AppTopBar(
                     title = stringResource(R.string.merge_split_apk_selection_title),
                     scrollBehavior = scrollBehavior,
-                    onBackClick = onDismissRequest
+                    onBackClick = onDismissRequest,
+                    actions = {
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Sort,
+                                    contentDescription = stringResource(
+                                        R.string.merge_split_apk_sort_title
+                                    )
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false }
+                            ) {
+                                SplitMergeModuleSortMode.values().forEach { option ->
+                                    val selected = sortMode == option
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(option.labelRes)) },
+                                        leadingIcon = {
+                                            if (selected) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.size(24.dp))
+                                            }
+                                        },
+                                        onClick = {
+                                            sortMode = option
+                                            showSortMenu = false
+                                            onSortModeChanged(option)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
             }
         ) { paddingValues ->
@@ -1167,7 +1249,7 @@ private fun SplitMergeSelectionDialog(
                             }
                         )
                     }
-                    selection.modules.forEach { module ->
+                    sortedModules.forEach { module ->
                         val required = requiredModules.contains(module.name)
                         val forcedOffByNativeStrip =
                             stripNativeLibs &&

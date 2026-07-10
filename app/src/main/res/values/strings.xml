@@ -1101,6 +1101,10 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_selection_preset_recommended">Recommended for this device</string>
     <string name="merge_split_apk_selection_preset_languages">Exclude unused languages</string>
     <string name="merge_split_apk_selection_preset_densities">Exclude extra densities</string>
+    <string name="merge_split_apk_sort_title">Split ordering</string>
+    <string name="merge_split_apk_sort_default">Default</string>
+    <string name="merge_split_apk_sort_name_asc">Split name (A to Z)</string>
+    <string name="merge_split_apk_sort_name_desc">Split name (Z to A)</string>
     <string name="merge_split_apk_module_kind_base">Base module</string>
     <string name="merge_split_apk_module_kind_language">Language split</string>
     <string name="merge_split_apk_module_kind_density">Density split</string>
