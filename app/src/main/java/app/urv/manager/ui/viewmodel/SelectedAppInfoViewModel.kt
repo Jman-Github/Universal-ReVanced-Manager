@@ -120,6 +120,8 @@ class SelectedAppInfoViewModel(
     val prefs: PreferencesManager = get()
     private var selectionLoadJob: Job? = null
     private var optionsLoadJob: Job? = null
+    // Recommendation mode scopes the active selection to one bundle, so retain each bundle's custom choices here.
+    private val rememberedBundleSelections = mutableMapOf<Int, Set<String>>()
     val plugins = pluginsRepository.loadedPluginsFlow
     val desiredVersion = input.app.version
     val packageName = input.app.packageName
@@ -461,9 +463,7 @@ class SelectedAppInfoViewModel(
                             prefs.disablePatchVersionCompatCheck.get()
                         )
                     } else {
-                        if (selectionState is SelectionState.Customized) {
-                            selectionState = SelectionState.Default
-                        }
+                        clearSelectionState()
                     }
                 }
             }
@@ -492,12 +492,14 @@ class SelectedAppInfoViewModel(
     }
 
     private fun clearSelectionState() {
+        rememberedBundleSelections.clear()
         if (selectionState is SelectionState.Customized) {
             selectionState = SelectionState.Default
         }
     }
 
     private fun clearSelectionForBundle(bundleUid: Int) {
+        rememberedBundleSelections.remove(bundleUid)
         val current = selectionState
         if (current !is SelectionState.Customized) return
         if (bundleUid !in current.patchSelection) return
@@ -1055,30 +1057,43 @@ class SelectedAppInfoViewModel(
             else -> Unit
         }
 
-        if (bundleUid != null && (selectionState is SelectionState.Default || customSelectionEmpty)) {
+        if (bundleUid != null) {
             applyBundleRecommendationSelection(bundleUid)
         }
     }
 
     private fun applyBundleRecommendationSelection(bundleUid: Int) = viewModelScope.launch {
+        selectionLoadJob?.join()
+        (selectionState as? SelectionState.Customized)
+            ?.patchSelection
+            ?.let(::rememberBundleSelections)
+
         val bundles = bundleInfoFlow.first()
         val bundle = bundles.firstOrNull { it.uid == bundleUid } ?: return@launch
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
-        val selectedPatches = bundle.patchSequence(allowIncompatible)
-            .filter { it.include }
-            .map { it.name }
-            .toSet()
-            .ifEmpty {
-                bundle.patchSequence(false)
-                    .filter { it.include }
-                    .map { it.name }
-                    .toSet()
-            }
-            .ifEmpty {
-                bundle.patchSequence(false)
-                    .map { it.name }
-                    .toSet()
-            }
+        val availablePatches = bundle.patchSequence(allowIncompatible).toList()
+        val availablePatchNames = availablePatches.mapTo(mutableSetOf()) { it.name }
+        val customizedPatches = rememberedBundleSelections[bundleUid]
+            ?.filterTo(mutableSetOf()) { it in availablePatchNames }
+            ?.takeIf { it.isNotEmpty() }
+        val selectedPatches = customizedPatches
+            ?: availablePatches
+                .filter { it.include }
+                .map { it.name }
+                .toSet()
+                .ifEmpty {
+                    bundle.patchSequence(false)
+                        .filter { it.include }
+                        .map { it.name }
+                        .toSet()
+                }
+                .ifEmpty {
+                    bundle.patchSequence(false)
+                        .map { it.name }
+                        .toSet()
+                }
+
+        if (preferredBundleUidFlow.value != bundleUid) return@launch
 
         if (selectedPatches.isEmpty()) {
             selectionState = SelectionState.Default
@@ -1086,6 +1101,16 @@ class SelectedAppInfoViewModel(
         }
 
         selectionState = SelectionState.Customized(mapOf(bundleUid to selectedPatches))
+    }
+
+    private fun rememberBundleSelections(selection: PatchSelection) {
+        selection.forEach { (bundleUid, patches) ->
+            if (patches.isEmpty()) {
+                rememberedBundleSelections.remove(bundleUid)
+            } else {
+                rememberedBundleSelections[bundleUid] = patches.toSet()
+            }
+        }
     }
 
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
@@ -1293,6 +1318,8 @@ class SelectedAppInfoViewModel(
         optionsLoadJob?.cancel()
         optionsLoadJob = null
 
+        rememberedBundleSelections.clear()
+        selection?.let(::rememberBundleSelections)
         selectionState = selection?.let(SelectionState::Customized) ?: SelectionState.Default
 
         val filteredOptions = withContext(Dispatchers.Default) {
