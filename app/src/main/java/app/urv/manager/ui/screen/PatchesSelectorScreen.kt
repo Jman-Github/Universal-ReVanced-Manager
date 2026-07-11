@@ -259,6 +259,7 @@ fun PatchesSelectorScreen(
     val sortSelectionModePref by viewModel.prefs.patchSelectionSortSelectionMode.getAsState()
     val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
     val showVersionTags by viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val showOptionPreviews by viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
     var patchVersionsDialogState by remember { mutableStateOf<PatchVersionsDialogState?>(null) }
     val disablePatchSelectionTabSwipe by viewModel.prefs.disablePatchSelectionTabSwipe.getAsState()
     val preventAccidentalTouching by viewModel.prefs.preventAccidentalTouching.getAsState()
@@ -1085,6 +1086,7 @@ fun PatchesSelectorScreen(
                     ),
                     searchEngineHost = searchEngineHost,
                     showVersionTags = showVersionTags,
+                    showOptionPreviews = showOptionPreviews,
                     onToggle = {
                         when {
                             // Open incompatible dialog if the patch is not supported
@@ -1908,7 +1910,8 @@ private fun PatchItem(
     optionValues: Map<String, Any?>?,
     suggestedVersion: String?,
     searchEngineHost: String,
-    showVersionTags: Boolean
+    showVersionTags: Boolean,
+    showOptionPreviews: Boolean
 ): Unit {
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
@@ -2131,7 +2134,11 @@ private fun PatchItem(
                     }
                 }
             }
-            if (patch.options?.isNotEmpty() == true && optionSummaries.isNotEmpty()) {
+            if (
+                showOptionPreviews &&
+                patch.options?.isNotEmpty() == true &&
+                optionSummaries.isNotEmpty()
+            ) {
                 Surface(
                     color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
                     shape = RoundedCornerShape(14.dp),

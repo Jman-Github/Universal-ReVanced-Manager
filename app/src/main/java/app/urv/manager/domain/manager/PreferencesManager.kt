@@ -201,6 +201,14 @@ class PreferencesManager(
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
+    val patchSelectionShowOptionPreviews =
+        booleanPreference("patch_selection_show_option_previews", true)
+
+    suspend fun setMinimalPatchSelectionView(enabled: Boolean) = edit {
+        patchSelectionShowVersionTags.value = !enabled
+        patchSelectionShowOptionPreviews.value = !enabled
+    }
+
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
@@ -323,6 +331,7 @@ class PreferencesManager(
         val patchSelectionActionOrder: String? = null,
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
+        val patchSelectionShowOptionPreviews: Boolean? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
         val savedAppActionOrder: String? = null,
@@ -493,6 +502,7 @@ class PreferencesManager(
             patchSelectionActionOrder = patchSelectionActionOrder.get(),
             patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
+            patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.get(),
             patchBundleActionOrder = patchBundleActionOrder.get(),
             patchBundleHiddenActions = patchBundleHiddenActions.get(),
             savedAppActionOrder = savedAppActionOrder.get(),
@@ -651,6 +661,9 @@ class PreferencesManager(
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
+        snapshot.patchSelectionShowOptionPreviews?.let {
+            patchSelectionShowOptionPreviews.value = it
+        }
         snapshot.patchBundleActionOrder?.let { patchBundleActionOrder.value = it }
         snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
         snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }

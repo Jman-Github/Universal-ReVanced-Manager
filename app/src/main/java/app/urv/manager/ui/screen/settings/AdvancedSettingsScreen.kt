@@ -1329,6 +1329,21 @@ fun AdvancedSettingsScreen(
     val actionOrderPref by viewModel.prefs.patchSelectionActionOrder.getAsState()
     val hiddenActionsPref by viewModel.prefs.patchSelectionHiddenActions.getAsState()
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
+    val showPatchSelectionVersionTags by
+        viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+    val showPatchSelectionOptionPreviews by
+        viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
+    val minimalPatchSelectionView =
+        !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
+    var patchSelectionViewOptionsExpanded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(highlightTarget) {
+        if (
+            highlightTarget == R.string.patch_selection_version_tags_title ||
+            highlightTarget == R.string.patch_selection_option_previews_title
+        ) {
+            patchSelectionViewOptionsExpanded = true
+        }
+    }
     val bundleActionOrderPref by viewModel.prefs.patchBundleActionOrder.getAsState()
     val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
     val savedActionOrderPref by viewModel.prefs.savedAppActionOrder.getAsState()
@@ -1823,17 +1838,83 @@ fun AdvancedSettingsScreen(
                 }
             ExpressiveSettingsDivider()
             SettingsSearchHighlight(
-                targetKey = R.string.patch_selection_version_tags_title,
+                targetKey = R.string.minimal_patch_selection_view_title,
                 activeKey = highlightTarget,
                 onHighlightComplete = { highlightTarget = null }
             ) { highlightModifier ->
-                BooleanItem(
+                ExpressiveSettingsItem(
                     modifier = highlightModifier,
-                    preference = viewModel.prefs.patchSelectionShowVersionTags,
-                    coroutineScope = viewModel.viewModelScope,
-                    headline = R.string.patch_selection_version_tags_title,
-                    description = R.string.patch_selection_version_tags_description
+                    headlineContent = stringResource(R.string.minimal_patch_selection_view_title),
+                    supportingContent = stringResource(
+                        R.string.minimal_patch_selection_view_description
+                    ),
+                    trailingContent = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ExpressiveSettingsSwitch(
+                                checked = minimalPatchSelectionView,
+                                onCheckedChange = { enabled ->
+                                    viewModel.viewModelScope.launch {
+                                        viewModel.prefs.setMinimalPatchSelectionView(enabled)
+                                    }
+                                }
+                            )
+                            Icon(
+                                imageVector = if (patchSelectionViewOptionsExpanded) {
+                                    Icons.Outlined.KeyboardArrowUp
+                                } else {
+                                    Icons.Outlined.KeyboardArrowDown
+                                },
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    onClick = {
+                        patchSelectionViewOptionsExpanded = !patchSelectionViewOptionsExpanded
+                    }
                 )
+            }
+            if (patchSelectionViewOptionsExpanded) {
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_version_tags_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionVersionTags,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowVersionTags.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_version_tags_title,
+                        description = R.string.patch_selection_version_tags_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_selection_option_previews_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = showPatchSelectionOptionPreviews,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.patchSelectionShowOptionPreviews.update(value)
+                            }
+                        },
+                        headline = R.string.patch_selection_option_previews_title,
+                        description = R.string.patch_selection_option_previews_description,
+                        enabled = !minimalPatchSelectionView
+                    )
+                }
             }
             ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
