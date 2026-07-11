@@ -25,6 +25,8 @@
 - Added suggested version dropdowns to app search results on the `Select an app` screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/586
 - Added split ordering options to the split APK merge selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/582
 - Added the ability to install APKs downloaded through plugins from the Downloads screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/541
+- Corrected singular and plural wording in patch bundle import progress https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/590
+- Made patch bundle update progress counts use consistent `out of` wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/591
 
 
 # Bug fixes

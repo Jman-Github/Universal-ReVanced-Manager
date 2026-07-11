@@ -249,6 +249,8 @@ class PatchBundleRepository(
     private var localImportProcessedSteps = 0
     @Volatile
     private var localImportTotalSteps = 0
+    @Volatile
+    private var localImportTotalBundles = 0
 
     private var bundleImportAutoClearJob: Job? = null
     private var bundleUpdateAutoClearJob: Job? = null
@@ -366,12 +368,15 @@ class PatchBundleRepository(
         localImportStateMutex.withLock {
             localImportQueued += 1
             localImportTotalSteps += LOCAL_IMPORT_STEPS
+            localImportTotalBundles += 1
             val total = localImportTotalSteps
+            val bundleCount = localImportTotalBundles
             bundleImportProgressFlow.update { progress ->
                 if (progress?.isStepBased != true) return@update progress
                 progress.copy(
                     total = total,
-                    processed = progress.processed.coerceAtMost(total)
+                    processed = progress.processed.coerceAtMost(total),
+                    bundleCount = bundleCount
                 )
             }
         }
@@ -384,6 +389,7 @@ class PatchBundleRepository(
             if (localImportQueued == 0 && localImportProcessedSteps >= localImportTotalSteps) {
                 localImportProcessedSteps = 0
                 localImportTotalSteps = 0
+                localImportTotalBundles = 0
             }
         }
     }
@@ -391,6 +397,8 @@ class PatchBundleRepository(
     private fun localImportBaseSteps(): Int = localImportProcessedSteps
 
     private fun localImportTotalSteps(): Int = localImportTotalSteps.coerceAtLeast(LOCAL_IMPORT_STEPS)
+
+    private fun localImportBundleCount(): Int = localImportTotalBundles.coerceAtLeast(1)
 
     private fun changelogHistoryFile(uid: Int): File =
         directoryOf(uid).resolve("changelog_history.json")
@@ -625,6 +633,7 @@ class PatchBundleRepository(
             ImportProgress(
                 processed = processed,
                 total = total,
+                bundleCount = localImportBundleCount(),
                 currentBundleName = displayName?.takeIf { it.isNotBlank() },
                 phase = phase,
                 bytesRead = bytesRead,
@@ -3168,6 +3177,7 @@ class PatchBundleRepository(
         val bytesRead: Long = 0L,
         val bytesTotal: Long? = null,
         val isStepBased: Boolean = false,
+        val bundleCount: Int = total,
     ) {
         val ratio: Float?
             get() {

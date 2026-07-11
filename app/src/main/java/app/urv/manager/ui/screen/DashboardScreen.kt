@@ -905,6 +905,7 @@ fun DashboardScreen(
                 bundleImportProgress?.let { progress ->
                     val context = LocalContext.current
                     val total = progress.total.coerceAtLeast(1)
+                    val bundleCount = progress.bundleCount.coerceAtLeast(1)
                     val collapsedCount = if (progress.isStepBased) {
                         (progress.processed + 1).coerceIn(1, total)
                     } else {
@@ -955,11 +956,15 @@ fun DashboardScreen(
                         add(detail)
                     }
                     DownloadProgressBanner(
-                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        title = pluralStringResource(
+                            R.plurals.import_patch_bundles_banner_title_quantity,
+                            bundleCount
+                        ),
                         subtitle = subtitleParts.joinToString(" - "),
                         progress = progress.ratio,
-                        collapsedLabel = stringResource(
-                            R.string.import_patch_bundles_banner_collapsed,
+                        collapsedLabel = pluralStringResource(
+                            R.plurals.import_patch_bundles_banner_collapsed_quantity,
+                            bundleCount,
                             collapsedCount,
                             total
                         ),

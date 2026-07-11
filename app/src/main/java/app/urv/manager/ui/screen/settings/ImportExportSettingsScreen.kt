@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -607,8 +608,9 @@ fun ImportExportSettingsScreen(
                     )
             ) {
                 importProgress?.let { progress ->
+                    val total = progress.total.coerceAtLeast(1)
+                    val bundleCount = progress.bundleCount.coerceAtLeast(1)
                     val subtitleParts = buildList {
-                        val total = progress.total.coerceAtLeast(1)
                         val stepLabel = if (progress.isStepBased) {
                             val step = (progress.processed + 1).coerceAtMost(total)
                             stringResource(R.string.import_patch_bundles_banner_steps, step, total)
@@ -653,7 +655,10 @@ fun ImportExportSettingsScreen(
                         add(detail)
                     }
                     DownloadProgressBanner(
-                        title = stringResource(R.string.import_patch_bundles_banner_title),
+                        title = pluralStringResource(
+                            R.plurals.import_patch_bundles_banner_title_quantity,
+                            bundleCount
+                        ),
                         subtitle = subtitleParts.joinToString(" - "),
                         progress = progress.ratio,
                         modifier = Modifier
