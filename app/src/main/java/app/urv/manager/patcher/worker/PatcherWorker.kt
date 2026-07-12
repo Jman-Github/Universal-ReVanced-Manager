@@ -63,6 +63,7 @@ import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.util.AppForeground
+import app.urv.manager.util.applyProgressNotification
 import app.urv.manager.util.Options
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
@@ -202,7 +203,11 @@ class PatcherWorker(
             .setContentText(contentText)
             .apply {
                 if (progress != null) {
-                    setProgress(progress.max, progress.current, progress.indeterminate)
+                    applyProgressNotification(
+                        max = progress.max,
+                        current = progress.current,
+                        indeterminate = progress.indeterminate
+                    )
                 } else {
                     setProgress(0, 0, false)
                 }
@@ -1920,7 +1925,11 @@ class PatcherWorker(
             runCatching {
                 val notification = createNotificationBuilder(context)
                     .setContentText(context.getText(R.string.patcher_notification_text))
-                    .setProgress(0, 0, true)
+                    .applyProgressNotification(
+                        max = 0,
+                        current = 0,
+                        indeterminate = true
+                    )
                     .build()
                 manager.notify(NOTIFICATION_ID, notification)
             }.onFailure { error ->

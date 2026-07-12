@@ -1639,6 +1639,8 @@ Details: %2$s</string>
     <string name="battery_optimization_banner_disable_confirm">Hide banner</string>
     <string name="installing_manager_update">Installing update…</string>
     <string name="downloading_manager_update">Downloading update…</string>
+    <string name="download_progress_notification_channel">Downloads</string>
+    <string name="download_progress_indeterminate">Downloading…</string>
     <string name="manager_update_banner_title">URV Manager update found</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Failed to download update: %s</string>

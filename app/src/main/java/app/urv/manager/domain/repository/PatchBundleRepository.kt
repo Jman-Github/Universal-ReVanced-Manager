@@ -44,6 +44,7 @@ import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.Options
 import app.urv.manager.util.simpleMessage
@@ -99,6 +100,7 @@ class PatchBundleRepository(
     private val app: Application,
     private val networkInfo: NetworkInfo,
     private val prefs: PreferencesManager,
+    private val downloadProgressNotifier: DownloadProgressNotifier,
     db: AppDatabase,
 ) {
     private val dao = db.patchBundleDao()
@@ -1883,13 +1885,27 @@ class PatchBundleRepository(
 
         val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return true
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-        updateNow(
-            force = true,
-            allowUnsafeNetwork = allowUnsafeDownload,
-            onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
-                if (bundle.uid == updatedSource.uid) onProgress?.invoke(bytesRead, bytesTotal)
-            }
-        ) { it.uid == updatedSource.uid }
+        val progressNotification =
+            downloadProgressNotifier.begin(progressLabelFor(updatedSource))
+        val updated = try {
+            updateNow(
+                force = true,
+                allowUnsafeNetwork = allowUnsafeDownload,
+                onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                    if (bundle.uid == updatedSource.uid) {
+                        progressNotification.update(bytesRead, bytesTotal)
+                        onProgress?.invoke(bytesRead, bytesTotal)
+                    }
+                }
+            ) { it.uid == updatedSource.uid }
+        } catch (error: CancellationException) {
+            progressNotification.cancel()
+            throw error
+        } catch (error: Exception) {
+            progressNotification.fail()
+            throw error
+        }
+        if (updated) progressNotification.complete() else progressNotification.fail()
         return true
     }
 
@@ -2123,35 +2139,56 @@ class PatchBundleRepository(
         createdAt: Long? = null,
         updatedAt: Long? = null,
         onProgress: PatchBundleDownloadProgress? = null,
-    ) =
-        dispatchAction("Add bundle ($url)") { state ->
-            val normalizedUrl = try {
-                normalizeRemoteBundleUrl(url)
-            } catch (e: IllegalArgumentException) {
-                withContext(Dispatchers.Main) {
-                    app.toast(e.message ?: "Invalid bundle URL")
-                }
-                return@dispatchAction state
+    ) {
+        val normalizedUrl = try {
+            normalizeRemoteBundleUrl(url)
+        } catch (e: IllegalArgumentException) {
+            withContext(Dispatchers.Main) {
+                app.toast(e.message ?: "Invalid bundle URL")
             }
+            return
+        }
 
-            val src = createEntity(
-                "",
-                SourceInfo.from(normalizedUrl),
-                autoUpdate,
-                searchUpdate = searchUpdate,
-                createdAt = createdAt,
-                updatedAt = updatedAt
-            ).load() as RemotePatchBundle
-            val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-            update(
-                src,
-                allowUnsafeNetwork = allowUnsafeDownload,
-                onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
-                    if (bundle.uid == src.uid) onProgress?.invoke(bytesRead, bytesTotal)
-                }
-            )
+        val src = createEntity(
+            "",
+            SourceInfo.from(normalizedUrl),
+            autoUpdate,
+            searchUpdate = searchUpdate,
+            createdAt = createdAt,
+            updatedAt = updatedAt
+        ).load() as RemotePatchBundle
+        dispatchAction("Add bundle ($url)") { state ->
             state.copy(sources = state.sources.put(src.uid, src))
         }
+        withTimeoutOrNull(2_000) {
+            sources.first { list -> list.any { it.uid == src.uid } }
+        }
+
+        val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
+        val progressNotification = downloadProgressNotifier.begin(
+            progressLabelFor(src).ifBlank { "Patch bundle" }
+        )
+        val updated = try {
+            updateNow(
+                allowUnsafeNetwork = allowUnsafeDownload,
+                showProgress = false,
+                onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
+                    if (bundle.uid == src.uid) {
+                        progressNotification.update(bytesRead, bytesTotal)
+                        onProgress?.invoke(bytesRead, bytesTotal)
+                    }
+                },
+                predicate = { it.uid == src.uid }
+            )
+        } catch (error: CancellationException) {
+            progressNotification.cancel()
+            throw error
+        } catch (error: Exception) {
+            progressNotification.fail()
+            throw error
+        }
+        if (updated) progressNotification.complete() else progressNotification.fail()
+    }
 
     suspend fun createRemoteFromDiscovery(
         bundle: ExternalBundleSnapshot,
@@ -2208,14 +2245,29 @@ class PatchBundleRepository(
             sources.first { list -> list.any { it.uid == src.uid } }
         }
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
-        updateNow(
-            allowUnsafeNetwork = allowUnsafeDownload,
-            showProgress = false,
-            onPerBundleProgress = { bundleSrc, bytesRead, bytesTotal ->
-                if (bundleSrc.uid == src.uid) onProgress?.invoke(bytesRead, bytesTotal)
-            },
-            predicate = { it.uid == src.uid }
+        val progressNotification = downloadProgressNotifier.begin(
+            bundle.repoName.ifBlank { bundle.ownerName.ifBlank { "Patch bundle" } }
         )
+        val updated = try {
+            updateNow(
+                allowUnsafeNetwork = allowUnsafeDownload,
+                showProgress = false,
+                onPerBundleProgress = { bundleSrc, bytesRead, bytesTotal ->
+                    if (bundleSrc.uid == src.uid) {
+                        progressNotification.update(bytesRead, bytesTotal)
+                        onProgress?.invoke(bytesRead, bytesTotal)
+                    }
+                },
+                predicate = { it.uid == src.uid }
+            )
+        } catch (error: CancellationException) {
+            progressNotification.cancel()
+            throw error
+        } catch (error: Exception) {
+            progressNotification.fail()
+            throw error
+        }
+        if (updated) progressNotification.complete() else progressNotification.fail()
     }
 
     private fun externalBundleEndpoint(
@@ -2841,6 +2893,12 @@ class PatchBundleRepository(
                         )
                     }
                     onPerBundleProgress?.invoke(bundle, 0L, null)
+                    val progressNotification =
+                        if (showProgress && onPerBundleProgress == null) {
+                            downloadProgressNotifier.begin(progressLabelFor(bundle))
+                        } else {
+                            null
+                        }
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
                         if (isRemoteUpdateCancelled(bundle.uid)) {
@@ -2856,9 +2914,11 @@ class PatchBundleRepository(
                                 )
                             }
                         }
+                        progressNotification?.update(bytesRead, bytesTotal)
                         onPerBundleProgress?.invoke(bundle, bytesRead, bytesTotal)
                     }
 
+                    var bundleFailed = false
                     val result = try {
                         withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
                             if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
@@ -2866,15 +2926,26 @@ class PatchBundleRepository(
                     } catch (e: BundleUpdateCancelled) {
                         null
                     } catch (e: TimeoutCancellationException) {
+                        bundleFailed = true
                         hadBundleFailures = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
                         null
+                    } catch (e: CancellationException) {
+                        progressNotification?.cancel()
+                        throw e
                     } catch (e: Exception) {
+                        bundleFailed = true
                         hadBundleFailures = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
                         null
+                    }
+
+                    when {
+                        result != null -> progressNotification?.complete()
+                        bundleFailed -> progressNotification?.fail()
+                        else -> progressNotification?.cancel()
                     }
 
                     val downloadedName = if (result != null) {
@@ -2919,6 +2990,8 @@ class PatchBundleRepository(
                 }
 
                 results
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(tag, "Failed to update patches", e)
                 toast(R.string.patches_download_fail, e.simpleMessage())

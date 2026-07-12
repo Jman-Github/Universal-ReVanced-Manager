@@ -25,12 +25,14 @@ import app.urv.manager.network.service.HttpService
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.PM
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
 import app.urv.manager.util.simpleMessage
 import io.ktor.client.plugins.onDownload
 import io.ktor.client.request.url
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -58,6 +60,7 @@ class UpdateViewModel(
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
     private val installerManager: InstallerManager by inject()
+    private val downloadProgressNotifier: DownloadProgressNotifier by inject()
     private val ackpineInstaller: PackageInstaller = get()
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
@@ -131,6 +134,8 @@ class UpdateViewModel(
                     canResumeDownload = resumeOffset > 0L
 
                     state = State.DOWNLOADING
+                    val progressNotification =
+                        downloadProgressNotifier.begin(app.getString(R.string.app_name))
 
                     try {
                         http.download(location, resumeOffset) {
@@ -142,11 +147,17 @@ class UpdateViewModel(
                                     totalSize > 0L -> totalSize
                                     else -> downloadedSize
                                 }
+                                progressNotification.update(downloadedSize, totalSize)
                             }
                         }
+                        progressNotification.complete()
                         canResumeDownload = false
                         installUpdate()
+                    } catch (error: CancellationException) {
+                        progressNotification.cancel()
+                        throw error
                     } catch (error: Exception) {
+                        progressNotification.fail()
                         downloadedSize = location.takeIf { it.exists() }?.length() ?: 0L
                         if (totalSize < downloadedSize) {
                             totalSize = downloadedSize

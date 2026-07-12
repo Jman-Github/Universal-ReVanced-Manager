@@ -19,6 +19,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.Worker
 import app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver
 import app.urv.manager.util.BundleDeepLinkIntent
+import app.urv.manager.util.applyProgressNotification
 import app.urv.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.flow.first
 import org.koin.core.component.KoinComponent
@@ -342,11 +343,21 @@ class BundleUpdateNotificationWorker(
         if (progress != null) {
             val total = progress.bytesTotal?.takeIf { it > 0L }
             if (total == null) {
-                builder.setProgress(0, 0, true)
+                builder.applyProgressNotification(
+                    max = 0,
+                    current = 0,
+                    indeterminate = true,
+                    ongoing = ongoing
+                )
             } else {
                 val max = min(total, Int.MAX_VALUE.toLong()).toInt()
                 val current = min(progress.bytesRead, max.toLong()).toInt()
-                builder.setProgress(max, current, false)
+                builder.applyProgressNotification(
+                    max = max,
+                    current = current,
+                    indeterminate = false,
+                    ongoing = ongoing
+                )
             }
         } else {
             builder.setProgress(0, 0, false)

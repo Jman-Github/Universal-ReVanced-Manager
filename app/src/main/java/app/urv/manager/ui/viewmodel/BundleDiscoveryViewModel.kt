@@ -15,6 +15,7 @@ import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.network.dto.ExternalBundlePatch
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.network.utils.getOrNull
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
 import io.ktor.client.request.url
@@ -42,6 +43,7 @@ class BundleDiscoveryViewModel(
     private val app: Application,
     private val http: HttpService,
     private val json: Json,
+    private val downloadProgressNotifier: DownloadProgressNotifier,
 ) : ViewModel() {
     var bundles: List<ExternalBundleSnapshot>? by mutableStateOf(null)
         private set
@@ -246,6 +248,8 @@ class BundleDiscoveryViewModel(
                 return@launch
             }
             bundleExports[bundleId] = BundleExportProgress(0L, null)
+            val progressNotification =
+                downloadProgressNotifier.begin(target.fileName.toString())
             try {
                 withContext(Dispatchers.IO) {
                     target.parent?.toFile()?.mkdirs()
@@ -253,14 +257,20 @@ class BundleDiscoveryViewModel(
                         saveLocation = target.toFile(),
                         builder = { url(url) },
                         onProgress = { bytesRead, bytesTotal ->
+                            progressNotification.update(bytesRead, bytesTotal)
                             viewModelScope.launch(Dispatchers.Main) {
                                 bundleExports[bundleId] = BundleExportProgress(bytesRead, bytesTotal)
                             }
                         }
                     )
                 }
+                progressNotification.complete()
                 app.toast(app.getString(R.string.patch_bundle_export_success, target.fileName.toString()))
+            } catch (e: CancellationException) {
+                progressNotification.cancel()
+                throw e
             } catch (e: Exception) {
+                progressNotification.fail()
                 app.toast(app.getString(R.string.patch_bundle_export_fail, e.simpleMessage()))
             } finally {
                 bundleExports.remove(bundleId)
@@ -279,12 +289,15 @@ class BundleDiscoveryViewModel(
             }
             bundleExports[bundleId] = BundleExportProgress(0L, null)
             val tempFile = File.createTempFile("bundle-export-$bundleId-", ".tmp", cacheDir)
+            val successName = bundle.repoName.ifBlank { "bundle" }
+            val progressNotification = downloadProgressNotifier.begin(successName)
             try {
                 withContext(Dispatchers.IO) {
                     http.downloadToFile(
                         saveLocation = tempFile,
                         builder = { url(url) },
                         onProgress = { bytesRead, bytesTotal ->
+                            progressNotification.update(bytesRead, bytesTotal)
                             viewModelScope.launch(Dispatchers.Main) {
                                 bundleExports[bundleId] = BundleExportProgress(bytesRead, bytesTotal)
                             }
@@ -294,9 +307,13 @@ class BundleDiscoveryViewModel(
                         tempFile.inputStream().use { input -> input.copyTo(output) }
                     } ?: error("Could not open output stream for bundle export")
                 }
-                val successName = bundle.repoName.ifBlank { "bundle" }
+                progressNotification.complete()
                 app.toast(app.getString(R.string.patch_bundle_export_success, successName))
+            } catch (e: CancellationException) {
+                progressNotification.cancel()
+                throw e
             } catch (e: Exception) {
+                progressNotification.fail()
                 app.toast(app.getString(R.string.patch_bundle_export_fail, e.simpleMessage()))
             } finally {
                 bundleExports.remove(bundleId)

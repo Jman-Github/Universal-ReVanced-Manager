@@ -18,6 +18,7 @@ import app.urv.manager.network.runtime.PatcherRuntimePluginSourceEntry
 import app.urv.manager.network.runtime.PatcherRuntimePluginSourceState
 import app.urv.manager.network.runtime.PatcherRuntimePluginState
 import app.urv.manager.network.service.HttpService
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.PM
 import app.urv.manager.util.tag
 import io.ktor.client.request.url
@@ -40,7 +41,8 @@ class PatcherRuntimePluginRepository(
     private val app: Application,
     private val api: ReVancedAPI,
     private val httpService: HttpService,
-    private val networkInfo: NetworkInfo
+    private val networkInfo: NetworkInfo,
+    private val downloadProgressNotifier: DownloadProgressNotifier
 ) {
     private val managedSourceRoot = app.getDir("managed_patcher_runtime_plugins", Context.MODE_PRIVATE)
     private val _pluginStates = MutableStateFlow(emptyMap<String, PatcherRuntimePluginState>())
@@ -582,11 +584,13 @@ class PatcherRuntimePluginRepository(
         val target = sourceFile(entry)
         val tempFile = directory.resolve("patcher-runtime.tmp")
         if (tempFile.exists()) tempFile.delete()
+        val progressNotification = downloadProgressNotifier.begin(asset.name)
 
         runCatching {
             httpService.downloadToFile(
                 saveLocation = tempFile,
-                builder = { url(asset.downloadUrl) }
+                builder = { url(asset.downloadUrl) },
+                onProgress = progressNotification::update
             )
             val packageInfo = readArchivePackageInfo(tempFile)
             resolvePlugin(packageInfo, sourceId = entry.id)
@@ -609,11 +613,17 @@ class PatcherRuntimePluginRepository(
             tempFile.copyTo(target, overwrite = true)
             ensureManagedSourceIsReadOnly(target)
         }.getOrElse { error ->
+            if (error is CancellationException) {
+                progressNotification.cancel()
+            } else {
+                progressNotification.fail()
+            }
             tempFile.delete()
             throw error
         }
 
         tempFile.delete()
+        progressNotification.complete()
     }
 
     private fun parseImportUrl(rawUrl: String): ImportRequest {

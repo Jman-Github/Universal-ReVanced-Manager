@@ -28,6 +28,7 @@
 - Corrected singular and plural wording in patch bundle import progress https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/590
 - Made patch bundle update progress counts use consistent `out of` wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/591
 - Added a minimal patch selection view preset with controls for version tags and patch option previews https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/274
+- Added consistent progress notification metadata and Android 16 progress styling for cutout ring support https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/394
 
 
 # Bug fixes

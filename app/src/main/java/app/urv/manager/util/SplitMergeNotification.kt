@@ -40,10 +40,11 @@ object SplitMergeNotification {
                 .setLargeIcon(Icon.createWithResource(appContext, R.drawable.ic_notification))
                 .setSmallIcon(Icon.createWithResource(appContext, R.drawable.ic_notification_status))
                 .setContentIntent(createPendingIntent(appContext))
-                .setCategory(Notification.CATEGORY_PROGRESS)
-                .setOngoing(true)
-                .setOnlyAlertOnce(true)
-                .setProgress(progress.max, progress.current.coerceIn(0, progress.max), progress.indeterminate)
+                .applyProgressNotification(
+                    max = progress.max,
+                    current = progress.current,
+                    indeterminate = progress.indeterminate
+                )
                 .build()
             manager.notify(NOTIFICATION_ID, notification)
         }.onFailure { error ->

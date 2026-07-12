@@ -22,6 +22,7 @@ import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.patcher.runtime.PatcherRuntimePluginRegistry
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.util.AppForeground
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.tag
 import app.urv.manager.util.PatchListCatalog
 import app.urv.manager.util.SplitMergeNotification
@@ -56,6 +57,7 @@ class ManagerApplication : Application() {
     private val bundleUpdateWebSocketCoordinator: BundleUpdateWebSocketCoordinator by inject()
     private val fs: Filesystem by inject()
     private val httpService: HttpService by inject()
+    private val downloadProgressNotifier: DownloadProgressNotifier by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -78,6 +80,7 @@ class ManagerApplication : Application() {
             )
         }
 
+        downloadProgressNotifier.clearStaleNotifications()
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
         Revanced21RuntimeBridge.initialize(this)

@@ -38,6 +38,7 @@ import app.urv.manager.downloader.DownloaderBuilder as ModernDownloaderBuilder
 import app.urv.manager.downloader.DownloaderHostApi as ModernDownloaderHostApi
 import app.urv.manager.downloader.Scope as ModernScope
 import app.urv.manager.util.PM
+import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.tag
 import dalvik.system.PathClassLoader
 import io.ktor.client.request.url
@@ -66,6 +67,7 @@ class DownloaderPluginRepository(
     private val api: ReVancedAPI,
     private val httpService: HttpService,
     private val networkInfo: NetworkInfo,
+    private val downloadProgressNotifier: DownloadProgressNotifier,
     db: AppDatabase
 ) {
     private val trustDao = db.trustedDownloaderPluginDao()
@@ -682,13 +684,15 @@ class DownloaderPluginRepository(
         val target = sourceFile(entry)
         val tempFile = directory.resolve("downloader.tmp")
         if (tempFile.exists()) tempFile.delete()
+        val progressNotification = downloadProgressNotifier.begin(asset.name)
 
         runCatching {
             httpService.downloadToFile(
                 saveLocation = tempFile,
                 builder = {
                     url(asset.downloadUrl)
-                }
+                },
+                onProgress = progressNotification::update
             )
             val packageInfo = readArchivePackageInfo(tempFile)
             if (entry.trustedSignatureHex != null) {
@@ -716,11 +720,17 @@ class DownloaderPluginRepository(
             tempFile.copyTo(target, overwrite = true)
             ensureManagedSourceIsReadOnly(target)
         }.getOrElse { error ->
+            if (error is CancellationException) {
+                progressNotification.cancel()
+            } else {
+                progressNotification.fail()
+            }
             tempFile.delete()
             throw error
         }
 
         tempFile.delete()
+        progressNotification.complete()
     }
 
     private sealed interface ImportRequest {
