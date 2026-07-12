@@ -1341,7 +1341,8 @@ private fun BundleDiscoveryItem(
                     } else {
                         LinearProgressIndicator(
                             progress = { fraction },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            drawStopIndicator = {}
                         )
                     }
                 }

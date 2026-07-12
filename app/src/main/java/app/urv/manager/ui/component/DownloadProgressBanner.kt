@@ -128,7 +128,8 @@ fun DownloadProgressBanner(
                 } else {
                     LinearProgressIndicator(
                         progress = { clampedProgress },
-                        modifier = progressModifier
+                        modifier = progressModifier,
+                        drawStopIndicator = {}
                     )
                 }
             }
