@@ -199,6 +199,7 @@ class PatcherViewModel(
     private val selectedApp = input.selectedApp
     val packageName = selectedApp.packageName
     val version = selectedApp.version
+    val hasProfileInstallerPreference = input.profileInstallerToken != null
 
     var basePackageInstalled by mutableStateOf(pm.getPackageInfo(packageName) != null)
         private set
@@ -222,6 +223,7 @@ class PatcherViewModel(
 
     var isInstalling by mutableStateOf(ongoingPmSession)
         private set
+    private var profileAutoInstallTriggered: Boolean by savedStateHandle.saveableVar { false }
     var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
         private set
     var signatureMismatchPackage by mutableStateOf<String?>(null)
@@ -2299,6 +2301,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     override fun install() {
         if (isInstalling) return
+        input.profileInstallerToken?.let { storedToken ->
+            installWithToken(installerManager.parseToken(storedToken))
+            return
+        }
         viewModelScope.launch {
             runCatching {
                 val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
@@ -2328,6 +2334,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
         }
+    }
+
+    fun maybeAutoInstallProfile() {
+        if (!input.autoInstall || input.profileInstallerToken == null || profileAutoInstallTriggered) return
+        profileAutoInstallTriggered = true
+        installWithToken(installerManager.parseToken(input.profileInstallerToken))
     }
 
     fun installWithToken(token: InstallerManager.Token) {

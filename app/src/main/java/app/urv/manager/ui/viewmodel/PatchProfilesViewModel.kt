@@ -47,6 +47,8 @@ data class PatchProfileListItem(
     val apkVersion: String?,
     val useSelectedApkVersion: Boolean,
     val autoPatch: Boolean,
+    val installerToken: String?,
+    val autoInstall: Boolean,
     val bundleCount: Int,
     val bundleNames: List<String>,
     val createdAt: Long,
@@ -345,6 +347,8 @@ class PatchProfilesViewModel(
                 apkVersion = profile.apkVersion,
                 useSelectedApkVersion = profile.useSelectedApkVersion,
                 autoPatch = profile.autoPatch,
+                installerToken = profile.installerToken,
+                autoInstall = profile.autoInstall,
                 bundleCount = workingPayload.bundles.size,
                 bundleNames = bundleNames,
                 createdAt = profile.createdAt,
@@ -535,6 +539,14 @@ class PatchProfilesViewModel(
         withContext(Dispatchers.IO) {
             patchProfileRepository.updateProfileAutoPatch(profileId, enabled) != null
         }
+
+    suspend fun updateProfileInstaller(
+        profileId: Int,
+        installerToken: String?,
+        autoInstall: Boolean
+    ): Boolean = withContext(Dispatchers.IO) {
+        patchProfileRepository.updateProfileInstaller(profileId, installerToken, autoInstall) != null
+    }
 
     suspend fun changeLocalBundleUid(
         profileId: Int,

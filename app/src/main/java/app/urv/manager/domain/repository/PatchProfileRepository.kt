@@ -39,6 +39,8 @@ class PatchProfileRepository(
             apkVersion = null,
             useSelectedApkVersion = false,
             autoPatch = false,
+            installerToken = null,
+            autoInstall = false,
             name = name,
             payload = payload,
             createdAt = System.currentTimeMillis(),
@@ -108,6 +110,20 @@ class PatchProfileRepository(
         return entity.toDomain()
     }
 
+    suspend fun updateProfileInstaller(
+        uid: Int,
+        installerToken: String?,
+        autoInstall: Boolean
+    ): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(
+            installerToken = installerToken,
+            autoInstall = autoInstall && installerToken != null
+        )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
     suspend fun getProfile(uid: Int): PatchProfile? = dao.get(uid)?.toDomain()
 
     suspend fun exportProfiles(): List<PatchProfileExportEntry> =
@@ -126,6 +142,8 @@ class PatchProfileRepository(
                     appVersion = entry.appVersion,
                     useSelectedApkVersion = entry.useSelectedApkVersion,
                     autoPatch = entry.autoPatch,
+                    installerToken = entry.installerToken,
+                    autoInstall = entry.autoInstall && entry.installerToken != null,
                     payload = entry.payload,
                     createdAt = entry.createdAt ?: existing.createdAt
                 )
@@ -146,6 +164,8 @@ class PatchProfileRepository(
                 apkVersion = null,
                 useSelectedApkVersion = entry.useSelectedApkVersion,
                 autoPatch = entry.autoPatch,
+                installerToken = entry.installerToken,
+                autoInstall = entry.autoInstall && entry.installerToken != null,
                 name = entry.name,
                 payload = entry.payload,
                 createdAt = entry.createdAt ?: System.currentTimeMillis(),
@@ -174,6 +194,8 @@ data class PatchProfile(
     val apkVersion: String?,
     val useSelectedApkVersion: Boolean,
     val autoPatch: Boolean,
+    val installerToken: String?,
+    val autoInstall: Boolean,
     val name: String,
     val createdAt: Long,
     val payload: PatchProfilePayload
@@ -186,6 +208,8 @@ data class PatchProfileExportEntry(
     val appVersion: String?,
     val useSelectedApkVersion: Boolean = false,
     val autoPatch: Boolean = false,
+    val installerToken: String? = null,
+    val autoInstall: Boolean = false,
     val createdAt: Long?,
     val payload: PatchProfilePayload
 )
@@ -220,6 +244,8 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     apkVersion = apkVersion,
     useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
+    installerToken = installerToken,
+    autoInstall = autoInstall,
     name = name,
     createdAt = createdAt,
     payload = payload
@@ -238,6 +264,8 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     appVersion = appVersion,
     useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
+    installerToken = installerToken,
+    autoInstall = autoInstall,
     createdAt = createdAt,
     payload = payload
 )

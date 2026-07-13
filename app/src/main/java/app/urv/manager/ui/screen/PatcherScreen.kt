@@ -156,6 +156,10 @@ fun PatcherScreen(
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
     val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
+
+    LaunchedEffect(patcherSucceeded) {
+        if (patcherSucceeded == true) viewModel.maybeAutoInstallProfile()
+    }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
     val primaryInstallerIsMount = remember(primaryInstallerValue) {
@@ -997,6 +1001,7 @@ fun PatcherScreen(
                                         onClick = {
                                             when {
                                                 viewModel.installedPackageName != null -> viewModel.open()
+                                                viewModel.hasProfileInstallerPreference -> viewModel.install()
                                                 chooseInstallerPerInstall -> showInstallerPicker = true
                                                 else -> viewModel.install()
                                             }

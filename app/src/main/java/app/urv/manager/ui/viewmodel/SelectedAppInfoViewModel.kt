@@ -648,6 +648,8 @@ class SelectedAppInfoViewModel(
                 apkVersion = null,
                 useSelectedApkVersion = false,
                 autoPatch = false,
+                installerToken = null,
+                autoInstall = false,
                 createdAt = 0L,
                 payload = remappedPayload
             ).toConfiguration(scopedBundles, sources)
@@ -1292,10 +1294,14 @@ class SelectedAppInfoViewModel(
         optionsLoadJob?.join()
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
         val bundles = bundleInfoFlow.first()
+        val profile = profileId?.let { patchProfileRepository.getProfile(it) }
         return Patcher.ViewModelParams(
-            selectedApp,
-            getPatches(bundles, allowIncompatible),
-            getOptionsFiltered(bundles)
+            selectedApp = selectedApp,
+            selectedPatches = getPatches(bundles, allowIncompatible),
+            options = getOptionsFiltered(bundles),
+            profileId = profile?.uid,
+            profileInstallerToken = profile?.installerToken,
+            autoInstall = profile?.autoInstall == true
         )
     }
 

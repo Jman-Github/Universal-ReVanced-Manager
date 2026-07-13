@@ -98,10 +98,12 @@ import app.urv.manager.ui.component.TextInputDialog
 import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.RememberedGetContent
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
@@ -147,6 +149,7 @@ fun PatchProfilesScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
+    val installerManager = koinInject<InstallerManager>()
     val useCustomFilePicker by prefs.useCustomFilePicker.flow.collectAsStateWithLifecycle(
         initialValue = prefs.useCustomFilePicker.default
     )
@@ -181,6 +184,7 @@ fun PatchProfilesScreen(
     var versionDialogUseSelectedApkVersion by remember { mutableStateOf(false) }
     var versionDialogSaving by remember { mutableStateOf(false) }
     var settingsDialogProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
+    var installerPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var apkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var downloadedApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
     var pendingDocumentApkPickerProfile by remember { mutableStateOf<PatchProfileListItem?>(null) }
@@ -1138,6 +1142,30 @@ fun PatchProfilesScreen(
         )
     }
 
+    installerPickerProfile?.let { profile ->
+        InstallerPickerDialog(
+            title = stringResource(R.string.patch_profile_installer_choose_title),
+            options = installerManager.listEntries(
+                target = InstallerManager.InstallTarget.PATCHER,
+                includeNone = false
+            ),
+            initialSelection = profile.installerToken?.let(installerManager::parseToken),
+            confirmLabel = R.string.save,
+            onDismiss = { installerPickerProfile = null },
+            onConfirm = { token ->
+                scope.launch {
+                    val saved = viewModel.updateProfileInstaller(
+                        profile.id,
+                        installerManager.tokenToPreference(token),
+                        profile.autoInstall
+                    )
+                    if (!saved) context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                }
+            },
+            onOpenShizuku = installerManager::openShizukuApp
+        )
+    }
+
     settingsDialogProfile?.let { profile ->
         val settingsProfile = profiles.firstOrNull { it.id == profile.id } ?: profile
         val storedApkPath = settingsProfile.apkPath?.takeIf { it.isNotBlank() }
@@ -1158,6 +1186,10 @@ fun PatchProfilesScreen(
             allVersionsLabel = stringResource(R.string.bundle_version_all_versions)
         )
         var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        var installerUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        val selectedInstaller = settingsProfile.installerToken
+            ?.let(installerManager::parseToken)
+            ?.let { installerManager.describeEntry(it, InstallerManager.InstallTarget.PATCHER) }
         AlertDialog(
             onDismissRequest = {
                 if (apkPickerBusy) return@AlertDialog
@@ -1175,7 +1207,10 @@ fun PatchProfilesScreen(
             },
             title = { CenteredDialogTitle(stringResource(R.string.patch_profile_settings_title, settingsProfile.name)) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = stringResource(R.string.patch_profile_apk_section_title),
@@ -1286,6 +1321,86 @@ fun PatchProfilesScreen(
                             }
                         ) {
                             Text(stringResource(R.string.edit))
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = stringResource(R.string.patch_profile_installer_title),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = selectedInstaller?.label
+                                ?: stringResource(R.string.patch_profile_installer_default),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                onClick = {
+                                    installerPickerProfile = settingsProfile
+                                    settingsDialogProfile = null
+                                },
+                                enabled = !installerUpdating
+                            ) {
+                                Text(stringResource(R.string.patch_profile_installer_choose))
+                            }
+                            if (settingsProfile.installerToken != null) {
+                                TextButton(
+                                    onClick = {
+                                        if (installerUpdating) return@TextButton
+                                        installerUpdating = true
+                                        scope.launch {
+                                            val saved = viewModel.updateProfileInstaller(
+                                                settingsProfile.id,
+                                                null,
+                                                false
+                                            )
+                                            if (!saved) {
+                                                context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                                            }
+                                            installerUpdating = false
+                                        }
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.clear))
+                                }
+                            }
+                        }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        HapticCheckbox(
+                            checked = settingsProfile.autoInstall,
+                            enabled = settingsProfile.installerToken != null && !installerUpdating,
+                            onCheckedChange = { enabled ->
+                                if (installerUpdating) return@HapticCheckbox
+                                installerUpdating = true
+                                scope.launch {
+                                    val updated = viewModel.updateProfileInstaller(
+                                        settingsProfile.id,
+                                        settingsProfile.installerToken,
+                                        enabled
+                                    )
+                                    if (!updated) {
+                                        context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                                    }
+                                    installerUpdating = false
+                                }
+                            }
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_install_label),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                text = stringResource(R.string.patch_profile_auto_install_description),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                     Divider(color = MaterialTheme.colorScheme.outlineVariant)

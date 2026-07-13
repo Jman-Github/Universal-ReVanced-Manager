@@ -1,6 +1,7 @@
 package app.urv.manager.ui.component.patcher
 
 import android.graphics.drawable.Drawable
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +49,7 @@ fun InstallerPickerDialog(
     title: String,
     options: List<InstallerManager.Entry>,
     initialSelection: InstallerManager.Token? = null,
+    @StringRes confirmLabel: Int = R.string.install_app,
     onDismiss: () -> Unit,
     onConfirm: (InstallerManager.Token) -> Unit,
     onOpenShizuku: (() -> Boolean)? = null
@@ -92,7 +94,7 @@ fun InstallerPickerDialog(
                 },
                 enabled = confirmEnabled
             ) {
-                Text(stringResource(R.string.install_app))
+                Text(stringResource(confirmLabel))
             }
         },
         title = { CenteredDialogTitle(title) },

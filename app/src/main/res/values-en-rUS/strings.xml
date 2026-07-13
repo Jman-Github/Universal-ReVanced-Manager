@@ -1202,6 +1202,12 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_mismatch_toast">Selected package does not match this profile</string>
     <string name="patch_profile_apk_failed_toast">Failed to save package</string>
     <string name="patch_profile_settings_title">Settings for "%1$s"</string>
+    <string name="patch_profile_installer_title">Installer</string>
+    <string name="patch_profile_installer_default">Use global installer settings</string>
+    <string name="patch_profile_installer_choose">Choose installer</string>
+    <string name="patch_profile_installer_choose_title">Choose installer for this profile</string>
+    <string name="patch_profile_auto_install_label">Install automatically</string>
+    <string name="patch_profile_auto_install_description">After patching finishes, immediately install using this profile’s saved installer.</string>
     <string name="patch_profile_auto_patch_label">Start patching immediately</string>
     <string name="patch_profile_auto_patch_description">When enabled and an APK is saved, tapping this profile starts patching instead of opening patch selection.</string>
     <string name="apk_file_type">APK</string>

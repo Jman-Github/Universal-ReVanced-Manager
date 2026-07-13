@@ -121,7 +121,10 @@ data object Patcher : ComplexParameter<Patcher.ViewModelParams> {
     data class ViewModelParams(
         val selectedApp: SelectedApp,
         val selectedPatches: PatchSelection,
-        val options: @RawValue Options
+        val options: @RawValue Options,
+        val profileId: Int? = null,
+        val profileInstallerToken: String? = null,
+        val autoInstall: Boolean = false
     ) : Parcelable
 }
 

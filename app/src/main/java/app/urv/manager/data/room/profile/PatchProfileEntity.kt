@@ -14,6 +14,8 @@ data class PatchProfileEntity(
     @ColumnInfo(name = "apk_version") val apkVersion: String?,
     @ColumnInfo(name = "use_selected_apk_version") val useSelectedApkVersion: Boolean,
     @ColumnInfo(name = "auto_patch") val autoPatch: Boolean,
+    @ColumnInfo(name = "installer_token") val installerToken: String?,
+    @ColumnInfo(name = "auto_install") val autoInstall: Boolean,
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "payload") val payload: PatchProfilePayload,
     @ColumnInfo(name = "created_at") val createdAt: Long,
