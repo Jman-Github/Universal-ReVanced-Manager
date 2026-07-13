@@ -220,6 +220,7 @@
 - Automatically enabled manager pre-release updates when running a pre-release build https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/593
 - Bumped Morphe Patcher to `1.6.0`
 - Added APK version codes to app details, supported-version displays, searches, and Morphe patch compatibility checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/594
+- Added an option to choose which split APKs are merged before patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/592
 
 
 # Bug fixes

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +46,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -888,7 +890,7 @@ private data class SplitMergePresetOption(
     val modules: Set<String>
 )
 
-private enum class SplitMergeModuleSortMode(
+internal enum class SplitMergeModuleSortMode(
     val storageValue: String,
     @StringRes val labelRes: Int
 ) {
@@ -911,12 +913,13 @@ private enum class SplitMergeModuleSortMode(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SplitMergeSelectionDialog(
+internal fun SplitMergeSelectionDialog(
     selection: SplitApkPreparer.SplitArchiveInspection,
     initialModules: Set<String>,
     initialStripNativeLibs: Boolean,
     initialPresetKey: String,
     initialSortMode: SplitMergeModuleSortMode,
+    @StringRes confirmTextRes: Int? = null,
     onDismissRequest: () -> Unit,
     onFilterSelectionChanged: (String, Boolean, Boolean, Boolean) -> Unit,
     onSortModeChanged: (SplitMergeModuleSortMode) -> Unit,
@@ -1300,24 +1303,37 @@ private fun SplitMergeSelectionDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(onClick = onDismissRequest) {
                             Text(stringResource(R.string.cancel))
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        HapticExtendedFloatingActionButton(
-                            text = {
-                                Text(
-                                    stringResource(
-                                        R.string.merge_split_apk_selection_confirm_with_count,
-                                        selectedModuleCount
+                        if (confirmTextRes != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            FilledTonalButton(
+                                onClick = {
+                                    onConfirm(selectedModules + requiredModules, stripNativeLibs)
+                                }
+                            ) {
+                                Text(stringResource(confirmTextRes))
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.weight(1f))
+                            HapticExtendedFloatingActionButton(
+                                text = {
+                                    Text(
+                                        stringResource(
+                                            R.string.merge_split_apk_selection_confirm_with_count,
+                                            selectedModuleCount
+                                        )
                                     )
-                                )
-                            },
-                            icon = { Icon(Icons.Default.AutoFixHigh, null) },
-                            onClick = { onConfirm(selectedModules + requiredModules, stripNativeLibs) }
-                        )
+                                },
+                                icon = { Icon(Icons.Default.AutoFixHigh, null) },
+                                onClick = {
+                                    onConfirm(selectedModules + requiredModules, stripNativeLibs)
+                                }
+                            )
+                        }
                     }
                 }
             }

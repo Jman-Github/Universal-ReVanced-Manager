@@ -768,6 +768,10 @@ Patch profiles are not affected.</string>
     <string name="strip_unused_libs_description">Remove all native libraries except a single supported CPU architecture from patched apps</string>
     <string name="skip_unneeded_split_apks">Skip unneeded split APKs</string>
     <string name="skip_unneeded_split_apks_description">Skip split APK modules that don’t match this device (e.g. language or density)</string>
+    <string name="choose_split_apks_before_patching">Choose split APKs before patching</string>
+    <string name="choose_split_apks_before_patching_description">Show the split selection screen before patching a split APK. Your selection overrides the “Remove unused native libraries” and “Skip unneeded split APKs” settings for that patch</string>
+    <string name="patcher_preparing_split_selection">Preparing app for split selection…</string>
+    <string name="patcher_prepare_input_failed">Failed to prepare app</string>
     <string name="continue_on_patch_error">Continue after patch errors</string>
     <string name="continue_on_patch_error_description">Try to keep patching when an individual patch fails. The patched app may be missing that failed patch</string>
     <string name="skip_apk_signing">Skip APK signing</string>

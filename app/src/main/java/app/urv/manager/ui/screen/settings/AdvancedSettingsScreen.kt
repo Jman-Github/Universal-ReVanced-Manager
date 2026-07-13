@@ -1011,6 +1011,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.choose_split_apks_before_patching,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.chooseSplitApksBeforePatching,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.choose_split_apks_before_patching,
+                        description = R.string.choose_split_apks_before_patching_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.continue_on_patch_error,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

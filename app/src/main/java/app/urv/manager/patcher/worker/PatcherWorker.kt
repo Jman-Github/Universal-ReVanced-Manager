@@ -42,6 +42,7 @@ import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced21BridgeFailureException
@@ -111,6 +112,7 @@ class PatcherWorker(
     private val patchBundleRepository: PatchBundleRepository by inject()
     private var activeRuntime: app.urv.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.urv.manager.patcher.runtime.morphe.MorpheRuntime? = null
+    private var activeSplitMergeRuntime: SplitMergeProcessRuntime? = null
     @Volatile
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
@@ -174,12 +176,19 @@ class PatcherWorker(
         val options: Options,
         val skipApkSigning: Boolean,
         val logger: Logger,
+        val preparedInput: DownloadResult?,
+        val splitSelection: SplitSelection?,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
         val onEvent: (PatcherWorkerProgressUpdate) -> Unit
     ) {
         val packageName get() = input.packageName
     }
+
+    data class SplitSelection(
+        val includedModules: Set<String>,
+        val stripNativeLibs: Boolean
+    )
 
     override suspend fun getForegroundInfo() = createForegroundInfo(event = null, totalPatchCount = 0)
 
@@ -470,6 +479,7 @@ class PatcherWorker(
     private fun cancelActiveRuntimes() {
         activeRuntime?.cancel()
         activeMorpheRuntime?.cancel()
+        activeSplitMergeRuntime?.cancelActiveExecution()
     }
 
     private fun isAppTaskPresent(): Boolean {
@@ -1424,7 +1434,7 @@ class PatcherWorker(
                     args.setInputFile(result.file, result.needsSplit, result.merged)
                 }
 
-            val downloadResult = when (val selectedApp = args.input) {
+            val downloadResult = args.preparedInput ?: when (val selectedApp = args.input) {
                 is SelectedApp.Download -> runStep(StepId.DownloadAPK, eventDispatcher) {
                     val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selectedApp.data)
                     download(plugin, data)
@@ -1528,6 +1538,63 @@ class PatcherWorker(
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
+            var runtimeInputFile = inputFile
+            var manualSplitSelectionApplied = false
+            if (inputIsSplitArchive && args.splitSelection != null) {
+                val selection = args.splitSelection
+                val mergeWorkspace = fs.tempDir.resolve("split-patcher-selection-${id}").apply {
+                    deleteRecursively()
+                    mkdirs()
+                }
+                val mergeRuntime = SplitMergeProcessRuntime(applicationContext)
+                activeSplitMergeRuntime = mergeRuntime
+                eventDispatcher(
+                    ProgressEvent.Started(
+                        StepId.PrepareSplitApk,
+                        subSteps = emptyList()
+                    )
+                )
+                runtimeInputFile = try {
+                    mergeRuntime.execute(
+                        inputFile = inputFile,
+                        workspace = mergeWorkspace,
+                        stripNativeLibs = selection.stripNativeLibs,
+                        skipUnneededSplits = false,
+                        includedModules = selection.includedModules,
+                        onProgress = { message ->
+                            eventDispatcher(
+                                ProgressEvent.Progress(
+                                    stepId = StepId.PrepareSplitApk,
+                                    message = message
+                                )
+                            )
+                        },
+                        onSubSteps = { subSteps ->
+                            eventDispatcher(
+                                ProgressEvent.Progress(
+                                    stepId = StepId.PrepareSplitApk,
+                                    subSteps = subSteps
+                                )
+                            )
+                        },
+                        onLog = workerLogger::info,
+                        onMemoryUsage = { sample ->
+                            publishPatcherMemoryUsage(sample, args.onEvent)
+                        }
+                    )
+                } finally {
+                    activeSplitMergeRuntime = null
+                }
+                manualSplitSelectionApplied = true
+                workerLogger.info(
+                    "Selected ${selection.includedModules.size} split modules before patching"
+                )
+                eventDispatcher(ProgressEvent.Completed(StepId.PrepareSplitApk))
+            }
+            val effectiveStripNativeLibs =
+                if (manualSplitSelectionApplied) false else stripNativeLibs
+            val effectiveSkipUnneededSplits =
+                if (manualSplitSelectionApplied) false else skipUnneededSplits
             val selectedCount = totalPatchCount
             val useProcessRuntime = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
             val useRevancedPatcher22 =
@@ -1567,7 +1634,7 @@ class PatcherWorker(
                     }
                     activeMorpheRuntime = runtime
                     runtime.execute(
-                        inputFile.absolutePath,
+                        runtimeInputFile.absolutePath,
                         patchedApk.absolutePath,
                         args.packageName,
                         args.selectedPatches,
@@ -1575,8 +1642,8 @@ class PatcherWorker(
                         workerLogger,
                         eventDispatcher,
                         runtimeMemoryUsageDispatcher,
-                        stripNativeLibs,
-                        skipUnneededSplits
+                        effectiveStripNativeLibs,
+                        effectiveSkipUnneededSplits
                     )
                 }
                 PatchBundleType.AMPLE -> throw IllegalStateException("Ample runtime is no longer supported.")
@@ -1606,7 +1673,7 @@ class PatcherWorker(
                         }
                     activeRuntime = runtime
                     runtime.execute(
-                        inputFile.absolutePath,
+                        runtimeInputFile.absolutePath,
                         patchedApk.absolutePath,
                         args.packageName,
                         args.selectedPatches,
@@ -1614,8 +1681,8 @@ class PatcherWorker(
                         workerLogger,
                         eventDispatcher,
                         runtimeMemoryUsageDispatcher,
-                        stripNativeLibs,
-                        skipUnneededSplits
+                        effectiveStripNativeLibs,
+                        effectiveSkipUnneededSplits
                     )
                 }
             }
@@ -1833,6 +1900,7 @@ class PatcherWorker(
         } finally {
             activeRuntime = null
             activeMorpheRuntime = null
+            activeSplitMergeRuntime = null
             patchNotificationSteps = emptyList()
             foregroundStarted = false
             patchedApk.delete()

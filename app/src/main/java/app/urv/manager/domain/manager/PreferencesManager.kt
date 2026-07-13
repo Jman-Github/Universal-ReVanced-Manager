@@ -87,6 +87,7 @@ class PreferencesManager(
 
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
+    val chooseSplitApksBeforePatching = booleanPreference("choose_split_apks_before_patching", false)
     val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
     val skipApkSigning = booleanPreference("skip_apk_signing", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
@@ -357,6 +358,7 @@ class PreferencesManager(
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
         val skipUnneededSplitApks: Boolean? = null,
+        val chooseSplitApksBeforePatching: Boolean? = null,
         val continueOnPatchError: Boolean? = null,
         val skipApkSigning: Boolean? = null,
         val morpheBytecodeMode: String? = null,
@@ -569,6 +571,7 @@ class PreferencesManager(
         return snapshot.copy(
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
+            chooseSplitApksBeforePatching = chooseSplitApksBeforePatching.get(),
             continueOnPatchError = continueOnPatchError.get(),
             skipApkSigning = skipApkSigning.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
@@ -732,6 +735,7 @@ class PreferencesManager(
     private fun EditorContext.importRuntimeAndInstallerSettings(snapshot: SettingsSnapshot) {
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
+        snapshot.chooseSplitApksBeforePatching?.let { chooseSplitApksBeforePatching.value = it }
         snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
         snapshot.skipApkSigning?.let { skipApkSigning.value = it }
         snapshot.morpheBytecodeMode?.let {

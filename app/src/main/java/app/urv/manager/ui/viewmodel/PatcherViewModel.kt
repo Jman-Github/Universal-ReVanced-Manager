@@ -15,6 +15,7 @@ import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelUuid
+import android.os.Parcelable
 import android.os.PowerManager
 import android.util.Log
 import android.widget.Toast
@@ -50,6 +51,9 @@ import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.repository.DownloadResult
+import app.urv.manager.domain.repository.DownloadedAppRepository
+import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
@@ -61,11 +65,14 @@ import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
+import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.patcher.worker.PatcherWorkerProgressState
 import app.urv.manager.patcher.worker.PatcherWorkerProgressUpdate
+import app.urv.manager.network.downloader.LoadedDownloaderPlugin
+import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.InstallerModel
@@ -97,6 +104,7 @@ import app.urv.manager.util.toast
 import app.urv.manager.util.awaitUserConfirmation
 import app.urv.manager.util.toastHandle
 import app.urv.manager.util.uiSafe
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -137,7 +145,11 @@ import java.nio.file.Path
 import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 import java.time.Duration
+import java.util.LinkedHashSet
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
@@ -151,6 +163,8 @@ class PatcherViewModel(
     private val patchSelectionRepository: PatchSelectionRepository by inject()
     private val patchOptionsRepository: PatchOptionsRepository by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
+    private val downloaderPluginRepository: DownloaderPluginRepository by inject()
+    private val downloadedAppRepository: DownloadedAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val installerManager: InstallerManager by inject()
@@ -308,7 +322,7 @@ fun proceedAfterMissingPatchWarning() {
     if (missingPatchWarning == null) return
     viewModelScope.launch {
         missingPatchWarning = null
-        startWorker()
+        beginPrePatchFlow()
     }
 }
 
@@ -321,8 +335,279 @@ fun proceedAfterMissingPatchWarning() {
             appliedSelection = sanitizedSelection
             appliedOptions = sanitizedOptions
             missingPatchWarning = null
-            startWorker()
+            beginPrePatchFlow()
         }
+    }
+
+    data class SplitSelectionDialogState(
+        val inspection: SplitApkPreparer.SplitArchiveInspection,
+        val initialModules: Set<String>,
+        val initialStripNativeLibs: Boolean
+    )
+
+    private var pendingSplitSelectionDialog: SplitSelectionDialogState? by mutableStateOf(null)
+    val splitSelectionDialog by derivedStateOf { pendingSplitSelectionDialog }
+
+    var isPreparingSplitSelection by mutableStateOf(false)
+        private set
+    var splitSelectionPreparationError by mutableStateOf<String?>(null)
+        private set
+
+    private var prePatchPreparationJob: Job? = null
+    private var preparedInput: DownloadResult? = null
+    private var preparedInputIncludesDownload = false
+    private var selectedSplitConfiguration: PatcherWorker.SplitSelection? = null
+
+    fun confirmSplitSelection(includedModules: Set<String>, stripNativeLibs: Boolean) {
+        if (pendingSplitSelectionDialog == null) return
+        selectedSplitConfiguration = PatcherWorker.SplitSelection(
+            includedModules = includedModules,
+            stripNativeLibs = stripNativeLibs
+        )
+        pendingSplitSelectionDialog = null
+        startWorker()
+    }
+
+    fun cancelSplitSelectionPreparation() {
+        prePatchPreparationJob?.cancel()
+        prePatchPreparationJob = null
+        isPreparingSplitSelection = false
+        pendingSplitSelectionDialog = null
+        cleanupPreparedInput()
+    }
+
+    fun dismissSplitSelectionPreparationError() {
+        splitSelectionPreparationError = null
+    }
+
+    private fun beginPrePatchFlow() {
+        if (!prefs.chooseSplitApksBeforePatching.getBlocking()) {
+            startWorker()
+            return
+        }
+        prePatchPreparationJob?.cancel()
+        prePatchPreparationJob = viewModelScope.launch {
+            isPreparingSplitSelection = true
+            splitSelectionPreparationError = null
+            try {
+                val resolvedInput = resolveInputBeforePatching()
+                preparedInput = resolvedInput
+                preparedInputIncludesDownload =
+                    input.selectedApp is SelectedApp.Download || input.selectedApp is SelectedApp.Search
+                inputFile = resolvedInput.file
+                updateSplitStepRequirement(
+                    file = resolvedInput.file,
+                    needsSplitOverride = resolvedInput.needsSplit,
+                    merged = resolvedInput.merged
+                )
+
+                if (!resolvedInput.needsSplit ||
+                    !SplitApkPreparer.isSplitArchive(resolvedInput.file)
+                ) {
+                    isPreparingSplitSelection = false
+                    startWorker()
+                    return@launch
+                }
+
+                val inspection = withContext(Dispatchers.IO) {
+                    SplitApkPreparer.inspect(resolvedInput.file)
+                }
+                val initialStripNativeLibs = prefs.stripUnusedNativeLibs.get()
+                val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
+                val initialModules = if (initialStripNativeLibs) {
+                    val abiModules = inspection.modules
+                        .filter { it.kind == SplitApkPreparer.SplitArchiveModuleKind.ABI }
+                        .mapTo(linkedSetOf()) { it.name }
+                    (allModules - abiModules) + inspection.abiTrimmedModules
+                } else {
+                    allModules
+                }
+
+                pendingSplitSelectionDialog = SplitSelectionDialogState(
+                    inspection = inspection,
+                    initialModules = initialModules,
+                    initialStripNativeLibs = initialStripNativeLibs
+                )
+            } catch (error: CancellationException) {
+                cleanupPreparedInput()
+                throw error
+            } catch (error: Throwable) {
+                cleanupPreparedInput()
+                splitSelectionPreparationError =
+                    error.simpleMessage() ?: error.javaClass.simpleName
+            } finally {
+                isPreparingSplitSelection = false
+                prePatchPreparationJob = null
+            }
+        }
+    }
+
+    private suspend fun resolveInputBeforePatching(): DownloadResult {
+        suspend fun download(plugin: LoadedDownloaderPlugin, data: Parcelable): DownloadResult =
+            downloadedAppRepository.download(
+                plugin = plugin,
+                data = data,
+                expectedPackageName = packageName,
+                expectedVersion = input.selectedApp.version,
+                appCompatibilityCheck = prefs.suggestedVersionSafeguard.get(),
+                patchesCompatibilityCheck = !prefs.disablePatchVersionCompatCheck.get(),
+                onDownload = {},
+                persistDownload = prefs.autoSaveDownloaderApks.get()
+            )
+
+        return when (val selected = input.selectedApp) {
+            is SelectedApp.Download -> {
+                val (plugin, data) = downloaderPluginRepository.unwrapParceledData(selected.data)
+                download(plugin, data)
+            }
+
+            is SelectedApp.Search -> {
+                var lastInteractionFailure: UserInteractionException? = null
+                for (plugin in downloaderPluginRepository.loadedPluginsFlow.first()) {
+                    val interactionFailure = AtomicReference<UserInteractionException?>(null)
+                    try {
+                        val scope = object : GetScope {
+                            override val pluginPackageName = plugin.packageName
+                            override val hostPackageName = app.packageName
+
+                            override suspend fun requestStartActivity(intent: Intent): Intent? {
+                                interactionFailure.get()?.let { throw it }
+                                val result = try {
+                                    handleDownloaderActivityRequest(plugin, intent)
+                                } catch (error: UserInteractionException) {
+                                    interactionFailure.compareAndSet(null, error)
+                                    throw error
+                                }
+                                interactionFailure.get()?.let { throw it }
+                                return when (result.resultCode) {
+                                    Activity.RESULT_OK -> result.data
+                                    Activity.RESULT_CANCELED -> {
+                                        val error = UserInteractionException.Activity.Cancelled()
+                                        interactionFailure.compareAndSet(null, error)
+                                        throw error
+                                    }
+
+                                    else -> {
+                                        val error = UserInteractionException.Activity.NotCompleted(
+                                            result.resultCode,
+                                            result.data
+                                        )
+                                        interactionFailure.compareAndSet(null, error)
+                                        throw error
+                                    }
+                                }
+                            }
+                        }
+                        val result = runInterruptiblePluginGet(interactionFailure) {
+                            plugin.get(scope, selected.packageName, selected.version)
+                        }?.takeIf { (_, version) ->
+                            selected.version == null || version == null || version == selected.version
+                        }
+                        if (result != null) {
+                            return download(plugin, result.first)
+                        }
+                    } catch (error: UserInteractionException.Activity.NotCompleted) {
+                        throw error
+                    } catch (error: UserInteractionException) {
+                        lastInteractionFailure = error
+                    }
+                }
+                throw (lastInteractionFailure ?: IllegalStateException("App is not available."))
+            }
+
+            is SelectedApp.Local -> {
+                val needsSplit = SplitApkPreparer.isSplitArchive(selected.file)
+                DownloadResult(selected.file, needsSplit = needsSplit)
+            }
+
+            is SelectedApp.Installed -> prepareInstalledInputBeforePatching(selected.packageName)
+        }
+    }
+
+    private suspend fun prepareInstalledInputBeforePatching(
+        packageName: String
+    ): DownloadResult = withContext(Dispatchers.IO) {
+        val packageInfo = pm.getPackageInfo(packageName)
+            ?: throw IllegalStateException("Installed package not found: $packageName")
+        val appInfo = packageInfo.applicationInfo
+            ?: throw IllegalStateException("ApplicationInfo missing for package: $packageName")
+        val baseApk = File(
+            appInfo.sourceDir
+                ?: throw IllegalStateException("sourceDir missing for package: $packageName")
+        )
+        if (!baseApk.exists()) {
+            throw IllegalStateException("Base APK not found for package: $packageName")
+        }
+
+        val splitApks = appInfo.splitSourceDirs
+            ?.map(::File)
+            ?.filter(File::exists)
+            ?.sortedBy { it.name }
+            .orEmpty()
+        if (splitApks.isEmpty()) {
+            return@withContext DownloadResult(baseApk, needsSplit = false)
+        }
+
+        val archiveDir = fs.tempDir
+            .resolve("prepatch-installed-splits-${System.currentTimeMillis()}")
+            .apply { mkdirs() }
+        val archiveFile = archiveDir.resolve("${packageName.replace('.', '_')}.apks")
+        try {
+            buildInstalledSplitArchive(listOf(baseApk) + splitApks, archiveFile)
+            DownloadResult(
+                file = archiveFile,
+                needsSplit = true,
+                cleanup = { archiveDir.deleteRecursively() }
+            )
+        } catch (error: Throwable) {
+            archiveDir.deleteRecursively()
+            throw error
+        }
+    }
+
+    private fun buildInstalledSplitArchive(apkFiles: List<File>, output: File) {
+        output.parentFile?.mkdirs()
+        val usedNames = LinkedHashSet<String>()
+        var writtenEntries = 0
+        ZipOutputStream(output.outputStream().buffered()).use { zip ->
+            apkFiles.forEachIndexed { index, apk ->
+                if (!apk.exists()) return@forEachIndexed
+                val normalized = apk.name.takeIf { it.endsWith(".apk", ignoreCase = true) }
+                    ?: "${apk.name}.apk"
+                var entryName = normalized
+                var counter = 1
+                while (!usedNames.add(entryName)) {
+                    entryName = "${normalized.removeSuffix(".apk")}_${index}_${counter++}.apk"
+                }
+                zip.putNextEntry(ZipEntry(entryName).apply { time = apk.lastModified() })
+                apk.inputStream().buffered().use { source -> source.copyTo(zip) }
+                zip.closeEntry()
+                writtenEntries++
+            }
+        }
+        check(writtenEntries > 0) {
+            "Failed to build installed split archive: no APK entries written."
+        }
+    }
+
+    private fun cleanupPreparedInput() {
+        preparedInput?.cleanup?.let { cleanup -> runCatching { cleanup() } }
+        preparedInput = null
+        preparedInputIncludesDownload = false
+        selectedSplitConfiguration = null
+    }
+
+    private suspend fun <T> runInterruptiblePluginGet(
+        interactionFailure: AtomicReference<UserInteractionException?>,
+        block: suspend () -> T
+    ): T = runCancellableBlockingIo(
+        checkCancelled = {
+            interactionFailure.get()?.let { error -> throw error }
+        }
+    ) {
+        runBlocking { block() }
+    }.also {
+        interactionFailure.get()?.let { error -> throw error }
     }
 
     data class ActivityPromptDialogState(
@@ -1102,7 +1387,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 patchNames = missing.distinct().sorted()
             )
         } else {
-            startWorker()
+            beginPrePatchFlow()
         }
     }
 
@@ -1129,6 +1414,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         lastAppliedWorkerProgressGeneration = Long.MIN_VALUE
         lastAppliedWorkerProgressSequence = Long.MIN_VALUE
         resetVisualProgress()
+        if (preparedInputIncludesDownload) {
+            val downloadIndex = steps.indexOfFirst { it.id == StepId.DownloadAPK }
+            if (downloadIndex >= 0) {
+                steps[downloadIndex] = steps[downloadIndex].withState(
+                    state = State.COMPLETED,
+                    progress = null
+                )
+            }
+        }
         markInitialStepRunning()
         _isPatchingActive.value = true
         startPatchingTaskMonitor()
@@ -1516,6 +1810,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun onBack(cleanupLocalInput: Boolean) {
+        cancelSplitSelectionPreparation()
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
@@ -2568,6 +2863,47 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             buildWorkerArgs()
         )
 
+    private suspend fun handleDownloaderActivityRequest(
+        plugin: LoadedDownloaderPlugin,
+        intent: Intent
+    ): ActivityResult = withContext(Dispatchers.Main) {
+        activityRequestMutex.withLock {
+            val request = ActivityPromptRequest(
+                completion = CompletableDeferred(),
+                dialogState = ActivityPromptDialogState(
+                    title = plugin.shortDisplayName,
+                    requestId = nextActivityPromptRequestId++
+                )
+            )
+            try {
+                currentActivityRequest = request
+                val accepted = try {
+                    request.completion.await()
+                } finally {
+                    if (currentActivityRequest === request) {
+                        currentActivityRequest = null
+                    }
+                }
+                delay(DOWNLOADER_DIALOG_SETTLE_MS)
+                if (!accepted) throw UserInteractionException.RequestDenied()
+
+                try {
+                    with(CompletableDeferred<ActivityResult>()) {
+                        launchedActivity = this
+                        launchActivityChannel.send(intent)
+                        await()
+                    }
+                } finally {
+                    launchedActivity = null
+                }
+            } finally {
+                if (currentActivityRequest === request) {
+                    currentActivityRequest = null
+                }
+            }
+        }
+    }
+
     private fun buildWorkerArgs(): PatcherWorker.Args {
         val selectedForRun = when (val selected = input.selectedApp) {
             is SelectedApp.Local -> {
@@ -2581,6 +2917,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val shouldPreserveInput =
             selectedForRun is SelectedApp.Local && (selectedForRun.temporary || forceKeepLocalInput)
+        val resolvedPreparedInput = preparedInput
+        val resolvedSplitSelection = selectedSplitConfiguration
+        preparedInput = null
+        preparedInputIncludesDownload = false
+        selectedSplitConfiguration = null
 
         return PatcherWorker.Args(
             selectedForRun,
@@ -2589,6 +2930,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.options,
             skipApkSigning,
             logger,
+            preparedInput = resolvedPreparedInput,
+            splitSelection = resolvedSplitSelection,
             setInputFile = { file, needsSplit, merged ->
                 val storedFile = if (shouldPreserveInput) {
                     val existing = inputFile
@@ -2606,45 +2949,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     updateSplitStepRequirement(storedFile, needsSplit, merged)
                 }
             },
-            handleStartActivityRequest = { plugin, intent ->
-                withContext(Dispatchers.Main) {
-                    activityRequestMutex.withLock {
-                        val request = ActivityPromptRequest(
-                            completion = CompletableDeferred(),
-                            dialogState = ActivityPromptDialogState(
-                                title = plugin.shortDisplayName,
-                                requestId = nextActivityPromptRequestId++
-                            )
-                        )
-                        try {
-                            currentActivityRequest = request
-                            val accepted = try {
-                                request.completion.await()
-                            } finally {
-                                if (currentActivityRequest === request) {
-                                    currentActivityRequest = null
-                                }
-                            }
-                            delay(DOWNLOADER_DIALOG_SETTLE_MS)
-                            if (!accepted) throw UserInteractionException.RequestDenied()
-
-                            try {
-                                with(CompletableDeferred<ActivityResult>()) {
-                                    launchedActivity = this
-                                    launchActivityChannel.send(intent)
-                                    await()
-                                }
-                            } finally {
-                                launchedActivity = null
-                            }
-                        } finally {
-                            if (currentActivityRequest === request) {
-                                currentActivityRequest = null
-                            }
-                        }
-                    }
-                }
-            },
+            handleStartActivityRequest = ::handleDownloaderActivityRequest,
             onEvent = ::handleProgressEvent
         )
     }

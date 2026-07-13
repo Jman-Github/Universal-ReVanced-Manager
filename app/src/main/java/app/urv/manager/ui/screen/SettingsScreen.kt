@@ -106,6 +106,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 keywords = listOf(
                     R.string.strip_unused_libs,
                     R.string.skip_unneeded_split_apks,
+                    R.string.choose_split_apks_before_patching,
                     R.string.continue_on_patch_error,
                     R.string.skip_apk_signing,
                     R.string.patcher_log_mode,
@@ -420,6 +421,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.restore_official_bundle, null, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.strip_unused_libs, R.string.strip_unused_libs_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.skip_unneeded_split_apks, R.string.skip_unneeded_split_apks_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.choose_split_apks_before_patching, R.string.choose_split_apks_before_patching_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.continue_on_patch_error, R.string.continue_on_patch_error_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.skip_apk_signing, R.string.skip_apk_signing_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_log_mode, R.string.patcher_log_mode_description, R.string.patcher_category, Settings.Patcher),

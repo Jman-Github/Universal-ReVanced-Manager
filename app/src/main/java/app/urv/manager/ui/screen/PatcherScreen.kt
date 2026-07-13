@@ -83,6 +83,7 @@ import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
 import app.urv.manager.ui.component.ProgressPercentageBadge
+import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.haptics.HapticFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
@@ -130,6 +131,7 @@ fun PatcherScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val patchedApkExportDirectory by prefs.patchedApkExportLastDirectory.getAsState()
     val patcherLogExportDirectory by prefs.patcherLogExportLastDirectory.getAsState()
+    val splitMergeSortMode by prefs.splitMergeModuleSortMode.getAsState()
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
@@ -745,6 +747,61 @@ fun PatcherScreen(
                     Text(stringResource(R.string.cancel))
                 }
             }
+        )
+    }
+
+    if (viewModel.isPreparingSplitSelection) {
+        TransparentLoadingDialog(
+            message = stringResource(R.string.patcher_preparing_split_selection),
+            cancelButtonText = stringResource(R.string.cancel),
+            onCancel = {
+                viewModel.cancelSplitSelectionPreparation()
+                onPageBack()
+            }
+        )
+    }
+
+    viewModel.splitSelectionPreparationError?.let { message ->
+        AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.dismissSplitSelectionPreparationError()
+                        onPageBack()
+                    }
+                ) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = {
+                CenteredDialogTitle(
+                    stringResource(R.string.patcher_prepare_input_failed)
+                )
+            },
+            text = { Text(message) }
+        )
+    }
+
+    viewModel.splitSelectionDialog?.let { state ->
+        SplitMergeSelectionDialog(
+            selection = state.inspection,
+            initialModules = state.initialModules,
+            initialStripNativeLibs = state.initialStripNativeLibs,
+            initialPresetKey = "all",
+            initialSortMode = SplitMergeModuleSortMode.fromStorage(splitMergeSortMode),
+            confirmTextRes = R.string.continue_,
+            onDismissRequest = {
+                viewModel.cancelSplitSelectionPreparation()
+                onPageBack()
+            },
+            onFilterSelectionChanged = { _, _, _, _ -> },
+            onSortModeChanged = { mode ->
+                pickerScope.launch {
+                    prefs.splitMergeModuleSortMode.update(mode.storageValue)
+                }
+            },
+            onConfirm = viewModel::confirmSplitSelection
         )
     }
 
