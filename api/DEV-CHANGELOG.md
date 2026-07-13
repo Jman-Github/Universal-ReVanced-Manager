@@ -33,6 +33,7 @@
 - Added separate remembered folders for file selection and export workflows in both the custom and built-in Android file pickers https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/543
 - Added an `Install base & mount` option that installs base and split APKs through root before mounting the patched APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/542
 - Added per-profile installer selection and automatic installation to Patch Profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/583
+- Added a Patcher Engine option to skip signing and keep patched APKs unsigned for saving or installation
 
 
 # Bug fixes

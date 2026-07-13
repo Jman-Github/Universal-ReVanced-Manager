@@ -769,6 +769,8 @@ Patch profiles are not affected.</string>
     <string name="skip_unneeded_split_apks_description">Skip split APK modules that don’t match this device (e.g. language or density)</string>
     <string name="continue_on_patch_error">Continue after patch errors</string>
     <string name="continue_on_patch_error_description">Try to keep patching when an individual patch fails. The patched app may be missing that failed patch</string>
+    <string name="skip_apk_signing">Skip APK signing</string>
+    <string name="skip_apk_signing_description">Leave patched APKs unsigned. You can still save or send them to the selected installer, but Android normally rejects unsigned APKs</string>
     <string name="patcher_log_mode">Patcher logging</string>
     <string name="patcher_log_mode_description">Choose how much patcher log output is processed while patching. Lower logging can reduce overhead and help stability on heavier patch jobs</string>
     <string name="patcher_log_mode_dialog_description">Default reduces logging overhead while keeping the progress logs needed for the patcher screens. Verbose keeps the full logging behavior for troubleshooting, but it can slow patching and increase memory pressure on heavier jobs.</string>

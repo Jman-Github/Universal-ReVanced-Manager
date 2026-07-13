@@ -1025,6 +1025,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.skip_apk_signing,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.skipApkSigning,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.skip_apk_signing,
+                        description = R.string.skip_apk_signing_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.patcher_log_mode,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

@@ -172,6 +172,7 @@ class PatcherWorker(
         val output: String,
         val selectedPatches: PatchSelection,
         val options: Options,
+        val skipApkSigning: Boolean,
         val logger: Logger,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
@@ -1619,8 +1620,13 @@ class PatcherWorker(
                 }
             }
 
-            runStep(StepId.SignAPK, eventDispatcher) {
-                keystoreManager.sign(patchedApk, File(args.output))
+            if (args.skipApkSigning) {
+                workerLogger.warn("APK signing skipped; saving unsigned output")
+                patchedApk.copyTo(File(args.output), overwrite = true)
+            } else {
+                runStep(StepId.SignAPK, eventDispatcher) {
+                    keystoreManager.sign(patchedApk, File(args.output))
+                }
             }
 
             val elapsed = System.currentTimeMillis() - startTime

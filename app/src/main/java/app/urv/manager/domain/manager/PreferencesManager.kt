@@ -83,6 +83,7 @@ class PreferencesManager(
     val stripUnusedNativeLibs = booleanPreference("strip_unused_native_libs", false)
     val skipUnneededSplitApks = booleanPreference("skip_unneeded_split_apks", false)
     val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
+    val skipApkSigning = booleanPreference("skip_apk_signing", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
     val patchedAppExportFormat = stringPreference(
@@ -350,6 +351,7 @@ class PreferencesManager(
         val stripUnusedNativeLibs: Boolean? = null,
         val skipUnneededSplitApks: Boolean? = null,
         val continueOnPatchError: Boolean? = null,
+        val skipApkSigning: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
         val theme: Theme? = null,
@@ -540,6 +542,7 @@ class PreferencesManager(
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
             continueOnPatchError = continueOnPatchError.get(),
+            skipApkSigning = skipApkSigning.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
@@ -702,6 +705,7 @@ class PreferencesManager(
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
+        snapshot.skipApkSigning?.let { skipApkSigning.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }

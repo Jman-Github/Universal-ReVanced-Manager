@@ -155,6 +155,7 @@ class PatcherViewModel(
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val installerManager: InstallerManager by inject()
     private val prefs: PreferencesManager by inject()
+    private val skipApkSigning = prefs.skipApkSigning.getBlocking()
     private val savedStateHandle: SavedStateHandle = get()
     private val ackpineInstaller: AckpinePackageInstaller = get()
     private val ackpineUninstaller: PackageUninstaller = get()
@@ -1027,7 +1028,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 app,
                 input.selectedApp,
                 input.selectedPatches,
-                requiresSplitPreparation
+                requiresSplitPreparation,
+                skipApkSigning
             ).toMutableStateList()
         }
     val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
@@ -2584,6 +2586,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             outputFile.path,
             input.selectedPatches,
             input.options,
+            skipApkSigning,
             logger,
             setInputFile = { file, needsSplit, merged ->
                 val storedFile = if (shouldPreserveInput) {
@@ -4251,7 +4254,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 app,
                 input.selectedApp,
                 input.selectedPatches,
-                splitStepActive = true
+                splitStepActive = true,
+                skipApkSigning = skipApkSigning
             ).toMutableStateList()
             steps.clear()
             steps.addAll(regeneratedSteps)
@@ -4322,7 +4326,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             app,
             input.selectedApp,
             input.selectedPatches,
-            requiresSplitPreparation
+            requiresSplitPreparation,
+            skipApkSigning
         ).toMutableStateList()
         steps.clear()
         resetDexCompileState()
@@ -4617,7 +4622,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             context: Context,
             selectedApp: SelectedApp,
             selectedPatches: PatchSelection,
-            splitStepActive: Boolean
+            splitStepActive: Boolean,
+            skipApkSigning: Boolean
         ): List<Step> = buildList {
             if (selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search) {
                 add(
@@ -4675,13 +4681,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     StepCategory.SAVING
                 )
             )
-            add(
-                Step(
-                    StepId.SignAPK,
-                    context.getString(R.string.patcher_step_sign_apk),
-                    StepCategory.SAVING
+            if (!skipApkSigning) {
+                add(
+                    Step(
+                        StepId.SignAPK,
+                        context.getString(R.string.patcher_step_sign_apk),
+                        StepCategory.SAVING
+                    )
                 )
-            )
+            }
         }
 
     }
