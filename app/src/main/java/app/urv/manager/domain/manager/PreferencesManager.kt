@@ -99,7 +99,14 @@ class PreferencesManager(
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
-    val dashboardProgressBannerCollapsed = booleanPreference("dashboard_progress_banner_collapsed", false)
+    private val dashboardProgressBannerCollapsed =
+        booleanPreference("dashboard_progress_banner_collapsed", false)
+    private val dashboardBundleBannerStateMigrated =
+        booleanPreference("dashboard_bundle_banner_state_migrated", false)
+    val dashboardBundleImportBannerCollapsed =
+        booleanPreference("dashboard_bundle_import_banner_collapsed", false)
+    val dashboardBundleUpdateBannerCollapsed =
+        booleanPreference("dashboard_bundle_update_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
@@ -119,6 +126,16 @@ class PreferencesManager(
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT_ALIAS)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT_PASSWORD)
     val keystoreKeyPass = stringPreference("keystore_key_pass", KeystoreManager.DEFAULT_KEY_PASSWORD)
+
+    suspend fun migrateDashboardBundleBannerState() {
+        if (dashboardBundleBannerStateMigrated.get()) return
+        edit {
+            val legacyState = dashboardProgressBannerCollapsed.value
+            dashboardBundleImportBannerCollapsed.value = legacyState
+            dashboardBundleUpdateBannerCollapsed.value = legacyState
+            dashboardBundleBannerStateMigrated.value = true
+        }
+    }
 
     val firstLaunch = booleanPreference("first_launch", true)
     val managerAutoUpdates = booleanPreference("manager_auto_updates", false)
@@ -290,6 +307,8 @@ class PreferencesManager(
         val dashboardBundlesFabCollapsed: Boolean? = null,
         val dashboardAppsFabCollapsed: Boolean? = null,
         val dashboardProgressBannerCollapsed: Boolean? = null,
+        val dashboardBundleImportBannerCollapsed: Boolean? = null,
+        val dashboardBundleUpdateBannerCollapsed: Boolean? = null,
         val allowMeteredUpdates: Boolean? = null,
         val chooseInstallerPerInstall: Boolean? = null,
         val installerPrimary: String? = null,
@@ -478,7 +497,10 @@ class PreferencesManager(
             keystoreKeyPass = keystoreKeyPass.get(),
             dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
             dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
-            dashboardProgressBannerCollapsed = dashboardProgressBannerCollapsed.get()
+            dashboardProgressBannerCollapsed =
+                dashboardBundleImportBannerCollapsed.get() && dashboardBundleUpdateBannerCollapsed.get(),
+            dashboardBundleImportBannerCollapsed = dashboardBundleImportBannerCollapsed.get(),
+            dashboardBundleUpdateBannerCollapsed = dashboardBundleUpdateBannerCollapsed.get()
         )
     }
 
@@ -639,7 +661,14 @@ class PreferencesManager(
         snapshot.keystoreKeyPass?.let { keystoreKeyPass.value = it }
         snapshot.dashboardBundlesFabCollapsed?.let { dashboardBundlesFabCollapsed.value = it }
         snapshot.dashboardAppsFabCollapsed?.let { dashboardAppsFabCollapsed.value = it }
-        snapshot.dashboardProgressBannerCollapsed?.let { dashboardProgressBannerCollapsed.value = it }
+        val legacyBannerState = snapshot.dashboardProgressBannerCollapsed
+        (snapshot.dashboardBundleImportBannerCollapsed ?: legacyBannerState)?.let {
+            dashboardBundleImportBannerCollapsed.value = it
+        }
+        (snapshot.dashboardBundleUpdateBannerCollapsed ?: legacyBannerState)?.let {
+            dashboardBundleUpdateBannerCollapsed.value = it
+        }
+        dashboardBundleBannerStateMigrated.value = true
     }
 
     private fun EditorContext.importPatchingSettings(snapshot: SettingsSnapshot) {

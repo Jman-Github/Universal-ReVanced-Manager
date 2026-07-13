@@ -294,7 +294,8 @@ fun DashboardScreen(
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
-    val progressBannerCollapsed by prefs.dashboardProgressBannerCollapsed.getAsState()
+    val bundleImportBannerCollapsed by prefs.dashboardBundleImportBannerCollapsed.getAsState()
+    val bundleUpdateBannerCollapsed by prefs.dashboardBundleUpdateBannerCollapsed.getAsState()
     val installerManager: InstallerManager = koinInject()
     val bundlesSelectable by remember { derivedStateOf { selectedSourceCount > 0 } }
     val selectedProfileCount by remember { derivedStateOf { patchProfilesViewModel.selectedProfiles.size } }
@@ -968,10 +969,12 @@ fun DashboardScreen(
                             collapsedCount,
                             total
                         ),
-                        collapsed = progressBannerCollapsed,
+                        collapsed = bundleImportBannerCollapsed,
                         onToggleCollapsed = {
                             composableScope.launch {
-                                prefs.dashboardProgressBannerCollapsed.update(!progressBannerCollapsed)
+                                prefs.dashboardBundleImportBannerCollapsed.update(
+                                    !bundleImportBannerCollapsed
+                                )
                             }
                         },
                         modifier = Modifier
@@ -1060,10 +1063,12 @@ fun DashboardScreen(
                             progress.completed.coerceAtMost(progress.total),
                             progress.total
                         ),
-                        collapsed = progressBannerCollapsed,
+                        collapsed = bundleUpdateBannerCollapsed,
                         onToggleCollapsed = {
                             composableScope.launch {
-                                prefs.dashboardProgressBannerCollapsed.update(!progressBannerCollapsed)
+                                prefs.dashboardBundleUpdateBannerCollapsed.update(
+                                    !bundleUpdateBannerCollapsed
+                                )
                             }
                         },
                         modifier = Modifier

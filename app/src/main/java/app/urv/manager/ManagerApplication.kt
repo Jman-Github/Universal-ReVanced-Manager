@@ -120,6 +120,7 @@ class ManagerApplication : Application() {
         scope.launch {
             prefs.preload()
             prefs.migrateAnnouncementPushNotificationInterval()
+            prefs.migrateDashboardBundleBannerState()
             workerRepository.ensureBundleUpdateNotificationWork(
                 prefs.searchForUpdatesBackgroundInterval.get()
             )
