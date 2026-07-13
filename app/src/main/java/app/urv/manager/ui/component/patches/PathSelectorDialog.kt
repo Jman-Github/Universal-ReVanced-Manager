@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.semantics
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.manager.base.Preference
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.component.AppTopBar
@@ -100,7 +101,8 @@ fun PathSelectorDialog(
     allowDirectorySelection: Boolean = true,
     fileTypeLabel: String? = null,
     confirmButtonText: String? = null,
-    onConfirm: ((Path) -> Unit)? = null
+    onConfirm: ((Path) -> Unit)? = null,
+    lastDirectoryPreference: Preference<String>? = null
 ) {
     val context = LocalContext.current
     val prefs = koinInject<PreferencesManager>()
@@ -118,7 +120,8 @@ fun PathSelectorDialog(
         roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
     }
     val defaultRoot = availableRoots.firstOrNull() ?: return
-    val lastDirectoryValue by prefs.pathSelectorLastDirectory.getAsState()
+    val directoryPreference = lastDirectoryPreference ?: prefs.pathSelectorLastDirectory
+    val lastDirectoryValue by directoryPreference.getAsState()
     val (initialRootPath, initialDirectory) = remember(availableRoots, defaultRoot, lastDirectoryValue) {
         val lastPath = lastDirectoryValue.takeIf { it.isNotBlank() }
             ?.let { runCatching { Paths.get(it) }.getOrNull() }
@@ -235,7 +238,7 @@ fun PathSelectorDialog(
     LaunchedEffect(currentDirectory, lastDirectoryValue) {
         val nextValue = currentDirectory.absolutePathString()
         if (nextValue != lastDirectoryValue) {
-            prefs.pathSelectorLastDirectory.update(nextValue)
+            directoryPreference.update(nextValue)
         }
     }
 

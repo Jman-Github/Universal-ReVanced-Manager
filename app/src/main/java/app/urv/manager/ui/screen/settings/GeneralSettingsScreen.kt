@@ -85,6 +85,8 @@ import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.SettingsSectionIcons
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
@@ -128,6 +130,7 @@ fun GeneralSettingsScreen(
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val backgroundImageInputDirectory by prefs.backgroundImageInputLastDirectory.getAsState()
     val theme by prefs.theme.getAsState()
     var showCustomBackgroundImagePicker by rememberSaveable { mutableStateOf(false) }
     var showCustomBackgroundImagePreview by rememberSaveable { mutableStateOf(false) }
@@ -174,10 +177,15 @@ fun GeneralSettingsScreen(
         }
     }
     val backgroundImageDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            backgroundImageInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         showCustomBackgroundImagePicker = false
         if (uri == null) return@rememberLauncherForActivityResult
+        viewModel.viewModelScope.launch {
+            prefs.backgroundImageInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         viewModel.importCustomBackgroundImageUri(context, uri)
     }
     if (showCustomBackgroundImagePicker && useCustomFilePicker) {
@@ -190,7 +198,8 @@ fun GeneralSettingsScreen(
             },
             fileFilter = { isSupportedBackgroundImageFile(it, supportedBackgroundImageExtensions) },
             allowDirectorySelection = false,
-            fileTypeLabel = supportedBackgroundImageLabel
+            fileTypeLabel = supportedBackgroundImageLabel,
+            lastDirectoryPreference = prefs.backgroundImageInputLastDirectory
         )
     }
     LaunchedEffect(showCustomBackgroundImagePicker, useCustomFilePicker) {

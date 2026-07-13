@@ -176,6 +176,10 @@ import app.urv.manager.ui.component.bundle.ImportPatchBundleDialog
 import app.urv.manager.ui.component.haptics.HapticFloatingActionButton
 import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.RememberedOpenDocumentTree
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptMode
@@ -291,6 +295,12 @@ fun DashboardScreen(
     val showToolsTab by prefs.showToolsTab.getAsState()
     val announcementSystemEnabled by prefs.announcementSystemEnabled.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
+    val dashboardApkInputDirectory by prefs.dashboardApkInputLastDirectory.getAsState()
+    val dashboardQuickExportDirectory by prefs.dashboardQuickExportLastDirectory.getAsState()
+    val dashboardBundleInputDirectory by prefs.dashboardBundleInputLastDirectory.getAsState()
+    val dashboardSplitInputDirectory by prefs.dashboardSplitInputLastDirectory.getAsState()
+    val dashboardSavedAppsExportDirectory by
+        prefs.dashboardSavedAppsExportLastDirectory.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
@@ -319,6 +329,7 @@ fun DashboardScreen(
         onStorageSelect(selected)
     }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
+    val pickerScope = rememberCoroutineScope()
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
@@ -327,9 +338,14 @@ fun DashboardScreen(
             }
         }
     val openStorageDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            dashboardApkInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri != null) {
+            pickerScope.launch {
+                prefs.dashboardApkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+            }
             storageVm.handleStorageResult(uri)
         }
     }
@@ -647,9 +663,14 @@ fun DashboardScreen(
             }
         }
     val bundleDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            dashboardBundleInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri != null) {
+            composableScope.launch {
+                prefs.dashboardBundleInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+            }
             selectedBundleUri = uri
             val displayName = runCatching {
                 androidContext.contentResolver.query(
@@ -728,9 +749,14 @@ fun DashboardScreen(
             pendingSplitPermissionRequest = null
         }
     val splitInputDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            dashboardSplitInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        composableScope.launch {
+            prefs.dashboardSplitInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         val displayName = runCatching {
             androidContext.contentResolver.query(
                 uri,
@@ -791,9 +817,14 @@ fun DashboardScreen(
             }
         }
     val savedAppsExportTreeLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
+        contract = RememberedOpenDocumentTree {
+            dashboardSavedAppsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        composableScope.launch {
+            prefs.dashboardSavedAppsExportLastDirectory.update(uri.toString())
+        }
         savedAppsExportInProgress = true
         installedAppsViewModel.exportSelectedSavedAppsToTreeUri(
             context = androidContext,
@@ -858,10 +889,15 @@ fun DashboardScreen(
         return ExportNameFormatter.format(exportFormat, exportData)
     }
     val quickExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+            dashboardQuickExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val viewModel = quickActionViewModel
         if (uri != null && viewModel != null) {
+            composableScope.launch {
+                prefs.dashboardQuickExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
+            }
             viewModel.exportSavedApp(uri)
         }
         showQuickExportPicker = false
@@ -1243,7 +1279,8 @@ fun DashboardScreen(
                 path?.let { storageVm.handleStorageFile(File(it.toString())) }
             },
             fileFilter = ::isAllowedApkFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.dashboardApkInputLastDirectory
         )
     }
     storageVm.universalFallbackDialogSubject?.let {
@@ -1270,7 +1307,8 @@ fun DashboardScreen(
                 path?.let { selectedBundlePath = it.toString() }
             },
             fileFilter = ::isAllowedPatchBundleFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.dashboardBundleInputLastDirectory
         )
     }
     if (showSplitSourceDialog) {
@@ -1342,7 +1380,8 @@ fun DashboardScreen(
                 vm.startSplitMergeFromPath(path.toString())
             },
             fileFilter = ::isAllowedSplitArchiveFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.dashboardSplitInputLastDirectory
         )
     }
     if (showSplitMergeLoading) {
@@ -1396,7 +1435,8 @@ fun DashboardScreen(
                         )
                     }
                 }
-            }
+            },
+            lastDirectoryPreference = prefs.dashboardSavedAppsExportLastDirectory
         )
     }
     if (savedAppsExportInProgress) {
@@ -1598,7 +1638,8 @@ fun DashboardScreen(
             onConfirm = { directory ->
                 val exportName = resolveQuickExportName(quickExportApp)
                 quickExportDialogState = QuickExportDialogState(directory, exportName)
-            }
+            },
+            lastDirectoryPreference = prefs.dashboardQuickExportLastDirectory
         )
     }
     LaunchedEffect(showQuickExportPicker, quickExportApp?.currentPackageName, useCustomFilePicker) {

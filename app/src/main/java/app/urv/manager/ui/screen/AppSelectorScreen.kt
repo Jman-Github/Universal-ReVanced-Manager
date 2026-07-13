@@ -80,6 +80,8 @@ import app.urv.manager.ui.component.LazyColumnWithScrollbar
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.NonSuggestedVersionDialog
 import app.urv.manager.ui.component.TransparentLoadingDialog
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.UniversalFallbackVersionDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.SafeguardHintCard
@@ -121,6 +123,7 @@ fun AppSelectorScreen(
     val searchEngineHost by prefs.searchEngineHost.getAsState()
     val filterInstalledOnly by prefs.appSelectorFilterInstalledOnly.getAsState()
     val filterPatchesAvailable by prefs.appSelectorFilterPatchesAvailable.getAsState()
+    val apkInputDirectory by prefs.apkInputLastDirectory.getAsState()
     val coroutineScope = rememberCoroutineScope()
 
     EventEffect(flow = vm.storageSelectionFlow) {
@@ -142,9 +145,14 @@ fun AppSelectorScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            apkInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri != null) {
+            coroutineScope.launch {
+                prefs.apkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+            }
             vm.handleStorageResult(uri)
         } else if (returnToDashboardOnStorage) {
             onBackClick()
@@ -183,7 +191,8 @@ fun AppSelectorScreen(
                 }
             },
             fileFilter = ::isAllowedApkFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.apkInputLastDirectory
         )
     }
 

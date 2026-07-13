@@ -86,6 +86,8 @@ import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
@@ -116,6 +118,8 @@ fun MergeSplitApkScreen(
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val mergedApkExportDirectory by prefs.mergedApkExportLastDirectory.getAsState()
+    val mergeLogExportDirectory by prefs.mergeLogExportLastDirectory.getAsState()
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
@@ -157,17 +161,29 @@ fun MergeSplitApkScreen(
     }
 
     val outputDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+            mergedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            prefs.mergedApkExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         vm.saveLastMergedToUri(
             outputUri = uri,
             outputDisplayName = preferredMergedOutputName(state.outputName, state.inputName)
         )
     }
     val logExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = RememberedCreateDocument("text/plain") {
+            mergeLogExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri: Uri? ->
+        uri?.let {
+            coroutineScope.launch {
+                prefs.mergeLogExportLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+        }
         vm.exportSplitMergeLogsToUri(uri)
         showLogExportPicker = false
         pendingLogExportFileName = null
@@ -330,7 +346,8 @@ fun MergeSplitApkScreen(
                     directory = exportDirectory,
                     fileName = preferredMergedOutputName(state.outputName, state.inputName)
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.mergedApkExportLastDirectory
         )
     }
     if (showLogExportPicker && useCustomFilePicker) {
@@ -357,7 +374,8 @@ fun MergeSplitApkScreen(
                     fileName = pendingLogExportFileName
                         ?: FilenameUtils.timestampedLogFileName("merger")
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.mergeLogExportLastDirectory
         )
     }
     LaunchedEffect(showLogExportPicker, useCustomFilePicker, pendingLogExportFileName) {

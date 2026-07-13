@@ -1,6 +1,7 @@
 package app.urv.manager.ui.screen
 
 import android.os.Build
+import android.net.Uri
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -55,6 +56,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -79,6 +81,8 @@ import app.urv.manager.ui.component.InstallerStatusDialog
 import app.urv.manager.ui.component.ProgressPercentageBadge
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
@@ -101,6 +105,7 @@ import app.urv.manager.util.toast
 import org.koin.compose.koinInject
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.launch
 import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,6 +121,9 @@ fun PatcherScreen(
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val patchedApkExportDirectory by prefs.patchedApkExportLastDirectory.getAsState()
+    val patcherLogExportDirectory by prefs.patcherLogExportLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
@@ -166,14 +174,28 @@ fun PatcherScreen(
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+            patchedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
+        uri?.let {
+            pickerScope.launch {
+                prefs.patchedApkExportLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+        }
         viewModel.export(uri)
         showExportPicker = false
     }
     val logExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = RememberedCreateDocument("text/plain") {
+            patcherLogExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
+        uri?.let {
+            pickerScope.launch {
+                prefs.patcherLogExportLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+        }
         viewModel.exportLogsToUri(context, uri)
         showLogExportPicker = false
         pendingLogExportFileName = null
@@ -374,7 +396,8 @@ fun PatcherScreen(
             confirmButtonText = stringResource(R.string.save),
             onConfirm = { directory ->
                 exportFileDialogState = ExportApkDialogState(directory, exportFileName)
-            }
+            },
+            lastDirectoryPreference = prefs.patchedApkExportLastDirectory
         )
     }
     if (showLogExportPicker && useCustomFilePicker) {
@@ -395,7 +418,8 @@ fun PatcherScreen(
                     directory,
                     pendingLogExportFileName ?: FilenameUtils.timestampedLogFileName("patcher")
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.patcherLogExportLastDirectory
         )
     }
     LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {

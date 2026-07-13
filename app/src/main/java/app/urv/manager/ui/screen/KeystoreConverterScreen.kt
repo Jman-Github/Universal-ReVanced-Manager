@@ -53,6 +53,9 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.PasswordField
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.io.File
@@ -74,6 +77,8 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val keystoreConverterInputDirectory by prefs.keystoreConverterInputLastDirectory.getAsState()
+    val convertedKeystoreExportDirectory by prefs.convertedKeystoreExportLastDirectory.getAsState()
     val roots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -133,9 +138,14 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        RememberedGetContent {
+            keystoreConverterInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            prefs.keystoreConverterInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         val displayName = runCatching {
             context.contentResolver.query(
                 uri,
@@ -162,11 +172,14 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
     }
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
+        RememberedCreateDocument("application/octet-stream") {
+            convertedKeystoreExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val keystore = convertedKeystore ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            prefs.convertedKeystoreExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
             runCatching {
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -222,7 +235,8 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
             },
             fileFilter = ::isKeystoreFile,
             allowDirectorySelection = false,
-            fileTypeLabel = ".jks .keystore .p12 .pfx .bks"
+            fileTypeLabel = ".jks .keystore .p12 .pfx .bks",
+            lastDirectoryPreference = prefs.keystoreConverterInputLastDirectory
         )
     }
 
@@ -241,7 +255,8 @@ fun KeystoreConverterScreen(onBackClick: () -> Unit) {
                     directory = directory,
                     fileName = defaultOutputName()
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.convertedKeystoreExportLastDirectory
         )
     }
 

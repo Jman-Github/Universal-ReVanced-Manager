@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.ComponentName
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.net.Uri
 import android.view.HapticFeedbackConstants
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -182,6 +183,8 @@ import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.SettingsSectionIcons
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.splitTrailingPunctuation
 import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.ui.component.settings.SafeguardBooleanItem
@@ -2336,10 +2339,22 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            val exportDebugLogsLauncher =
-                rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) {
-                    it?.let(viewModel::exportDebugLogs)
+            val advancedLogExportDirectory by
+                viewModel.prefs.advancedLogExportLastDirectory.getAsState()
+            val exportDebugLogsLauncher = rememberLauncherForActivityResult(
+                RememberedCreateDocument("text/plain") {
+                    advancedLogExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
                 }
+            ) { uri ->
+                uri?.let {
+                    viewModel.viewModelScope.launch {
+                        viewModel.prefs.advancedLogExportLastDirectory.update(
+                            it.toPickerDirectoryUri().toString()
+                        )
+                    }
+                    viewModel.exportDebugLogs(it)
+                }
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)

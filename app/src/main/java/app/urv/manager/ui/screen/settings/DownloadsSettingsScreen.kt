@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
@@ -56,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -102,10 +104,13 @@ import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
 import app.urv.manager.ui.screen.settings.SettingsSearchState
 import app.urv.manager.ui.viewmodel.DownloadsViewModel
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.toast
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.security.MessageDigest
 import kotlin.text.HexFormat
@@ -121,6 +126,8 @@ fun DownloadsSettingsScreen(
 ) {
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val downloadsExportDirectory by prefs.downloadsExportLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     val autoSaveDownloaderApks by prefs.autoSaveDownloaderApks.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
@@ -163,11 +170,16 @@ fun DownloadsSettingsScreen(
             pendingExportState = null
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
+        contract = RememberedCreateDocument("*/*") {
+            downloadsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val exportState = pendingDocumentExportState
         pendingDocumentExportState = null
         if (uri != null && exportState != null) {
+            pickerScope.launch {
+                prefs.downloadsExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
+            }
             viewModel.exportSelectedApps(context, uri, exportState.asArchive)
         }
     }
@@ -345,7 +357,8 @@ fun DownloadsSettingsScreen(
             onConfirm = { directory ->
                 exportFileDialogState =
                     DownloadedAppsExportDialogState(state, directory, state.defaultFileName)
-            }
+            },
+            lastDirectoryPreference = prefs.downloadsExportLastDirectory
         )
     }
     exportFileDialogState?.let { state ->

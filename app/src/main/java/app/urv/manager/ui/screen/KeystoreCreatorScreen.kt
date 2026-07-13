@@ -49,6 +49,8 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.PasswordField
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.io.IOException
@@ -68,6 +70,7 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val createdKeystoreExportDirectory by prefs.createdKeystoreExportLastDirectory.getAsState()
     val roots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -95,11 +98,14 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
     }
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/octet-stream")
+        RememberedCreateDocument("application/octet-stream") {
+            createdKeystoreExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val keystore = createdKeystore ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            prefs.createdKeystoreExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
             runCatching {
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -143,7 +149,8 @@ fun KeystoreCreatorScreen(onBackClick: () -> Unit) {
                     directory = directory,
                     fileName = defaultOutputName()
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.createdKeystoreExportLastDirectory
         )
     }
 

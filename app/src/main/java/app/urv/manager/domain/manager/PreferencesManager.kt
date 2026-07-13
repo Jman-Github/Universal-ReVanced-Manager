@@ -228,6 +228,70 @@ class PreferencesManager(
 
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
     val pathSelectorLastDirectory = stringPreference("path_selector_last_directory", "")
+    val apkInputLastDirectory = stringPreference("file_picker_apk_input_directory", "")
+    val selectedAppApkInputLastDirectory =
+        stringPreference("file_picker_selected_app_apk_input_directory", "")
+    val patchProfileApkInputLastDirectory =
+        stringPreference("file_picker_patch_profile_apk_input_directory", "")
+    val dashboardApkInputLastDirectory =
+        stringPreference("file_picker_dashboard_apk_input_directory", "")
+    val patchedApkExportLastDirectory = stringPreference("file_picker_patched_apk_export_directory", "")
+    val savedAppExportLastDirectory =
+        stringPreference("file_picker_saved_app_export_directory", "")
+    val dashboardQuickExportLastDirectory =
+        stringPreference("file_picker_dashboard_quick_export_directory", "")
+    val dashboardBundleInputLastDirectory =
+        stringPreference("file_picker_dashboard_bundle_input_directory", "")
+    val dashboardSplitInputLastDirectory =
+        stringPreference("file_picker_dashboard_split_input_directory", "")
+    val dashboardSavedAppsExportLastDirectory =
+        stringPreference("file_picker_dashboard_saved_apps_export_directory", "")
+    val settingsBackupLastDirectory = stringPreference("file_picker_settings_backup_directory", "")
+    val keystoreImportLastDirectory = stringPreference("file_picker_keystore_import_directory", "")
+    val patchBundlesImportLastDirectory =
+        stringPreference("file_picker_patch_bundles_import_directory", "")
+    val patchProfilesImportLastDirectory =
+        stringPreference("file_picker_patch_profiles_import_directory", "")
+    val managerSettingsImportLastDirectory =
+        stringPreference("file_picker_manager_settings_import_directory", "")
+    val everythingImportLastDirectory =
+        stringPreference("file_picker_everything_import_directory", "")
+    val patchSelectionImportLastDirectory =
+        stringPreference("file_picker_patch_selection_import_directory", "")
+    val patchBundlesExportLastDirectory =
+        stringPreference("file_picker_patch_bundles_export_directory", "")
+    val patchProfilesExportLastDirectory =
+        stringPreference("file_picker_patch_profiles_export_directory", "")
+    val everythingExportLastDirectory =
+        stringPreference("file_picker_everything_export_directory", "")
+    val patchSelectionExportLastDirectory =
+        stringPreference("file_picker_patch_selection_export_directory", "")
+    val currentKeystoreExportLastDirectory = stringPreference("file_picker_current_keystore_export_directory", "")
+    val youtubeAssetsExportLastDirectory = stringPreference("file_picker_youtube_assets_export_directory", "")
+    val mergedApkExportLastDirectory = stringPreference("file_picker_merged_apk_export_directory", "")
+    val signedApkExportLastDirectory = stringPreference("file_picker_signed_apk_export_directory", "")
+    val createdKeystoreExportLastDirectory = stringPreference("file_picker_created_keystore_export_directory", "")
+    val convertedKeystoreExportLastDirectory = stringPreference("file_picker_converted_keystore_export_directory", "")
+    val apkSignerInputLastDirectory = stringPreference("file_picker_apk_signer_input_directory", "")
+    val youtubeImageInputLastDirectory = stringPreference("file_picker_youtube_image_input_directory", "")
+    val keystoreConverterInputLastDirectory =
+        stringPreference("file_picker_keystore_converter_input_directory", "")
+    val patchOptionFileInputLastDirectory =
+        stringPreference("file_picker_patch_option_file_input_directory", "")
+    val mergeLogExportLastDirectory = stringPreference("file_picker_merge_log_export_directory", "")
+    val patcherLogExportLastDirectory = stringPreference("file_picker_patcher_log_export_directory", "")
+    val patchBundleDiscoveryExportLastDirectory =
+        stringPreference("file_picker_patch_bundle_discovery_export_directory", "")
+    val splitInstallerInputLastDirectory =
+        stringPreference("file_picker_split_installer_input_directory", "")
+    val splitInstallerLogExportLastDirectory =
+        stringPreference("file_picker_split_installer_log_export_directory", "")
+    val advancedLogExportLastDirectory =
+        stringPreference("file_picker_advanced_log_export_directory", "")
+    val downloadsExportLastDirectory = stringPreference("file_picker_downloads_export_directory", "")
+    val backgroundImageInputLastDirectory =
+        stringPreference("file_picker_background_image_input_directory", "")
+    val contentSelectorLastDirectory = stringPreference("file_picker_content_selector_directory", "")
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)

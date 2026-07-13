@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -84,6 +85,8 @@ import app.urv.manager.ui.component.SegmentedButton
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptMode
@@ -135,6 +138,7 @@ fun InstalledAppInfoScreen(
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val savedAppExportDirectory by prefs.savedAppExportLastDirectory.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val installerManager: InstallerManager = koinInject()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
@@ -166,8 +170,15 @@ fun InstalledAppInfoScreen(
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/vnd.android.package-archive")
+        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+            savedAppExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
+        uri?.let {
+            scope.launch {
+                prefs.savedAppExportLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+        }
         viewModel.exportSavedApp(uri)
         showExportPicker = false
     }
@@ -853,7 +864,8 @@ fun InstalledAppInfoScreen(
             confirmButtonText = stringResource(R.string.save),
             onConfirm = { directory ->
                 exportFileDialogState = ExportSavedApkDialogState(directory, exportFileName)
-            }
+            },
+            lastDirectoryPreference = prefs.savedAppExportLastDirectory
         )
     }
     LaunchedEffect(showExportPicker, useCustomFilePicker, exportFileName) {

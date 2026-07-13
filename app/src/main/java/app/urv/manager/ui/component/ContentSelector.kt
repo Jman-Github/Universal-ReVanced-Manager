@@ -2,19 +2,20 @@ package app.urv.manager.ui.component
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 import java.nio.file.Path
 
 @Composable
@@ -22,6 +23,8 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val contentSelectorDirectory by prefs.contentSelectorLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
     var showPicker by rememberSaveable { mutableStateOf(false) }
@@ -34,9 +37,16 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
         pendingPicker = false
     }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            contentSelectorDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
-        uri?.let(onSelect)
+        uri?.let {
+            pickerScope.launch {
+                prefs.contentSelectorLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+            onSelect(it)
+        }
     }
 
     if (showPicker && useCustomFilePicker) {
@@ -47,7 +57,8 @@ fun ContentSelector(mime: String, onSelect: (Uri) -> Unit, content: @Composable 
                 path?.let { onSelect(Uri.fromFile(it.toFile())) }
             },
             fileFilter = fileFilter,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.contentSelectorLastDirectory
         )
     }
     LaunchedEffect(useCustomFilePicker) {

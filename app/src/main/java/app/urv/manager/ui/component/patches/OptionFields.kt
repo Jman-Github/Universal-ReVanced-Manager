@@ -64,6 +64,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -88,6 +89,8 @@ import app.urv.manager.ui.component.FloatInputDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.IntInputDialog
 import app.urv.manager.ui.component.LongInputDialog
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.haptics.HapticRadioButton
 import app.urv.manager.ui.component.haptics.HapticSwitch
@@ -98,6 +101,7 @@ import app.urv.manager.util.saver.snapshotStateSetSaver
 import app.urv.manager.util.toast
 import app.urv.manager.util.transparentListItemColors
 import kotlinx.parcelize.Parcelize
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
@@ -290,15 +294,24 @@ private object StringOptionEditor : OptionEditor<String> {
         val app: Application = koinInject()
         val prefs: PreferencesManager = koinInject()
         val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+        val patchOptionFileInputDirectory by prefs.patchOptionFileInputLastDirectory.getAsState()
+        val pickerScope = rememberCoroutineScope()
         val storageRoots = remember { fs.storageRoots() }
         val (contract, permissionName) = fs.permissionContract()
         val permissionLauncher = rememberLauncherForActivityResult(contract = contract) {
             showFileDialog = it
         }
         val openDocumentLauncher = rememberLauncherForActivityResult(
-            contract = ActivityResultContracts.GetContent()
+            contract = RememberedGetContent {
+                patchOptionFileInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+            }
         ) { uri ->
             uri?.let { selectedUri ->
+                pickerScope.launch {
+                    prefs.patchOptionFileInputLastDirectory.update(
+                        selectedUri.toPickerDirectoryUri().toString()
+                    )
+                }
                 importDocumentUriToLocalPath(fs, selectedUri)?.let { localPath ->
                     fieldValue = localPath
                 } ?: app.toast(app.getString(R.string.failed_to_load_file))
@@ -309,11 +322,13 @@ private object StringOptionEditor : OptionEditor<String> {
             PathSelectorDialog(
                 roots = storageRoots,
                 onSelect = {
-                showFileDialog = false
-                it?.let { path ->
-                    fieldValue = path.toString()
-                }
-            })
+                    showFileDialog = false
+                    it?.let { path ->
+                        fieldValue = path.toString()
+                    }
+                },
+                lastDirectoryPreference = prefs.patchOptionFileInputLastDirectory
+            )
         }
         LaunchedEffect(useCustomFilePicker) {
             if (!useCustomFilePicker) {

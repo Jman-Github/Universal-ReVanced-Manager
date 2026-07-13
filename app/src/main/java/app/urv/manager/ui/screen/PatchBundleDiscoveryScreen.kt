@@ -3,6 +3,7 @@ package app.urv.manager.ui.screen
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.net.Uri
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -91,6 +92,8 @@ import app.urv.manager.ui.component.LazyColumnWithScrollbar
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.bundle.LinkOptionRow
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.viewmodel.BundleDiscoveryViewModel
 import app.urv.manager.util.isAllowedPatchBundleFile
@@ -143,6 +146,9 @@ fun PatchBundleDiscoveryScreen(
     val latestPref by prefs.patchBundleDiscoveryLatest.getAsState()
     val sortModePref by prefs.patchBundleDiscoverySortMode.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val patchBundleDiscoveryExportDirectory by
+        prefs.patchBundleDiscoveryExportLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     var showRelease by remember { mutableStateOf(showReleasePref) }
     var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
     var latestSelected by remember { mutableStateOf(latestPref) }
@@ -345,11 +351,18 @@ fun PatchBundleDiscoveryScreen(
     var exportFileDialogState by remember { mutableStateOf<BundleExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingBundleExportConfirmation?>(null) }
     val bundleExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("*/*")
+        contract = RememberedCreateDocument("*/*") {
+            patchBundleDiscoveryExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val bundle = pendingDocumentExportBundle
         pendingDocumentExportBundle = null
         if (bundle != null && uri != null) {
+            pickerScope.launch {
+                prefs.patchBundleDiscoveryExportLastDirectory.update(
+                    uri.toPickerDirectoryUri().toString()
+                )
+            }
             viewModel.exportBundle(bundle, uri)
         }
     }
@@ -382,7 +395,8 @@ fun PatchBundleDiscoveryScreen(
                     directory = directory,
                     fileName = defaultBundleExportName(bundle)
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.patchBundleDiscoveryExportLastDirectory
         )
     }
 

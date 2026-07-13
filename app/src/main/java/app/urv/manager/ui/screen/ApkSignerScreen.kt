@@ -58,6 +58,9 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.util.APK_MIMETYPE
 import app.urv.manager.util.APK_SIGNER_CACHE_DIR
 import app.urv.manager.util.toast
@@ -81,6 +84,8 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val apkSignerInputDirectory by prefs.apkSignerInputLastDirectory.getAsState()
+    val signedApkExportDirectory by prefs.signedApkExportLastDirectory.getAsState()
     val roots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -124,9 +129,14 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
     }
 
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        RememberedGetContent {
+            apkSignerInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            prefs.apkSignerInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         val displayName = queryDisplayName(context, uri) ?: uri.lastPathSegment
         val mimeType = context.contentResolver.getType(uri)
         if (!isApkInput(displayName, mimeType)) {
@@ -143,11 +153,14 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
     }
 
     val saveDocumentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument(APK_MIMETYPE)
+        RememberedCreateDocument(APK_MIMETYPE) {
+            signedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val apk = signedApk ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            prefs.signedApkExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
             runCatching {
                 CacheCleanupGuard.withCacheInUse {
                     withContext(Dispatchers.IO) {
@@ -205,7 +218,8 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
             },
             fileFilter = ::isApkFile,
             allowDirectorySelection = false,
-            fileTypeLabel = ".apk"
+            fileTypeLabel = ".apk",
+            lastDirectoryPreference = prefs.apkSignerInputLastDirectory
         )
     }
 
@@ -224,7 +238,8 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
                     directory = directory,
                     fileName = defaultOutputName()
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.signedApkExportLastDirectory
         )
     }
 

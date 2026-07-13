@@ -51,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -69,6 +70,9 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.RememberedOpenDocument
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.viewmodel.SplitApkInstallerViewModel
 import app.urv.manager.ui.viewmodel.SplitInstallMode
 import app.urv.manager.util.SPLIT_ARCHIVE_MIME_TYPES
@@ -82,6 +86,7 @@ import java.nio.file.Path
 import kotlin.io.path.isDirectory
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import kotlinx.coroutines.launch
 import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +102,9 @@ fun SplitApkInstallerScreen(
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val splitInstallerInputDirectory by prefs.splitInstallerInputLastDirectory.getAsState()
+    val splitInstallerLogExportDirectory by prefs.splitInstallerLogExportLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     val storageRoots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
@@ -129,11 +137,16 @@ fun SplitApkInstallerScreen(
     }
 
     val splitArchiveLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
+        contract = RememberedOpenDocument {
+            splitInstallerInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri: Uri? ->
         val mode = pendingMode
         pendingMode = null
         if (mode == null || uri == null) return@rememberLauncherForActivityResult
+        pickerScope.launch {
+            prefs.splitInstallerInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
 
         val displayName = resolveDisplayName(context.contentResolver, uri)
 
@@ -151,8 +164,15 @@ fun SplitApkInstallerScreen(
         )
     }
     val logExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("text/plain")
+        contract = RememberedCreateDocument("text/plain") {
+            splitInstallerLogExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
+        uri?.let {
+            pickerScope.launch {
+                prefs.splitInstallerLogExportLastDirectory.update(it.toPickerDirectoryUri().toString())
+            }
+        }
         vm.exportLogsToUri(context, uri)
         showLogExportPicker = false
         pendingLogExportFileName = null
@@ -336,7 +356,8 @@ fun SplitApkInstallerScreen(
                 }
             },
             fileFilter = ::isAllowedSplitArchiveFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.splitInstallerInputLastDirectory
         )
     }
     if (showLogExportPicker && useCustomFilePicker) {
@@ -362,7 +383,8 @@ fun SplitApkInstallerScreen(
                     exportDirectory,
                     pendingLogExportFileName ?: FilenameUtils.timestampedLogFileName("installer")
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.splitInstallerLogExportLastDirectory
         )
     }
     LaunchedEffect(showLogExportPicker, useCustomFilePicker, pendingLogExportFileName) {

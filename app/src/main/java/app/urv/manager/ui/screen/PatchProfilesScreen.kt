@@ -98,6 +98,8 @@ import app.urv.manager.ui.component.TextInputDialog
 import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
@@ -148,6 +150,10 @@ fun PatchProfilesScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.flow.collectAsStateWithLifecycle(
         initialValue = prefs.useCustomFilePicker.default
     )
+    val patchProfileApkInputDirectory by
+        prefs.patchProfileApkInputLastDirectory.flow.collectAsStateWithLifecycle(
+            initialValue = prefs.patchProfileApkInputLastDirectory.default
+        )
     val allowUniversal by prefs.disableUniversalPatchCheck.flow.collectAsStateWithLifecycle(
         initialValue = prefs.disableUniversalPatchCheck.default
     )
@@ -260,12 +266,17 @@ fun PatchProfilesScreen(
         }
     }
     val apkDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            patchProfileApkInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         val profile = pendingDocumentApkPickerProfile
         pendingDocumentApkPickerProfile = null
         apkPickerProfile = null
         if (profile == null || uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            prefs.patchProfileApkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         if (!isAllowedApkUri(context, uri)) {
             handleApkSelectionResult(profile.name, PatchProfilesViewModel.ApkSelectionResult.INVALID_FILE)
             return@rememberLauncherForActivityResult
@@ -313,6 +324,7 @@ fun PatchProfilesScreen(
             },
             fileFilter = ::isAllowedApkFile,
             allowDirectorySelection = false,
+            lastDirectoryPreference = prefs.patchProfileApkInputLastDirectory,
             fileTypeLabel = stringResource(R.string.apk_file_type)
         )
     }

@@ -105,6 +105,9 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedCreateDocument
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import coil.imageLoader
@@ -133,6 +136,8 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val youtubeImageInputDirectory by prefs.youtubeImageInputLastDirectory.getAsState()
+    val youtubeAssetsExportDirectory by prefs.youtubeAssetsExportLastDirectory.getAsState()
     val scope = rememberCoroutineScope()
     val storageRoots = remember { fs.storageRoots() }
     val imageExtensions = remember { setOf("png", "jpg", "jpeg", "webp", "gif", "bmp") }
@@ -253,11 +258,18 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
         if (syncHeaderTransforms) lightTransform = updated
     }
 
-    val openImage = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val openImage = rememberLauncherForActivityResult(
+        RememberedGetContent {
+            youtubeImageInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
         val target = activePicker ?: return@rememberLauncherForActivityResult
         showPicker = false
         activePicker = null
         val source = uri?.toString() ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            prefs.youtubeImageInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+        }
         runCatching {
             context.contentResolver.takePersistableUriPermission(
                 uri,
@@ -269,10 +281,15 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
         }
     }
 
-    val saveDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+    val saveDocument = rememberLauncherForActivityResult(
+        RememberedCreateDocument("application/zip") {
+            youtubeAssetsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
         val zip = generatedZip ?: return@rememberLauncherForActivityResult
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
+            prefs.youtubeAssetsExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
             runCatching {
                 withContext(Dispatchers.IO) {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
@@ -402,6 +419,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
             fileFilter = { it.extension.lowercase(Locale.ROOT) in imageExtensions },
             allowDirectorySelection = false,
             fileTypeLabel = ".png .jpg .jpeg .webp .gif .bmp",
+            lastDirectoryPreference = prefs.youtubeImageInputLastDirectory
         )
     }
 
@@ -431,7 +449,8 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
                     directory = if (Files.isDirectory(selected)) selected else (selected.parent ?: selected),
                     fileName = generatedZip?.name ?: "youtube-assets.zip"
                 )
-            }
+            },
+            lastDirectoryPreference = prefs.youtubeAssetsExportLastDirectory
         )
     }
 

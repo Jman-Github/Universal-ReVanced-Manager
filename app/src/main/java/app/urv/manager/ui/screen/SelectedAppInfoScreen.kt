@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
@@ -84,6 +85,8 @@ import app.urv.manager.ui.component.NotificationCard
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.SafeguardHintCard
 import app.urv.manager.ui.component.patches.PathSelectorDialog
+import app.urv.manager.ui.component.RememberedGetContent
+import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.urv.manager.ui.viewmodel.BundleRecommendationDetail
@@ -182,6 +185,8 @@ fun SelectedAppInfoScreen(
     }
     val fs = koinInject<Filesystem>()
     val useCustomFilePicker by vm.prefs.useCustomFilePicker.getAsState()
+    val selectedAppApkInputDirectory by vm.prefs.selectedAppApkInputLastDirectory.getAsState()
+    val pickerScope = rememberCoroutineScope()
     val storageRoots = remember { fs.storageRoots() }
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
@@ -192,9 +197,16 @@ fun SelectedAppInfoScreen(
             }
         }
     val openDocumentLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
+        contract = RememberedGetContent {
+            selectedAppApkInputDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
     ) { uri ->
         if (uri != null) {
+            pickerScope.launch {
+                vm.prefs.selectedAppApkInputLastDirectory.update(
+                    uri.toPickerDirectoryUri().toString()
+                )
+            }
             vm.handleStorageResult(uri)
         }
     }
@@ -225,7 +237,8 @@ fun SelectedAppInfoScreen(
                 vm.handleStorageFile(path?.let { File(it.toString()) })
             },
             fileFilter = ::isAllowedApkFile,
-            allowDirectorySelection = false
+            allowDirectorySelection = false,
+            lastDirectoryPreference = vm.prefs.selectedAppApkInputLastDirectory
         )
     }
     val composableScope = rememberCoroutineScope()
