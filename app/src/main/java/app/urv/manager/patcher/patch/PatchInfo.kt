@@ -4,8 +4,10 @@ import androidx.compose.runtime.Immutable
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.resourcePatch as revancedResourcePatch
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.collections.immutable.toImmutableSet
 import java.util.Locale
 import kotlin.reflect.KType
@@ -22,14 +24,16 @@ data class PatchInfo(
     fun compatibleWith(packageName: String) =
         compatiblePackages?.any { it.packageName == packageName } ?: true
 
-    fun supports(packageName: String, versionName: String?): Boolean {
+    fun supports(packageName: String, versionName: String?, versionCode: Long? = null): Boolean {
         val packages = compatiblePackages ?: return true // Universal patch
 
         return packages.any { pkg ->
             if (pkg.packageName != packageName) return@any false
             if (pkg.versions == null) return@any true
+            if (versionName == null || versionName !in pkg.versions) return@any false
 
-            versionName != null && versionName in pkg.versions
+            val supportedCodes = pkg.versionCodes?.get(versionName) ?: return@any true
+            versionCode == null || versionCode in supportedCodes
         }
     }
 
@@ -71,7 +75,8 @@ data class PatchInfo(
                         ?.mapNotNull { it as? String }
                         ?.toImmutableSet()
                         ?.takeIf { it.isNotEmpty() }
-                    CompatiblePackage(packageName, versions, experimentalVersions)
+                    val versionCodes = parseVersionCodes(map["versionCodes"])
+                    CompatiblePackage(packageName, versions, experimentalVersions, versionCodes)
                 }
                 ?.toImmutableList()
                 ?.takeIf { it.isNotEmpty() }
@@ -86,6 +91,20 @@ data class PatchInfo(
 
             return PatchInfo(name, description, include, compatiblePackages, options)
         }
+
+        private fun parseVersionCodes(raw: Any?): ImmutableMap<String, ImmutableSet<Long>>? {
+            val entries = raw as? Map<*, *> ?: return null
+            return entries.mapNotNull { (rawVersion, rawCodes) ->
+                val version = rawVersion as? String ?: return@mapNotNull null
+                val codes = (rawCodes as? Iterable<*>)
+                    ?.mapNotNull { (it as? Number)?.toLong() }
+                    ?.toImmutableSet()
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: return@mapNotNull null
+                version to codes
+            }.toMap().toImmutableMap().takeIf { it.isNotEmpty() }
+
+        }
     }
 }
 
@@ -93,7 +112,8 @@ data class PatchInfo(
 data class CompatiblePackage(
     val packageName: String,
     val versions: ImmutableSet<String>?,
-    val experimentalVersions: ImmutableSet<String>? = null
+    val experimentalVersions: ImmutableSet<String>? = null,
+    val versionCodes: ImmutableMap<String, ImmutableSet<Long>>? = null
 )
 
 @Immutable

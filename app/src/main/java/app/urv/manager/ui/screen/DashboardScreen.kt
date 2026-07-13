@@ -158,6 +158,7 @@ import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppLabel
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.AppVersion
 import app.urv.manager.ui.component.AutoUpdatesDialog
 import app.urv.manager.ui.component.AvailableUpdateDialog
 import app.urv.manager.ui.component.CheckedFilterChip
@@ -1294,6 +1295,7 @@ fun DashboardScreen(
             suggestedVersion = storageVm.nonSuggestedVersionDialogSuggestedVersion
                 ?.takeUnless { it.isBlank() }
                 ?: storageSuggestedVersions[local.packageName].orEmpty().ifBlank { local.version },
+            suggestedVersionCodes = storageVm.nonSuggestedVersionDialogSuggestedVersionCodes,
             requiresUniversalPatchesEnabled = storageVm.nonSuggestedVersionDialogRequiresUniversalEnabled,
             onDismiss = storageVm::dismissNonSuggestedVersionDialog
         )
@@ -3271,15 +3273,7 @@ private fun MergeSplitInstalledAppCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    packageInfo.versionName?.takeIf { it.isNotBlank() }?.let { versionName ->
-                        Text(
-                            text = versionName,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    AppVersion(packageInfo)
                 }
             }
             Row(

@@ -145,8 +145,11 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.domain.repository.PatchProfile
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.appVersionLabel
+import app.urv.manager.ui.component.suggestedVersionLabel
 import app.urv.manager.ui.component.CheckedFilterChip
 import app.urv.manager.ui.component.ExperimentalVersionBadge
+import app.urv.manager.ui.component.ExpandableText
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
@@ -159,6 +162,7 @@ import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.patches.OptionItem
 import app.urv.manager.ui.component.patches.SelectionWarningDialog
 import app.urv.manager.ui.model.PatchSelectionActionKey
+import app.urv.manager.ui.model.SupportedVersionInfo
 import app.urv.manager.ui.viewmodel.BundleSourceType
 import app.urv.manager.ui.viewmodel.PatchesSelectorViewModel
 import app.urv.manager.ui.viewmodel.PatchesSelectorViewModel.Companion.SHOW_INCOMPATIBLE
@@ -185,6 +189,7 @@ fun PatchesSelectorScreen(
     onBackClick: () -> Unit,
     viewModel: PatchesSelectorViewModel
 ) {
+    val appInfo by viewModel.selectedAppInfo.collectAsStateWithLifecycle()
     val bundles by viewModel.bundlesFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val bundleDisplayNames by viewModel.bundleDisplayNames.collectAsStateWithLifecycle(initialValue = emptyMap())
     val bundleTypes by viewModel.bundleTypes.collectAsStateWithLifecycle(initialValue = emptyMap<Int, BundleSourceType>())
@@ -666,9 +671,12 @@ fun PatchesSelectorScreen(
         }
     }
 
+    val currentAppVersionLabel = viewModel.currentAppVersion?.let { version ->
+        appVersionLabel(versionName = version, appInfo = appInfo)
+    } ?: stringResource(R.string.any_version)
     if (viewModel.compatibleVersions.isNotEmpty())
         IncompatiblePatchDialog(
-            appVersion = viewModel.currentAppVersion ?: stringResource(R.string.any_version),
+            appVersion = currentAppVersionLabel,
             compatibleVersions = viewModel.compatibleVersions,
             onDismissRequest = viewModel::dismissDialogs
         )
@@ -677,7 +685,7 @@ fun PatchesSelectorScreen(
     }
     if (showIncompatiblePatchesDialog)
         IncompatiblePatchesDialog(
-            appVersion = viewModel.currentAppVersion ?: stringResource(R.string.any_version),
+            appVersion = currentAppVersionLabel,
             onDismissRequest = { showIncompatiblePatchesDialog = false }
         )
 
@@ -1929,9 +1937,14 @@ private fun PatchItem(
         PatchVersionChipInfo(
             label = stringResource(
                 R.string.bundle_version_suggested_label,
-                formatPatchVersionLabel(version)
+                suggestedVersionLabel(
+                    versionName = version,
+                    versionCodes = supportedPackage?.versionCodes?.get(version).orEmpty(),
+                    displayVersion = formatPatchVersionLabel(version)
+                )
             ),
             version = version,
+            versionCodes = supportedPackage?.versionCodes?.get(version).orEmpty(),
             highlighted = true,
             experimental = version in experimentalVersions
         )
@@ -1999,8 +2012,13 @@ private fun PatchItem(
         )
         else -> availableVersions.map { version ->
             PatchVersionChipInfo(
-                label = formatPatchVersionLabel(version),
+                label = suggestedVersionLabel(
+                    versionName = version,
+                    versionCodes = supportedPackage?.versionCodes?.get(version).orEmpty(),
+                    displayVersion = formatPatchVersionLabel(version)
+                ),
                 version = version,
+                versionCodes = supportedPackage?.versionCodes?.get(version).orEmpty(),
                 outlined = true,
                 experimental = version in experimentalVersions
             )
@@ -2101,6 +2119,7 @@ private fun PatchItem(
                             label = info.label,
                             packageName = packageName,
                             version = info.version,
+                            versionCodes = info.versionCodes,
                             searchEngineHost = searchEngineHost,
                             highlighted = true,
                             experimental = info.experimental
@@ -2111,6 +2130,7 @@ private fun PatchItem(
                             label = version.label,
                             packageName = packageName,
                             version = version.version,
+                            versionCodes = version.versionCodes,
                             searchEngineHost = searchEngineHost,
                             outlined = true,
                             experimental = version.experimental
@@ -2232,6 +2252,7 @@ private fun PatchItem(
 private data class PatchVersionChipInfo(
     val label: String,
     val version: String?,
+    val versionCodes: Set<Long> = emptySet(),
     val highlighted: Boolean = false,
     val outlined: Boolean = false,
     val experimental: Boolean = false
@@ -2248,6 +2269,7 @@ private fun PatchVersionSearchChip(
     label: String,
     packageName: String,
     version: String?,
+    versionCodes: Set<Long> = emptySet(),
     searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
@@ -2265,7 +2287,9 @@ private fun PatchVersionSearchChip(
         experimental = experimental,
         fullWidth = fullWidth,
         modifier = modifier,
-        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) }
+        onClick = {
+            context.openUrl(buildSearchUrl(packageName, version, versionCodes, searchEngineHost))
+        }
     )
 }
 
@@ -2274,6 +2298,7 @@ private fun PatchVersionChipWithSearch(
     label: String,
     packageName: String,
     version: String?,
+    versionCodes: Set<Long> = emptySet(),
     searchEngineHost: String,
     highlighted: Boolean = false,
     outlined: Boolean = false,
@@ -2294,6 +2319,7 @@ private fun PatchVersionChipWithSearch(
         PatchVersionSearchButton(
             packageName = packageName,
             version = version,
+            versionCodes = versionCodes,
             searchEngineHost = searchEngineHost
         )
     }
@@ -2356,12 +2382,10 @@ private fun PatchVersionChip(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(if (icon == null) 6.dp else 4.dp)
             ) {
-                Text(
+                ExpandableText(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = if (fullWidth && icon == null) Modifier.fillMaxWidth() else Modifier
                 )
                 if (icon != null) {
@@ -2417,6 +2441,7 @@ private fun PatchVersionsDialog(
                             label = info.label,
                             packageName = packageName,
                             version = info.version,
+                            versionCodes = info.versionCodes,
                             searchEngineHost = searchEngineHost,
                             highlighted = true,
                             experimental = info.experimental
@@ -2441,6 +2466,7 @@ private fun PatchVersionsDialog(
                                         label = info.label,
                                         packageName = packageName,
                                         version = info.version,
+                                        versionCodes = info.versionCodes,
                                         searchEngineHost = searchEngineHost,
                                         outlined = true,
                                         experimental = info.experimental,
@@ -2467,12 +2493,15 @@ private fun formatPatchVersionLabel(version: String): String =
 private fun PatchVersionSearchButton(
     packageName: String,
     version: String?,
+    versionCodes: Set<Long> = emptySet(),
     searchEngineHost: String,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     IconButton(
-        onClick = { context.openUrl(buildSearchUrl(packageName, version, searchEngineHost)) },
+        onClick = {
+            context.openUrl(buildSearchUrl(packageName, version, versionCodes, searchEngineHost))
+        },
         modifier = modifier.size(24.dp)
     ) {
         Icon(
@@ -2483,15 +2512,26 @@ private fun PatchVersionSearchButton(
     }
 }
 
-private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
+private fun buildSearchUrl(
+    packageName: String,
+    version: String?,
+    versionCodes: Set<Long>,
+    searchEngineHost: String
+): String {
     val encodedPackage = Uri.encode(packageName)
     val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
         Uri.encode(formatPatchVersionLabel(it))
     }
+    val encodedVersionCodes = versionCodes.sorted().map { Uri.encode(it.toString()) }
     val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
         ?.takeIf { it.isNotBlank() }
         ?.let(Uri::encode)
-    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val query = buildList {
+        add(encodedPackage)
+        encodedVersion?.let(::add)
+        addAll(encodedVersionCodes)
+        encodedArch?.let(::add)
+    }.joinToString("+")
     val host = normalizeSearchHost(searchEngineHost)
     return "https://$host/search?q=$query"
 }
@@ -3130,29 +3170,40 @@ private fun IncompatiblePatchesDialog(
 @Composable
 private fun IncompatiblePatchDialog(
     appVersion: String,
-    compatibleVersions: List<String>,
+    compatibleVersions: List<SupportedVersionInfo>,
     onDismissRequest: () -> Unit
-) = AlertDialog(
-    icon = {
-        Icon(Icons.Outlined.WarningAmber, null)
-    },
-    onDismissRequest = onDismissRequest,
-    confirmButton = {
-        TextButton(onClick = onDismissRequest) {
-            Text(stringResource(R.string.ok))
-        }
-    },
-    title = { CenteredDialogTitle(stringResource(R.string.incompatible_patch)) },
-    text = {
-        Text(
-            stringResource(
-                R.string.app_version_not_compatible,
-                appVersion,
-                compatibleVersions.joinToString(", ")
+) {
+    val compatibleVersionLabels = compatibleVersions
+        .sortedBy { it.version }
+        .map { info ->
+            suggestedVersionLabel(
+                versionName = info.version,
+                versionCodes = info.versionCodes
             )
-        )
-    }
-)
+        }
+
+    AlertDialog(
+        icon = {
+            Icon(Icons.Outlined.WarningAmber, null)
+        },
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.ok))
+            }
+        },
+        title = { CenteredDialogTitle(stringResource(R.string.incompatible_patch)) },
+        text = {
+            Text(
+                stringResource(
+                    R.string.app_version_not_compatible,
+                    appVersion,
+                    compatibleVersionLabels.joinToString(", ")
+                )
+            )
+        }
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

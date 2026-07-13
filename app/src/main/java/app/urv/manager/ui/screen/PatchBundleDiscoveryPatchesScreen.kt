@@ -469,7 +469,8 @@ private fun PatchInfo.matchesQuery(query: String): Boolean {
     if (description?.contains(normalized, ignoreCase = true) == true) return true
     if (compatiblePackages?.any { pkg ->
             pkg.packageName.contains(normalized, ignoreCase = true) ||
-                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true) ||
+                (pkg.versionCodes?.values?.flatten()?.any { it.toString().contains(normalized) } == true)
         } == true
     ) {
         return true

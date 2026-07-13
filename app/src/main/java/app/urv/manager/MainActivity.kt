@@ -502,8 +502,16 @@ private fun ReVancedManager(
                 },
                 onReviewSelection = { app, selection, options, missing ->
                     val appWithVersion = when (app) {
-                        is SelectedApp.Search -> app.copy(version = app.version ?: params.selectedApp.version)
-                        is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = params.selectedApp.version) else app
+                        is SelectedApp.Search -> if (app.version == null) {
+                            app.copy(version = params.selectedApp.version, versionCode = null)
+                        } else {
+                            app
+                        }
+                        is SelectedApp.Download -> if (app.version.isNullOrBlank()) {
+                            app.copy(version = params.selectedApp.version, versionCode = null)
+                        } else {
+                            app
+                        }
                         else -> app
                     }
                     navController.navigateComplex(
@@ -637,8 +645,15 @@ private fun ReVancedManager(
                             ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.desiredVersion
                         val appWithVersion = when (app) {
-                            is SelectedApp.Search -> app.copy(version = versionHint)
-                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            is SelectedApp.Search -> app.copy(
+                                version = versionHint,
+                                versionCode = app.versionCode.takeIf { app.version == versionHint }
+                            )
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) {
+                                app.copy(version = versionHint, versionCode = null)
+                            } else {
+                                app
+                            }
                             else -> app
                         }
                         navController.navigateComplex(
@@ -661,8 +676,15 @@ private fun ReVancedManager(
                             ?: viewModel.preferredBundleVersion?.takeUnless { it.isNullOrBlank() }
                             ?: viewModel.desiredVersion
                         val appWithVersion = when (app) {
-                            is SelectedApp.Search -> app.copy(version = versionHint)
-                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) app.copy(version = versionHint) else app
+                            is SelectedApp.Search -> app.copy(
+                                version = versionHint,
+                                versionCode = app.versionCode.takeIf { app.version == versionHint }
+                            )
+                            is SelectedApp.Download -> if (app.version.isNullOrBlank()) {
+                                app.copy(version = versionHint, versionCode = null)
+                            } else {
+                                app
+                            }
                             else -> app
                         }
                         navController.navigateComplex(

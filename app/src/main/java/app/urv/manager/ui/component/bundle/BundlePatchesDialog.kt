@@ -38,8 +38,10 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.ui.component.ArrowButton
 import app.urv.manager.ui.component.ExperimentalVersionBadge
+import app.urv.manager.ui.component.ExpandableText
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.suggestedVersionLabel
 import app.urv.manager.util.openUrl
 import kotlinx.coroutines.flow.mapNotNull
 import org.koin.compose.koinInject
@@ -246,7 +248,10 @@ fun PatchItem(
                                             val searchable = !(packageIsAny && versionIsAny)
                                             PatchInfoChip(
                                                 modifier = Modifier.align(Alignment.CenterVertically),
-                                                text = "$VERSION_ICON $version",
+                                                text = "$VERSION_ICON ${suggestedVersionLabel(
+                                                    versionName = version,
+                                                    versionCodes = compatiblePackage.versionCodes?.get(version).orEmpty()
+                                                )}",
                                                 experimental = versionIsExperimental,
                                                 onClick = if (!searchable) {
                                                     null
@@ -255,7 +260,12 @@ fun PatchItem(
                                                         val queryVersion = if (versionIsAny) null else version
                                                         val queryPackage = if (packageIsAny) "android.app" else packageName
                                                         context.openUrl(
-                                                            buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                            buildSearchUrl(
+                                                                queryPackage,
+                                                                queryVersion,
+                                                                searchEngineHost,
+                                                                compatiblePackage.versionCodes?.get(version).orEmpty()
+                                                            )
                                                         )
                                                     }
                                                 }
@@ -270,7 +280,10 @@ fun PatchItem(
                                         val searchable = !(packageIsAny && versionIsAny)
                                         PatchInfoChip(
                                             modifier = Modifier.align(Alignment.CenterVertically),
-                                            text = "$VERSION_ICON $displayedVersion",
+                                            text = "$VERSION_ICON ${suggestedVersionLabel(
+                                                versionName = displayedVersion,
+                                                versionCodes = compatiblePackage.versionCodes?.get(displayedVersion).orEmpty()
+                                            )}",
                                             experimental = versionIsExperimental,
                                             onClick = if (!searchable) {
                                                 null
@@ -279,7 +292,12 @@ fun PatchItem(
                                                     val queryVersion = if (versionIsAny) null else displayedVersion
                                                     val queryPackage = if (packageIsAny) "android.app" else packageName
                                                     context.openUrl(
-                                                        buildSearchUrl(queryPackage, queryVersion, searchEngineHost)
+                                                        buildSearchUrl(
+                                                            queryPackage,
+                                                            queryVersion,
+                                                            searchEngineHost,
+                                                            compatiblePackage.versionCodes?.get(displayedVersion).orEmpty()
+                                                        )
                                                     )
                                                 }
                                             }
@@ -416,11 +434,10 @@ fun PatchInfoChip(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(
-                text,
+            ExpandableText(
+                text = text,
                 textAlign = TextAlign.Center,
-                overflow = TextOverflow.Ellipsis,
-                softWrap = false,
+                collapsedSoftWrap = false,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -452,16 +469,27 @@ private fun isAnyVersionTag(value: String?, anyVersionLabel: String): Boolean {
         normalized == "*"
 }
 
-private fun buildSearchUrl(packageName: String, version: String?, searchEngineHost: String): String {
+private fun buildSearchUrl(
+    packageName: String,
+    version: String?,
+    searchEngineHost: String,
+    versionCodes: Set<Long> = emptySet()
+): String {
     val encodedPackage = Uri.encode(packageName)
     val encodedVersion = version?.takeIf { it.isNotBlank() }?.let {
         val formatted = if (it.startsWith("v", ignoreCase = true)) it else "v$it"
         Uri.encode(formatted)
     }
+    val encodedVersionCodes = versionCodes.sorted().map { Uri.encode(it.toString()) }
     val encodedArch = Build.SUPPORTED_ABIS.firstOrNull()
         ?.takeIf { it.isNotBlank() }
         ?.let(Uri::encode)
-    val query = listOfNotNull(encodedPackage, encodedVersion, encodedArch).joinToString("+")
+    val query = buildList {
+        add(encodedPackage)
+        encodedVersion?.let(::add)
+        addAll(encodedVersionCodes)
+        encodedArch?.let(::add)
+    }.joinToString("+")
     val host = normalizeSearchHost(searchEngineHost)
     return "https://$host/search?q=$query"
 }
@@ -480,7 +508,8 @@ private fun PatchInfo.matchesQuery(query: String): Boolean {
     if (description?.contains(normalized, ignoreCase = true) == true) return true
     if (compatiblePackages?.any { pkg ->
             pkg.packageName.contains(normalized, ignoreCase = true) ||
-                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true)
+                (pkg.versions?.any { it.contains(normalized, ignoreCase = true) } == true) ||
+                (pkg.versionCodes?.values?.flatten()?.any { it.toString().contains(normalized) } == true)
         } == true
     ) {
         return true

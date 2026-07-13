@@ -52,7 +52,8 @@ sealed class PatchBundleInfo {
         /**
          * Create a [PatchBundleInfo.Scoped] that only contains information about patches that are relevant for a specific [packageName].
          */
-        fun forPackage(packageName: String, version: String?): Scoped {
+        fun forPackage(packageName: String, version: String?, versionCode: Long? = null): Scoped {
+            val compatibleVersionCode = versionCode.takeIf { bundleType == PatchBundleType.MORPHE }
             val relevantPatches = patches.filter { it.compatibleWith(packageName) }
             val compatible = mutableListOf<PatchInfo>()
             val incompatible = mutableListOf<PatchInfo>()
@@ -63,7 +64,8 @@ sealed class PatchBundleInfo {
                     it.compatiblePackages == null -> universal
                     it.supports(
                         packageName,
-                        version
+                        version,
+                        compatibleVersionCode
                     ) -> compatible
 
                     else -> incompatible

@@ -13,8 +13,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
-import app.urv.manager.ui.component.ShimmerBox
+import androidx.core.content.pm.PackageInfoCompat
+import app.universal.revanced.manager.R
 
 @Composable
 fun AppInfo(
@@ -88,4 +91,59 @@ fun AppInfo(
             extraContent()
         }
     }
+}
+
+@Composable
+fun appVersionLabel(
+    versionName: String,
+    appInfo: PackageInfo?,
+    displayVersion: String = versionName
+): String {
+    if (appInfo == null) return displayVersion
+
+    val versionCode = PackageInfoCompat.getLongVersionCode(appInfo)
+    val matchesPackage = appInfo.versionName == versionName || versionCode.toString() == versionName
+    if (!matchesPackage) return displayVersion
+
+    return stringResource(
+        R.string.app_version_with_code,
+        appInfo.versionName?.takeIf { it.isNotBlank() } ?: displayVersion,
+        versionCode
+    )
+}
+
+@Composable
+fun suggestedVersionLabel(
+    versionName: String,
+    versionCodes: Set<Long> = emptySet(),
+    displayVersion: String = versionName
+): String {
+    if (versionCodes.isEmpty()) return displayVersion
+
+    return stringResource(
+        R.string.app_version_with_code,
+        displayVersion,
+        versionCodes.sorted().joinToString(", ")
+    )
+}
+
+@Composable
+fun AppVersion(
+    appInfo: PackageInfo?,
+    versionName: String? = appInfo?.versionName,
+    modifier: Modifier = Modifier,
+    style: TextStyle? = null
+) {
+    val displayVersion = versionName?.takeIf { it.isNotBlank() } ?: return
+
+    ExpandableText(
+        text = appVersionLabel(
+            versionName = displayVersion,
+            appInfo = appInfo,
+            displayVersion = displayVersion
+        ),
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = style ?: MaterialTheme.typography.bodySmall
+    )
 }

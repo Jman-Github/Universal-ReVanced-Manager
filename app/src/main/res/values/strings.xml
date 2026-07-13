@@ -62,6 +62,7 @@
     <string name="bundle_version_dialog_default">Use default recommendation</string>
     <string name="bundle_version_dialog_default_subtitle">Automatically pick the most common compatible version.</string>
     <string name="version_label">v%1$s</string>
+    <string name="app_version_with_code">%1$s (%2$s)</string>
     <string name="bundle_version_all_versions">All versions</string>
     <string name="bundle_version_no_version">No suggested version</string>
     <string name="bundle_version_suggested_label">Suggested version: %1$s</string>

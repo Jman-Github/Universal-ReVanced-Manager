@@ -79,6 +79,7 @@ import app.urv.manager.ui.component.AppInfo
 import app.urv.manager.ui.component.AppliedPatchBundleUi
 import app.urv.manager.ui.component.AppliedPatchesDialog
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.AppVersion
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.SegmentedButton
@@ -803,7 +804,11 @@ fun InstalledAppInfoScreen(
                 appInfo = viewModel.appInfo,
                 placeholderLabel = null
             ) {
-                Text(installedApp.version, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                AppVersion(
+                    appInfo = viewModel.appInfo,
+                    versionName = installedApp.version,
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 viewModel.savedApkAbiLabel?.let { abiLabel ->
                     Text(
                         abiLabel,

@@ -17,6 +17,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import androidx.documentfile.provider.DocumentFile
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.model.SupportedVersionInfo
+import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.PM
@@ -74,8 +75,19 @@ class AppSelectorViewModel(
                     patch.compatiblePackages?.forEach { compatible ->
                         val accumulator =
                             packageSupport.getOrPut(compatible.packageName) {
-                                BundleSupportAccumulator(mutableSetOf(), mutableSetOf(), mutableSetOf(), false)
+                                BundleSupportAccumulator(
+                                    mutableSetOf(),
+                                    mutableSetOf(),
+                                    mutableSetOf(),
+                                    mutableMapOf(),
+                                    false
+                                )
                             }
+                        if (info.bundleType == PatchBundleType.MORPHE) {
+                            compatible.versionCodes.orEmpty().forEach { (version, codes) ->
+                                accumulator.versionCodes.getOrPut(version) { mutableSetOf() } += codes
+                            }
+                        }
                         val versions = compatible.versions
                         if (versions.isNullOrEmpty()) {
                             accumulator.supportsAllVersions = true
@@ -106,7 +118,8 @@ class AppSelectorViewModel(
                             SupportedVersionInfo(
                                 version = version,
                                 experimental = version in support.experimentalVersions &&
-                                    version !in support.stableVersions
+                                    version !in support.stableVersions,
+                                versionCodes = support.versionCodes[version].orEmpty()
                             )
                         }
 
@@ -117,6 +130,7 @@ class AppSelectorViewModel(
                             ?.takeIf { it.isNotBlank() }
                             ?: info.name,
                         recommendedVersion = recommended,
+                        recommendedVersionCodes = recommended?.let(support.versionCodes::get).orEmpty(),
                         recommendedVersionExperimental = recommendedExperimental,
                         otherSupportedVersions = otherVersions,
                         supportsAllVersions = support.supportsAllVersions
@@ -134,6 +148,8 @@ class AppSelectorViewModel(
         private set
     var nonSuggestedVersionDialogSuggestedVersion by mutableStateOf<String?>(null)
         private set
+    var nonSuggestedVersionDialogSuggestedVersionCodes by mutableStateOf<Set<Long>>(emptySet())
+        private set
     var nonSuggestedVersionDialogRequiresUniversalEnabled by mutableStateOf(false)
         private set
     var universalFallbackDialogSubject by mutableStateOf<SelectedApp.Local?>(null)
@@ -147,6 +163,7 @@ class AppSelectorViewModel(
     fun dismissNonSuggestedVersionDialog() {
         nonSuggestedVersionDialogSubject = null
         nonSuggestedVersionDialogSuggestedVersion = null
+        nonSuggestedVersionDialogSuggestedVersionCodes = emptySet()
         nonSuggestedVersionDialogRequiresUniversalEnabled = false
     }
 
@@ -223,7 +240,11 @@ class AppSelectorViewModel(
 
     private suspend fun handleSelectedStorageApp(selectedApp: SelectedApp.Local) {
         val assessment =
-            patchBundleRepository.assessVersionSelection(selectedApp.packageName, selectedApp.version)
+            patchBundleRepository.assessVersionSelection(
+                selectedApp.packageName,
+                selectedApp.version,
+                selectedApp.versionCode
+            )
         if (assessment.isAllowed) {
             dismissUniversalFallbackDialog()
             dismissNonSuggestedVersionDialog()
@@ -240,6 +261,7 @@ class AppSelectorViewModel(
             storageSelectionInProgress = false
             nonSuggestedVersionDialogSubject = selectedApp
             nonSuggestedVersionDialogSuggestedVersion = assessment.suggestedVersion
+            nonSuggestedVersionDialogSuggestedVersionCodes = assessment.suggestedVersionCodes
             nonSuggestedVersionDialogRequiresUniversalEnabled =
                 assessment.requiresUniversalPatchesEnabled
             dismissUniversalFallbackDialog()
@@ -262,7 +284,8 @@ class AppSelectorViewModel(
                         ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                     file = destination,
                     temporary = true,
-                    resolved = true
+                    resolved = true,
+                    versionCode = pm.getVersionCode(packageInfo)
                 )
             }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
         } ?: StorageApkLoadResult.Failed
@@ -285,7 +308,8 @@ class AppSelectorViewModel(
                     ?: if (isSplitArchive) app.getString(R.string.app_version_unspecified) else "",
                 file = destination,
                 temporary = true,
-                resolved = true
+                resolved = true,
+                    versionCode = pm.getVersionCode(packageInfo)
             )
         }?.let(StorageApkLoadResult::Success) ?: StorageApkLoadResult.Failed
     }
@@ -331,6 +355,7 @@ data class BundleVersionSuggestion(
     val bundleUid: Int,
     val bundleName: String,
     val recommendedVersion: String?,
+    val recommendedVersionCodes: Set<Long>,
     val recommendedVersionExperimental: Boolean,
     val otherSupportedVersions: List<SupportedVersionInfo>,
     val supportsAllVersions: Boolean
@@ -340,5 +365,6 @@ private data class BundleSupportAccumulator(
     val versions: MutableSet<String>,
     val stableVersions: MutableSet<String>,
     val experimentalVersions: MutableSet<String>,
+    val versionCodes: MutableMap<String, MutableSet<Long>>,
     var supportsAllVersions: Boolean
 )

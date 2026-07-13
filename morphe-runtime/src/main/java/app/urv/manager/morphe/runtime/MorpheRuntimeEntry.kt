@@ -362,6 +362,19 @@ object MorpheRuntimeEntry {
                 .toSet()
                 .takeIf { it.isNotEmpty() }
                 ?.toList()
+            val versionCodes = compatibility.targets
+                .mapNotNull { target ->
+                    val version = target.version ?: return@mapNotNull null
+                    val codes = target.versionCodes?.values
+                        ?.distinct()
+                        ?.sorted()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: return@mapNotNull null
+                    version to codes
+                }
+                .groupBy({ it.first }, { it.second })
+                .mapValues { (_, codeGroups) -> codeGroups.flatten().distinct().sorted() }
+                .takeIf { it.isNotEmpty() }
             val experimentalVersions = compatibility.targets
                 .filter { it.isExperimental }
                 .mapNotNull { it.version }
@@ -372,7 +385,8 @@ object MorpheRuntimeEntry {
             linkedMapOf(
                 "packageName" to compatibility.packageName,
                 "versions" to versions,
-                "experimentalVersions" to experimentalVersions
+                "experimentalVersions" to experimentalVersions,
+                "versionCodes" to versionCodes
             )
         } ?: patch.compatiblePackages?.map { (pkg, versions) ->
             linkedMapOf(

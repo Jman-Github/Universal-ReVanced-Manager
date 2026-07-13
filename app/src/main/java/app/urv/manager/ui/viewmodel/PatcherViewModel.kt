@@ -924,7 +924,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun gatherScopedBundles(): Map<Int, PatchBundleInfo.Scoped> =
         patchBundleRepository.scopedBundleInfoFlow(
             packageName,
-            input.selectedApp.version
+            input.selectedApp.version,
+            input.selectedApp.versionCode
         ).first().associateBy { it.uid }
 
     private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {

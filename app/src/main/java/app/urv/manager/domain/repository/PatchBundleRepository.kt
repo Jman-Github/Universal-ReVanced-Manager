@@ -176,11 +176,16 @@ class PatchBundleRepository(
         }
     }
 
-    fun scopedBundleInfoFlow(packageName: String, version: String?) = enabledBundlesInfoFlow.map {
+    fun scopedBundleInfoFlow(
+        packageName: String,
+        version: String?,
+        versionCode: Long? = null
+    ) = enabledBundlesInfoFlow.map {
         it.map { (_, bundleInfo) ->
             bundleInfo.forPackage(
                 packageName,
-                version
+                version,
+                versionCode
             )
         }
     }
@@ -1290,9 +1295,13 @@ class PatchBundleRepository(
         return metadata
     }
 
-    suspend fun findBestBundleVersionMatch(packageName: String, version: String?): BundleVersionMatch? =
+    suspend fun findBestBundleVersionMatch(
+        packageName: String,
+        version: String?,
+        versionCode: Long? = null
+    ): BundleVersionMatch? =
         withContext(Dispatchers.Default) {
-            val scopedBundles = scopedBundleInfoFlow(packageName, version).first()
+            val scopedBundles = scopedBundleInfoFlow(packageName, version, versionCode).first()
             if (scopedBundles.isEmpty()) return@withContext null
 
             val suggestedByBundle = suggestedVersionsByBundle.first()
@@ -1351,13 +1360,27 @@ class PatchBundleRepository(
             }
         }
 
-    suspend fun isVersionAllowed(packageName: String, version: String) =
-        assessVersionSelection(packageName, version).isAllowed
+    suspend fun isVersionAllowed(packageName: String, version: String, versionCode: Long? = null) =
+        assessVersionSelection(packageName, version, versionCode).isAllowed
 
-    suspend fun assessVersionSelection(packageName: String, version: String) =
+    suspend fun assessVersionSelection(
+        packageName: String,
+        version: String,
+        versionCode: Long? = null
+    ) =
         withContext(Dispatchers.Default) {
-            val match = findBestBundleVersionMatch(packageName, version)
+            val match = findBestBundleVersionMatch(packageName, version, versionCode)
             val suggestedVersion = suggestedVersions.first()[packageName]
+            val suggestedVersionCodes = suggestedVersion?.let { targetVersion ->
+                enabledBundlesInfoFlow.first().values
+                    .asSequence()
+                    .filter { it.bundleType == PatchBundleType.MORPHE }
+                    .flatMap { it.patches.asSequence() }
+                    .flatMap { it.compatiblePackages.orEmpty().asSequence() }
+                    .filter { it.packageName == packageName }
+                    .flatMap { it.versionCodes?.get(targetVersion).orEmpty().asSequence() }
+                    .toSet()
+            }.orEmpty()
             val allowUniversalPatches = prefs.disableUniversalPatchCheck.get()
             val allowIncompatiblePatches = prefs.disablePatchVersionCompatCheck.get()
             val requireSuggestedVersion = prefs.suggestedVersionSafeguard.get()
@@ -1383,6 +1406,7 @@ class PatchBundleRepository(
             VersionSelectionAssessment(
                 isAllowed = isAllowed,
                 suggestedVersion = suggestedVersion,
+                suggestedVersionCodes = suggestedVersionCodes,
                 canContinueWithUniversalFallback = canContinueWithUniversalFallback,
                 requiresUniversalPatchesEnabled = requiresUniversalPatchesEnabled
             )
@@ -3196,6 +3220,7 @@ class PatchBundleRepository(
     data class VersionSelectionAssessment(
         val isAllowed: Boolean,
         val suggestedVersion: String?,
+        val suggestedVersionCodes: Set<Long> = emptySet(),
         val canContinueWithUniversalFallback: Boolean = false,
         val requiresUniversalPatchesEnabled: Boolean = false
     )

@@ -54,9 +54,13 @@ fun SafeguardDialog(
 @Composable
 fun NonSuggestedVersionDialog(
     suggestedVersion: String?,
+    suggestedVersionCodes: Set<Long> = emptySet(),
     requiresUniversalPatchesEnabled: Boolean = false,
     onDismiss: () -> Unit
 ) {
+    val formattedSuggestedVersion = suggestedVersion?.let {
+        suggestedVersionLabel(it, suggestedVersionCodes)
+    }.orEmpty()
     val body = if (requiresUniversalPatchesEnabled) {
         stringResource(
             R.string.universal_patches_app_blocked_description,
@@ -65,7 +69,7 @@ fun NonSuggestedVersionDialog(
     } else {
         stringResource(
             R.string.non_suggested_version_warning_description,
-            suggestedVersion.orEmpty()
+            formattedSuggestedVersion
         )
     }
 

@@ -1,6 +1,7 @@
 package app.urv.manager.ui.viewmodel
 
 import android.app.Application
+import android.content.pm.PackageInfo
 import android.util.Log
 import androidx.annotation.StringRes
 import androidx.compose.runtime.MutableState
@@ -17,6 +18,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.revanced.manager.R
+import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.data.room.options.Option as StoredOption
 import app.urv.manager.domain.manager.PreferencesManager
@@ -34,8 +36,13 @@ import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.patcher.split.SplitApkInspector
+import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.model.SupportedVersionInfo
 import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.util.Options
+import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.tag
 import app.urv.manager.util.saver.Nullable
@@ -71,6 +78,8 @@ import kotlin.collections.ArrayDeque
 class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.ViewModelParams) :
     ViewModel(), KoinComponent {
     private val app: Application = get()
+    private val filesystem: Filesystem = get()
+    private val pm: PM = get()
     private val savedStateHandle: SavedStateHandle = get()
     val prefs: PreferencesManager = get()
     private val patchBundleRepository: PatchBundleRepository = get()
@@ -78,7 +87,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     val missingPatchNames: List<String>? = input.missingPatchNames
     private val patchProfileRepository: PatchProfileRepository = get()
 
-    private val packageName = input.app.packageName
+    val selectedApp = input.app
+    private val packageName = selectedApp.packageName
+    val selectedAppInfo = flow {
+        emit(resolveSelectedAppInfo())
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = null
+    )
     private val downloadedAppRepository: DownloadedAppRepository = get()
     private val preferredBundleUid = input.preferredBundleUid
     private val preferredBundleOverride = input.preferredBundleOverride?.takeUnless { it.isNullOrBlank() }
@@ -103,8 +120,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val suggestedVersionSafeguardEnabled = prefs.suggestedVersionSafeguard.getBlocking()
     private val allowUniversalPatchesFlow = prefs.disableUniversalPatchCheck.flow
     val bundlesFlow =
-        appVersionState.flatMapLatest { version ->
-            patchBundleRepository.scopedBundleInfoFlow(packageName, version)
+        combine(appVersionState, selectedAppInfo) { version, info ->
+            val resolvedVersionCode =
+                info?.takeIf { it.versionName == version }?.let(pm::getVersionCode)
+            val knownVersionCode =
+                selectedApp.versionCode.takeIf { selectedApp.version == version }
+            version to (resolvedVersionCode ?: knownVersionCode)
+        }.flatMapLatest { (version, versionCode) ->
+            patchBundleRepository.scopedBundleInfoFlow(packageName, version, versionCode)
         }.combine(allowUniversalPatchesFlow) { bundles, allowUniversal ->
             if (allowUniversal) bundles else bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
         }
@@ -282,7 +305,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     var showMixedRevancedPatcherVersionsDialog by mutableStateOf(false)
         private set
 
-    val compatibleVersions = mutableStateListOf<String>()
+    val compatibleVersions = mutableStateListOf<SupportedVersionInfo>()
 
     // This is for the required options screen.
     private val requiredOptsPatchesDeferred = viewModelScope.async(start = CoroutineStart.LAZY) {
@@ -891,7 +914,19 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     fun openIncompatibleDialog(incompatiblePatch: PatchInfo) {
-        compatibleVersions.addAll(incompatiblePatch.compatiblePackages?.find { it.packageName == packageName }?.versions.orEmpty())
+        val compatiblePackage = incompatiblePatch.compatiblePackages
+            ?.find { it.packageName == packageName }
+            ?: return
+        compatibleVersions.clear()
+        compatibleVersions.addAll(
+            compatiblePackage.versions.orEmpty().map { version ->
+                SupportedVersionInfo(
+                    version = version,
+                    experimental = compatiblePackage.experimentalVersions?.contains(version) == true,
+                    versionCodes = compatiblePackage.versionCodes?.get(version).orEmpty()
+                )
+            }
+        )
     }
 
     fun toggleFlag(flag: Int) {
@@ -1001,6 +1036,33 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
     private fun actionLabel(@StringRes labelRes: Int, vararg args: Any?): String =
         app.getString(labelRes, *args)
+
+    private suspend fun resolveSelectedAppInfo(): PackageInfo? = runCatching {
+        withContext(Dispatchers.IO) {
+            when (val source = selectedApp) {
+                is SelectedApp.Local -> {
+                    if (SplitApkPreparer.isSplitArchive(source.file)) {
+                        val extracted = SplitApkInspector.extractRepresentativeApk(
+                            source.file,
+                            filesystem.tempDir
+                        ) ?: return@withContext null
+                        try {
+                            pm.getPackageInfo(extracted.file)
+                        } finally {
+                            extracted.cleanup()
+                        }
+                    } else {
+                        pm.getPackageInfo(source.file)
+                    }
+                }
+
+                is SelectedApp.Installed -> pm.getPackageInfo(source.packageName)
+                is SelectedApp.Download, is SelectedApp.Search -> null
+            }
+        }
+    }.onFailure { error ->
+        Log.w(tag, "Failed to resolve selected app package info", error)
+    }.getOrNull()
 
     private fun restoreInitialCustomPatchSelection(
         initialSelection: PatchSelection?

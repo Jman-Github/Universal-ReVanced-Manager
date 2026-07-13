@@ -35,6 +35,8 @@
 - Added per-profile installer selection and automatic installation to Patch Profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/583
 - Added a Patcher Engine option to skip signing and keep patched APKs unsigned for saving or installation
 - Automatically enabled manager pre-release updates when running a pre-release build https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/593
+- Bumped Morphe Patcher to `1.6.0`
+- Added APK version codes to app details, supported-version displays, searches, and Morphe patch compatibility checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/594
 
 
 # Bug fixes
