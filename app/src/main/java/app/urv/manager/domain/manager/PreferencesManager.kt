@@ -44,6 +44,11 @@ class PreferencesManager(
     context: Context
 ) : BasePreferencesManager(context, "settings") {
     companion object {
+        private val MANAGER_PRERELEASE_VERSION_REGEX = Regex("""\d+\.\d+\.\d+-.+""")
+        private fun isManagerPrereleaseVersion(versionName: String): Boolean =
+            MANAGER_PRERELEASE_VERSION_REGEX.matches(
+                versionName.removePrefix("v").substringBefore('+')
+            )
         private val PATCH_ACTION_ORDER_DEFAULT =
             PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val PATCH_BUNDLE_ACTION_ORDER_DEFAULT =
@@ -161,6 +166,8 @@ class PreferencesManager(
     val selectedAnnouncementTags =
         stringSetPreference("selected_announcement_tags", DEFAULT_ANNOUNCEMENT_TAGS)
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
+    private val managerPrereleaseAutoEnabledVersion =
+        stringPreference("manager_prerelease_auto_enabled_version", "")
     val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
     val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
     val allowPatchProfileBundleOverride = booleanPreference(
@@ -487,6 +494,27 @@ class PreferencesManager(
         }
         announcementPushNotificationsLegacy.value = false
         announcementPushNotificationIntervalMigrated.value = true
+    }
+
+    suspend fun enableManagerPrereleasesForVersion(versionName: String) {
+        val normalizedVersion = versionName.removePrefix("v").substringBefore('+')
+        if (!isManagerPrereleaseVersion(normalizedVersion)) {
+            if (managerPrereleaseAutoEnabledVersion.get().isNotEmpty()) {
+                managerPrereleaseAutoEnabledVersion.update("")
+            }
+            return
+        }
+
+        edit {
+            if (managerPrereleaseAutoEnabledVersion.value == normalizedVersion) return@edit
+            useManagerPrereleases.value = true
+            managerPrereleaseAutoEnabledVersion.value = normalizedVersion
+        }
+    }
+
+    suspend fun useManagerPrereleasesForVersion(versionName: String): Boolean {
+        enableManagerPrereleasesForVersion(versionName)
+        return useManagerPrereleases.get()
     }
 
     private suspend fun exportAppearanceSettings(snapshot: SettingsSnapshot): SettingsSnapshot {

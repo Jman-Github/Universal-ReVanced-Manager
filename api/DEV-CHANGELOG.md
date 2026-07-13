@@ -34,6 +34,7 @@
 - Added an `Install base & mount` option that installs base and split APKs through root before mounting the patched APK https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/542
 - Added per-profile installer selection and automatic installation to Patch Profiles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/583
 - Added a Patcher Engine option to skip signing and keep patched APKs unsigned for saving or installation
+- Automatically enabled manager pre-release updates when running a pre-release build https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/593
 
 
 # Bug fixes

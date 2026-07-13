@@ -27,6 +27,7 @@ import app.urv.manager.util.tag
 import app.urv.manager.util.PatchListCatalog
 import app.urv.manager.util.SplitMergeNotification
 import app.urv.manager.util.applyAppLanguage
+import app.universal.revanced.manager.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import coil.Coil
 import coil.ImageLoader
@@ -119,6 +120,7 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
+            prefs.enableManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
             prefs.migrateAnnouncementPushNotificationInterval()
             prefs.migrateDashboardBundleBannerState()
             workerRepository.ensureBundleUpdateNotificationWork(

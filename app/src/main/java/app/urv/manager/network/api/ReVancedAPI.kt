@@ -259,7 +259,8 @@ class ReVancedAPI(
 
     suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
         val config = repoConfig()
-        val includePrerelease = prefs.useManagerPrereleases.get()
+        val includePrerelease =
+            prefs.useManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
         return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, ::pickManagerAsset)
     }
 
