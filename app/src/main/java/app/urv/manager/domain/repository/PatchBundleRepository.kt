@@ -2917,12 +2917,7 @@ class PatchBundleRepository(
                         )
                     }
                     onPerBundleProgress?.invoke(bundle, 0L, null)
-                    val progressNotification =
-                        if (showProgress && onPerBundleProgress == null) {
-                            downloadProgressNotifier.begin(progressLabelFor(bundle))
-                        } else {
-                            null
-                        }
+                    var progressNotification: DownloadProgressNotifier.Session? = null
 
                     val onProgress: PatchBundleDownloadProgress = { bytesRead, bytesTotal ->
                         if (isRemoteUpdateCancelled(bundle.uid)) {
@@ -2938,7 +2933,13 @@ class PatchBundleRepository(
                                 )
                             }
                         }
-                        progressNotification?.update(bytesRead, bytesTotal)
+                        if (showProgress && onPerBundleProgress == null) {
+                            val notification = progressNotification
+                                ?: downloadProgressNotifier.begin(progressLabelFor(bundle)).also {
+                                    progressNotification = it
+                                }
+                            notification.update(bytesRead, bytesTotal)
+                        }
                         onPerBundleProgress?.invoke(bundle, bytesRead, bytesTotal)
                     }
 
