@@ -59,6 +59,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,6 +137,41 @@ fun SelectedAppInfoScreen(
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showPatchSummaryDialog by rememberSaveable { mutableStateOf(false) }
+
+    vm.removedPatchesNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = vm::dismissRemovedPatchesNotice,
+            title = {
+                CenteredDialogTitle(
+                    pluralStringResource(
+                        R.plurals.removed_saved_patches_title,
+                        notice.patchNames.size,
+                        notice.patchNames.size
+                    )
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.removed_saved_patches_message))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(notice.patchNames) { patchName ->
+                            Text(text = "• $patchName")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = vm::dismissRemovedPatchesNotice) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()

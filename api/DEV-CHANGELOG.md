@@ -38,6 +38,7 @@
 - Bumped Morphe Patcher to `1.6.0`
 - Added APK version codes to app details, supported-version displays, searches, and Morphe patch compatibility checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/594
 - Added an option to choose which split APKs are merged before patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/592
+- Automatically remove unavailable patches and their saved options from saved selections, and show a toast indicating which patches were removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/595
 
 
 # Bug fixes

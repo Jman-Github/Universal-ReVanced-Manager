@@ -4,6 +4,10 @@
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
         </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">%d patch was removed</item>
+        <item quantity="other">%d patches were removed</item>
+        </plurals>
     <plurals name="selected_count">
         <item quantity="other">%d selected</item>
         </plurals>

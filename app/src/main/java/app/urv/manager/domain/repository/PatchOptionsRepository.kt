@@ -112,6 +112,17 @@ class PatchOptionsRepository(db: AppDatabase) {
     fun getPackagesWithSavedOptions() =
         dao.getPackagesWithOptions().map(Iterable<String>::toSet).distinctUntilChanged()
 
+    suspend fun removeOptionsForPatches(
+        packageName: String,
+        patchesByBundle: Map<Int, Set<String>>
+    ) {
+        patchesByBundle.forEach { (bundleUid, patchNames) ->
+            if (patchNames.isNotEmpty()) {
+                dao.removeOptionsForPatches(bundleUid, packageName, patchNames.toList())
+            }
+        }
+    }
+
     suspend fun resetOptionsForPackage(packageName: String) {
         dao.resetOptionsForPackage(packageName)
         resetEventsFlow.emit(ResetEvent.Package(packageName))

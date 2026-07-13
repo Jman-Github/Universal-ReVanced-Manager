@@ -1283,6 +1283,7 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
     <string name="patch_selector_missing_patch_message">These patches need to be reselected:
 %1$s
 Enable them again (or pick alternatives) and then try patching once more.</string>
+    <string name="removed_saved_patches_message">These patches are no longer available and were removed from your saved selection:</string>
     <string name="patch_profile_delete_multiple_dialog_description">Are you sure you want to delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>

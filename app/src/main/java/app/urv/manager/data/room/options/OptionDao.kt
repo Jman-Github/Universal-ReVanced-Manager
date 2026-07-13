@@ -40,6 +40,17 @@ abstract class OptionDao {
     @Query("DELETE FROM option_groups WHERE package_name = :packageName")
     abstract suspend fun resetOptionsForPackage(packageName: String)
 
+    @Query(
+        "DELETE FROM options WHERE `group` IN (" +
+                "SELECT uid FROM option_groups WHERE patch_bundle = :bundleUid AND package_name = :packageName" +
+                ") AND patch_name IN (:patchNames)"
+    )
+    abstract suspend fun removeOptionsForPatches(
+        bundleUid: Int,
+        packageName: String,
+        patchNames: List<String>
+    )
+
     @Query("DELETE FROM option_groups")
     abstract suspend fun reset()
 

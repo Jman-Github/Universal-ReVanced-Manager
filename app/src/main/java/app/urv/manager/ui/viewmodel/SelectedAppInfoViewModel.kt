@@ -316,6 +316,15 @@ class SelectedAppInfoViewModel(
     }
         private set
 
+    data class RemovedPatchesNotice(val patchNames: List<String>)
+
+    var removedPatchesNotice by mutableStateOf<RemovedPatchesNotice?>(null)
+        private set
+
+    fun dismissRemovedPatchesNotice() {
+        removedPatchesNotice = null
+    }
+
     private fun loadOptionsFromRepository() {
         if (optionsLoadJob?.isActive == true) return
         optionsLoadJob = viewModelScope.launch {
@@ -345,9 +354,12 @@ class SelectedAppInfoViewModel(
         if (shouldLoadPersistedSelection) {
             selectionLoadJob = viewModelScope.launch {
                 if (!prefs.disableSelectionWarning.get()) return@launch
+                bundleRepository.reloadInProgress.first { loading -> !loading }
                 val previous = selectionRepository.getSelection(packageName)
                 if (previous.values.sumOf { it.size } == 0) return@launch
+
                 selectionState = SelectionState.Customized(previous)
+                removeDeletedPatchesFromSavedSelection()
                 pruneSelectionForAvailability(
                     bundleInfoFlowInternal.value,
                     prefs.disablePatchVersionCompatCheck.get()
@@ -406,6 +418,7 @@ class SelectedAppInfoViewModel(
                         bundles.map(PatchBundleInfo.Scoped::withoutUniversalPatches)
                     }
                     bundleInfoFlowInternal.value = visibleBundles
+                    removeDeletedPatchesFromSavedSelection()
                     pruneSelectionForAvailability(visibleBundles, allowIncompatible)
                 }
         }
@@ -670,6 +683,43 @@ class SelectedAppInfoViewModel(
             ).join()
         }
     }
+
+    private suspend fun removeDeletedPatchesFromSavedSelection() {
+        if (!shouldLoadPersistedSelection) return
+        val currentState = selectionState as? SelectionState.Customized ?: return
+        val availablePatches = bundleRepository.allBundlesInfoFlow.first()
+            .mapValues { (_, bundle) ->
+                bundle.patches.mapTo(mutableSetOf()) { it.name }
+            }
+        val removedPatchesByBundle = currentState.patchSelection.mapValues { (bundleUid, selectedPatches) ->
+            val available = availablePatches[bundleUid].orEmpty()
+            selectedPatches.filterNotTo(mutableSetOf()) { it in available }
+        }.filterValues { it.isNotEmpty() }
+        val removedPatches = removedPatchesByBundle.values
+            .flatten()
+            .sorted()
+        if (removedPatches.isEmpty()) return
+
+        val cleanedSelection = currentState.patchSelection.mapNotNull { (bundleUid, selectedPatches) ->
+            val available = availablePatches[bundleUid].orEmpty()
+            selectedPatches.filterTo(mutableSetOf()) { it in available }
+                .takeIf { it.isNotEmpty() }
+                ?.let { bundleUid to it }
+        }.toMap()
+
+        selectionState = SelectionState.Customized(cleanedSelection)
+        options = options.mapNotNull { (bundleUid, patchOptions) ->
+            val removedForBundle = removedPatchesByBundle[bundleUid].orEmpty()
+            patchOptions.filterKeys { it !in removedForBundle }
+                .takeIf { it.isNotEmpty() }
+                ?.let { bundleUid to it }
+        }.toMap()
+        selectionRepository.updateSelection(packageName, cleanedSelection)
+        optionsRepository.removeOptionsForPatches(packageName, removedPatchesByBundle)
+        val pendingNames = removedPatchesNotice?.patchNames.orEmpty()
+        removedPatchesNotice = RemovedPatchesNotice((pendingNames + removedPatches).sorted())
+    }
+
     private fun pruneSelectionForAvailability(
         bundles: List<PatchBundleInfo.Scoped>,
         allowIncompatible: Boolean
