@@ -305,7 +305,7 @@ class DownloadsViewModel(
     ) {
         rootInstaller.install(
             patchedAPK = apk,
-            stockAPK = apk,
+            stockAPKs = listOf(apk),
             packageName = packageInfo.packageName,
             version = packageInfo.versionName.orEmpty(),
             label = label

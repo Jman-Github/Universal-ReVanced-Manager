@@ -1,58 +1,23 @@
 package app.urv.manager.domain.installer
 
 import android.app.Application
-import android.content.ComponentName
-import android.content.Intent
-import android.content.ServiceConnection
-import android.os.IBinder
 import android.os.SystemClock
-import android.util.Log
-import app.urv.manager.IRootSystemService
-import app.urv.manager.service.ManagerRootService
 import app.urv.manager.util.PM
 import com.topjohnwu.superuser.Shell
-import com.topjohnwu.superuser.ipc.RootService
-import com.topjohnwu.superuser.nio.FileSystemManager
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.time.withTimeoutOrNull
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.time.Duration
 
 class RootInstaller(
     private val app: Application,
     private val pm: PM
-) : ServiceConnection {
-    private var remoteFS = CompletableDeferred<FileSystemManager>()
+) {
     @Volatile
     private var cachedHasRoot: Boolean? = null
     @Volatile
     private var lastRootCheck = 0L
-
-    override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-        val ipc = IRootSystemService.Stub.asInterface(service)
-        val binder = ipc.fileSystemService
-
-        remoteFS.complete(FileSystemManager.getRemote(binder))
-    }
-
-    override fun onServiceDisconnected(name: ComponentName?) {
-        remoteFS = CompletableDeferred()
-    }
-
-    private suspend fun awaitRemoteFS(): FileSystemManager {
-        if (remoteFS.isActive) {
-            withContext(Dispatchers.Main) {
-                val intent = Intent(app, ManagerRootService::class.java)
-                RootService.bind(intent, this@RootInstaller)
-            }
-        }
-
-        return withTimeoutOrNull(Duration.ofSeconds(20L)) {
-            remoteFS.await()
-        } ?: throw RootServiceException()
-    }
 
     private suspend fun getShell() = with(CompletableDeferred<Shell>()) {
         Shell.getShell(::complete)
@@ -60,7 +25,16 @@ class RootInstaller(
         await()
     }
 
-    suspend fun execute(vararg commands: String) = getShell().newJob().add(*commands).exec()
+    suspend fun execute(vararg commands: String) = execute(getShell(), *commands)
+
+    private fun execute(shell: Shell, vararg commands: String): Shell.Result {
+        val stdout = ArrayList<String>()
+        val stderr = ArrayList<String>()
+        return shell.newJob()
+            .add(*commands)
+            .to(stdout, stderr)
+            .exec()
+    }
 
     fun hasRootAccess(): Boolean {
         Shell.isAppGrantedRoot()?.let { granted ->
@@ -100,10 +74,11 @@ class RootInstaller(
         File(path, "su").canExecute()
     } ?: false
 
-    suspend fun isAppInstalled(packageName: String): Boolean {
-        val remoteFS = awaitRemoteFS()
-        return remoteFS.getFile("$revancedPath/$packageName/$packageName.apk").exists()
-            || remoteFS.getFile("$modulesPath/$packageName-revanced").exists()
+    suspend fun isAppInstalled(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        execute(
+            "[ -f ${shellQuote("$revancedPath/$packageName/$packageName.apk")} ] || " +
+                "[ -d ${shellQuote("$modulesPath/$packageName-revanced")} ]"
+        ).isSuccess
     }
 
     suspend fun isAppMounted(packageName: String) = withContext(Dispatchers.IO) {
@@ -144,113 +119,180 @@ class RootInstaller(
 
     suspend fun install(
         patchedAPK: File,
-        stockAPK: File?,
+        stockAPKs: List<File>?,
         packageName: String,
         version: String,
         label: String
     ) = withContext(Dispatchers.IO) {
-        val remoteFS = awaitRemoteFS()
-        val assets = app.assets
+        require(patchedAPK.exists()) { "Patched APK does not exist" }
         val modulePath = "$modulesPath/$packageName-revanced"
-        val serviceScriptPath = "$serviceDirPath/urv-$packageName.sh"
-
-        unmount(packageName)
-
-        stockAPK?.let { stockApp ->
-            pm.getPackageInfo(packageName)?.let { packageInfo ->
-                // TODO: get user id programmatically
-                if (pm.getVersionCode(packageInfo) <= pm.getVersionCode(
-                        pm.getPackageInfo(patchedAPK)
-                            ?: error("Failed to get package info for patched app")
-                    )
-                )
-                    execute("pm uninstall -k --user 0 $packageName").assertSuccess("Failed to uninstall stock app")
-            }
-
-            execute("pm install \"${stockApp.absolutePath}\"").assertSuccess("Failed to install stock app")
+        val apkPath = "$modulePath/$packageName.apk"
+        val stagingDir = File(app.cacheDir, "root-mount-$packageName").apply {
+            deleteRecursively()
+            mkdirs()
         }
 
-        // Fresh rooted-mount installs now store everything in the Magisk module
-        // directory. Keep /data/adb/revanced only as a legacy fallback path.
-        execute(
-            "mkdir -p \"$serviceDirPath\""
-        ).assertSuccess("Failed to prepare root mount service directory")
-
-        execute(
-            "for f in \"$serviceDirPath\"/urv-*.sh; do " +
-                "[ -e \"\$f\" ] || continue; " +
-                "pkg=\"${'$'}{f#$serviceDirPath/urv-}\"; " +
-                "pkg=\"${'$'}{pkg%.sh}\"; " +
-                "if [ ! -d \"$revancedPath/${'$'}pkg\" ] && [ ! -d \"$modulesPath/${'$'}pkg-revanced\" ]; then " +
-                "rm -f \"\$f\"; " +
-                "fi; " +
-                "done"
-        ).assertSuccess("Failed to clean service scripts")
-
-        // Remove legacy per-app service.d script to avoid duplicate mount logic.
-        val legacyScript = remoteFS.getFile(serviceScriptPath)
-        val hadLegacyScript = legacyScript.exists()
-        if (hadLegacyScript) legacyScript.delete()
-        if (hadLegacyScript) Log.i(TAG, "Removed legacy service.d mount script for $packageName")
-
-        remoteFS.getFile(modulePath).mkdir()
-
-        listOf(
-            "service.sh",
-            "module.prop",
-        ).forEach { file ->
-            assets.open("root/$file").use { inputStream ->
-                remoteFS.getFile("$modulePath/$file").newOutputStream()
-                    .use { outputStream ->
-                        val content = String(inputStream.readBytes())
-                            .replace("\r\n", "\n")
-                            .replace("\r", "\n")
-                            .replace("__PKG_NAME__", packageName)
-                            .replace("__VERSION__", version)
-                            .replace("__LABEL__", label)
-                            .toByteArray()
-
-                        outputStream.write(content)
-                    }
-            }
-        }
-
-        "$modulePath/$packageName.apk".let { apkPath ->
-
-            remoteFS.getFile(patchedAPK.absolutePath)
-                .also { if (!it.exists()) throw Exception("File doesn't exist") }
-                .newInputStream().use { inputStream ->
-                    remoteFS.getFile(apkPath).newOutputStream().use { outputStream ->
-                        inputStream.copyTo(outputStream)
-                    }
+        try {
+            unmount(packageName)
+            stockAPKs?.let { stockFiles ->
+                if (pm.getPackageInfo(packageName) != null) {
+                    execute("pm uninstall -k --user 0 ${shellQuote(packageName)}")
+                        .assertSuccess("Failed to remove the existing app before installing the stock APK")
                 }
+                installPackageFiles(stockFiles)
+            }
+
+            listOf("service.sh", "module.prop").forEach { fileName ->
+                val content = app.assets.open("root/$fileName").use { input ->
+                    String(input.readBytes())
+                        .replace("\r\n", "\n")
+                        .replace("\r", "\n")
+                        .replace("__PKG_NAME__", packageName)
+                        .replace("__VERSION__", version)
+                        .replace("__LABEL__", label)
+                }
+                stagingDir.resolve(fileName).writeText(content)
+            }
 
             execute(
-                "chmod 644 $apkPath",
-                "chown system:system $apkPath",
-                "chcon u:object_r:apk_data_file:s0 $apkPath",
-                "chmod +x $modulePath/service.sh"
-            ).assertSuccess("Failed to set file permissions")
+                "mkdir -p ${shellQuote(serviceDirPath)} ${shellQuote(modulePath)}",
+                "rm -f ${shellQuote("$serviceDirPath/urv-$packageName.sh")}",
+                "cp ${shellQuote(stagingDir.resolve("service.sh").absolutePath)} ${shellQuote("$modulePath/service.sh")}",
+                "cp ${shellQuote(stagingDir.resolve("module.prop").absolutePath)} ${shellQuote("$modulePath/module.prop")}",
+                "cp ${shellQuote(patchedAPK.absolutePath)} ${shellQuote(apkPath)}",
+                "chmod 644 ${shellQuote(apkPath)}",
+                "chown system:system ${shellQuote(apkPath)}",
+                "chcon u:object_r:apk_data_file:s0 ${shellQuote(apkPath)}",
+                "chmod +x ${shellQuote("$modulePath/service.sh")}"
+            ).assertSuccess("Failed to prepare rooted mount module")
+        } finally {
+            stagingDir.deleteRecursively()
         }
     }
 
-    suspend fun uninstall(packageName: String) {
-        val remoteFS = awaitRemoteFS()
-        if (isAppMounted(packageName))
-            unmount(packageName)
+    suspend fun installPackageFiles(
+        apkFiles: List<File>,
+        onLog: (String) -> Unit = {},
+        registerCancelCleanup: ((() -> Unit) -> Unit)? = null
+    ) = withContext(Dispatchers.IO) {
+        require(apkFiles.isNotEmpty()) { "No stock APK files were provided" }
+        require(apkFiles.all(File::exists)) { "A stock APK file is missing" }
 
-        val moduleDir = remoteFS.getFile("$modulesPath/$packageName-revanced")
-        val revancedDir = remoteFS.getFile("$revancedPath/$packageName")
-        val serviceScript = remoteFS.getFile("$serviceDirPath/urv-$packageName.sh")
+        val installShell = Shell.Builder.create()
+            .setFlags(Shell.FLAG_MOUNT_MASTER)
+            .build()
+        val closeInstallShell = {
+            runCatching { installShell.close() }
+            Unit
+        }
+        registerCancelCleanup?.invoke(closeInstallShell)
 
-        if (serviceScript.exists()) serviceScript.delete()
-        if (revancedDir.exists()) revancedDir.deleteRecursively()
-        if (!moduleDir.exists()) return
+        try {
+            val rootProbe = execute(installShell, "id")
+            onLog("Root shell probe: ${rootProbe.render()}")
+            if (!rootProbe.hasRootUid()) throw RootServiceException()
 
-        moduleDir.deleteRecursively().also { deleted ->
-            if (!deleted) throw Exception("Failed to delete files")
+            val installerPackage = shellQuote(app.packageName)
+            val createCommands = listOf(
+                "pm install-create -r --install-location 0 -i $installerPackage",
+                "pm install-create -r -i $installerPackage",
+                "cmd package install-create -r --install-location 0 -i $installerPackage",
+                "cmd package install-create -r -i $installerPackage",
+                "pm install-create -r",
+                "cmd package install-create -r"
+            )
+            var sessionId: String? = null
+            var createFailure = "Failed to create root install session"
+            createCommands.forEachIndexed { index, command ->
+                if (sessionId != null) return@forEachIndexed
+                kotlin.coroutines.coroutineContext.ensureActive()
+                val result = execute(installShell, command)
+                val output = result.combinedOutput()
+                val parsed = parseSessionId(output)
+                onLog("Root install-create attempt ${index + 1}: ${result.render()}, session=${parsed ?: "n/a"}")
+                if (result.isSuccess && parsed != null) sessionId = parsed
+                else if (output.isNotBlank()) createFailure = output
+            }
+            val session = sessionId ?: throw Exception(createFailure)
+
+            val abandon = {
+                Shell.cmd(
+                    "pm install-abandon $session",
+                    "cmd package install-abandon $session"
+                ).exec()
+                Unit
+            }
+            registerCancelCleanup?.invoke(abandon)
+
+            var committed = false
+            try {
+                apkFiles.forEachIndexed { index, file ->
+                    kotlin.coroutines.coroutineContext.ensureActive()
+                    val splitName = "$index.apk"
+                    val writeCommands = listOf(
+                        "pm install-write -S ${file.length()} $session ${shellQuote(splitName)} < ${shellQuote(file.absolutePath)}",
+                        "cmd package install-write -S ${file.length()} $session ${shellQuote(splitName)} < ${shellQuote(file.absolutePath)}"
+                    )
+                    var written = false
+                    var failure = "Failed to write stock APK ${file.name}"
+                    writeCommands.forEachIndexed { attempt, command ->
+                        if (written) return@forEachIndexed
+                        kotlin.coroutines.coroutineContext.ensureActive()
+                        val result = execute(installShell, command)
+                        val output = result.combinedOutput()
+                        onLog("Root install-write attempt ${attempt + 1}: ${result.render()}")
+                        written = result.isSuccess && !output.contains("Failure", ignoreCase = true)
+                        if (!written && output.isNotBlank()) failure = output
+                    }
+                    if (!written) throw Exception(failure)
+                }
+
+                val commitCommands = listOf(
+                    "pm install-commit $session",
+                    "cmd package install-commit $session"
+                )
+                var commitSucceeded = false
+                var commitFailure = "Failed to install stock app"
+                commitCommands.forEachIndexed { index, command ->
+                    if (commitSucceeded) return@forEachIndexed
+                    kotlin.coroutines.coroutineContext.ensureActive()
+                    val result = execute(installShell, command)
+                    val output = result.combinedOutput()
+                    onLog("Root install-commit attempt ${index + 1}: ${result.render()}")
+                    commitSucceeded = result.isSuccess && !output.contains("Failure", ignoreCase = true)
+                    if (!commitSucceeded && output.isNotBlank()) commitFailure = output
+                }
+                if (!commitSucceeded) throw Exception(commitFailure)
+                onLog("Root package manager install committed successfully (session $session)")
+                committed = true
+            } finally {
+                if (!committed) abandon()
+            }
+        } finally {
+            closeInstallShell()
         }
     }
+    suspend fun uninstall(packageName: String) = withContext(Dispatchers.IO) {
+        if (isAppMounted(packageName)) unmount(packageName)
+        execute(
+            "rm -rf ${shellQuote("$modulesPath/$packageName-revanced")}",
+            "rm -rf ${shellQuote("$revancedPath/$packageName")}",
+            "rm -f ${shellQuote("$serviceDirPath/urv-$packageName.sh")}"
+        ).assertSuccess("Failed to remove rooted mount files")
+    }
+
+    private fun parseSessionId(output: String): String? {
+        val normalized = output.trim()
+        if (normalized.matches(Regex("""^\d+$"""))) return normalized
+        Regex("""\[(\d+)]""").find(normalized)?.groupValues?.getOrNull(1)?.let { return it }
+        return Regex("""session(?:\s+id)?\s*[:=]?\s*(\d+)""", RegexOption.IGNORE_CASE)
+            .find(normalized)
+            ?.groupValues
+            ?.getOrNull(1)
+    }
+
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\\''") + "'"
 
     companion object {
         private const val TAG = "RootInstaller"
@@ -266,14 +308,14 @@ class RootInstaller(
     }
 
     private suspend fun resolvePatchedApkPath(packageName: String): String {
-        val remoteFS = awaitRemoteFS()
         val moduleApk = "$modulesPath/$packageName-revanced/$packageName.apk"
-        if (remoteFS.getFile(moduleApk).exists()) return moduleApk
-
         val revancedApk = "$revancedPath/$packageName/$packageName.apk"
-        if (remoteFS.getFile(revancedApk).exists()) return revancedApk
-
-        throw Exception("Patched APK not found for mount")
+        val result = execute(
+            "if [ -f ${shellQuote(moduleApk)} ]; then echo ${shellQuote(moduleApk)}; " +
+                "elif [ -f ${shellQuote(revancedApk)} ]; then echo ${shellQuote(revancedApk)}; fi"
+        )
+        return result.out.firstOrNull { it.startsWith("/") }
+            ?: throw Exception("Patched APK not found for mount")
     }
 
     private suspend fun resolveStockApkPathForMount(packageName: String): String? = withContext(Dispatchers.IO) {
@@ -299,6 +341,14 @@ class RootInstaller(
 }
 
 class RootServiceException : Exception("Root not available")
+
+private fun Shell.Result.combinedOutput(): String =
+    (out + err).joinToString("\n").trim()
+
+private fun Shell.Result.render(): String {
+    val output = combinedOutput().ifBlank { "n/a" }
+    return "success=$isSuccess, code=$code, output=$output"
+}
 
 private fun Shell.Result.hasRootUid() = isSuccess && out.any { line ->
     line.contains("uid=0")

@@ -810,6 +810,23 @@ object SplitApkPreparer {
         return lower == "base.apk" || lower.startsWith("base-")
     }
 
+    suspend fun extractForInstall(
+        source: File,
+        targetDir: File,
+        includedModules: Set<String>? = null
+    ): List<File> {
+        require(isSplitArchive(source)) { "Source is not a supported split archive." }
+        targetDir.mkdirs()
+        val included = includedModules?.map(::normalizeModuleSelectionName)?.toSet()
+        return extractSplitEntries(source, targetDir)
+            .filter { included == null || normalizeModuleSelectionName(it.name) in included }
+            .sortedWith(
+                compareBy<ExtractedModule> { !isBaseModuleName(it.name) }
+                    .thenBy { it.name.lowercase(Locale.ROOT) }
+            )
+            .map(ExtractedModule::file)
+    }
+
     private suspend fun extractSplitEntries(
         source: File,
         targetDir: File,

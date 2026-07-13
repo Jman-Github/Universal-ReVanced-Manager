@@ -674,7 +674,7 @@ class InstalledAppInfoViewModel(
 
                     rootInstaller.install(
                         patchedAPK = apk,
-                        stockAPK = null,
+                        stockAPKs = null,
                         packageName = packageInfo.packageName,
                         version = versionName,
                         label = label
@@ -1081,7 +1081,7 @@ class InstalledAppInfoViewModel(
         val label = with(pm) { packageInfo.label() }
         rootInstaller.install(
             patchedAPK = apk,
-            stockAPK = null,
+            stockAPKs = null,
             packageName = packageInfo.packageName,
             version = versionName,
             label = label

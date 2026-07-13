@@ -47,6 +47,7 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
@@ -198,6 +199,9 @@ class PatcherViewModel(
     private val selectedApp = input.selectedApp
     val packageName = selectedApp.packageName
     val version = selectedApp.version
+
+    var basePackageInstalled by mutableStateOf(pm.getPackageInfo(packageName) != null)
+        private set
 
     var installedPackageName by savedStateHandle.saveable(
         key = "installedPackageName",
@@ -1452,9 +1456,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private val packageChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
-            if (action != Intent.ACTION_PACKAGE_ADDED && action != Intent.ACTION_PACKAGE_REPLACED) return
             val pkg = intent.data?.schemeSpecificPart ?: return
-            handleExternalInstallSuccess(pkg)
+            if (pkg == packageName) {
+                basePackageInstalled = action != Intent.ACTION_PACKAGE_REMOVED
+            }
+            if (action == Intent.ACTION_PACKAGE_ADDED || action == Intent.ACTION_PACKAGE_REPLACED) {
+                handleExternalInstallSuccess(pkg)
+            }
         }
     }
 
@@ -1466,6 +1474,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             IntentFilter().apply {
                 addAction(Intent.ACTION_PACKAGE_ADDED)
                 addAction(Intent.ACTION_PACKAGE_REPLACED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
                 addDataScheme("package")
             },
             ContextCompat.RECEIVER_NOT_EXPORTED
@@ -1965,66 +1974,59 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         val label = with(pm) {
                             packageInfo.label()
                         }
-                        val patchedVersion = packageInfo.versionName ?: ""
-                        val mountTargetPackage = packageName
-                        val mountPackageInfo = pm.getPackageInfo(mountTargetPackage)
-                        val packageInstalledForMount = if (mountPackageInfo != null) {
-                            true
-                        } else if (rootInstaller.hasRootAccess()) {
-                            runCatching {
-                                rootInstaller.isPackageResolvableForMount(mountTargetPackage)
-                            }.onFailure {
-                                Log.w(TAG, "Failed to resolve package for mount using root shell", it)
-                            }.getOrDefault(false)
-                        } else {
-                            false
+                        if (!withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() }) {
+                            throw RootServiceException()
                         }
 
-                        // Check for base APK. If package manager cannot resolve the app, verify via root shell.
-                        if (!packageInstalledForMount) {
-                            // If the app is not installed, check if the output file is a base apk
-                            if (currentPackageInfo.splitNames?.isNotEmpty() == true) {
-                                val hint =
-                                    installerManager.formatFailureHint(PackageInstaller.STATUS_FAILURE_INVALID, null)
-                                        ?: app.getString(R.string.installer_hint_invalid)
-                                showInstallFailure(app.getString(R.string.install_app_fail, hint))
-                                return
-                            }
-                            // If the original input is a split APK, bail out because mount cannot install splits.
-                            val inputInfo = inputFile?.let(pm::getPackageInfo)
-                            if (inputInfo?.splitNames?.isNotEmpty() == true) {
-                                showInstallFailure(app.getString(R.string.mount_split_not_supported))
-                                return
-                            }
+                        val installedBaseInfo = pm.getPackageInfo(packageName)
+                        basePackageInstalled = installedBaseInfo != null
+                        val splitInstallWorkspace = tempDir.resolve("root-stock-splits").apply {
+                            deleteRecursively()
+                            mkdirs()
                         }
-
-                        val inputVersion = input.selectedApp.version
-                            ?: inputFile?.let(pm::getPackageInfo)?.versionName
-                            ?: throw Exception("Failed to determine input APK version")
-
-                        // Only reinstall stock when the app is not currently installed/resolvable.
-                        val stockForMount = if (!packageInstalledForMount) {
-                            inputFile ?: run {
-                                showInstallFailure(
-                                    app.getString(
-                                        R.string.install_app_fail,
-                                        app.getString(R.string.install_app_fail_missing_stock)
+                        try {
+                            val stockApks = if (installedBaseInfo == null) {
+                                val originalInput = inputFile ?: run {
+                                    showInstallFailure(
+                                        app.getString(
+                                            R.string.install_app_fail,
+                                            app.getString(R.string.install_app_fail_missing_stock)
+                                        )
                                     )
-                                )
-                                return
+                                    return
+                                }
+                                if (SplitApkPreparer.isSplitArchive(originalInput)) {
+                                    val inspection = SplitApkPreparer.inspect(originalInput)
+                                    SplitApkPreparer.extractForInstall(
+                                        source = originalInput,
+                                        targetDir = splitInstallWorkspace,
+                                        includedModules = inspection.recommendedModules
+                                    )
+                                } else {
+                                    listOf(originalInput)
+                                }
+                            } else {
+                                null
                             }
-                        } else {
-                            null
-                        }
+                            val inputVersion = input.selectedApp.version
+                                ?: stockApks?.asSequence()
+                                    ?.mapNotNull(pm::getPackageInfo)
+                                    ?.mapNotNull { it.versionName }
+                                    ?.firstOrNull()
+                                ?: installedBaseInfo?.versionName
+                                ?: packageInfo.versionName
+                                ?: throw Exception("Failed to determine input APK version")
 
-                        // Install as root
-                        rootInstaller.install(
-                            outputFile,
-                            stockForMount,
-                            packageName,
-                            inputVersion,
-                            label
-                        )
+                            rootInstaller.install(
+                                patchedAPK = outputFile,
+                                stockAPKs = stockApks,
+                                packageName = packageName,
+                                version = inputVersion,
+                                label = label
+                            )
+                        } finally {
+                            splitInstallWorkspace.deleteRecursively()
+                        }
 
                         if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
                             Log.w(TAG, "Failed to persist mounted patched app metadata")

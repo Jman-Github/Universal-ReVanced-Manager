@@ -1484,6 +1484,7 @@ Details: %2$s</string>
     <string name="mounting_ellipsis">Mounting…</string>
     <string name="unmounting">Unmounting…</string>
     <string name="install_app">Install</string>
+    <string name="install_base_and_mount">Install base &amp; mount</string>
     <string name="install_app_success">Installed successfully</string>
     <string name="install_app_fail_title">Installation failed</string>
     <string name="uninstall_app_fail_title">Uninstall failed</string>

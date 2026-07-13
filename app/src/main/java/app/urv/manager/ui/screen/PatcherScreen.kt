@@ -31,13 +31,17 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
@@ -80,6 +84,7 @@ import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
 import app.urv.manager.ui.component.ProgressPercentageBadge
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.urv.manager.ui.component.haptics.HapticFloatingActionButton
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
@@ -105,7 +110,9 @@ import app.urv.manager.util.toast
 import org.koin.compose.koinInject
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import app.urv.manager.ui.component.CenteredDialogTitle
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -129,6 +136,8 @@ fun PatcherScreen(
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
+    val primaryInstallerValue by prefs.installerPrimary.getAsState()
+    val fallbackInstallerValue by prefs.installerFallback.getAsState()
     val continueOnPatchError by prefs.continueOnPatchError.getAsState()
     val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
@@ -149,6 +158,34 @@ fun PatcherScreen(
     val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
+    val primaryInstallerIsMount = remember(primaryInstallerValue) {
+        installerManager.parseToken(primaryInstallerValue) is InstallerManager.Token.AutoSaved
+    }
+    val fallbackInstallerIsMount = remember(fallbackInstallerValue) {
+        installerManager.parseToken(fallbackInstallerValue) is InstallerManager.Token.AutoSaved
+    }
+    var mountInstallerAvailable by remember { mutableStateOf(false) }
+    LaunchedEffect(chooseInstallerPerInstall, primaryInstallerIsMount, fallbackInstallerIsMount) {
+        mountInstallerAvailable = if (
+            !chooseInstallerPerInstall && (primaryInstallerIsMount || fallbackInstallerIsMount)
+        ) {
+            withContext(Dispatchers.IO) {
+                installerManager.describeEntry(
+                    InstallerManager.Token.AutoSaved,
+                    InstallerManager.InstallTarget.PATCHER
+                )?.availability?.available == true
+            }
+        } else {
+            false
+        }
+    }
+    val showMountFallbackMenu =
+        !chooseInstallerPerInstall &&
+            viewModel.installedPackageName == null &&
+            !viewModel.basePackageInstalled &&
+            fallbackInstallerIsMount &&
+            !primaryInstallerIsMount &&
+            mountInstallerAvailable
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallInProgressDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
@@ -158,6 +195,7 @@ fun PatcherScreen(
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
+    var showInstallDropdown by rememberSaveable { mutableStateOf(false) }
     var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     val fs: Filesystem = koinInject()
     val storageRoots = remember { fs.storageRoots() }
@@ -910,6 +948,12 @@ fun PatcherScreen(
                 ) {
                     Icon(Icons.Outlined.PostAdd, stringResource(id = R.string.save_logs))
                 }
+                IconButton(
+                    onClick = ::onPageBackToDashboard,
+                    enabled = canInstall
+                ) {
+                    Icon(Icons.Outlined.Check, stringResource(R.string.done))
+                }
                 },
                 floatingActionButton = {
                     AnimatedVisibility(visible = canInstall) {
@@ -917,47 +961,95 @@ fun PatcherScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            HapticExtendedFloatingActionButton(
-                                text = { Text(stringResource(R.string.done)) },
-                                icon = {
-                                    Icon(
-                                        Icons.Outlined.Check,
-                                        stringResource(R.string.done)
-                                    )
-                                },
-                                onClick = ::onPageBackToDashboard,
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            HapticExtendedFloatingActionButton(
-                                text = {
-                                    Text(
-                                        stringResource(if (viewModel.installedPackageName == null) R.string.install_app else R.string.open_app)
-                                    )
-                                },
-                                icon = {
-                                    viewModel.installedPackageName?.let {
-                                        Icon(
-                                            Icons.AutoMirrored.Outlined.OpenInNew,
-                                            stringResource(R.string.open_app)
-                                        )
-                                    } ?: Icon(
-                                        Icons.Outlined.FileDownload,
-                                        stringResource(R.string.install_app)
-                                    )
-                                },
-                                onClick = {
-                                    if (viewModel.installedPackageName == null) {
-                                        if (chooseInstallerPerInstall) {
-                                            showInstallerPicker = true
+                            Box {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    HapticExtendedFloatingActionButton(
+                                        text = {
+                                            Text(
+                                                stringResource(
+                                                    when {
+                                                        viewModel.installedPackageName != null -> R.string.open_app
+                                                        !chooseInstallerPerInstall && primaryInstallerIsMount &&
+                                                            mountInstallerAvailable && !viewModel.basePackageInstalled ->
+                                                            R.string.install_base_and_mount
+                                                        else -> R.string.install_app
+                                                    }
+                                                )
+                                            )
+                                        },
+                                        icon = {
+                                            when {
+                                                viewModel.installedPackageName != null -> Icon(
+                                                    Icons.AutoMirrored.Outlined.OpenInNew,
+                                                    stringResource(R.string.open_app)
+                                                )
+                                                !chooseInstallerPerInstall && primaryInstallerIsMount &&
+                                                    mountInstallerAvailable && !viewModel.basePackageInstalled -> Icon(
+                                                    Icons.Outlined.Layers,
+                                                    stringResource(R.string.install_base_and_mount)
+                                                )
+                                                else -> Icon(
+                                                    Icons.Outlined.FileDownload,
+                                                    stringResource(R.string.install_app)
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            when {
+                                                viewModel.installedPackageName != null -> viewModel.open()
+                                                chooseInstallerPerInstall -> showInstallerPicker = true
+                                                else -> viewModel.install()
+                                            }
+                                        },
+                                        shape = if (showMountFallbackMenu) {
+                                            RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                bottomStart = 16.dp,
+                                                topEnd = 0.dp,
+                                                bottomEnd = 0.dp
+                                            )
                                         } else {
-                                            viewModel.install()
+                                            RoundedCornerShape(16.dp)
                                         }
-                                    } else {
-                                        viewModel.open()
+                                    )
+                                    if (showMountFallbackMenu) {
+                                        HapticFloatingActionButton(
+                                            onClick = { showInstallDropdown = true },
+                                            modifier = Modifier.size(56.dp),
+                                            shape = RoundedCornerShape(
+                                                topStart = 0.dp,
+                                                bottomStart = 0.dp,
+                                                topEnd = 16.dp,
+                                                bottomEnd = 16.dp
+                                            )
+                                        ) {
+                                            Icon(
+                                                Icons.Outlined.ArrowDropDown,
+                                                contentDescription = stringResource(R.string.install_base_and_mount),
+                                                modifier = Modifier.size(30.dp)
+                                            )
+                                        }
                                     }
                                 }
-                            )
+                                DropdownMenu(
+                                    expanded = showInstallDropdown && showMountFallbackMenu,
+                                    onDismissRequest = { showInstallDropdown = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.install_base_and_mount)) },
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Outlined.Layers,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        onClick = {
+                                            showInstallDropdown = false
+                                            viewModel.installWithToken(InstallerManager.Token.AutoSaved)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
