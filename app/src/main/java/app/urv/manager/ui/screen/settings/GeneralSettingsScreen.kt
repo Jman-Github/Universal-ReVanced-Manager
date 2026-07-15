@@ -98,6 +98,7 @@ import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
 import app.urv.manager.ui.theme.Theme
+import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.urv.manager.ui.viewmodel.GeneralSettingsViewModel
 import app.urv.manager.ui.viewmodel.ThemePreset
 import app.urv.manager.ui.screen.settings.SettingsSearchState
@@ -123,7 +124,8 @@ import app.urv.manager.ui.component.CenteredDialogTitle
 @Composable
 fun GeneralSettingsScreen(
     onBackClick: () -> Unit,
-    viewModel: GeneralSettingsViewModel = koinViewModel()
+    viewModel: GeneralSettingsViewModel = koinViewModel(),
+    actionButtonsViewModel: AdvancedSettingsViewModel = koinViewModel()
 ) {
     val prefs = viewModel.prefs
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
@@ -365,20 +367,6 @@ fun GeneralSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
-                    targetKey = R.string.prevent_accidental_touching,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    BooleanItem(
-                        modifier = highlightModifier,
-                        preference = prefs.preventAccidentalTouching,
-                        coroutineScope = viewModel.viewModelScope,
-                        headline = R.string.prevent_accidental_touching,
-                        description = R.string.prevent_accidental_touching_description
-                    )
-                }
-                ExpressiveSettingsDivider()
-                SettingsSearchHighlight(
                     targetKey = R.string.hide_patch_profiles_tab,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -435,6 +423,25 @@ fun GeneralSettingsScreen(
                         }
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.prevent_accidental_touching,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.preventAccidentalTouching,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.prevent_accidental_touching,
+                        description = R.string.prevent_accidental_touching_description
+                    )
+                }
+                ActionButtonSettings(
+                    viewModel = actionButtonsViewModel,
+                    highlightTarget = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                )
             }
 
             GroupHeader(

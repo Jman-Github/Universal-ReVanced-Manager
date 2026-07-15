@@ -380,6 +380,7 @@
 # Refactors
 
 - Migrated URV’s internal source namespace from `app.revanced.manager` to `app.urv.manager` across the app, API, and runtime modules
+- Reorganized navigation, tab, and action-button settings under Appearance & UI, and improved search to expand and highlight nested settings correctly
 
 
 # CI

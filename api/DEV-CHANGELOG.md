@@ -60,6 +60,11 @@
 - Fixed patch bundle update and import progress bars showing a filled marker at the end before completion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/589
 
 
+# Refactors
+
+- Reorganized navigation, tab, and action-button settings under Appearance & UI, and improved search to expand and highlight nested settings correctly
+
+
 # v1.8.1-dev.19 (2026-06-14)
 
 

@@ -259,7 +259,7 @@
     <string name="advanced_system_description">Safety, debug, and system controls</string>
     <string name="theme_section">Theme</string>
     <string name="background_section">Background</string>
-    <string name="navigation_tabs_section">Navigation &amp; Tabs</string>
+    <string name="navigation_tabs_section">Navigation, Tabs &amp; Action Buttons</string>
     <string name="action_buttons_patch_list_section">Action Buttons &amp; Patch List Display</string>
     <string name="app_behavior_section">App Behavior</string>
     <string name="network_integrations_section">Network &amp; Integrations</string>
