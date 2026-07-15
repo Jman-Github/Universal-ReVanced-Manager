@@ -321,7 +321,7 @@ To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch 
 
 ## ⭐ Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Jman-Github/Universal-ReVanced-Manager&type=date&legend=top-left)](https://www.star-history.com/#Jman-Github/Universal-ReVanced-Manager&type=date&legend=top-left)
+[![Star History Chart](https://api.star-history.com/chart?repos=Jman-Github/Universal-ReVanced-Manager&type=date&legend=top-left&sealed_token=tB1R5oujz97DvcFzx0y5Kvvm0WfE3Q1lrYLlvG9m0gbbfopkIl-QW0HSBgXR7f4v0JkJK0auztZiPYYAflhgEw1Y6vTUwmZ_nl9qOlT-7lcJfkZ4inXeAQ)](https://www.star-history.com/?type=date&legend=top-left&repos=Jman-Github%2FUniversal-ReVanced-Manager)
 
 ## ⚖️ License
 
