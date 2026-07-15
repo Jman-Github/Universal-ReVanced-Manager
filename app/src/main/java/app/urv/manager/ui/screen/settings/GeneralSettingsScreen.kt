@@ -58,6 +58,7 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,6 +80,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
@@ -101,10 +103,16 @@ import app.urv.manager.ui.viewmodel.ThemePreset
 import app.urv.manager.ui.screen.settings.SettingsSearchState
 import app.urv.manager.util.toColorOrNull
 import app.urv.manager.util.toHexString
+import app.urv.manager.util.toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.nio.file.Path
@@ -128,6 +136,7 @@ fun GeneralSettingsScreen(
     val customBackgroundImageUri by prefs.customBackgroundImageUri.getAsState()
     val customBackgroundImageOpacity by prefs.customBackgroundImageOpacity.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
+    val showLsposedTab by prefs.showLsposedTab.getAsState()
     val showToolsTab by prefs.showToolsTab.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val backgroundImageInputDirectory by prefs.backgroundImageInputLastDirectory.getAsState()
@@ -163,6 +172,60 @@ fun GeneralSettingsScreen(
     if (!canAdjustAccentColor && showAccentPicker) showAccentPicker = false
     val context = LocalContext.current
     val filesystem: Filesystem = koinInject()
+    val rootInstaller: RootInstaller = koinInject()
+    var lsposedRootAvailable by remember { mutableStateOf(rootInstaller.currentRootGrant() == true) }
+    val checkLsposedRootAccess: () -> Unit = {
+        viewModel.viewModelScope.launch {
+            val granted = withContext(Dispatchers.IO) {
+                rootInstaller.hasRootAccess(forceRefresh = true)
+            }
+            lsposedRootAvailable = granted
+            if (!granted && showLsposedTab) {
+                prefs.showLsposedTab.update(false)
+            }
+        }
+    }
+    LaunchedEffect(showLsposedTab) {
+        if (showLsposedTab) {
+            val granted = withContext(Dispatchers.IO) {
+                rootInstaller.hasRootAccess(forceRefresh = true)
+            }
+            lsposedRootAvailable = granted
+            if (!granted) {
+                prefs.showLsposedTab.update(false)
+            }
+        }
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, showLsposedTab) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (showLsposedTab) {
+                    checkLsposedRootAccess()
+                } else {
+                    lsposedRootAvailable = rootInstaller.currentRootGrant() == true
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    val toggleLsposedTab: () -> Unit = {
+        viewModel.viewModelScope.launch {
+            if (showLsposedTab) {
+                prefs.showLsposedTab.update(false)
+            } else {
+                val granted = withContext(Dispatchers.IO) {
+                    rootInstaller.hasRootAccess(forceRefresh = true)
+                }
+                lsposedRootAvailable = granted
+                if (granted) prefs.showLsposedTab.update(true)
+                else context.toast(context.getString(R.string.lsposed_requires_root))
+            }
+        }
+    }
     val storageRoots = remember { filesystem.storageRoots() }
     val supportedBackgroundImageExtensions = remember {
         setOf("jpg", "jpeg", "png", "gif", "svg", "tif", "tiff", "webp")
@@ -348,6 +411,28 @@ fun GeneralSettingsScreen(
                         },
                         headline = R.string.hide_tools_tab,
                         description = R.string.hide_tools_tab_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.show_lsposed_tab,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier.alpha(
+                            if (lsposedRootAvailable) 1f else 0.5f
+                        ),
+                        headlineContent = stringResource(R.string.show_lsposed_tab),
+                        supportingContent = stringResource(R.string.show_lsposed_tab_description),
+                        onClick = toggleLsposedTab,
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = showLsposedTab,
+                                onCheckedChange = { toggleLsposedTab() },
+                                enabled = lsposedRootAvailable
+                            )
+                        }
                     )
                 }
             }

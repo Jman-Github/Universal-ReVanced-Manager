@@ -42,6 +42,7 @@ import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
 import app.urv.manager.ui.model.PatchProfileActionKey
+import app.urv.manager.ui.model.LsposedModuleActionKey
 
 class AdvancedSettingsViewModel(
     val prefs: PreferencesManager,
@@ -229,6 +230,17 @@ class AdvancedSettingsViewModel(
     fun setPatchProfileHiddenActions(hidden: Set<String>) =
         viewModelScope.launch(Dispatchers.Default) {
             prefs.patchProfileHiddenActions.update(hidden)
+        }
+
+    fun setLsposedModuleActionOrder(order: List<LsposedModuleActionKey>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val serialized = order.joinToString(",") { it.storageId }
+            prefs.lsposedModuleActionOrder.update(serialized)
+        }
+
+    fun setLsposedModuleHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.lsposedModuleHiddenActions.update(hidden)
         }
 
     fun setPatchSelectionHiddenActions(hidden: Set<String>) =

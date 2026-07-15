@@ -50,8 +50,7 @@ class InstallerFileProvider : ContentProvider() {
     }
 
     override fun delete(uri: Uri, selection: String?, selectionArgs: Array<out String>?): Int {
-        val file = buildFile(contextOrThrow(), uri)
-        return if (file.exists() && file.delete()) 1 else 0
+        throw UnsupportedOperationException("Read-only provider")
     }
 
     override fun update(
@@ -64,7 +63,7 @@ class InstallerFileProvider : ContentProvider() {
     }
 
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
-        if (!mode.contains('r')) {
+        if (mode != "r") {
             throw IllegalArgumentException("Only read access is supported.")
         }
         val file = buildFile(contextOrThrow(), uri)

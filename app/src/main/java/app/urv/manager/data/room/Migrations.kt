@@ -201,3 +201,97 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
         db.execSQL("ALTER TABLE patch_profiles ADD COLUMN auto_install INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS lsposed_modules (
+                package_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                installed_version TEXT NOT NULL,
+                installed_version_code INTEGER NOT NULL,
+                source_kind TEXT NOT NULL,
+                source_reference TEXT NOT NULL,
+                release_tag TEXT,
+                asset_name TEXT,
+                asset_digest TEXT,
+                signing_fingerprint TEXT NOT NULL,
+                has_settings_activity INTEGER NOT NULL,
+
+                latest_version TEXT,
+                latest_asset_digest TEXT,
+                last_update_check INTEGER,
+                update_available INTEGER NOT NULL,
+                PRIMARY KEY(package_name)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
+
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE lsposed_modules_new (
+                package_name TEXT NOT NULL,
+                display_name TEXT NOT NULL,
+                installed_version TEXT NOT NULL,
+                installed_version_code INTEGER NOT NULL,
+                source_kind TEXT NOT NULL,
+                source_reference TEXT NOT NULL,
+                release_tag TEXT,
+                asset_name TEXT,
+                asset_digest TEXT,
+                signing_fingerprint TEXT NOT NULL,
+                latest_version TEXT,
+                latest_asset_digest TEXT,
+                last_update_check INTEGER,
+                update_available INTEGER NOT NULL,
+                PRIMARY KEY(package_name)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            INSERT INTO lsposed_modules_new (
+                package_name,
+                display_name,
+                installed_version,
+                installed_version_code,
+                source_kind,
+                source_reference,
+                release_tag,
+                asset_name,
+                asset_digest,
+                signing_fingerprint,
+                latest_version,
+                latest_asset_digest,
+                last_update_check,
+                update_available
+            )
+            SELECT
+                package_name,
+                display_name,
+                installed_version,
+                installed_version_code,
+                source_kind,
+                source_reference,
+                release_tag,
+                asset_name,
+                asset_digest,
+                signing_fingerprint,
+                latest_version,
+                latest_asset_digest,
+                last_update_check,
+                update_available
+            FROM lsposed_modules
+            """.trimIndent()
+        )
+        db.execSQL("DROP TABLE lsposed_modules")
+        db.execSQL("ALTER TABLE lsposed_modules_new RENAME TO lsposed_modules")
+    }
+}

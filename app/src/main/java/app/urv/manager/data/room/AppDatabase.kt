@@ -21,11 +21,13 @@ import app.urv.manager.data.room.plugins.TrustedDownloaderPlugin
 import app.urv.manager.data.room.plugins.TrustedDownloaderPluginDao
 import app.urv.manager.data.room.profile.PatchProfileDao
 import app.urv.manager.data.room.profile.PatchProfileEntity
+import app.urv.manager.data.room.lsposed.LsposedModule
+import app.urv.manager.data.room.lsposed.LsposedModuleDao
 import kotlin.random.Random
 
 @Database(
-    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, SeenPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class],
-    version = 16
+    entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, SeenPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class, LsposedModule::class],
+    version = 18
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -36,6 +38,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun optionDao(): OptionDao
     abstract fun trustedDownloaderPluginDao(): TrustedDownloaderPluginDao
     abstract fun patchProfileDao(): PatchProfileDao
+    abstract fun lsposedModuleDao(): LsposedModuleDao
 
     companion object {
         fun generateUid() = Random.Default.nextInt()

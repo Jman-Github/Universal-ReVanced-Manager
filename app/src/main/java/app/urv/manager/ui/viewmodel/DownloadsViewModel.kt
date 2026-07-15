@@ -368,7 +368,6 @@ class DownloadsViewModel(
 
     private fun cleanupExternalInstall(plan: InstallerManager.InstallPlan.External) {
         installerManager.cleanup(plan)
-        runCatching { plan.sharedFile.delete() }
     }
 
     fun refreshPlugins() = viewModelScope.launch {

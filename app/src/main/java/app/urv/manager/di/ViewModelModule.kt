@@ -35,4 +35,5 @@ val viewModelModule = module {
     viewModelOf(::BundleDiscoveryViewModel)
     viewModelOf(::ChangelogsViewModel)
     viewModelOf(::PatchProfilesViewModel)
+    viewModelOf(::LsposedViewModel)
 }

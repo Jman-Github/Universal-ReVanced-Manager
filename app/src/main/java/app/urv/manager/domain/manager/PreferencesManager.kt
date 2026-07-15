@@ -19,6 +19,7 @@ import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
 import app.urv.manager.ui.model.PatchProfileActionKey
+import app.urv.manager.ui.model.LsposedModuleActionKey
 
 enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
@@ -57,6 +58,8 @@ class PreferencesManager(
             SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val PATCH_PROFILE_ACTION_ORDER_DEFAULT =
             PatchProfileActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val LSPOSED_MODULE_ACTION_ORDER_DEFAULT =
+            LsposedModuleActionKey.DefaultOrder.joinToString(",") { it.storageId }
         val DEFAULT_ANNOUNCEMENT_TAGS: Set<String> = emptySet()
         const val MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT = 1
         const val DEFAULT_BUNDLE_CHANGELOG_FETCH_LIMIT = 20
@@ -77,6 +80,7 @@ class PreferencesManager(
     val preventAccidentalTouching = booleanPreference("prevent_accidental_touching", true)
     val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
     val showToolsTab = booleanPreference("show_tools_tab", true)
+    val showLsposedTab = booleanPreference("show_lsposed_tab", false)
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
 
@@ -106,6 +110,7 @@ class PreferencesManager(
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
+    val dashboardLsposedFabCollapsed = booleanPreference("dashboard_lsposed_fab_collapsed", false)
     private val dashboardProgressBannerCollapsed =
         booleanPreference("dashboard_progress_banner_collapsed", false)
     private val dashboardBundleBannerStateMigrated =
@@ -224,6 +229,10 @@ class PreferencesManager(
         stringPreference("patch_profile_action_order", PATCH_PROFILE_ACTION_ORDER_DEFAULT)
     val patchProfileHiddenActions =
         stringSetPreference("patch_profile_hidden_actions", emptySet())
+    val lsposedModuleActionOrder =
+        stringPreference("lsposed_module_action_order", LSPOSED_MODULE_ACTION_ORDER_DEFAULT)
+    val lsposedModuleHiddenActions =
+        stringSetPreference("lsposed_module_hidden_actions", emptySet())
     val patchSelectionHiddenActions =
         stringSetPreference("patch_selection_hidden_actions", emptySet())
     val patchSelectionShowVersionTags = booleanPreference("patch_selection_show_version_tags", true)
@@ -282,6 +291,8 @@ class PreferencesManager(
     val createdKeystoreExportLastDirectory = stringPreference("file_picker_created_keystore_export_directory", "")
     val convertedKeystoreExportLastDirectory = stringPreference("file_picker_converted_keystore_export_directory", "")
     val apkSignerInputLastDirectory = stringPreference("file_picker_apk_signer_input_directory", "")
+    val lsposedModuleInputLastDirectory =
+        stringPreference("file_picker_lsposed_module_input_directory", "")
     val youtubeImageInputLastDirectory = stringPreference("file_picker_youtube_image_input_directory", "")
     val keystoreConverterInputLastDirectory =
         stringPreference("file_picker_keystore_converter_input_directory", "")
@@ -354,6 +365,7 @@ class PreferencesManager(
         val preventAccidentalTouching: Boolean? = null,
         val showPatchProfilesTab: Boolean? = null,
         val showToolsTab: Boolean? = null,
+        val showLsposedTab: Boolean? = null,
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
@@ -432,6 +444,8 @@ class PreferencesManager(
         val savedAppHiddenActions: Set<String>? = null,
         val patchProfileActionOrder: String? = null,
         val patchProfileHiddenActions: Set<String>? = null,
+        val lsposedModuleActionOrder: String? = null,
+        val lsposedModuleHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val downloaderPluginSourcesJson: String? = null,
         val acknowledgedPatcherRuntimePlugins: Set<String>? = null,
@@ -533,6 +547,7 @@ class PreferencesManager(
             preventAccidentalTouching = preventAccidentalTouching.get(),
             showPatchProfilesTab = showPatchProfilesTab.get(),
             showToolsTab = showToolsTab.get(),
+            showLsposedTab = showLsposedTab.get(),
             themePresetSelectionName = themePresetSelectionName.get(),
             themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
             theme = theme.get(),
@@ -628,7 +643,9 @@ class PreferencesManager(
             savedAppActionOrder = savedAppActionOrder.get(),
             savedAppHiddenActions = savedAppHiddenActions.get(),
             patchProfileActionOrder = patchProfileActionOrder.get(),
-            patchProfileHiddenActions = patchProfileHiddenActions.get()
+            patchProfileHiddenActions = patchProfileHiddenActions.get(),
+            lsposedModuleActionOrder = lsposedModuleActionOrder.get(),
+            lsposedModuleHiddenActions = lsposedModuleHiddenActions.get()
         )
     }
 
@@ -681,6 +698,7 @@ class PreferencesManager(
         snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
         snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
         snapshot.showToolsTab?.let { showToolsTab.value = it }
+        snapshot.showLsposedTab?.let { showLsposedTab.value = it }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.theme?.let { theme.value = it }
@@ -799,6 +817,8 @@ class PreferencesManager(
         snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
         snapshot.patchProfileActionOrder?.let { patchProfileActionOrder.value = it }
         snapshot.patchProfileHiddenActions?.let { patchProfileHiddenActions.value = it }
+        snapshot.lsposedModuleActionOrder?.let { lsposedModuleActionOrder.value = it }
+        snapshot.lsposedModuleHiddenActions?.let { lsposedModuleHiddenActions.value = it }
     }
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {

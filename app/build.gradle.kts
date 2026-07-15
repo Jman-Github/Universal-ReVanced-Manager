@@ -125,6 +125,9 @@ dependencies {
     implementation(libs.room.ktx)
     annotationProcessor(libs.room.compiler)
     ksp(libs.room.compiler)
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 
     // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
     implementation(libs.revanced.patcher.v22) {
@@ -204,6 +207,8 @@ dependencies {
     // Ackpine
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
+
+    testImplementation(kotlin("test"))
 }
 
 buildscript {
@@ -227,6 +232,7 @@ android {
         applicationId = "app.universal.revanced.manager"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
         versionName = versionStr
@@ -376,6 +382,7 @@ android {
         getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
         getByName("main").assets.srcDir(revanced22RuntimeAssetsDir)
         getByName("main").res.srcDir(legalResourcesDir)
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
 
     externalNativeBuild {

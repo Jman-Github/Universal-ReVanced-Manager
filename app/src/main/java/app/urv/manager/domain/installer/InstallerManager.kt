@@ -307,6 +307,7 @@ class InstallerManager(
         runCatching {
             app.revokeUriPermission(plan.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
+        runCatching { plan.sharedFile.delete() }
     }
 
     private fun readCustomInstallerTokens(): List<Token.Component> =
@@ -645,7 +646,8 @@ class InstallerManager(
     enum class InstallTarget(val supportsRoot: Boolean) {
         PATCHER(true),
         SAVED_APP(true),
-        MANAGER_UPDATE(false)
+        MANAGER_UPDATE(false),
+        LSPOSED_MODULE(false)
     }
 
     companion object {

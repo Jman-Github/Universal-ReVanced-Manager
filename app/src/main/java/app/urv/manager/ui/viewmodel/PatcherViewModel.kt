@@ -2472,7 +2472,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun installTypeFor(target: InstallerManager.InstallTarget): InstallType = when (target) {
         InstallerManager.InstallTarget.PATCHER -> InstallType.DEFAULT
         InstallerManager.InstallTarget.SAVED_APP -> InstallType.DEFAULT
-        InstallerManager.InstallTarget.MANAGER_UPDATE -> InstallType.DEFAULT
+        InstallerManager.InstallTarget.MANAGER_UPDATE,
+        InstallerManager.InstallTarget.LSPOSED_MODULE -> InstallType.DEFAULT
     }
 
     private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
@@ -2588,7 +2589,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             InstallerManager.InstallTarget.SAVED_APP,
-            InstallerManager.InstallTarget.MANAGER_UPDATE -> {
+            InstallerManager.InstallTarget.MANAGER_UPDATE,
+            InstallerManager.InstallTarget.LSPOSED_MODULE -> {
             }
         }
         suppressFailureAfterSuccess = true

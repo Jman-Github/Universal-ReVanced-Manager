@@ -25,6 +25,7 @@ data class GitHubAsset(
     val downloadUrl: String,
     @SerialName("content_type")
     val contentType: String? = null,
+    val digest: String? = null,
 )
 
 @Serializable

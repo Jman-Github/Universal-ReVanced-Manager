@@ -36,20 +36,11 @@ class RootInstaller(
             .exec()
     }
 
-    fun hasRootAccess(): Boolean {
-        Shell.isAppGrantedRoot()?.let { granted ->
-            if (granted) cachedHasRoot = true
-            return granted
-        }
-
-        cachedHasRoot?.let { cached ->
-            if (cached) return true
-            if (SystemClock.elapsedRealtime() - lastRootCheck < ROOT_CHECK_INTERVAL_MS) return false
-        }
-
-        synchronized(this) {
+    fun hasRootAccess(forceRefresh: Boolean = false): Boolean {
+        if (!forceRefresh) {
             Shell.isAppGrantedRoot()?.let { granted ->
-                if (granted) cachedHasRoot = true
+                cachedHasRoot = granted
+                lastRootCheck = SystemClock.elapsedRealtime()
                 return granted
             }
 
@@ -57,11 +48,30 @@ class RootInstaller(
                 if (cached) return true
                 if (SystemClock.elapsedRealtime() - lastRootCheck < ROOT_CHECK_INTERVAL_MS) return false
             }
+        }
 
-            val probeResult = runCatching { Shell.cmd("id").exec() }.getOrNull()
+        synchronized(this) {
+            if (!forceRefresh) {
+                Shell.isAppGrantedRoot()?.let { granted ->
+                    cachedHasRoot = granted
+                    lastRootCheck = SystemClock.elapsedRealtime()
+                    return granted
+                }
+
+                cachedHasRoot?.let { cached ->
+                    if (cached) return true
+                    if (SystemClock.elapsedRealtime() - lastRootCheck < ROOT_CHECK_INTERVAL_MS) return false
+                }
+            }
+
+            val probeResult = runCatching {
+                Shell.Builder.create().build().use { shell ->
+                    execute(shell, "id")
+                }
+            }.getOrNull()
             lastRootCheck = SystemClock.elapsedRealtime()
 
-            val granted = Shell.isAppGrantedRoot() == true || probeResult?.hasRootUid() == true
+            val granted = probeResult?.hasRootUid() == true
             cachedHasRoot = granted
 
             return granted
@@ -69,6 +79,8 @@ class RootInstaller(
     }
 
     fun peekRootAccess(): Boolean? = Shell.isAppGrantedRoot() ?: cachedHasRoot
+
+    fun currentRootGrant(): Boolean? = Shell.isAppGrantedRoot()
 
     fun isDeviceRooted() = System.getenv("PATH")?.split(":")?.any { path ->
         File(path, "su").canExecute()

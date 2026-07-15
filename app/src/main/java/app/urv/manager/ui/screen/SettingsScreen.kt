@@ -94,6 +94,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.prevent_accidental_touching,
                     R.string.hide_patch_profiles_tab,
                     R.string.hide_tools_tab,
+                    R.string.show_lsposed_tab,
                     R.string.theme_preview_title,
                     R.string.theme_reset
                 )
@@ -132,7 +133,9 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.patch_bundle_action_order_title,
                     R.string.patch_bundle_action_visibility_title,
                     R.string.saved_app_action_order_title,
-                    R.string.saved_app_action_visibility_title
+                    R.string.saved_app_action_visibility_title,
+                    R.string.lsposed_module_action_order_title,
+                    R.string.lsposed_module_action_visibility_title
                 )
             ),
             Section(
@@ -315,6 +318,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.prevent_accidental_touching, R.string.prevent_accidental_touching_description, R.string.general, Settings.General),
             SearchEntry(R.string.hide_patch_profiles_tab, R.string.hide_patch_profiles_tab_description, R.string.general, Settings.General),
             SearchEntry(R.string.hide_tools_tab, R.string.hide_tools_tab_description, R.string.general, Settings.General),
+            SearchEntry(R.string.show_lsposed_tab, R.string.show_lsposed_tab_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_preview_title, R.string.theme_preview_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_reset, null, R.string.general, Settings.General),
             SearchEntry(R.string.app_language, null, R.string.advanced_system, Settings.AdvancedSystem),
@@ -451,6 +455,8 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.saved_app_action_visibility_title, R.string.saved_app_action_visibility_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patch_profile_action_order_title, R.string.patch_profile_action_order_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patch_profile_action_visibility_title, R.string.patch_profile_action_visibility_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.lsposed_module_action_order_title, R.string.lsposed_module_action_order_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.lsposed_module_action_visibility_title, R.string.lsposed_module_action_visibility_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.export_name_format, R.string.export_name_format_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.merged_apk_name_format, R.string.merged_apk_name_format_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.debug_logs_export, null, R.string.advanced_system, Settings.AdvancedSystem),

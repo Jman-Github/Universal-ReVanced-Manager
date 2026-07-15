@@ -2,6 +2,7 @@ package app.urv.manager.di
 
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.platform.NetworkInfo
+import app.urv.manager.domain.lsposed.LsposedRepository
 import app.urv.manager.domain.repository.*
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
@@ -34,4 +35,5 @@ val repositoryModule = module {
     singleOf(::WorkerRepository)
     singleOf(::DownloadedAppRepository)
     singleOf(::InstalledAppRepository)
+    singleOf(::LsposedRepository)
 }
