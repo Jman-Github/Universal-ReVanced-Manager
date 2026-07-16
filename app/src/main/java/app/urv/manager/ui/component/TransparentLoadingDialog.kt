@@ -52,7 +52,8 @@ fun TransparentLoadingDialog(
     cancelEnabled: Boolean = true,
     logTitle: String? = null,
     logLines: List<String> = emptyList(),
-    emptyLogMessage: String? = null
+    emptyLogMessage: String? = null,
+    progress: Float? = null
 ) {
     Dialog(
         onDismissRequest = {
@@ -85,6 +86,7 @@ fun TransparentLoadingDialog(
             ) {
                 LoadingIndicator(
                     modifier = Modifier.size(56.dp),
+                    progress = { progress },
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
                     strokeWidth = 4.dp

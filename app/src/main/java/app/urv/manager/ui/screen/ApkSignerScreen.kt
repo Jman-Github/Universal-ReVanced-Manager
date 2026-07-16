@@ -6,7 +6,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +17,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,9 +34,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.KeystoreManager
@@ -55,12 +61,14 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
-import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.RememberedGetContent
 import app.urv.manager.ui.component.toPickerDirectoryUri
+import app.urv.manager.ui.viewmodel.SignatureMetadataInjectorViewModel
 import app.urv.manager.util.APK_MIMETYPE
 import app.urv.manager.util.APK_SIGNER_CACHE_DIR
 import app.urv.manager.util.toast
@@ -73,6 +81,7 @@ import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,6 +92,8 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
     val keystoreManager: KeystoreManager = koinInject()
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
+    val injectorViewModel: SignatureMetadataInjectorViewModel = koinViewModel()
+    val injectorState by injectorViewModel.state.collectAsStateWithLifecycle()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val apkSignerInputDirectory by prefs.apkSignerInputLastDirectory.getAsState()
     val signedApkExportDirectory by prefs.signedApkExportLastDirectory.getAsState()
@@ -98,7 +109,19 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
     var showInputPicker by rememberSaveable { mutableStateOf(false) }
     var showOutputPicker by rememberSaveable { mutableStateOf(false) }
     var outputDialogState by remember { mutableStateOf<ApkSignerSaveDialogState?>(null) }
+    var pendingOutputOverwrite by remember { mutableStateOf<ApkSignerSaveDialogState?>(null) }
     var pendingPermission by rememberSaveable { mutableStateOf<ApkSignerPermissionRequest?>(null) }
+    var showInjectorDismissConfirmationDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    fun requestBack() {
+        if (injectorState.injecting) {
+            showInjectorDismissConfirmationDialog = true
+        } else {
+            onBackClick()
+        }
+    }
 
     fun defaultOutputName(): String {
         val sourceName = inputDisplayName
@@ -204,6 +227,58 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
         }
     }
 
+    fun saveSignedApk(directory: Path, fileName: String) {
+        val apk = signedApk ?: return
+        outputDialogState = null
+        pendingOutputOverwrite = null
+        showOutputPicker = false
+        scope.launch {
+            runCatching {
+                CacheCleanupGuard.withCacheInUse {
+                    withContext(Dispatchers.IO) {
+                        Files.copy(
+                            apk.toPath(),
+                            directory.resolve(fileName),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                    }
+                }
+            }.onSuccess {
+                prefs.signedApkExportLastDirectory.update(directory.toString())
+                context.toast(context.getString(R.string.tools_apk_signer_saved))
+            }.onFailure {
+                errorText = it.message
+                    ?: context.getString(R.string.tools_apk_signer_save_failed)
+            }
+        }
+    }
+
+    InterceptBackHandler(onBack = ::requestBack)
+
+    LaunchedEffect(injectorState.injecting) {
+        if (!injectorState.injecting) {
+            showInjectorDismissConfirmationDialog = false
+        }
+    }
+
+    if (showInjectorDismissConfirmationDialog) {
+        ConfirmDialog(
+            onDismiss = { showInjectorDismissConfirmationDialog = false },
+            onConfirm = {
+                showInjectorDismissConfirmationDialog = false
+                injectorViewModel.cancelInjection()
+                onBackClick()
+            },
+            title = stringResource(
+                R.string.tools_signature_metadata_injector_stop_confirm_title
+            ),
+            description = stringResource(
+                R.string.tools_signature_metadata_injector_stop_confirm_description
+            ),
+            icon = Icons.Outlined.Cancel
+        )
+    }
+
     if (showInputPicker && useCustomFilePicker) {
         PathSelectorDialog(
             roots = roots,
@@ -248,47 +323,47 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
             initialName = state.fileName,
             onDismiss = { outputDialogState = null },
             onConfirm = { enteredName ->
-                val apk = signedApk ?: return@ExportSavedApkFileNameDialog
-                val finalName = normalizeApkFileName(enteredName.trim().ifBlank { state.fileName })
+                val finalName = normalizeApkFileName(
+                    enteredName.trim().ifBlank { state.fileName }
+                )
                 outputDialogState = null
-                showOutputPicker = false
-                scope.launch {
-                    runCatching {
-                        CacheCleanupGuard.withCacheInUse {
-                            withContext(Dispatchers.IO) {
-                                Files.copy(
-                                    apk.toPath(),
-                                    state.directory.resolve(finalName),
-                                    StandardCopyOption.REPLACE_EXISTING
-                                )
-                            }
-                        }
-                    }.onSuccess {
-                        context.toast(context.getString(R.string.tools_apk_signer_saved))
-                    }.onFailure {
-                        errorText = it.message ?: context.getString(R.string.tools_apk_signer_save_failed)
-                    }
+                if (Files.exists(state.directory.resolve(finalName))) {
+                    pendingOutputOverwrite = ApkSignerSaveDialogState(
+                        directory = state.directory,
+                        fileName = finalName
+                    )
+                } else {
+                    saveSignedApk(state.directory, finalName)
                 }
             }
+        )
+    }
+
+    pendingOutputOverwrite?.let { overwrite ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingOutputOverwrite = null
+                outputDialogState = overwrite
+            },
+            onConfirm = {
+                saveSignedApk(overwrite.directory, overwrite.fileName)
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(
+                R.string.export_overwrite_description,
+                overwrite.fileName
+            ),
+            icon = Icons.Outlined.WarningAmber
         )
     }
 
     AppScaffold(
         topBar = { scrollBehavior ->
             AppTopBar(
-                title = stringResource(R.string.tools_apk_signer_title),
+                title = stringResource(R.string.tools_apk_signature_tools_title),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick
+                onBackClick = ::requestBack
             )
-        },
-        floatingActionButton = {
-            AnimatedVisibility(visible = signedApk != null && !signing) {
-                HapticExtendedFloatingActionButton(
-                    text = { Text(stringResource(R.string.save)) },
-                    icon = { Icon(Icons.Outlined.Save, null) },
-                    onClick = ::requestSave
-                )
-            }
         }
     ) { paddingValues ->
         LazyColumn(
@@ -298,6 +373,31 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Outlined.Draw,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.tools_apk_signer_title),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+            }
             item {
                 Card(
                     colors = CardDefaults.cardColors(
@@ -405,12 +505,25 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
             }
             signedApk?.let { apk ->
                 item {
-                    ApkSignerFileStatusCard(
-                        label = stringResource(R.string.tools_apk_signer_ready_label),
-                        value = apk.name,
-                        icon = Icons.Outlined.CheckCircle,
-                        positive = true
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ApkSignerFileStatusCard(
+                            label = stringResource(R.string.tools_apk_signer_ready_label),
+                            value = apk.name,
+                            icon = Icons.Outlined.CheckCircle,
+                            positive = true
+                        )
+                        OutlinedButton(
+                            onClick = ::requestSave,
+                            enabled = !signing,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Outlined.Save, null)
+                            Text(
+                                text = stringResource(R.string.tools_apk_signer_save_action),
+                                modifier = Modifier.padding(start = 8.dp)
+                            )
+                        }
+                    }
                 }
             }
             errorText?.let { error ->
@@ -431,6 +544,9 @@ fun ApkSignerScreen(onBackClick: () -> Unit) {
                         }
                     }
                 }
+            }
+            item {
+                SignatureMetadataInjectorSection(viewModel = injectorViewModel)
             }
         }
     }

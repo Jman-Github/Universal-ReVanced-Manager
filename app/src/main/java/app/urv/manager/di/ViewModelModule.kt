@@ -36,4 +36,5 @@ val viewModelModule = module {
     viewModelOf(::ChangelogsViewModel)
     viewModelOf(::PatchProfilesViewModel)
     viewModelOf(::LsposedViewModel)
+    viewModelOf(::SignatureMetadataInjectorViewModel)
 }

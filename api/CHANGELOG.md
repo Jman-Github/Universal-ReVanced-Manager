@@ -223,6 +223,8 @@
 - Added an option to choose which split APKs are merged before patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/592
 - Automatically remove unavailable patches and their saved options from saved selections, and show a toast indicating which patches were removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/595
 - Added an optional root-only LSPosed tab with support for LSPosed, Vector, and compatible builds, including local and GitHub module management, update checks, manager and settings shortcuts, and customizable module actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/596 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/598
+- Added Signature metadata injector & cloner tool under APK signature tools
+- Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
 
 
 # Bug fixes

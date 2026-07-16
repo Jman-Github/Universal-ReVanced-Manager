@@ -24,6 +24,11 @@
     public static void main(java.lang.String[]);
 }
 
+# Invoked reflectively by app_process for signature metadata injection.
+-keep class app.urv.manager.domain.manager.SignatureMetadataInjectorProcess {
+    public static void main(java.lang.String[]);
+}
+
 -keep class app.revanced.manager.plugin.downloader.** { *; }
 -keep class app.revanced.manager.downloader.** { *; }
 -keep class app.urv.manager.plugin.downloader.** { *; }

@@ -37,6 +37,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -123,7 +124,7 @@ class SplitApkInstallerViewModel(
         clearCancelCleanupActions()
         val job = viewModelScope.launch {
             val cacheUseToken = CacheCleanupGuard.begin()
-            clearLogs()
+            startLogSession()
             appendLog("Started split install (${mode.name.lowercase(Locale.ROOT)})")
             inputDisplayName?.takeIf { it.isNotBlank() }?.let { appendLog("Input: $it") }
             val preparingMessage = app.getString(R.string.split_installer_preparing)
@@ -228,7 +229,7 @@ class SplitApkInstallerViewModel(
                 app.toast(app.getString(R.string.split_installer_error_toast))
             } finally {
                 if (!completedSuccessfully) {
-                    withContext(Dispatchers.IO) {
+                    withContext(NonCancellable + Dispatchers.IO) {
                         runCancelCleanupActions()
                     }
                 } else {
@@ -240,6 +241,7 @@ class SplitApkInstallerViewModel(
                 runCatching { workspace.deleteRecursively() }
                 refreshAvailability()
                 runCatching { cacheUseToken.close() }
+                stateFlow.update { it.copy(logComplete = true) }
             }
         }
         installJob = job
@@ -647,13 +649,25 @@ class SplitApkInstallerViewModel(
         if (trimmed.isEmpty()) return
         val timestamp = "%1\$tH:%1\$tM:%1\$tS".format(Date())
         stateFlow.update { current ->
-            current.copy(logEntries = current.logEntries + "[$timestamp] $trimmed")
+            current.copy(
+                logEntries = current.logEntries + "[$timestamp] $trimmed",
+                logRevision = current.logRevision + 1
+            )
         }
     }
 
-    private fun clearLogs() {
+    private fun startLogSession() {
         stateFlow.update { current ->
-            current.copy(logEntries = emptyList())
+            current.copy(
+                inProgress = true,
+                installedPackageName = null,
+                errorMessage = null,
+                successMessage = null,
+                logEntries = emptyList(),
+                logComplete = false,
+                logRevision = current.logRevision + 1,
+                logSessionId = current.logSessionId + 1
+            )
         }
     }
 
@@ -663,7 +677,7 @@ class SplitApkInstallerViewModel(
         appendLine("Input: ${stateFlow.value.inputName ?: "n/a"}")
         appendLine()
         appendLine("------------")
-        appendLine("Installer Log:")
+        appendLine("Raw installer log:")
         appendLine("------------")
         if (stateFlow.value.logEntries.isEmpty()) {
             appendLine("No log messages recorded.")
@@ -763,7 +777,10 @@ data class SplitApkInstallerState(
     val statusMessage: String? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null,
-    val logEntries: List<String> = emptyList()
+    val logEntries: List<String> = emptyList(),
+    val logComplete: Boolean = false,
+    val logRevision: Long = 0L,
+    val logSessionId: Long = 0L
 )
 
 enum class SplitInstallMode {
@@ -771,7 +788,7 @@ enum class SplitInstallMode {
     PRIVILEGED
 }
 
-private data class InstallOutcome(
+internal data class InstallOutcome(
     val status: Int,
     val message: String?
 )
@@ -781,7 +798,7 @@ private data class ExtractedSplitApk(
     val file: File
 )
 
-private fun Intent.readConfirmationIntent(): Intent? {
+internal fun Intent.readConfirmationIntent(): Intent? {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
     } else {
@@ -790,7 +807,7 @@ private fun Intent.readConfirmationIntent(): Intent? {
     }
 }
 
-private object IntentSenderCompat {
+internal object IntentSenderCompat {
     fun create(callback: (Intent) -> Unit): IntentSender {
         val binder = object : android.content.IIntentSender.Stub() {
             override fun send(

@@ -345,10 +345,26 @@ fun proceedAfterMissingPatchWarning() {
         val initialStripNativeLibs: Boolean
     )
 
+    data class PrePatchDownloadProgress(
+        val downloadedBytes: Long,
+        val totalBytes: Long?
+    ) {
+        val fraction: Float?
+            get() = totalBytes
+                ?.takeIf { it > 0L }
+                ?.let { total ->
+                    (downloadedBytes.toDouble() / total.toDouble())
+                        .coerceIn(0.0, 1.0)
+                        .toFloat()
+                }
+    }
+
     private var pendingSplitSelectionDialog: SplitSelectionDialogState? by mutableStateOf(null)
     val splitSelectionDialog by derivedStateOf { pendingSplitSelectionDialog }
 
     var isPreparingSplitSelection by mutableStateOf(false)
+        private set
+    var prePatchDownloadProgress by mutableStateOf<PrePatchDownloadProgress?>(null)
         private set
     var splitSelectionPreparationError by mutableStateOf<String?>(null)
         private set
@@ -372,6 +388,7 @@ fun proceedAfterMissingPatchWarning() {
         prePatchPreparationJob?.cancel()
         prePatchPreparationJob = null
         isPreparingSplitSelection = false
+        prePatchDownloadProgress = null
         pendingSplitSelectionDialog = null
         cleanupPreparedInput()
     }
@@ -388,9 +405,29 @@ fun proceedAfterMissingPatchWarning() {
         prePatchPreparationJob?.cancel()
         prePatchPreparationJob = viewModelScope.launch {
             isPreparingSplitSelection = true
+            prePatchDownloadProgress = when (input.selectedApp) {
+                is SelectedApp.Download,
+                is SelectedApp.Search -> PrePatchDownloadProgress(0L, null)
+                else -> null
+            }
             splitSelectionPreparationError = null
             try {
-                val resolvedInput = resolveInputBeforePatching()
+                val localInput = input.selectedApp as? SelectedApp.Local
+                val localSplitEntryNames = localInput?.let { selected ->
+                    withContext(Dispatchers.IO) {
+                        SplitApkPreparer.splitApkEntryNames(selected.file)
+                    }
+                }
+                if (localSplitEntryNames != null && localSplitEntryNames.size <= 1) {
+                    isPreparingSplitSelection = false
+                    startWorker()
+                    return@launch
+                }
+
+                val resolvedInput = localInput?.let { selected ->
+                    DownloadResult(selected.file, needsSplit = true)
+                } ?: resolveInputBeforePatching()
+                prePatchDownloadProgress = null
                 preparedInput = resolvedInput
                 preparedInputIncludesDownload =
                     input.selectedApp is SelectedApp.Download || input.selectedApp is SelectedApp.Search
@@ -401,9 +438,21 @@ fun proceedAfterMissingPatchWarning() {
                     merged = resolvedInput.merged
                 )
 
-                if (!resolvedInput.needsSplit ||
-                    !SplitApkPreparer.isSplitArchive(resolvedInput.file)
+                val resolvedSplitEntryNames = if (
+                    localInput != null &&
+                    resolvedInput.file.absoluteFile == localInput.file.absoluteFile
                 ) {
+                    localSplitEntryNames.orEmpty()
+                } else if (resolvedInput.needsSplit) {
+                    withContext(Dispatchers.IO) {
+                        SplitApkPreparer.splitApkEntryNames(resolvedInput.file)
+                    }
+                } else {
+                    emptySet()
+                }
+                val hasSelectableSplits =
+                    resolvedInput.needsSplit && resolvedSplitEntryNames.size > 1
+                if (!hasSelectableSplits) {
                     isPreparingSplitSelection = false
                     startWorker()
                     return@launch
@@ -437,6 +486,7 @@ fun proceedAfterMissingPatchWarning() {
                     error.simpleMessage() ?: error.javaClass.simpleName
             } finally {
                 isPreparingSplitSelection = false
+                prePatchDownloadProgress = null
                 prePatchPreparationJob = null
             }
         }
@@ -451,7 +501,12 @@ fun proceedAfterMissingPatchWarning() {
                 expectedVersion = input.selectedApp.version,
                 appCompatibilityCheck = prefs.suggestedVersionSafeguard.get(),
                 patchesCompatibilityCheck = !prefs.disablePatchVersionCompatCheck.get(),
-                onDownload = {},
+                onDownload = { (downloadedBytes, totalBytes) ->
+                    prePatchDownloadProgress = PrePatchDownloadProgress(
+                        downloadedBytes = downloadedBytes,
+                        totalBytes = totalBytes
+                    )
+                },
                 persistDownload = prefs.autoSaveDownloaderApks.get()
             )
 

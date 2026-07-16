@@ -13,8 +13,26 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object SplitApkInspector {
-    suspend fun extractRepresentativeApk(source: File, workspace: File): ExtractedApk? {
-        if (!SplitApkPreparer.isSplitArchive(source)) return null
+    suspend fun extractRepresentativeApk(
+        source: File,
+        workspace: File,
+        maxExtractedBytes: Long = Long.MAX_VALUE,
+        maxArchiveEntries: Int = Int.MAX_VALUE,
+        validateEntryName: (String) -> Unit = {},
+        validateEntry: (ZipEntry) -> Unit = {},
+        checkCancelled: () -> Unit = {}
+    ): ExtractedApk? {
+        require(maxExtractedBytes >= 0L) { "Invalid extracted APK size limit." }
+        require(maxArchiveEntries >= 0) { "Invalid archive entry limit." }
+        if (
+            !SplitApkPreparer.isSplitArchive(
+                file = source,
+                maxArchiveEntries = maxArchiveEntries,
+                checkCancelled = checkCancelled
+            )
+        ) {
+            return null
+        }
 
         val temp = File(
             workspace,
@@ -23,14 +41,30 @@ object SplitApkInspector {
 
         return try {
             withContext(Dispatchers.IO) {
-                val selectedEntries = SplitApkPreparer.splitApkEntryNames(source)
+                checkCancelled()
+                val selectedEntries = SplitApkPreparer.splitApkEntryNames(
+                    file = source,
+                    maxArchiveEntries = maxArchiveEntries,
+                    checkCancelled = checkCancelled
+                )
                 try {
                     ZipFile(source).use { zip ->
+                        validateArchiveEntries(
+                            entries = zip.entries().asSequence(),
+                            maxArchiveEntries = maxArchiveEntries,
+                            validateEntryName = validateEntryName,
+                            validateEntry = validateEntry,
+                            checkCancelled = checkCancelled
+                        )
                         val entry = selectBestEntry(zip, selectedEntries)
                             ?: throw IOException("Split archive does not contain any APK entries.")
                         zip.getInputStream(entry).use { input ->
                             Files.newOutputStream(temp.toPath()).use { output ->
-                                input.copyTo(output)
+                                input.copyToBounded(
+                                    output = output,
+                                    maxBytes = maxExtractedBytes,
+                                    checkCancelled = checkCancelled
+                                )
                             }
                         }
                     }
@@ -39,9 +73,19 @@ object SplitApkInspector {
                     if (!message.contains("no such device") && !message.contains("enodev")) {
                         throw error
                     }
-                    extractWithStream(source, temp, selectedEntries)
+                    extractWithStream(
+                        source = source,
+                        temp = temp,
+                        selectedEntries = selectedEntries,
+                        maxExtractedBytes = maxExtractedBytes,
+                        maxArchiveEntries = maxArchiveEntries,
+                        validateEntryName = validateEntryName,
+                        validateEntry = validateEntry,
+                        checkCancelled = checkCancelled
+                    )
                 }
             }
+            checkCancelled()
             ExtractedApk(temp) { temp.delete() }
         } catch (error: Throwable) {
             temp.delete()
@@ -61,17 +105,12 @@ object SplitApkInspector {
 
         val lowered = entries.associateWith { it.name.lowercase(Locale.ROOT) }
         val baseEntry = lowered.entries.firstOrNull { (_, name) ->
-            name.endsWith("/base.apk") || name.endsWith("base.apk") || "base-master" in name || "base-main" in name
+            SplitApkPreparer.isExplicitBaseApkEntryName(name)
         }?.key
         if (baseEntry != null) return baseEntry
 
-        val primaryEntry = lowered.entries.firstOrNull { (_, name) ->
-            "main" in name || "master" in name
-        }?.key
-        if (primaryEntry != null) return primaryEntry
-
         val nonConfig = lowered.entries.filter { (_, name) ->
-            !name.startsWith("config") && !name.contains("split_config") && !name.contains("config.")
+            !isConfigApkEntryName(name)
         }.map { it.key }
         val largestNonConfig = nonConfig
             .filter { it.size >= 0 }
@@ -82,9 +121,8 @@ object SplitApkInspector {
             compareBy<ZipEntry> { entry ->
                 val lower = entry.name.lowercase(Locale.ROOT)
                 when {
-                    "base" in lower -> 0
-                    "main" in lower || "master" in lower -> 1
-                    lower.startsWith("config") -> 99
+                    SplitApkPreparer.isExplicitBaseApkEntryName(lower) -> 0
+                    isConfigApkEntryName(lower) -> 99
                     else -> 2
                 }
             }.thenBy { it.name.length }
@@ -94,16 +132,34 @@ object SplitApkInspector {
     private fun extractWithStream(
         source: File,
         temp: File,
+        maxExtractedBytes: Long,
+        maxArchiveEntries: Int,
+        validateEntryName: (String) -> Unit,
+        validateEntry: (ZipEntry) -> Unit,
+        checkCancelled: () -> Unit,
         selectedEntries: Set<String>
     ) {
-        val entryName = selectBestEntryName(source, selectedEntries)
+        val entryName = selectBestEntryName(
+            checkCancelled = checkCancelled,
+            maxArchiveEntries = maxArchiveEntries,
+            source = source,
+            selectedEntries = selectedEntries,
+            validateEntryName = validateEntryName,
+            validateEntry = validateEntry
+        )
             ?: throw IOException("Split archive does not contain any APK entries.")
         ZipInputStream(FileInputStream(source)).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
+                checkCancelled()
                 if (!entry.isDirectory && entry.name == entryName) {
+
                     Files.newOutputStream(temp.toPath()).use { output ->
-                        zip.copyTo(output)
+                        zip.copyToBounded(
+                            output = output,
+                            maxBytes = maxExtractedBytes,
+                            checkCancelled = checkCancelled
+                        )
                     }
                     return
                 }
@@ -114,13 +170,20 @@ object SplitApkInspector {
     }
 
     private fun selectBestEntryName(
+        maxArchiveEntries: Int,
+        validateEntryName: (String) -> Unit,
+        validateEntry: (ZipEntry) -> Unit,
+        checkCancelled: () -> Unit,
         source: File,
         selectedEntries: Set<String>
     ): String? {
+        val exactNames = HashSet<String>()
+        val apkNames = HashSet<String>()
         var baseEntry: ZipEntry? = null
         var primaryEntry: ZipEntry? = null
         var largestNonConfig: ZipEntry? = null
         var bestFallback: ZipEntry? = null
+        var entryCount = 0
 
         fun updateFallback(entry: ZipEntry) {
             if (bestFallback == null) {
@@ -131,15 +194,13 @@ object SplitApkInspector {
             val nextName = entry.name.lowercase(Locale.ROOT)
             val currentName = current.name.lowercase(Locale.ROOT)
             val nextScore = when {
-                "base" in nextName -> 0
-                "main" in nextName || "master" in nextName -> 1
-                nextName.startsWith("config") -> 99
+                SplitApkPreparer.isExplicitBaseApkEntryName(nextName) -> 0
+                isConfigApkEntryName(nextName) -> 99
                 else -> 2
             }
             val currentScore = when {
-                "base" in currentName -> 0
-                "main" in currentName || "master" in currentName -> 1
-                currentName.startsWith("config") -> 99
+                SplitApkPreparer.isExplicitBaseApkEntryName(currentName) -> 0
+                isConfigApkEntryName(currentName) -> 99
                 else -> 2
             }
             if (nextScore < currentScore || (nextScore == currentScore && entry.name.length < current.name.length)) {
@@ -150,15 +211,30 @@ object SplitApkInspector {
         ZipInputStream(FileInputStream(source)).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
+                checkCancelled()
+                entryCount++
+                require(entryCount <= maxArchiveEntries) {
+                    "Archive contains more than $maxArchiveEntries ZIP entries."
+                }
+                validateEntryName(entry.name)
+                validateEntry(entry)
+                require(exactNames.add(entry.name)) {
+                    "Duplicate ZIP entry: ${entry.name}"
+                }
+                if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
+                    require(apkNames.add(entry.name.substringAfterLast('/').uppercase(Locale.ROOT))) {
+                        "Duplicate APK entry: ${entry.name}"
+                    }
+                }
                 if (!entry.isDirectory && entry.name in selectedEntries) {
                     val lower = entry.name.lowercase(Locale.ROOT)
-                    if (baseEntry == null && (lower.endsWith("/base.apk") || lower.endsWith("base.apk") || "base-master" in lower || "base-main" in lower)) {
+                    if (baseEntry == null && SplitApkPreparer.isExplicitBaseApkEntryName(lower)) {
                         baseEntry = entry
                     }
                     if (primaryEntry == null && ("main" in lower || "master" in lower)) {
                         primaryEntry = entry
                     }
-                    if (!lower.startsWith("config") && !lower.contains("split_config") && !lower.contains("config.")) {
+                    if (!isConfigApkEntryName(lower)) {
                         if (entry.size >= 0 && (largestNonConfig == null || entry.size > (largestNonConfig?.size ?: -1))) {
                             largestNonConfig = entry
                         }
@@ -170,13 +246,68 @@ object SplitApkInspector {
         }
 
         return baseEntry?.name
-            ?: primaryEntry?.name
             ?: largestNonConfig?.name
             ?: bestFallback?.name
+    }
+
+    private fun isConfigApkEntryName(entryName: String): Boolean {
+        val fileName = entryName.replace('\\', '/').substringAfterLast('/')
+            .lowercase(Locale.ROOT)
+        return fileName.startsWith("config") ||
+            fileName.contains("split_config") ||
+            fileName.contains("config.")
+    }
+
+    private fun validateArchiveEntries(
+        entries: Sequence<ZipEntry>,
+        maxArchiveEntries: Int,
+        validateEntryName: (String) -> Unit,
+        validateEntry: (ZipEntry) -> Unit,
+        checkCancelled: () -> Unit
+    ) {
+        val exactNames = HashSet<String>()
+        val apkNames = HashSet<String>()
+        var entryCount = 0
+        entries.forEach { entry ->
+            checkCancelled()
+            entryCount++
+            require(entryCount <= maxArchiveEntries) {
+                "Archive contains more than $maxArchiveEntries ZIP entries."
+            }
+            validateEntryName(entry.name)
+            validateEntry(entry)
+            require(exactNames.add(entry.name)) {
+                "Duplicate ZIP entry: ${entry.name}"
+            }
+            if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
+                require(apkNames.add(entry.name.substringAfterLast('/').uppercase(Locale.ROOT))) {
+                    "Duplicate APK entry: ${entry.name}"
+                }
+            }
+        }
     }
 
     data class ExtractedApk(
         val file: File,
         val cleanup: () -> Unit = {}
     )
+}
+
+private fun java.io.InputStream.copyToBounded(
+    output: java.io.OutputStream,
+    maxBytes: Long,
+    checkCancelled: () -> Unit
+) {
+    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+    var copied = 0L
+    while (true) {
+        checkCancelled()
+        val count = read(buffer)
+        if (count < 0) break
+        copied = Math.addExact(copied, count.toLong())
+        require(copied <= maxBytes) {
+            "Extracted APK exceeds the supported size limit."
+        }
+        output.write(buffer, 0, count)
+    }
 }

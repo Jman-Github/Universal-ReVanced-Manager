@@ -44,7 +44,20 @@ class InstallerManager(
             .map { it.packageName }
             .toSet()
 
-    fun listEntries(target: InstallTarget, includeNone: Boolean): List<Entry> {
+    fun listEntries(target: InstallTarget, includeNone: Boolean): List<Entry> =
+        listEntries(target, includeNone, listOf(APK_MIME_CANDIDATE))
+
+    fun listEntriesForFile(
+        target: InstallTarget,
+        includeNone: Boolean,
+        sourceFile: File
+    ): List<Entry> = listEntries(target, includeNone, mimeCandidatesFor(sourceFile))
+
+    private fun listEntries(
+        target: InstallTarget,
+        includeNone: Boolean,
+        componentMimeCandidates: List<InstallerMimeCandidate>
+    ): List<Entry> {
         val hiddenPackages = hiddenInstallerPackages
         val entries = mutableListOf<Entry>()
 
@@ -53,7 +66,7 @@ class InstallerManager(
         entryFor(Token.Shizuku, target, checkRoot = true)?.let(entries::add)
         entryFor(Token.ShizukuGooglePlay, target, checkRoot = true)?.let(entries::add)
 
-        val activityEntries = queryInstallerActivities()
+        val activityEntries = queryInstallerActivities(componentMimeCandidates)
             .filter(::isInstallerCandidate)
             .distinctBy { it.activityInfo.packageName }
             .mapNotNull { info ->
@@ -63,7 +76,12 @@ class InstallerManager(
                 if (isExcludedDuplicate(component.packageName, info.loadLabel(packageManager)?.toString() ?: info.activityInfo.packageName)) {
                     return@mapNotNull null
                 }
-                entryFor(Token.Component(component), target, checkRoot = false)
+                entryFor(
+                    Token.Component(component),
+                    target,
+                    checkRoot = false,
+                    componentMimeCandidates = componentMimeCandidates
+                )
             }
             .sortedBy { it.label.lowercase() }
 
@@ -71,7 +89,12 @@ class InstallerManager(
 
         val customEntries = readCustomInstallerTokens()
             .mapNotNull { token ->
-                entryFor(token, target, checkRoot = false)
+                entryFor(
+                    token,
+                    target,
+                    checkRoot = false,
+                    componentMimeCandidates = componentMimeCandidates
+                )
             }
             .filterNot { entry ->
                 val componentToken = entry.token as? Token.Component ?: return@filterNot false
@@ -286,7 +309,7 @@ class InstallerManager(
         expectedPackage: String,
         sourceLabel: String?
     ): InstallPlan {
-        val sequence = buildSequence(target)
+        val sequence = buildSequence(target, sourceFile)
         sequence.forEach { token ->
             createPlan(token, target, sourceFile, expectedPackage, sourceLabel)?.let { return it }
         }
@@ -346,13 +369,16 @@ class InstallerManager(
                 if (isDefaultComponent(token.componentName)) {
                     return InstallPlan.Internal(target)
                 }
-                if (!availabilityFor(token, target).available) {
+                val sourceMimeCandidate = mimeCandidatesFor(sourceFile).firstOrNull { candidate ->
+                    isComponentAvailable(token.componentName, candidate)
+                }
+                if (sourceMimeCandidate == null) {
                     null
                 } else {
                     val shared = copyToShareDir(sourceFile)
                     val uri = InstallerFileProvider.buildUri(app, shared)
                     val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, APK_MIME)
+                        setDataAndType(uri, sourceMimeCandidate.mimeType)
                         addFlags(
                             Intent.FLAG_GRANT_READ_URI_PERMISSION or
                                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
@@ -406,7 +432,12 @@ class InstallerManager(
             activityInfo.loadLabel(packageManager)?.toString() ?: componentName.packageName
         }.getOrDefault(componentName.packageName)
 
-    private fun entryFor(token: Token, target: InstallTarget, checkRoot: Boolean = true): Entry? = when (token) {
+    private fun entryFor(
+        token: Token,
+        target: InstallTarget,
+        checkRoot: Boolean = true,
+        componentMimeCandidates: List<InstallerMimeCandidate> = listOf(APK_MIME_CANDIDATE)
+    ): Entry? = when (token) {
         Token.Internal -> Entry(
             token = Token.Internal,
             label = app.getString(R.string.installer_internal_name),
@@ -448,7 +479,12 @@ class InstallerManager(
         )
 
         is Token.Component -> {
-            val availability = availabilityFor(token, target, checkRoot)
+            val availability = availabilityFor(
+                token,
+                target,
+                checkRoot,
+                componentMimeCandidates
+            )
             Entry(
                 token = token,
                 label = resolveLabel(token.componentName),
@@ -460,7 +496,11 @@ class InstallerManager(
     }
 
     private fun copyToShareDir(source: File): File {
-        val target = File(shareDir, "${UUID.randomUUID()}.apk")
+        val sourceExtension = source.extension.lowercase()
+        val extension = sourceExtension
+            .takeIf { it == "apk" || it in SPLIT_ARCHIVE_EXTENSIONS }
+            ?: "apk"
+        val target = File(shareDir, "${UUID.randomUUID()}.$extension")
         try {
             source.inputStream().use { input ->
                 target.outputStream().use { output ->
@@ -474,15 +514,23 @@ class InstallerManager(
         return target
     }
 
-    private fun buildSequence(target: InstallTarget): List<Token> {
+    private fun buildSequence(target: InstallTarget, sourceFile: File): List<Token> {
         val tokens = mutableListOf<Token>()
         val primary = getPrimaryToken()
         val fallback = getFallbackToken()
+        val componentMimeCandidates = mimeCandidatesFor(sourceFile)
 
         fun add(token: Token) {
             if (token == Token.None) return
             if (token in tokens) return
-            if (!availabilityFor(token, target).available) return
+            if (!availabilityFor(
+                    token,
+                    target,
+                    componentMimeCandidates = componentMimeCandidates
+                ).available
+            ) {
+                return
+            }
             tokens += token
         }
 
@@ -495,7 +543,12 @@ class InstallerManager(
         return tokens
     }
 
-    private fun availabilityFor(token: Token, target: InstallTarget, checkRoot: Boolean = true): Availability = when (token) {
+    private fun availabilityFor(
+        token: Token,
+        target: InstallTarget,
+        checkRoot: Boolean = true,
+        componentMimeCandidates: List<InstallerMimeCandidate> = listOf(APK_MIME_CANDIDATE)
+    ): Availability = when (token) {
         Token.Internal -> Availability(true)
         Token.None -> Availability(true)
 
@@ -515,7 +568,7 @@ class InstallerManager(
         }
 
         is Token.Component -> {
-            if (isComponentAvailable(token.componentName)) Availability(true)
+            if (isComponentAvailable(token.componentName, componentMimeCandidates)) Availability(true)
             else Availability(false, R.string.installer_status_not_supported)
         }
     }
@@ -529,14 +582,78 @@ class InstallerManager(
         return intent.resolveActivity(packageManager) != null
     }
 
-    private fun queryInstallerActivities() =
-        packageManager.queryIntentActivities(
-            Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(dummyUri, APK_MIME)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            },
+    private fun isComponentAvailable(
+        componentName: ComponentName,
+        candidate: InstallerMimeCandidate
+    ): Boolean {
+        if (candidate == APK_MIME_CANDIDATE) return isComponentAvailable(componentName)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(dummyUriFor(candidate.extension), candidate.mimeType)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        return packageManager.queryIntentActivities(
+            intent,
             PackageManager.MATCH_DEFAULT_ONLY
-        )
+        ).any { info ->
+            ComponentName(info.activityInfo.packageName, info.activityInfo.name) == componentName
+        }
+    }
+
+    private fun isComponentAvailable(
+        componentName: ComponentName,
+        candidates: Collection<InstallerMimeCandidate>
+    ): Boolean = candidates.any { candidate ->
+        isComponentAvailable(componentName, candidate)
+    }
+
+    private fun mimeCandidatesFor(sourceFile: File): List<InstallerMimeCandidate> {
+        val extension = sourceFile.extension.lowercase()
+        val mimeTypes = when (extension) {
+            "apks" -> listOf(
+                APKS_MIME,
+                "application/apks",
+                "application/x-apks",
+                ARCHIVE_MIME,
+                ZIP_COMPRESSED_MIME
+            )
+            "xapk" -> listOf(
+                XAPK_MIME,
+                "application/xapk",
+                "application/x-xapk",
+                ARCHIVE_MIME,
+                ZIP_COMPRESSED_MIME
+            )
+            "apkm" -> listOf(
+                APKM_MIME,
+                "application/apkm",
+                "application/x-apkm",
+                ARCHIVE_MIME,
+                ZIP_COMPRESSED_MIME
+            )
+            "zip" -> listOf(ARCHIVE_MIME, ZIP_COMPRESSED_MIME)
+            else -> return listOf(APK_MIME_CANDIDATE)
+        }
+        return mimeTypes.map { mimeType -> InstallerMimeCandidate(mimeType, extension) }
+    }
+
+    private fun dummyUriFor(extension: String): Uri =
+        InstallerFileProvider.buildUri(app, "dummy.$extension")
+
+    private fun queryInstallerActivities(
+        candidates: Collection<InstallerMimeCandidate> = listOf(APK_MIME_CANDIDATE)
+    ) = candidates
+        .flatMap { candidate ->
+            packageManager.queryIntentActivities(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(dummyUriFor(candidate.extension), candidate.mimeType)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                },
+                PackageManager.MATCH_DEFAULT_ONLY
+            )
+        }
+        .distinctBy { info ->
+            ComponentName(info.activityInfo.packageName, info.activityInfo.name)
+        }
 
     private fun resolveDefaultInstallerComponent(): ComponentName? {
         fun isSystemApp(packageName: String): Boolean {
@@ -650,14 +767,35 @@ class InstallerManager(
         LSPOSED_MODULE(false)
     }
 
+    private data class InstallerMimeCandidate(
+        val mimeType: String,
+        val extension: String
+    )
+
     companion object {
         private const val APK_MIME = "application/vnd.android.package-archive"
+        private const val ARCHIVE_MIME = "application/zip"
+        private const val ZIP_COMPRESSED_MIME = "application/x-zip-compressed"
+        private const val APKS_MIME = "application/vnd.android.apks"
+        private const val XAPK_MIME = "application/vnd.android.xapk"
+        private const val APKM_MIME = "application/vnd.android.apkm"
+        private val SPLIT_ARCHIVE_EXTENSIONS = setOf("apks", "xapk", "apkm", "zip")
+        private val APK_MIME_CANDIDATE = InstallerMimeCandidate(APK_MIME, "apk")
         internal const val SHARE_DIR = "installer_share"
         private const val AOSP_INSTALLER_PACKAGE = "com.google.android.packageinstaller"
         private const val AOSP_INSTALLER_LABEL = "Package installer"
         private const val SEARCH_PACKAGE_SUGGESTION_LIMIT = 24
         private const val DEFAULT_PACKAGE_SUGGESTION_LIMIT = 8
         private const val TAG = "InstallerManager"
+
+        internal fun mimeTypeForExtension(extension: String): String =
+            when (extension.lowercase()) {
+                "apks" -> APKS_MIME
+                "xapk" -> XAPK_MIME
+                "apkm" -> APKM_MIME
+                "zip" -> ARCHIVE_MIME
+                else -> APK_MIME
+            }
     }
 
     fun openShizukuApp(): Boolean = shizukuInstaller.launchApp()

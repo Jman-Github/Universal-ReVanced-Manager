@@ -208,10 +208,20 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             }
         }
 
-    suspend fun sign(input: File, output: File) = withContext(Dispatchers.Default) {
+    suspend fun sign(input: File, output: File) =
+        signWithOptions(input, output, preserveSignatureMetadata = false)
+
+    suspend fun signPreservingSignatureMetadata(input: File, output: File) =
+        signWithOptions(input, output, preserveSignatureMetadata = true)
+
+    private suspend fun signWithOptions(
+        input: File,
+        output: File,
+        preserveSignatureMetadata: Boolean
+    ) = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
             try {
-                signWithApksig(input, output)
+                signWithApksig(input, output, preserveSignatureMetadata)
                 return@withLock
             } catch (e: Exception) {
                 val sanitized = sanitizeZipIfNeeded(input)
@@ -219,7 +229,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                     throw e
                 }
                 try {
-                    signWithApksig(sanitized, output)
+                    signWithApksig(sanitized, output, preserveSignatureMetadata)
                 } finally {
                     sanitized.delete()
                 }
@@ -537,7 +547,11 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         return null
     }
 
-    private suspend fun signWithApksig(input: File, output: File) {
+    private suspend fun signWithApksig(
+        input: File,
+        output: File,
+        preserveSignatureMetadata: Boolean
+    ) {
         requireKeystoreReady()
         val keystoreData = withContext(Dispatchers.IO) {
             Files.readAllBytes(keystorePath.toPath())
@@ -638,10 +652,12 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             AndroidApkSigner.Builder(listOf(signerConfig))
                 .setInputApk(input)
                 .setOutputApk(output)
-                .setV1SigningEnabled(true)
+                .setV1SigningEnabled(!preserveSignatureMetadata)
                 .setV2SigningEnabled(true)
                 .setV3SigningEnabled(true)
                 .setV4SigningEnabled(false)
+                .setOtherSignersSignaturesPreserved(preserveSignatureMetadata)
+                .setAlignmentPreserved(preserveSignatureMetadata)
                 .build()
                 .sign()
         }

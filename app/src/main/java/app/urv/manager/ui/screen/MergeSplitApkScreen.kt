@@ -917,6 +917,7 @@ internal fun SplitMergeSelectionDialog(
     selection: SplitApkPreparer.SplitArchiveInspection,
     initialModules: Set<String>,
     initialStripNativeLibs: Boolean,
+    showStripNativeLibsOption: Boolean = true,
     initialPresetKey: String,
     initialSortMode: SplitMergeModuleSortMode,
     @StringRes confirmTextRes: Int? = null,
@@ -1037,11 +1038,18 @@ internal fun SplitMergeSelectionDialog(
         }
     }
 
-    val rememberedInitialPresetKey = remember(initialPresetKey) {
-        initialPresetKey.takeIf { it == "all" || it == "none" || it == "recommended" } ?: "all"
+    val rememberedInitialPresetKey = remember(
+        initialPresetKey,
+        effectiveInitialModules,
+        presetOptions
+    ) {
+        initialPresetKey
+            .takeIf { it == "all" || it == "none" || it == "recommended" }
+            ?.takeIf { it in matchingPresetKeys(effectiveInitialModules) }
+            ?: inferPresetKey(effectiveInitialModules)
     }
     var selectedPresetKey by remember(selection, rememberedInitialPresetKey) {
-        mutableStateOf<String?>(rememberedInitialPresetKey)
+        mutableStateOf(rememberedInitialPresetKey)
     }
     var sortMode by remember(selection, initialSortMode) { mutableStateOf(initialSortMode) }
     var showSortMenu by rememberSaveable { mutableStateOf(false) }
@@ -1246,29 +1254,35 @@ internal fun SplitMergeSelectionDialog(
                                 }
                             )
                         }
-                        CheckedFilterChip(
-                            selected = stripNativeLibs,
-                            onClick = {
-                                val toggledStripNativeLibs = !stripNativeLibs
-                                val nextModules = if (toggledStripNativeLibs) {
-                                    selectedModules
-                                } else {
-                                    selectedModules + optionalAbiModules
+                        if (showStripNativeLibsOption) {
+                            CheckedFilterChip(
+                                selected = stripNativeLibs,
+                                onClick = {
+                                    val toggledStripNativeLibs = !stripNativeLibs
+                                    val nextModules = if (toggledStripNativeLibs) {
+                                        selectedModules
+                                    } else {
+                                        selectedModules + optionalAbiModules
+                                    }
+                                    val normalizedModules = updateSelection(
+                                        modules = nextModules,
+                                        stripUnusedNativeLibs = toggledStripNativeLibs
+                                    )
+                                    rememberCurrentFilterSelection(
+                                        modules = normalizedModules,
+                                        stripUnusedNativeLibs = toggledStripNativeLibs
+                                    )
+                                },
+                                colors = chipColors,
+                                label = {
+                                    Text(
+                                        stringResource(
+                                            R.string.merge_split_apk_selection_strip_native_libs_title
+                                        )
+                                    )
                                 }
-                                val normalizedModules = updateSelection(
-                                    modules = nextModules,
-                                    stripUnusedNativeLibs = toggledStripNativeLibs
-                                )
-                                rememberCurrentFilterSelection(
-                                    modules = normalizedModules,
-                                    stripUnusedNativeLibs = toggledStripNativeLibs
-                                )
-                            },
-                            colors = chipColors,
-                            label = {
-                                Text(stringResource(R.string.merge_split_apk_selection_strip_native_libs_title))
-                            }
-                        )
+                            )
+                        }
                     }
                     sortedModules.forEach { module ->
                         val required = requiredModules.contains(module.name)

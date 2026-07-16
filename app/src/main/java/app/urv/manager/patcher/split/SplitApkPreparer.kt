@@ -21,6 +21,17 @@ object SplitApkPreparer {
     private val SUPPORTED_EXTENSIONS = setOf("apks", "apkm", "xapk")
     private const val SKIPPED_STEP_PREFIX = "[skipped]"
     private const val MAX_FLATTEN_RETRIES = 2
+    internal const val MAX_ARCHIVE_ENTRIES = 100_000
+    internal const val MAX_EXTRACTED_ENTRY_BYTES = 2L * 1024L * 1024L * 1024L
+    internal const val MAX_TOTAL_EXTRACTED_BYTES = 4L * 1024L * 1024L * 1024L
+    private const val MAX_COMPRESSION_RATIO = 1_000L
+    private const val RATIO_CHECK_MIN_SIZE = 64L * 1024L * 1024L
+
+    private class SplitArchiveEntryLimitException(maxArchiveEntries: Int) :
+        IllegalArgumentException(
+            "Archive contains more than $maxArchiveEntries ZIP entries."
+        )
+
     private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     private val DENSITY_DPI_VALUES = linkedMapOf(
         "ldpi" to DisplayMetrics.DENSITY_LOW,
@@ -33,24 +44,53 @@ object SplitApkPreparer {
     )
     private val DENSITY_QUALIFIERS = DENSITY_DPI_VALUES.keys
 
-    fun isSplitArchive(file: File?): Boolean {
+    fun isSplitArchive(
+        file: File?,
+        maxArchiveEntries: Int = MAX_ARCHIVE_ENTRIES,
+        checkCancelled: () -> Unit = {}
+    ): Boolean {
         if (file == null || !file.exists()) return false
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension !in SUPPORTED_EXTENSIONS && extension != "zip" && extension != "apk") return false
-        return splitApkEntryNames(file).isNotEmpty()
+        return try {
+            splitApkEntryNames(
+                file = file,
+                maxArchiveEntries = maxArchiveEntries,
+                checkCancelled = checkCancelled
+            ).isNotEmpty()
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            false
+        }
     }
 
-    internal fun splitApkEntryNames(file: File): Set<String> {
+    internal fun splitApkEntryNames(
+        file: File,
+        maxArchiveEntries: Int = MAX_ARCHIVE_ENTRIES,
+        checkCancelled: () -> Unit = {}
+    ): Set<String> {
+        require(maxArchiveEntries >= 0) { "Invalid archive entry limit." }
         if (!file.exists()) return emptySet()
         val extension = file.extension.lowercase(Locale.ROOT)
         if (extension !in SUPPORTED_EXTENSIONS && extension != "zip" && extension != "apk") {
             return emptySet()
         }
-        return runCatching {
+        return try {
             ZipFile(file).use { zip ->
+                checkCancelled()
+                if (zip.size() > maxArchiveEntries) {
+                    throw SplitArchiveEntryLimitException(maxArchiveEntries)
+                }
                 resolveSplitApkEntryNames(zip, extension)
             }
-        }.getOrDefault(emptySet())
+        } catch (error: SplitArchiveEntryLimitException) {
+            throw error
+        } catch (error: kotlinx.coroutines.CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            emptySet()
+        }
     }
 
     suspend fun prepareIfNeeded(
@@ -294,10 +334,14 @@ object SplitApkPreparer {
         val splitLike = candidates.filter { isLikelySplitApkEntryName(it.name) }
         if (splitLike.isEmpty()) return emptySet()
 
-        val selected = LinkedHashSet<String>()
-        selectProbableZipBaseEntry(candidates, splitLike)?.let { selected += it.name }
-        splitLike.forEach { selected += it.name }
-        return selected
+        // Once a generic ZIP is recognized as a split set, every APK belongs to
+        // the set. Dynamic-feature APK names are not required to match the
+        // config/base naming heuristics used to identify the archive.
+        if (selectProbableZipBaseEntry(candidates, splitLike) == null) return emptySet()
+        return candidates.mapTo(LinkedHashSet()) { it.name }
+
+
+
     }
 
     private fun selectProbableZipBaseEntry(
@@ -350,11 +394,29 @@ object SplitApkPreparer {
     ): Boolean = runCatching {
         val workingDir = Files.createTempDirectory("split-verify-").toFile()
         try {
+            val usedLeafNames = HashSet<String>()
+            var totalExtractedBytes = 0L
+            val checkExtractionCancelled: () -> Unit = {}
             candidates.forEach { entry ->
-                val destination = workingDir.resolve(entry.name.substringAfterLast('/'))
+                validateSplitEntry(entry)
+                val leafName = entry.name.substringAfterLast('/')
+                require(usedLeafNames.add(leafName.uppercase(Locale.ROOT))) {
+                    "Split archive contains colliding APK names: $leafName"
+                }
+                val destination = workingDir.resolve(leafName)
                 zip.getInputStream(entry).use { input ->
                     Files.newOutputStream(destination.toPath()).use { output ->
-                        input.copyTo(output)
+                        val copied = input.copyToBounded(
+                            output = output,
+                            maxEntryBytes = MAX_EXTRACTED_ENTRY_BYTES,
+                            maxTotalBytes = MAX_TOTAL_EXTRACTED_BYTES,
+                            previouslyExtractedBytes = totalExtractedBytes,
+                            checkCancelled = checkExtractionCancelled
+                        )
+                        require(copied == entry.size) {
+                            "Split APK entry size metadata does not match its contents: ${entry.name}"
+                        }
+                        totalExtractedBytes = Math.addExact(totalExtractedBytes, copied)
                     }
                 }
             }
@@ -405,7 +467,11 @@ object SplitApkPreparer {
             )
         }
 
-    private data class ExtractedModule(val name: String, val file: File)
+    internal data class ExtractedModule(
+        val archiveName: String,
+        val name: String,
+        val file: File
+    )
 
     private data class PreparedApkValidation(
         val hasRootManifest: Boolean,
@@ -827,14 +893,30 @@ object SplitApkPreparer {
             .map(ExtractedModule::file)
     }
 
+    internal suspend fun extractEntriesForProcessing(
+        source: File,
+        targetDir: File
+    ): List<ExtractedModule> {
+        require(isSplitArchive(source)) { "Source is not a supported split archive." }
+        targetDir.mkdirs()
+        return extractSplitEntries(source, targetDir)
+    }
+
     private suspend fun extractSplitEntries(
         source: File,
         targetDir: File,
         onProgress: ((String) -> Unit)? = null
-    ): List<ExtractedModule> =
-        runInterruptible(Dispatchers.IO) {
+    ): List<ExtractedModule> {
+        val operationContext = coroutineContext
+        return runInterruptible(Dispatchers.IO) {
+
             val extracted = mutableListOf<ExtractedModule>()
-            val splitEntryNames = splitApkEntryNames(source)
+            val checkExtractionCancelled = operationContext::ensureActive
+            val splitEntryNames = splitApkEntryNames(
+                file = source,
+                maxArchiveEntries = MAX_ARCHIVE_ENTRIES,
+                checkCancelled = checkExtractionCancelled
+            )
             ZipFile(source).use { zip ->
                 val apkEntries = zip.entries().asSequence()
                     .filterNot { it.isDirectory }
@@ -846,20 +928,96 @@ object SplitApkPreparer {
                 }
 
                 onProgress?.invoke("Extracting split APKs")
+                val usedLeafNames = HashSet<String>()
+                var totalExtractedBytes = 0L
                 apkEntries.forEach { entry ->
+                    checkExtractionCancelled()
+                    validateSplitEntry(entry)
                     val entryName = entry.name.substringAfterLast('/')
+                    require(usedLeafNames.add(entryName.uppercase(Locale.ROOT))) {
+                        "Split archive contains colliding APK names: $entryName"
+                    }
                     val destination = targetDir.resolve(entryName)
                     destination.parentFile?.mkdirs()
                     zip.getInputStream(entry).use { input ->
                         Files.newOutputStream(destination.toPath()).use { output ->
-                            input.copyTo(output)
+                            val copied = input.copyToBounded(
+                                output = output,
+                                maxEntryBytes = MAX_EXTRACTED_ENTRY_BYTES,
+                                maxTotalBytes = MAX_TOTAL_EXTRACTED_BYTES,
+                                previouslyExtractedBytes = totalExtractedBytes,
+                                checkCancelled = checkExtractionCancelled
+                            )
+                            require(copied == entry.size) {
+                                "Split APK entry size metadata does not match its contents: ${entry.name}"
+                            }
+                            totalExtractedBytes = Math.addExact(totalExtractedBytes, copied)
                         }
                     }
-                    extracted += ExtractedModule(destination.name, destination)
+                    extracted += ExtractedModule(
+                        archiveName = entry.name,
+                        name = destination.name,
+                        file = destination
+                    )
                 }
             }
             extracted
         }
+
+    }
+
+    private fun validateSplitEntry(entry: java.util.zip.ZipEntry) {
+        val name = entry.name
+        require(name.isNotBlank() && '\u0000' !in name) {
+            "Split archive contains an invalid path."
+        }
+        require(!name.startsWith('/') && !name.startsWith('\\')) {
+            "Split archive contains an absolute path."
+        }
+        require(!Regex("^[A-Za-z]:").containsMatchIn(name) && '\\' !in name) {
+            "Split archive contains an unsafe path."
+        }
+        require(name.split('/').none { it == ".." }) {
+            "Split archive contains a path traversal entry."
+        }
+        require(entry.size >= 0L && entry.compressedSize >= 0L) {
+            "Split archive contains unknown entry sizes."
+        }
+        require(entry.size <= MAX_EXTRACTED_ENTRY_BYTES) {
+            "Split APK entry exceeds the supported size limit: $name"
+        }
+        if (entry.size >= RATIO_CHECK_MIN_SIZE && entry.compressedSize > 0L) {
+            require(entry.size / entry.compressedSize <= MAX_COMPRESSION_RATIO) {
+                "Split archive contains a suspiciously compressed entry: $name"
+            }
+        }
+    }
+
+    private fun java.io.InputStream.copyToBounded(
+        output: java.io.OutputStream,
+        maxEntryBytes: Long,
+        maxTotalBytes: Long,
+        previouslyExtractedBytes: Long,
+        checkCancelled: () -> Unit
+    ): Long {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var copied = 0L
+        while (true) {
+            checkCancelled()
+            val count = read(buffer)
+            if (count < 0) break
+            copied = Math.addExact(copied, count.toLong())
+            val total = Math.addExact(previouslyExtractedBytes, copied)
+            require(copied <= maxEntryBytes) {
+                "Split APK entry exceeds the supported size limit."
+            }
+            require(total <= maxTotalBytes) {
+                "Split APK extraction exceeds the supported total size limit."
+            }
+            output.write(buffer, 0, count)
+        }
+        return copied
+    }
 
     data class PreparationResult(
         val file: File,

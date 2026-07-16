@@ -288,9 +288,17 @@ class PreferencesManager(
     val youtubeAssetsExportLastDirectory = stringPreference("file_picker_youtube_assets_export_directory", "")
     val mergedApkExportLastDirectory = stringPreference("file_picker_merged_apk_export_directory", "")
     val signedApkExportLastDirectory = stringPreference("file_picker_signed_apk_export_directory", "")
+    val signatureMetadataExportLastDirectory =
+        stringPreference("file_picker_signature_metadata_export_directory", "")
+    val signatureMetadataLogExportLastDirectory =
+        stringPreference("file_picker_signature_metadata_log_export_directory", "")
     val createdKeystoreExportLastDirectory = stringPreference("file_picker_created_keystore_export_directory", "")
     val convertedKeystoreExportLastDirectory = stringPreference("file_picker_converted_keystore_export_directory", "")
     val apkSignerInputLastDirectory = stringPreference("file_picker_apk_signer_input_directory", "")
+    val signatureMetadataSourceInputLastDirectory =
+        stringPreference("file_picker_signature_metadata_archive_input_directory", "")
+    val signatureMetadataApkInputLastDirectory =
+        stringPreference("file_picker_signature_metadata_apk_input_directory", "")
     val lsposedModuleInputLastDirectory =
         stringPreference("file_picker_lsposed_module_input_directory", "")
     val youtubeImageInputLastDirectory = stringPreference("file_picker_youtube_image_input_directory", "")

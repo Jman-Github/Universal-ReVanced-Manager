@@ -43,7 +43,8 @@ class InstallerFileProvider : ContentProvider() {
         return cursor
     }
 
-    override fun getType(uri: Uri): String = APK_MIME
+    override fun getType(uri: Uri): String =
+        InstallerManager.mimeTypeForExtension(buildFile(contextOrThrow(), uri).extension)
 
     override fun insert(uri: Uri, values: ContentValues?): Uri? {
         throw UnsupportedOperationException("Read-only provider")
@@ -77,8 +78,6 @@ class InstallerFileProvider : ContentProvider() {
         ?: throw IllegalStateException("Context unavailable for InstallerFileProvider")
 
     companion object {
-        private const val APK_MIME = "application/vnd.android.package-archive"
-
         fun authority(context: Context): String = "${context.packageName}.installerfileprovider"
 
         fun buildUri(context: Context, file: File): Uri = buildUri(context, file.name)

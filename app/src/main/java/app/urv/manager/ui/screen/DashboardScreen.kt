@@ -2954,12 +2954,12 @@ private fun ToolsTabScreen(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = stringResource(R.string.tools_apk_signer_title),
+                        text = stringResource(R.string.tools_apk_signature_tools_title),
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = stringResource(R.string.tools_apk_signer_description),
+                        text = stringResource(R.string.tools_apk_signature_tools_description),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

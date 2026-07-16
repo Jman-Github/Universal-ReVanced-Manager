@@ -751,13 +751,26 @@ fun PatcherScreen(
     }
 
     if (viewModel.isPreparingSplitSelection) {
+        val downloadProgress = viewModel.prePatchDownloadProgress
+        val downloadFraction = downloadProgress?.fraction
+        val message = when {
+            downloadProgress == null ->
+                stringResource(R.string.patcher_preparing_split_selection)
+            downloadFraction != null ->
+                stringResource(
+                    R.string.patcher_downloading_apk_progress,
+                    (downloadFraction * 100).toInt()
+                )
+            else -> stringResource(R.string.patcher_downloading_apk)
+        }
         TransparentLoadingDialog(
-            message = stringResource(R.string.patcher_preparing_split_selection),
+            message = message,
             cancelButtonText = stringResource(R.string.cancel),
             onCancel = {
                 viewModel.cancelSplitSelectionPreparation()
                 onPageBack()
-            }
+            },
+            progress = downloadFraction
         )
     }
 
