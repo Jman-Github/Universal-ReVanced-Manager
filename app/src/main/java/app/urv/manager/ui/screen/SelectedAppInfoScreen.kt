@@ -445,7 +445,6 @@ fun SelectedAppInfoScreen(
                 hasRoot = vm.hasRoot,
                 downloadedApps = downloadedApps,
                 includeAutoOption = !vm.sourceSelectionRequired,
-                includeInstalledOption = !vm.sourceSelectionRequired,
                 requiredVersion = requiredVersion,
                 onDismissRequest = vm::dismissSourceSelector,
                 onSelectPlugin = vm::searchUsingPlugin,
@@ -1210,7 +1209,6 @@ private fun AppSourceSelectorDialog(
     hasRoot: Boolean,
     downloadedApps: List<DownloadedApp>,
     includeAutoOption: Boolean = true,
-    includeInstalledOption: Boolean = true,
     requiredVersion: String?,
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit,
@@ -1286,7 +1284,7 @@ private fun AppSourceSelectorDialog(
                     }
                 }
 
-                if (includeInstalledOption) installedApp?.let { (app, meta) ->
+                installedApp?.let { (app, meta) ->
                     item(key = "installed") {
                         val (usable, text) = when {
                             meta?.installType == InstallType.MOUNT && !hasRoot -> false to stringResource(

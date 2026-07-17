@@ -126,6 +126,8 @@
 - Fixed bundle update notifications disappearing after repeat checks while respecting intentionally dismissed alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/535
 - Fixed Android back navigation on the patch selector so it matches the toolbar back behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/408
 - Fixed serval bugs around themeing & customization
+- Fixed duplicate entries appearing in Previous changelogs
+- Fixed Patch Profiles sometimes only showing storage as an APK source
 
 
 # v1.8.1-dev.18 (2026-06-02)

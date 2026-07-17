@@ -382,6 +382,8 @@
 - Fixed bundle recommendations continuing to use the first selected bundle's patches after switching bundles while preserving custom patch selections https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/579
 - Fixed patch bundle update and import progress bars showing a filled marker at the end before completion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/589
 - Fixed serval bugs around themeing & customization
+- Fixed duplicate entries appearing in Previous changelogs
+- Fixed Patch Profiles sometimes only showing storage as an APK source
 
 
 # Refactors

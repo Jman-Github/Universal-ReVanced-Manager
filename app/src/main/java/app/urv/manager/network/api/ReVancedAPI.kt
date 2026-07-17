@@ -310,13 +310,11 @@ class ReVancedAPI(
         val config = runCatching { parseRepoUrl(repoUrl) }
             .getOrElse { return APIResponse.Failure(APIFailure(it, null)) }
         val targetLimit = limit.coerceAtLeast(1)
+        val perPage = targetLimit.coerceIn(20, 100)
         val releases = mutableListOf<GitHubRelease>()
         var page = 1
 
         while (releases.size < targetLimit) {
-            val perPage = (targetLimit - releases.size)
-                .coerceAtLeast(20)
-                .coerceAtMost(100)
             when (val response = githubRequest<List<GitHubRelease>>(config, "releases?per_page=$perPage&page=$page")) {
                 is APIResponse.Success -> {
                     val batch = response.data

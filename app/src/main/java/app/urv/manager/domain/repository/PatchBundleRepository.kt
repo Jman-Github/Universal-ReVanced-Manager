@@ -522,16 +522,35 @@ class PatchBundleRepository(
         existing: PatchBundleChangelogEntry,
         candidate: PatchBundleChangelogEntry
     ): Boolean {
-        val existingVersion = existing.version.trim()
-        val candidateVersion = candidate.version.trim()
-        if (candidateVersion.isNotBlank() && existingVersion.equals(candidateVersion, ignoreCase = true)) {
+        val existingVersion = existing.version.normalizedChangelogVersion()
+        val candidateVersion = candidate.version.normalizedChangelogVersion()
+        if (
+            existingVersion != null &&
+            candidateVersion != null &&
+            existingVersion.equals(candidateVersion, ignoreCase = true)
+        ) {
             return true
         }
+
+        val existingPageUrl = existing.pageUrl.normalizedChangelogPageUrl()
+        val candidatePageUrl = candidate.pageUrl.normalizedChangelogPageUrl()
+        if (
+            existingPageUrl != null &&
+            candidatePageUrl != null &&
+            existingPageUrl.equals(candidatePageUrl, ignoreCase = true)
+        ) {
+            return true
+        }
+
         val published = candidate.publishedAtMillis
         return published != null &&
             published > 0 &&
             existing.publishedAtMillis == published &&
-            existing.description.trim() == candidate.description.trim()
+            (
+                existingVersion == null ||
+                    candidateVersion == null ||
+                    existing.description.trim() == candidate.description.trim()
+            )
     }
 
     private fun mergeChangelogHistoryEntries(
@@ -551,10 +570,38 @@ class PatchBundleRepository(
     private fun trimChangelogHistoryEntries(
         entries: List<PatchBundleChangelogEntry>,
         maxEntries: Int
-    ): List<PatchBundleChangelogEntry> =
-        entries.sortedWith(
+    ): List<PatchBundleChangelogEntry> {
+        val sorted = entries.sortedWith(
             compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE }
-        ).take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
+        )
+        val unique = mutableListOf<PatchBundleChangelogEntry>()
+        sorted.forEach { candidate ->
+            if (unique.none { existing -> isSameChangelogEntry(existing, candidate) }) {
+                unique += candidate
+            }
+        }
+        return unique.take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
+    }
+
+    private fun String.normalizedChangelogVersion(): String? {
+        val trimmed = trim()
+        if (trimmed.isEmpty()) return null
+        return if (
+            trimmed.length > 1 &&
+            trimmed[0].equals('v', ignoreCase = true) &&
+            trimmed[1].isDigit()
+        ) {
+            trimmed.substring(1)
+        } else {
+            trimmed
+        }
+    }
+
+    private fun String?.normalizedChangelogPageUrl(): String? =
+        this
+            ?.trim()
+            ?.trimEnd('/')
+            ?.takeIf { it.isNotEmpty() }
 
     private suspend fun normalizedChangelogFetchLimit(): Int =
         prefs.bundleChangelogFetchLimit.get()
