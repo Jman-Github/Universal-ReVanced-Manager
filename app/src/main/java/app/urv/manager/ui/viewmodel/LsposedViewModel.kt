@@ -24,6 +24,7 @@ import app.urv.manager.domain.lsposed.LsposedRepository
 import app.urv.manager.domain.lsposed.LsposedSourceKind
 import app.urv.manager.domain.lsposed.PendingLsposedModule
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.util.PM
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
@@ -71,6 +72,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
     private var pendingExternalPlan: InstallerManager.InstallPlan.External? = null
     private var pendingExternalModule: PendingLsposedModule? = null
     private var pendingExternalInstalledState: LsposedInstalledPackageState? = null
+    private var pendingCacheUseToken: AutoCloseable? = null
     private var frameworkCheckRunning = false
     private lateinit var packageReceiver: BroadcastReceiver
 
@@ -136,7 +138,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
     }
 
     fun selectLocal(uri: Uri) = launchTask(app.getString(R.string.lsposed_busy_checking_module)) {
-        replacePending(repository.prepareLocal(uri))
+        preparePending(load = { repository.prepareLocal(uri) })
     }
 
     fun resolveUrl(url: String) = launchTask(app.getString(R.string.lsposed_busy_checking_release)) {
@@ -168,6 +170,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
         }
         candidate?.let(repository::deleteTemporary)
         pendingModule = null
+        releasePendingCacheUse()
     }
 
     fun installPending(installerToken: InstallerManager.Token? = null) {
@@ -211,7 +214,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
     }
 
     fun reinstall(module: LsposedModule) = launchTask(app.getString(R.string.lsposed_busy_checking_saved_module)) {
-        replacePending(repository.prepareStored(module))
+        preparePending(load = { repository.prepareStored(module) })
     }
 
     fun uninstall(module: LsposedModule) = launchTask(app.getString(R.string.lsposed_busy_uninstalling_module)) {
@@ -284,27 +287,58 @@ class LsposedViewModel : ViewModel(), KoinComponent {
         asset: LsposedReleaseAsset,
         expectedModule: LsposedModule? = null,
     ) {
-        val candidate = repository.prepareRemote(asset)
-        if (expectedModule != null && candidate.packageName != expectedModule.packageName) {
-            repository.deleteTemporary(candidate)
-            throw IllegalArgumentException(
-                app.getString(
-                    R.string.lsposed_update_wrong_package,
-                    candidate.packageName,
-                    expectedModule.packageName,
-                )
-            )
-        }
-        if (expectedModule != null && candidate.versionCode < expectedModule.installedVersionCode) {
-            repository.deleteTemporary(candidate)
-            throw IllegalArgumentException(app.getString(R.string.lsposed_update_older))
-        }
-        replacePending(candidate)
+        preparePending(
+            load = { repository.prepareRemote(asset) },
+            validate = { candidate ->
+                if (expectedModule != null && candidate.packageName != expectedModule.packageName) {
+                    throw IllegalArgumentException(
+                        app.getString(
+                            R.string.lsposed_update_wrong_package,
+                            candidate.packageName,
+                            expectedModule.packageName,
+                        )
+                    )
+                }
+                if (expectedModule != null && candidate.versionCode < expectedModule.installedVersionCode) {
+                    throw IllegalArgumentException(app.getString(R.string.lsposed_update_older))
+                }
+            },
+        )
     }
 
-    private fun replacePending(candidate: PendingLsposedModule) {
+    private suspend fun preparePending(
+        load: suspend () -> PendingLsposedModule,
+        validate: (PendingLsposedModule) -> Unit = {},
+    ) {
+        val cacheUseToken = CacheCleanupGuard.begin()
+        try {
+            val candidate = load()
+            try {
+                validate(candidate)
+            } catch (error: Exception) {
+                repository.deleteTemporary(candidate)
+                throw error
+            }
+            replacePending(candidate, cacheUseToken)
+        } catch (error: Exception) {
+            cacheUseToken.close()
+            throw error
+        }
+    }
+
+    private fun replacePending(
+        candidate: PendingLsposedModule,
+        cacheUseToken: AutoCloseable,
+    ) {
         pendingModule?.let(repository::deleteTemporary)
+        releasePendingCacheUse()
         pendingModule = candidate
+        pendingCacheUseToken = cacheUseToken
+    }
+
+    private fun releasePendingCacheUse() {
+        pendingCacheUseToken?.close()
+        pendingCacheUseToken = null
     }
 
     private suspend fun install(
@@ -399,6 +433,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
         val installedCandidate = repository.persistLocalApk(candidate)
         repository.recordInstalled(installedCandidate)
         repository.deleteTemporary(candidate)
+        releasePendingCacheUse()
         showInstallComplete = true
         app.toast(app.getString(R.string.lsposed_installed))
     }
@@ -460,6 +495,7 @@ class LsposedViewModel : ViewModel(), KoinComponent {
         pendingExternalPlan?.let(::cleanupExternal)
         pendingExternalModule?.let(repository::deleteTemporary)
         pendingModule?.let(repository::deleteTemporary)
+        releasePendingCacheUse()
         super.onCleared()
     }
 

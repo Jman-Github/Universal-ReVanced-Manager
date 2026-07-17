@@ -130,6 +130,17 @@ class PatcherRuntimePluginRepository(
         reload()
     }
 
+    suspend fun clearManagedSources() = withContext(Dispatchers.IO) {
+        check(!managedSourceRoot.exists() || managedSourceRoot.deleteRecursively()) {
+            "Failed to delete managed patcher runtime plugin files"
+        }
+        check(managedSourceRoot.mkdirs() || managedSourceRoot.isDirectory) {
+            "Failed to recreate managed patcher runtime plugin directory"
+        }
+        writeSourceEntries(emptyList())
+        reload()
+    }
+
     suspend fun trustSource(id: String) = withContext(Dispatchers.IO) {
         val entries = readSourceEntries().toMutableList()
         val index = entries.indexOfFirst { it.id == id }

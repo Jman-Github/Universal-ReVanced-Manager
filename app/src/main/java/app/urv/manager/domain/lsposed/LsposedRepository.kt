@@ -384,6 +384,14 @@ class LsposedRepository(
         dao.delete(packageName)
     }
 
+    suspend fun clearStoredLocalModules() = withContext(Dispatchers.IO) {
+        val directory = File(app.filesDir, "lsposed_modules")
+        check(!directory.exists() || directory.deleteRecursively()) {
+            app.getString(R.string.lsposed_error_delete_saved_apk)
+        }
+        dao.deleteBySourceKind(LsposedSourceKind.LOCAL_FILE.name)
+    }
+
     fun deleteTemporary(pending: PendingLsposedModule) {
         if (pending.temporary) pending.file.delete()
     }

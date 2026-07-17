@@ -64,13 +64,17 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
+import app.urv.manager.domain.lsposed.LsposedRepository
 import app.urv.manager.domain.manager.AutoClearCacheInterval
+import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchProfileRepository
+import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.domain.storage.clearManagerCache
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.ui.component.AppTopBar
@@ -104,6 +108,9 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val installedAppRepository: InstalledAppRepository = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val patchProfileRepository: PatchProfileRepository = koinInject()
+    val patcherRuntimePluginRepository: PatcherRuntimePluginRepository = koinInject()
+    val lsposedRepository: LsposedRepository = koinInject()
+    val keystoreManager: KeystoreManager = koinInject()
     val workerRepository: WorkerRepository = koinInject()
     val filesystem: Filesystem = koinInject()
     val coroutineScope = rememberCoroutineScope()
@@ -126,7 +133,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             val loadingStartedAt = SystemClock.elapsedRealtime()
             isLoading = true
             try {
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
                 val remainingShimmerTime = STORAGE_REFRESH_SHIMMER_MIN_MS -
                     (SystemClock.elapsedRealtime() - loadingStartedAt)
                 if (remainingShimmerTime > 0L) {
@@ -143,6 +150,10 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     }
 
     fun clearTarget(target: StorageClearTarget) {
+        if (target.blockedWhileStorageInUse && CacheCleanupGuard.isCacheInUse) {
+            context.toast(context.getString(R.string.storage_cache_in_use))
+            return
+        }
         val areaName = target.title(context)
         coroutineScope.launch {
             isLoading = true
@@ -155,9 +166,12 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     downloaderPluginRepository = downloaderPluginRepository,
                     installedAppRepository = installedAppRepository,
                     patchBundleRepository = patchBundleRepository,
-                    patchProfileRepository = patchProfileRepository
+                    patchProfileRepository = patchProfileRepository,
+                    patcherRuntimePluginRepository = patcherRuntimePluginRepository,
+                    lsposedRepository = lsposedRepository,
+                    keystoreManager = keystoreManager
                 )
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
                 context.toast(
                     context.getString(
                         R.string.storage_area_cleared,
@@ -192,7 +206,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             try {
                 workerRepository.workManager.getWorkInfoByIdFlow(workId)
                     .first { workInfo -> workInfo?.state?.isFinished == true }
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
             } finally {
                 isLoading = false
             }
@@ -245,11 +259,15 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                 TextButton(
                     onClick = {
                         showClearCacheDialog = false
+                        if (CacheCleanupGuard.isCacheInUse) {
+                            context.toast(context.getString(R.string.storage_cache_in_use))
+                            return@TextButton
+                        }
                         coroutineScope.launch {
                             isLoading = true
                             try {
                                 val clearedBytes = clearManagerCache(context)
-                                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository)
+                                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
                                 context.toast(
                                     context.getString(
                                         R.string.storage_cache_cleared,
@@ -828,7 +846,7 @@ private data class StorageSnapshot(
     val totalBytes: Long
 )
 
-private const val STORAGE_AREA_PLACEHOLDER_COUNT = 16
+private const val STORAGE_AREA_PLACEHOLDER_COUNT = 15
 private const val STORAGE_REFRESH_SHIMMER_MIN_MS = 1200L
 
 private data class StorageAreaUsage(
@@ -851,6 +869,8 @@ private enum class StorageClearTarget {
     PatchBundles,
     SigningFiles,
     DownloaderPlugins,
+    PatcherRuntimePlugins,
+    LsposedModules,
     PatchedApps,
     PatchProfileInputs,
     TemporaryWorkspace,
@@ -865,6 +885,8 @@ private enum class StorageClearTarget {
             NoBackupFiles,
             PatchBundles,
             SigningFiles,
+            PatcherRuntimePlugins,
+            LsposedModules,
             PatchedApps,
             PatchProfileInputs,
             OtherInternalData,
@@ -886,6 +908,8 @@ private enum class StorageClearTarget {
             NoBackupFiles -> R.string.storage_clear_no_backup_files_warning_description
             PatchBundles -> R.string.storage_clear_patch_bundles_warning_description
             SigningFiles -> R.string.storage_clear_signing_files_warning_description
+            PatcherRuntimePlugins -> R.string.storage_clear_patcher_runtime_plugins_warning_description
+            LsposedModules -> R.string.storage_clear_lsposed_modules_warning_description
             PatchedApps -> R.string.storage_clear_patched_apps_warning_description
             PatchProfileInputs -> R.string.storage_clear_patch_profile_inputs_warning_description
             OtherInternalData -> R.string.storage_clear_other_internal_data_warning_description
@@ -901,6 +925,29 @@ private enum class StorageClearTarget {
             ExternalCache -> null
         }
 
+    val blockedWhileStorageInUse: Boolean
+        get() = when (this) {
+            InternalCache,
+            CodeCache,
+            ApkSignerCache,
+            InternalFiles,
+            NoBackupFiles,
+            DownloadedApps,
+            PatchBundles,
+            SigningFiles,
+            DownloaderPlugins,
+            PatcherRuntimePlugins,
+            LsposedModules,
+            PatchedApps,
+            PatchProfileInputs,
+            TemporaryWorkspace,
+            UiTemporaryWorkspace,
+            OtherInternalData,
+            ExternalCache,
+            ExternalFiles -> true
+            CustomBackgrounds -> false
+        }
+
     fun title(context: Context): String = context.getString(
         when (this) {
             InternalCache -> R.string.storage_internal_cache
@@ -913,6 +960,8 @@ private enum class StorageClearTarget {
             PatchBundles -> R.string.storage_patch_bundles
             SigningFiles -> R.string.storage_signing_files
             DownloaderPlugins -> R.string.storage_downloader_plugins
+            PatcherRuntimePlugins -> R.string.storage_patcher_runtime_plugins
+            LsposedModules -> R.string.storage_lsposed_modules
             PatchedApps -> R.string.storage_patched_apps
             PatchProfileInputs -> R.string.storage_patch_profile_inputs
             TemporaryWorkspace -> R.string.storage_temporary_workspace
@@ -945,54 +994,72 @@ private data class DirectoryStats(
 private suspend fun loadStorageSnapshot(
     context: Context,
     filesystem: Filesystem,
-    installedAppRepository: InstalledAppRepository
+    installedAppRepository: InstalledAppRepository,
+    keystoreManager: KeystoreManager
 ): StorageSnapshot = withContext(Dispatchers.IO) {
     pruneUnreferencedPatchedAppFiles(filesystem, installedAppRepository)
 
     val dataRoot = File(context.applicationInfo.dataDir)
     val customBackgroundsDir = context.filesDir.resolve("custom_background")
     val preferencesDataStoreDir = context.filesDir.resolve("datastore")
+    val lsposedModulesDir = context.filesDir.resolve("lsposed_modules")
     val databasesDir = dataRoot.resolve("databases")
     val downloadedAppsDir = context.privateAppDir("downloaded-apps")
     val patchBundlesDir = context.privateAppDir("patch_bundles")
-    val signingDir = context.privateAppDir("signing")
     val downloaderPluginsDir = context.privateAppDir("managed_downloader_plugins")
+    val patcherRuntimePluginsDir = context.privateAppDir("managed_patcher_runtime_plugins")
     val patchedAppsDir = context.privateAppDir("patched-apps")
     val patchProfileInputsDir = context.privateAppDir("patch-profile-inputs")
     val temporaryWorkspaceDir = context.privateAppDir("ephemeral")
     val uiTemporaryWorkspaceDir = context.privateAppDir("ui_ephemeral")
     val apkSignerCacheDir = context.cacheDir.resolve(APK_SIGNER_CACHE_DIR)
+    val signingStorageRoots = keystoreManager.signingStorageRoots()
+    val externalFilesDirs = context.getExternalFilesDirs(null).filterNotNull()
+    val internalSigningRoots = signingStorageRoots.filter { root -> root.isWithin(dataRoot) }
+    val signingRootsInFilesDir = internalSigningRoots.filter { root -> root.isWithin(context.filesDir) }
+    val externalSigningRoots = signingStorageRoots.filter { root ->
+        externalFilesDirs.any { externalRoot -> root.isWithin(externalRoot) }
+    }
 
     val internalCacheStats = context.cacheDir.directoryStats()
     val codeCacheStats = context.codeCacheDir.directoryStats()
     val apkSignerCacheStats = apkSignerCacheDir.directoryStats()
     val customBackgroundsStats = customBackgroundsDir.directoryStats()
     val preferencesDataStoreStats = preferencesDataStoreDir.directoryStats()
+    val lsposedModulesStats = lsposedModulesDir.directoryStats()
     val databasesStats = databasesDir.directoryStats()
-    val internalFilesStats = context.filesDir.directoryStats() - customBackgroundsStats - preferencesDataStoreStats
+    val internalSigningStats = internalSigningRoots.combinedStats()
+    val signingStats = signingStorageRoots.combinedStats()
+    val internalFilesStats = context.filesDir.directoryStats() -
+        customBackgroundsStats -
+        preferencesDataStoreStats -
+        lsposedModulesStats -
+        signingRootsInFilesDir.combinedStats()
     val noBackupStats = context.noBackupFilesDir.directoryStats()
     val downloadedAppsStats = downloadedAppsDir.directoryStats()
     val patchBundlesStats = patchBundlesDir.directoryStats()
-    val signingStats = signingDir.directoryStats()
     val downloaderPluginsStats = downloaderPluginsDir.directoryStats()
+    val patcherRuntimePluginsStats = patcherRuntimePluginsDir.directoryStats()
     val patchedAppsStats = patchedAppsDir.directoryStats()
     val patchProfileInputsStats = patchProfileInputsDir.directoryStats()
     val temporaryWorkspaceStats = temporaryWorkspaceDir.directoryStats()
     val uiTemporaryWorkspaceStats = uiTemporaryWorkspaceDir.directoryStats()
     val externalCacheStats = context.externalCacheDirs.filterNotNull().combinedStats()
-    val externalFilesStats = context.getExternalFilesDirs(null).filterNotNull().combinedStats()
+    val externalFilesStats = externalFilesDirs.combinedStats() - externalSigningRoots.combinedStats()
     val knownInternalStats = listOf(
         internalCacheStats,
         codeCacheStats,
         internalFilesStats,
         preferencesDataStoreStats,
+        lsposedModulesStats,
         databasesStats,
         noBackupStats,
         customBackgroundsStats,
         downloadedAppsStats,
         patchBundlesStats,
-        signingStats,
+        internalSigningStats,
         downloaderPluginsStats,
+        patcherRuntimePluginsStats,
         patchedAppsStats,
         patchProfileInputsStats,
         temporaryWorkspaceStats,
@@ -1082,6 +1149,20 @@ private suspend fun loadStorageSnapshot(
             clearTarget = StorageClearTarget.DownloaderPlugins
         ),
         StorageAreaUsage(
+            targetKey = R.string.storage_patcher_runtime_plugins,
+            title = context.getString(R.string.storage_patcher_runtime_plugins),
+            description = context.getString(R.string.storage_patcher_runtime_plugins_description),
+            stats = patcherRuntimePluginsStats,
+            clearTarget = StorageClearTarget.PatcherRuntimePlugins
+        ),
+        StorageAreaUsage(
+            targetKey = R.string.storage_lsposed_modules,
+            title = context.getString(R.string.storage_lsposed_modules),
+            description = context.getString(R.string.storage_lsposed_modules_description),
+            stats = lsposedModulesStats,
+            clearTarget = StorageClearTarget.LsposedModules
+        ),
+        StorageAreaUsage(
             targetKey = R.string.storage_patched_apps,
             title = context.getString(R.string.storage_patched_apps),
             description = context.getString(R.string.storage_patched_apps_description),
@@ -1139,14 +1220,25 @@ private suspend fun clearStorageTarget(
     downloaderPluginRepository: DownloaderPluginRepository,
     installedAppRepository: InstalledAppRepository,
     patchBundleRepository: PatchBundleRepository,
-    patchProfileRepository: PatchProfileRepository
+    patchProfileRepository: PatchProfileRepository,
+    patcherRuntimePluginRepository: PatcherRuntimePluginRepository,
+    lsposedRepository: LsposedRepository,
+    keystoreManager: KeystoreManager
 ): Long = when (target) {
     StorageClearTarget.InternalCache -> clearStorageDirectories(context.cacheDir, context.codeCacheDir)
     StorageClearTarget.CodeCache -> clearStorageDirectories(context.codeCacheDir)
     StorageClearTarget.ApkSignerCache -> clearStorageDirectories(context.cacheDir.resolve(APK_SIGNER_CACHE_DIR))
     StorageClearTarget.InternalFiles -> measureClearedStorage(context.filesDir) {
         withContext(Dispatchers.IO) {
-            context.filesDir.deleteContentsExcept(context.filesDir.resolve("datastore"))
+            val excludedFiles = buildList {
+                add(context.filesDir.resolve("datastore"))
+                add(context.filesDir.resolve("lsposed_modules"))
+                addAll(
+                    keystoreManager.signingStorageRoots()
+                        .filter { root -> root.isWithin(context.filesDir) }
+                )
+            }
+            context.filesDir.deleteContentsExcept(excludedFiles)
         }
         prefs.customBackgroundImageUri.update("")
     }
@@ -1169,12 +1261,24 @@ private suspend fun clearStorageTarget(
             patchBundleRepository.remove(*sources.toTypedArray())
         }
     }
-    StorageClearTarget.SigningFiles -> clearStorageDirectories(context.privateAppDir("signing"))
+    StorageClearTarget.SigningFiles -> measureClearedStorage(
+        *keystoreManager.signingStorageRoots().toTypedArray()
+    ) {
+        keystoreManager.clearSigningFiles()
+    }
     StorageClearTarget.DownloaderPlugins -> measureClearedStorage(context.privateAppDir("managed_downloader_plugins")) {
         downloaderPluginRepository.reload()
         downloaderPluginRepository.sourceStates.value.keys.toList().forEach { sourceId ->
             downloaderPluginRepository.removeSource(sourceId)
         }
+    }
+    StorageClearTarget.PatcherRuntimePlugins -> measureClearedStorage(
+        context.privateAppDir("managed_patcher_runtime_plugins")
+    ) {
+        patcherRuntimePluginRepository.clearManagedSources()
+    }
+    StorageClearTarget.LsposedModules -> measureClearedStorage(context.filesDir.resolve("lsposed_modules")) {
+        lsposedRepository.clearStoredLocalModules()
     }
     StorageClearTarget.PatchedApps -> measureClearedStorage(context.privateAppDir("patched-apps")) {
         val savedApps = installedAppRepository.getByInstallType(InstallType.SAVED)
@@ -1214,7 +1318,10 @@ private suspend fun clearStorageTarget(
         }
     }
     StorageClearTarget.ExternalCache -> clearStorageDirectories(context.externalCacheDirs.filterNotNull())
-    StorageClearTarget.ExternalFiles -> clearStorageDirectories(context.getExternalFilesDirs(null).filterNotNull())
+    StorageClearTarget.ExternalFiles -> clearStorageDirectoriesExcept(
+        directories = context.getExternalFilesDirs(null).filterNotNull(),
+        excludedFiles = keystoreManager.signingStorageRoots()
+    )
 }
 
 private suspend fun clearStorageDirectories(vararg directories: File): Long =
@@ -1222,6 +1329,17 @@ private suspend fun clearStorageDirectories(vararg directories: File): Long =
 
 private suspend fun clearStorageDirectories(directories: List<File>): Long = withContext(Dispatchers.IO) {
     directories.sumOf { it.deleteContentsAndReturnBytes() }
+}
+
+private suspend fun clearStorageDirectoriesExcept(
+    directories: List<File>,
+    excludedFiles: Collection<File>
+): Long = withContext(Dispatchers.IO) {
+    directories.sumOf { directory ->
+        directory.deleteContentsExcept(
+            excludedFiles.filter { excluded -> excluded.isWithin(directory) }
+        )
+    }
 }
 
 private suspend fun measureClearedStorage(
@@ -1247,6 +1365,7 @@ private fun Context.knownInternalStorageRoots(): List<File> = listOf(
     privateAppDir("patch_bundles"),
     privateAppDir("signing"),
     privateAppDir("managed_downloader_plugins"),
+    privateAppDir("managed_patcher_runtime_plugins"),
     privateAppDir("patched-apps"),
     privateAppDir("patch-profile-inputs"),
     privateAppDir("ephemeral"),
@@ -1311,7 +1430,11 @@ private fun File.deleteContentsExcept(excludedFiles: Collection<File>): Long {
     if (!exists() || !isDirectory) return 0L
     val excludedPaths = excludedFiles.mapTo(mutableSetOf()) { it.canonicalStoragePath() }
     return listFiles().orEmpty().sumOf { child ->
-        if (child.canonicalStoragePath() in excludedPaths) {
+        val childPath = child.canonicalStoragePath()
+        val containsExcludedFile = excludedPaths.any { excludedPath ->
+            excludedPath == childPath || excludedPath.startsWith(childPath + File.separator)
+        }
+        if (containsExcludedFile) {
             0L
         } else {
             val bytes = child.directoryStats().bytes
@@ -1323,6 +1446,13 @@ private fun File.deleteContentsExcept(excludedFiles: Collection<File>): Long {
 
 private fun File.canonicalStoragePath(): String =
     runCatching { canonicalFile }.getOrDefault(absoluteFile).absolutePath
+
+private fun File.isWithin(directory: File): Boolean =
+    runCatching {
+        val filePath = canonicalFile.path
+        val directoryPath = directory.canonicalFile.path
+        filePath == directoryPath || filePath.startsWith(directoryPath + File.separator)
+    }.getOrDefault(false)
 
 private fun Context.openAppStorageSettings(): Boolean {
     val uri = Uri.fromParts("package", packageName, null)

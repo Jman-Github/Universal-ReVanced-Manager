@@ -18,4 +18,7 @@ interface LsposedModuleDao {
 
     @Query("DELETE FROM lsposed_modules WHERE package_name = :packageName")
     suspend fun delete(packageName: String)
+
+    @Query("DELETE FROM lsposed_modules WHERE source_kind = :sourceKind")
+    suspend fun deleteBySourceKind(sourceKind: String)
 }

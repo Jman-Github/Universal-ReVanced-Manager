@@ -414,6 +414,32 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         return legacyRestoreCandidates().any { it.exists() && it.length() > 0L }
     }
 
+    fun signingStorageRoots(): List<File> = listOfNotNull(
+        keystorePath.parentFile,
+        backupKeystorePath?.parentFile,
+        legacyBackupKeystorePath?.parentFile,
+        legacyKeystorePath,
+    ).distinctBy { file ->
+        runCatching { file.canonicalPath }.getOrDefault(file.absolutePath)
+    }
+
+    suspend fun clearSigningFiles() = withContext(Dispatchers.IO) {
+        keystoreMutex.withLock {
+            listOfNotNull(
+                keystorePath,
+                credentialsPath,
+                legacySigningKeystorePath,
+                legacyKeystorePath,
+                backupKeystorePath,
+                legacyBackupKeystorePath,
+            ).forEach { file ->
+                check(!file.exists() || file.deleteRecursively()) {
+                    "Failed to delete signing file at ${file.absolutePath}"
+                }
+            }
+        }
+    }
+
     suspend fun export(target: OutputStream) = withContext(Dispatchers.IO) {
         keystoreMutex.withLock {
             requireKeystoreReady()

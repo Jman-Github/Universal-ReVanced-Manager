@@ -228,6 +228,7 @@
 - Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
 - Added Monochrome and Material You theme presets, including optional Pure Black styling for Material You
 - Improved theme and accent preset selection, layout, indicators, and previews
+- Expanded Storage & Cache Management with separate cleanup options for signing files, patcher runtime plugins, and saved LSPosed module APKs, with safeguards against clearing files while they are in use
 
 
 # Bug fixes
