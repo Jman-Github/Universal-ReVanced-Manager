@@ -145,6 +145,8 @@ class PatcherWorker(
     private var activeMorpheDexChildTitle: String? = null
     @Volatile
     private var lastPatcherMemoryUsage: PatcherMemoryUsage? = null
+    @Volatile
+    private var requestedPatcherMemoryLimitMb: Long? = null
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
@@ -1353,6 +1355,7 @@ class PatcherWorker(
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
         cleanupTemporarySplitArtifacts()
         lastPatcherMemoryUsage = null
+        requestedPatcherMemoryLimitMb = null
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
         patchNotificationSteps = args.selectedPatches.values
@@ -1542,6 +1545,11 @@ class PatcherWorker(
                 applicationContext,
                 prefs.processMemoryLimit.get()
             )
+            requestedPatcherMemoryLimitMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                configuredProcessMemoryLimit.toLong()
+            } else {
+                null
+            }
             var runtimeInputFile = inputFile
             var manualSplitSelectionApplied = false
             if (inputIsSplitArchive && args.splitSelection != null) {
@@ -1995,14 +2003,18 @@ class PatcherWorker(
         memoryUsage: PatcherMemoryUsage,
         onEvent: (PatcherWorkerProgressUpdate) -> Unit
     ) {
-        lastPatcherMemoryUsage = memoryUsage
+        val sample = memoryUsage.copy(
+            requestedMaxMb = requestedPatcherMemoryLimitMb ?: memoryUsage.maxMb
+        )
+        lastPatcherMemoryUsage = sample
         val sequence = progressSequence.incrementAndGet()
         runCatching {
             onEvent(
                 PatcherWorkerProgressUpdate(
                     generation = progressGeneration,
                     sequence = sequence,
-                    memoryUsage = memoryUsage
+                    memoryUsage = sample,
+                    isMemorySample = true
                 )
             )
         }.onFailure { error ->

@@ -8,5 +8,6 @@ data class PatcherWorkerProgressUpdate(
     val event: ProgressEvent? = null,
     val notificationProgressCurrent: Int? = null,
     val notificationProgressMax: Int? = null,
-    val memoryUsage: PatcherMemoryUsage? = null
+    val memoryUsage: PatcherMemoryUsage? = null,
+    val isMemorySample: Boolean = false
 )

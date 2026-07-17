@@ -27,6 +27,9 @@ object PatcherWorkerProgressState {
     private const val PROGRESS_NOTIFICATION_MAX_KEY = "patching_progress_notification_max"
     private const val PROGRESS_MEMORY_USED_MB_KEY = "patching_progress_memory_used_mb"
     private const val PROGRESS_MEMORY_MAX_MB_KEY = "patching_progress_memory_max_mb"
+    private const val PROGRESS_MEMORY_REQUESTED_MAX_MB_KEY =
+        "patching_progress_memory_requested_max_mb"
+    private const val PROGRESS_MEMORY_SAMPLE_TIME_KEY = "patching_progress_memory_sample_time"
     private const val PROGRESS_FAILED_PATCH_INDEXES_KEY = "patching_progress_failed_patch_indexes"
 
     fun toWorkData(
@@ -51,6 +54,11 @@ object PatcherWorkerProgressState {
             snapshot.memoryUsage?.let { memory ->
                 builder.putLong(PROGRESS_MEMORY_USED_MB_KEY, memory.usedMb)
                 builder.putLong(PROGRESS_MEMORY_MAX_MB_KEY, memory.maxMb)
+                builder.putLong(PROGRESS_MEMORY_REQUESTED_MAX_MB_KEY, memory.requestedMaxMb)
+                builder.putLong(
+                    PROGRESS_MEMORY_SAMPLE_TIME_KEY,
+                    memory.sampledAtElapsedRealtimeMs
+                )
             }
             if (snapshot.failedPatchIndexes.isNotEmpty()) {
                 builder.putIntArray(
@@ -84,7 +92,15 @@ object PatcherWorkerProgressState {
         ) {
             PatcherMemoryUsage(
                 usedMb = data.getLong(PROGRESS_MEMORY_USED_MB_KEY, 0L),
-                maxMb = data.getLong(PROGRESS_MEMORY_MAX_MB_KEY, 1L).coerceAtLeast(1L)
+                maxMb = data.getLong(PROGRESS_MEMORY_MAX_MB_KEY, 1L).coerceAtLeast(1L),
+                requestedMaxMb = data.getLong(
+                    PROGRESS_MEMORY_REQUESTED_MAX_MB_KEY,
+                    data.getLong(PROGRESS_MEMORY_MAX_MB_KEY, 1L)
+                ).coerceAtLeast(1L),
+                sampledAtElapsedRealtimeMs = data.getLong(
+                    PROGRESS_MEMORY_SAMPLE_TIME_KEY,
+                    System.nanoTime() / 1_000_000L
+                )
             )
         } else {
             null

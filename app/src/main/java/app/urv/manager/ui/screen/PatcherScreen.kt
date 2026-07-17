@@ -100,7 +100,6 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.domain.manager.PreferencesManager
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.FilenameUtils
@@ -136,7 +135,6 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
-    val processMemoryLimit by prefs.processMemoryLimit.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
@@ -1195,14 +1193,7 @@ fun PatcherScreen(
                     item(key = "memory-usage") {
                         PatcherMemoryUsageCard(
                             samples = viewModel.patcherMemoryUsageSamples,
-                            limitMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                                MemoryLimitConfig.resolveMemoryLimitMb(
-                                    context,
-                                    processMemoryLimit
-                                ).toLong()
-                            } else {
-                                null
-                            }
+                            isActive = isPatchingActive
                         )
                     }
                 }

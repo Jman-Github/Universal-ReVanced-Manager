@@ -80,7 +80,6 @@ import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
-private const val SPLIT_MERGE_MEMORY_USAGE_SAMPLE_LIMIT = 48
 
 @OptIn(PluginHostApi::class)
 class DashboardViewModel(
@@ -1259,12 +1258,7 @@ class DashboardViewModel(
             selectionIncludedModules = includedModules.orEmpty(),
             selectionStripNativeLibs = stripNativeLibs,
             excludedModules = excludedModules,
-            memoryUsageSamples = listOf(
-                PatcherMemoryUsage(
-                    usedMb = 0L,
-                    maxMb = processMemoryLimit.toLong().coerceAtLeast(1L)
-                )
-            )
+            memoryUsageSamples = emptyList()
         )
         appendSplitMergeLog("Starting split merge: $inputDisplayName")
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_preparing))
@@ -1306,7 +1300,12 @@ class DashboardViewModel(
                         }
                     },
                     onMemoryUsage = { sample ->
-                        recordSplitMergeMemoryUsage(ownerJob, sample)
+                        recordSplitMergeMemoryUsage(
+                            ownerJob = ownerJob,
+                            sample = sample.copy(
+                                requestedMaxMb = processMemoryLimit.toLong().coerceAtLeast(1L)
+                            )
+                        )
                     }
                 )
 
@@ -1439,18 +1438,14 @@ class DashboardViewModel(
     }
 
     private fun recordSplitMergeMemoryUsage(ownerJob: Job?, sample: PatcherMemoryUsage) {
-        val maxMb = sample.maxMb.coerceAtLeast(1L)
         val normalized = sample.copy(
-            usedMb = sample.usedMb.coerceIn(0L, maxMb),
-            maxMb = maxMb
+            usedMb = sample.usedMb.coerceAtLeast(0L),
+            maxMb = sample.maxMb.coerceAtLeast(1L),
+            requestedMaxMb = sample.requestedMaxMb.coerceAtLeast(1L)
         )
         updateSplitMergeStateIfCurrent(ownerJob) { current ->
-            val existingSamples = current.memoryUsageSamples.takeIf {
-                it.lastOrNull()?.maxMb == normalized.maxMb
-            }.orEmpty()
             current.copy(
-                memoryUsageSamples = (existingSamples + normalized)
-                    .takeLast(SPLIT_MERGE_MEMORY_USAGE_SAMPLE_LIMIT)
+                memoryUsageSamples = current.memoryUsageSamples + normalized
             )
         }
     }
