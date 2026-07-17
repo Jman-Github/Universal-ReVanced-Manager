@@ -50,7 +50,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.core.component.inject
 
 class Revanced22ProcessRuntime(
-    private val context: Context
+    private val context: Context,
+    private val memoryLimitMb: Int = MemoryLimitConfig.maxLimitMb(context)
 ) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
@@ -113,7 +114,9 @@ class Revanced22ProcessRuntime(
             eventHandlerRef.set(null)
         }
         cancellationRequested.set(false)
-        val runtimeLimit = MemoryLimitConfig.maxLimitMb(context)
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
+        val runtimeLimit = MemoryLimitConfig.resolveMemoryLimitMb(context, memoryLimitMb)
         val sourceInput = File(inputFile)
         val hostPreparation = if (SplitApkPreparer.isSplitArchive(sourceInput)) {
             runStep(
@@ -381,6 +384,7 @@ class Revanced22ProcessRuntime(
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         const val OOM_EXIT_CODE = 134
         const val LOW_MEMORY_KILL_EXIT_CODE = 137
+        const val SEGMENTATION_FAULT_EXIT_CODE = 139
 
         const val CONNECT_TO_APP_ACTION = "CONNECT_TO_REVANCED22_APP_ACTION"
         const val INTENT_BUNDLE_KEY = "BUNDLE"

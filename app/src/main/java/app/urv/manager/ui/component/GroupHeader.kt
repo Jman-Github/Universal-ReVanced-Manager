@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.InstallMobile
+import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.Palette
@@ -44,6 +45,7 @@ object SettingsSectionIcons {
     val AppBehavior: ImageVector = Icons.Outlined.Tune
     val NetworkIntegrations: ImageVector = Icons.Outlined.Api
     val Installer: ImageVector = Icons.Outlined.InstallMobile
+    val SeparateProcesses: ImageVector = Icons.Outlined.Memory
     val SafeguardsCompatibility: ImageVector = Icons.Outlined.Warning
     val BundleSystemRecovery: ImageVector = Icons.Outlined.SettingsBackupRestore
     val PatchingEngine: ImageVector = Icons.Outlined.Build

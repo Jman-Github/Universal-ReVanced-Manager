@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.StepId
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
@@ -125,6 +126,7 @@ fun MergeSplitApkScreen(
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
+    val processMemoryLimit by prefs.processMemoryLimit.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
     val splitMergeAutoExpandRunningStepsExclusive by
         prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
@@ -617,7 +619,17 @@ fun MergeSplitApkScreen(
             ) {
                 if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
                     item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(samples = state.memoryUsageSamples)
+                        PatcherMemoryUsageCard(
+                            samples = state.memoryUsageSamples,
+                            limitMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                MemoryLimitConfig.resolveMemoryLimitMb(
+                                    context,
+                                    processMemoryLimit
+                                ).toLong()
+                            } else {
+                                null
+                            }
+                        )
                     }
                 }
                 items(stepsByCategory.toList(), key = { it.first }) { (category, steps) ->

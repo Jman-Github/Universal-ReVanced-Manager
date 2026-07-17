@@ -1210,6 +1210,12 @@ class DashboardViewModel(
         val runCacheUseToken = CacheCleanupGuard.begin()
         val runWorkspace = newSplitMergeRunWorkspace()
         var keepRunWorkspace = false
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
+        val processMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
+            app,
+            prefs.processMemoryLimit.getBlocking()
+        )
         activeSplitMergeRunWorkspace = runWorkspace
         invalidateCachedSplitMergeOutput()
         resetSplitMergeNotificationProgressTracking()
@@ -1256,7 +1262,7 @@ class DashboardViewModel(
             memoryUsageSamples = listOf(
                 PatcherMemoryUsage(
                     usedMb = 0L,
-                    maxMb = MemoryLimitConfig.maxLimitMb(app).toLong().coerceAtLeast(1L)
+                    maxMb = processMemoryLimit.toLong().coerceAtLeast(1L)
                 )
             )
         )
@@ -1279,6 +1285,7 @@ class DashboardViewModel(
                     stripNativeLibs = stripNativeLibs,
                     skipUnneededSplits = false,
                     includedModules = includedModules,
+                    memoryLimitMb = processMemoryLimit,
                     onProgress = { message ->
                         if (isCurrentSplitMergeOwner(ownerJob)) {
                             appendSplitMergeLog(message)
@@ -1367,7 +1374,8 @@ class DashboardViewModel(
                 return@onFailure
             }
             val resolvedErrorMessage = when {
-                error is SplitMergeProcessRuntime.ProcessExitException && error.exitCode == 137 ->
+                error is SplitMergeProcessRuntime.ProcessExitException &&
+                    SplitMergeProcessRuntime.isMemoryFailureExitCode(error.exitCode) ->
                     app.getString(R.string.merge_split_apk_process_killed_low_memory)
                 else -> error.message ?: app.getString(R.string.merge_split_apk_failed)
             }

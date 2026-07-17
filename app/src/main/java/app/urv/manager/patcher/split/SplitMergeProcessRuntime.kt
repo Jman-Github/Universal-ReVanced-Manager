@@ -6,6 +6,7 @@ import android.util.Log
 import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
+import app.urv.manager.patcher.runtime.ProcessAttemptLogSpool
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.tag
 import java.io.File
@@ -44,6 +45,83 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         onSubSteps: (List<String>) -> Unit,
         onLog: (String) -> Unit = {},
         onMemoryUsage: (PatcherMemoryUsage) -> Unit = {}
+    ): File {
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
+        var attemptLimitMb = memoryLimitMb?.let {
+            MemoryLimitConfig.clampLimitMb(context, it)
+        }
+        val priorAttemptProgressMessages = mutableSetOf<String>()
+        var mostReportedSubSteps = 0
+        while (true) {
+            val attemptLogs = ProcessAttemptLogSpool.create(
+                workspace,
+                "split-merge-attempt-"
+            )
+            val attemptProgressMessages = mutableSetOf<String>()
+            try {
+                val result = try {
+                    executeOnce(
+                        inputFile = inputFile,
+                        workspace = workspace,
+                        stripNativeLibs = stripNativeLibs,
+                        skipUnneededSplits = skipUnneededSplits,
+                        includedModules = includedModules,
+                        memoryLimitMb = attemptLimitMb,
+                        onProgress = { message ->
+                            attemptProgressMessages += message
+                            if (message !in priorAttemptProgressMessages) {
+                                onProgress(message)
+                            }
+                        },
+                        onSubSteps = { subSteps ->
+                            if (subSteps.size > mostReportedSubSteps) {
+                                mostReportedSubSteps = subSteps.size
+                                onSubSteps(subSteps)
+                            }
+                        },
+                        onLog = attemptLogs::append,
+                        onMemoryUsage = onMemoryUsage
+                    )
+                } catch (error: ProcessExitException) {
+                    val failedLimitMb = attemptLimitMb
+                    if (
+                        !isMemoryFailureExitCode(error.exitCode) ||
+                        failedLimitMb == null ||
+                        failedLimitMb <= MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM
+                    ) {
+                        attemptLogs.replayTo(onLog)
+                        throw error
+                    }
+                    priorAttemptProgressMessages += attemptProgressMessages
+                    cleanupFailedAttempt(workspace)
+                    attemptLimitMb = nextRetryMemoryLimitMb(failedLimitMb)
+                    continue
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    attemptLogs.replayTo(onLog)
+                    throw error
+                }
+                attemptLogs.replayTo(onLog)
+                return result
+            } finally {
+                attemptLogs.close()
+            }
+        }
+    }
+
+    private suspend fun executeOnce(
+        inputFile: File,
+        workspace: File,
+        stripNativeLibs: Boolean,
+        skipUnneededSplits: Boolean,
+        includedModules: Set<String>?,
+        memoryLimitMb: Int?,
+        onProgress: (String) -> Unit,
+        onSubSteps: (List<String>) -> Unit,
+        onLog: (String) -> Unit,
+        onMemoryUsage: (PatcherMemoryUsage) -> Unit
     ): File = coroutineScope {
         workspace.mkdirs()
         val output = workspace.resolve("last-merged-unsigned.apk")
@@ -55,17 +133,27 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         val env = System.getenv().toMutableMap().apply {
             put("CLASSPATH", managerBaseApk)
         }
-        val usePropOverride = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        if (usePropOverride && memoryLimitMb != null) {
-            val propOverride = findLibrary(context, "prop_override")
-            if (propOverride != null) {
-                val limit = "${MemoryLimitConfig.clampLimitMb(context, memoryLimitMb)}M"
-                env["LD_PRELOAD"] = propOverride.absolutePath
-                env["PROP_dalvik.vm.heapgrowthlimit"] = limit
-                env["PROP_dalvik.vm.heapsize"] = limit
-            } else {
-                Log.w(tag, "Split merge process: prop override library not found")
-            }
+        val effectiveMemoryLimitMb = memoryLimitMb?.let {
+            MemoryLimitConfig.clampLimitMb(context, it)
+        }
+        val propOverride = if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            effectiveMemoryLimitMb != null
+        ) {
+            findLibrary(context, "prop_override")
+        } else {
+            null
+        }
+        if (propOverride != null && effectiveMemoryLimitMb != null) {
+            val limit = "${effectiveMemoryLimitMb}M"
+            env["LD_PRELOAD"] = propOverride.absolutePath
+            env["PROP_dalvik.vm.heapgrowthlimit"] = limit
+            env["PROP_dalvik.vm.heapsize"] = limit
+        } else if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R &&
+            effectiveMemoryLimitMb != null
+        ) {
+            Log.w(tag, "Split merge process: prop override library not found")
         }
         val subSteps = mutableListOf<String>()
         val selectedModulesFile = workspace.resolve("selected-modules.txt").apply {
@@ -87,19 +175,23 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             throw error
         }
 
-        val command = listOf(
-            resolveAppProcessBin(),
-            "-Djava.io.tmpdir=${context.cacheDir.absolutePath}",
-            "/",
-            "--nice-name=${context.packageName}:SplitMerge",
-            SplitMergeProcess::class.java.name,
-            inputFile.absolutePath,
-            workspace.absolutePath,
-            output.absolutePath,
-            stripNativeLibs.toString(),
-            skipUnneededSplits.toString(),
-            selectedModulesFile.absolutePath
-        )
+        val command = buildList {
+            add(resolveAppProcessBin())
+            if (effectiveMemoryLimitMb != null && propOverride == null) {
+                add("-Xmx${effectiveMemoryLimitMb}m")
+                add("-XX:HeapGrowthLimit=${effectiveMemoryLimitMb}m")
+            }
+            add("-Djava.io.tmpdir=${context.cacheDir.absolutePath}")
+            add("/")
+            add("--nice-name=${context.packageName}:SplitMerge")
+            add(SplitMergeProcess::class.java.name)
+            add(inputFile.absolutePath)
+            add(workspace.absolutePath)
+            add(output.absolutePath)
+            add(stripNativeLibs.toString())
+            add(skipUnneededSplits.toString())
+            add(selectedModulesFile.absolutePath)
+        }
         val process = try {
             withContext(Dispatchers.IO) {
                 ProcessBuilder(command)
@@ -140,11 +232,19 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                 if (!isCancellationRequested(process)) throw error
             }
         }
+        val stderrTail = ArrayDeque<String>(MAX_STDERR_LINES)
         val stderrJob = launch(Dispatchers.IO) {
             try {
                 process.errorStream.bufferedReader().useLines { lines ->
                     lines.forEach { line ->
                         if (line.isNotBlank()) {
+                            val limitedLine = line.take(MAX_STDERR_LINE_LENGTH)
+                            synchronized(stderrTail) {
+                                if (stderrTail.size == MAX_STDERR_LINES) {
+                                    stderrTail.removeFirst()
+                                }
+                                stderrTail.addLast(limitedLine)
+                            }
                             Log.w(tag, "[split-merge process] $line")
                         }
                     }
@@ -173,7 +273,13 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             }
 
             if (exitCode != 0) {
-                throw ProcessExitException(exitCode)
+                val detail = synchronized(stderrTail) {
+                    stderrTail.joinToString("\n")
+                        .trim()
+                        .takeLast(MAX_STDERR_DETAIL_LENGTH)
+                        .takeIf(String::isNotBlank)
+                }
+                throw ProcessExitException(exitCode, detail)
             }
             if (!output.exists() || output.length() <= 0L) {
                 throw IOException("Split merge process completed without output APK.")
@@ -216,8 +322,30 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         )
     }
 
-    class ProcessExitException(val exitCode: Int) :
-        Exception("Split merge process exited with nonzero exit code $exitCode")
+    private suspend fun cleanupFailedAttempt(workspace: File) {
+        withContext(Dispatchers.IO) {
+            workspace.listFiles()
+                ?.asSequence()
+                ?.filter { it.isDirectory && it.name.startsWith("split-") }
+                ?.forEach { runCatching { it.deleteRecursively() } }
+        }
+    }
+
+    private fun nextRetryMemoryLimitMb(failedLimitMb: Int): Int =
+        minOf(
+            failedLimitMb - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP,
+            MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_MAX_LIMIT_INITIALIZATION
+        ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM)
+
+    class ProcessExitException(
+        val exitCode: Int,
+        val detail: String? = null
+    ) : Exception(
+        buildString {
+            append("Split merge process exited with nonzero exit code ").append(exitCode)
+            detail?.takeIf(String::isNotBlank)?.let { append(": ").append(it) }
+        }
+    )
 
     private fun resolveAppProcessBin(): String {
         val nativeDir = context.applicationInfo.nativeLibraryDir
@@ -242,9 +370,20 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         const val LOG_PREFIX = "URV_SPLIT_LOG:"
         const val SUBSTEP_PREFIX = "URV_SPLIT_SUBSTEP:"
         const val MEMORY_PREFIX = "URV_SPLIT_MEMORY_MB:"
+        const val OOM_EXIT_CODE = 134
+        const val LOW_MEMORY_KILL_EXIT_CODE = 137
+        const val SEGMENTATION_FAULT_EXIT_CODE = 139
         private const val APP_PROCESS_BIN_PATH = "/system/bin/app_process"
         private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
+        private const val MAX_STDERR_LINES = 40
+        private const val MAX_STDERR_LINE_LENGTH = 2000
+        private const val MAX_STDERR_DETAIL_LENGTH = 8000
+
+        fun isMemoryFailureExitCode(exitCode: Int): Boolean =
+            exitCode == OOM_EXIT_CODE ||
+                exitCode == LOW_MEMORY_KILL_EXIT_CODE ||
+                exitCode == SEGMENTATION_FAULT_EXIT_CODE
     }
 }
 

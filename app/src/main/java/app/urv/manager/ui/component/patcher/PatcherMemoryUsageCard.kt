@@ -31,11 +31,12 @@ import app.urv.manager.patcher.worker.PatcherMemoryUsage
 @Composable
 fun PatcherMemoryUsageCard(
     samples: List<PatcherMemoryUsage>,
+    limitMb: Long? = null,
     @StringRes titleRes: Int = R.string.patcher_memory_usage
 ) {
     val latest = samples.lastOrNull() ?: PatcherMemoryUsage(usedMb = 0L, maxMb = 1L)
     val chartSamples = samples.takeLast(MEMORY_USAGE_SAMPLE_LIMIT)
-    val displayMaxMb = latest.maxMb.coerceAtLeast(1L)
+    val displayMaxMb = (limitMb?.takeIf { it > 0L } ?: latest.maxMb).coerceAtLeast(1L)
     val barColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.82f).toArgb()
     val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f).toArgb()
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {

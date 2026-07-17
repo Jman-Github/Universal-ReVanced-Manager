@@ -248,9 +248,6 @@ internal object ApkEditorMergeRuntime {
                 if (allowHeapFallback && exitCode == 137) {
                     val configured = heapLimitMb ?: memoryLimitMb ?: 0
                     if (configured > SAFE_RETRY_HEAP_MB) {
-                        onLine?.invoke(
-                            "APKEditor: merge process killed (137), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
-                        )
                         runMergeProcess(
                             apkDir = apkDir,
                             outputApk = outputApk,
@@ -377,9 +374,6 @@ internal object ApkEditorMergeRuntime {
             if (allowHeapFallback && exitCode == 137) {
                 val configured = heapLimitMb ?: memoryLimitMb ?: 0
                 if (configured > SAFE_RETRY_HEAP_MB) {
-                    onLine?.invoke(
-                        "APKEditor: merge process killed (137), retrying with ${SAFE_RETRY_HEAP_MB}MB heap."
-                    )
                     runProcess(
                         action = action,
                         apkDir = apkDir,

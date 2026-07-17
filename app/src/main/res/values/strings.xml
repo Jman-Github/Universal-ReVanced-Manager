@@ -1463,6 +1463,18 @@ Patch profiles are not affected.</string>
     <string name="saved_app_bundle_select_error">Failed to update the saved app bundle.</string>
     <string name="patch_profile_bundle_override_title">Allow incompatible bundle override</string>
     <string name="patch_profile_bundle_override_description">Show a developer-only override button when a patch profile bundle is incompatible</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
+    <string name="separate_processes_section">Separate processes</string>
+    <string name="process_memory_limit">Separate process memory limit</string>
+    <string name="process_memory_limit_subtitle">Memory available to separate-process tools and runtimes</string>
+    <string name="process_memory_limit_description">Applies to patching runtimes, split merging, and other separate-process tools</string>
+    <string name="process_memory_limit_warning">A low memory limit may cause memory-intensive tools and runtimes to fail</string>
+    <string name="process_memory_limit_high_warning">A memory limit above 1280 MB may be too high for this device and can cause separate processes to fail</string>
+    <string name="process_memory_limit_value">%1$d MB</string>
+    <string name="process_memory_limit_oom_title">Separate process ran out of memory</string>
+    <string name="process_memory_limit_adjusted_message">The separate process memory limit was reduced from %1$d MB to %2$d MB for future attempts. Try again.</string>
+    <string name="process_memory_limit_minimum_message">The separate process memory limit is already at the minimum of %1$d MB and cannot be reduced further.</string>
     <string name="patcher_process_exit_message">Patcher process exited with code %1$d.</string>
     <string name="patcher_missing_patch_title">Patch selection needs attention</string>
     <string name="patcher_preflight_missing_patch_message">The following patches aren’t available in the current bundle:

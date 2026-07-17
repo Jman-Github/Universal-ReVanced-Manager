@@ -100,7 +100,10 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
             val runtimeClassPath = Revanced22RuntimeAssets.ensureRuntimeClassPath(appContext).absolutePath
             val appProcessPath = resolveAppProcessBin(appContext)
 
-            val mergeMemoryLimitMb = MemoryLimitConfig.maxLimitMb(appContext)
+            val mergeMemoryLimitMb = MemoryLimitConfig.resolveMemoryLimitMb(
+                appContext,
+                prefs.processMemoryLimit.get()
+            )
 
             val propOverridePath = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 resolvePropOverride(appContext)?.absolutePath

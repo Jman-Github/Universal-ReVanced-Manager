@@ -1385,6 +1385,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private set
     val patcherMemoryUsageSamples = mutableStateListOf<PatcherMemoryUsage>()
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/viewmodel/PatcherViewModel.kt
+    data class MemoryAdjustmentDialogState(
+        val previousLimit: Int,
+        val newLimit: Int,
+        val adjusted: Boolean
+    )
+
+    var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
+        private set
+
+    fun dismissMemoryAdjustmentDialog() {
+        memoryAdjustmentDialog = null
+    }
+
     private val workManager = WorkManager.getInstance(app)
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
     val patcherSucceeded: LiveData<Boolean?> get() = _patcherSucceeded
@@ -2051,12 +2066,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ?.removePrefix("Memory limit:")
                 ?.trim()
         )
-        val effectiveLimit = runtimeReportedLimit ?: MemoryLimitConfig.maxLimitMb(context)
-        val processRuntimeSupported = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+        val configuredLimit = MemoryLimitConfig.resolveMemoryLimitMb(
+            context,
+            prefs.processMemoryLimit.getBlocking()
+        )
+        val effectiveLimit = runtimeReportedLimit ?: configuredLimit
+        val processRuntimeEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         val runtimeMode = findLogValue("Runtime mode:")
-            ?: if (processRuntimeSupported) "process" else "in-process"
+            ?: if (processRuntimeEnabled) "process" else "in-process"
         val memoryOverride = findLogValue("Memory override:")
-            ?: if (processRuntimeSupported) "enabled" else "disabled"
+            ?: if (processRuntimeEnabled) "enabled" else "disabled"
         val aapt2 = findLogValue("AAPT2:") ?: when (bundleType) {
             PatchBundleType.REVANCED.name -> "Modern"
             PatchBundleType.MORPHE.name -> "N/A"
@@ -4657,8 +4676,40 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         reconcileFailureState(workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY))
         val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
         if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE ||
-            exitCode == Revanced22ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE) {
+            exitCode == Revanced22ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE ||
+            exitCode == Revanced22ProcessRuntime.SEGMENTATION_FAULT_EXIT_CODE) {
             forceKeepLocalInput = true
+        }
+
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/viewmodel/PatcherViewModel.kt
+        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE) {
+            viewModelScope.launch {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@launch
+                val previousFromWorker = workInfo.outputData.getInt(
+                    PatcherWorker.PROCESS_PREVIOUS_LIMIT_KEY,
+                    -1
+                )
+                val storedLimit = if (previousFromWorker > 0) {
+                    previousFromWorker
+                } else {
+                    prefs.processMemoryLimit.get()
+                }
+                val previousLimit =
+                    MemoryLimitConfig.clampConfiguredMemoryLimitMb(storedLimit)
+                val newLimit = (
+                    previousLimit - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP
+                ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_MINIMUM)
+                val adjusted = newLimit < previousLimit
+                if (newLimit != storedLimit) {
+                    prefs.processMemoryLimit.update(newLimit)
+                }
+                memoryAdjustmentDialog = MemoryAdjustmentDialogState(
+                    previousLimit = previousLimit,
+                    newLimit = if (adjusted) newLimit else previousLimit,
+                    adjusted = adjusted
+                )
+            }
         }
 
         // Missing patch issues are handled during preflight validation.

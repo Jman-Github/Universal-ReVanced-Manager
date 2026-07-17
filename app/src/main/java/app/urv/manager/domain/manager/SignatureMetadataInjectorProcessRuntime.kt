@@ -1,6 +1,10 @@
 package app.urv.manager.domain.manager
 
 import android.content.Context
+import android.os.Build
+import app.urv.manager.patcher.LibraryResolver
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.patcher.runtime.ProcessAttemptLogSpool
 import java.io.File
 import java.io.IOException
 import java.util.Properties
@@ -15,7 +19,7 @@ import kotlinx.coroutines.withContext
 
 internal class SignatureMetadataInjectorProcessRuntime(
     private val context: Context
-) {
+) : LibraryResolver() {
     private val activeProcessLock = Any()
     private var activeProcess: Process? = null
     private var activeCancellationRequested = false
@@ -33,29 +37,115 @@ internal class SignatureMetadataInjectorProcessRuntime(
         outputApk: File,
         workspace: File,
         mode: SignatureMetadataInjectionMode,
+        memoryLimitMb: Int,
+        onProgress: (SignatureMetadataInjectorProgress) -> Unit,
+        onLog: (String) -> Unit
+    ): SignatureMetadataInjectorEngineResult {
+        var attemptLimitMb = MemoryLimitConfig.clampLimitMb(context, memoryLimitMb)
+        var highestProgressStageOrdinal = -1
+        while (true) {
+            val attemptLogs = ProcessAttemptLogSpool.create(
+                workspace,
+                "signature-injector-attempt-"
+            )
+            try {
+                val result = try {
+                    executeOnce(
+                        metadataArchive = metadataArchive,
+                        targetApk = targetApk,
+                        outputApk = outputApk,
+                        workspace = workspace,
+                        mode = mode,
+                        memoryLimitMb = attemptLimitMb,
+                        onProgress = { progress ->
+                            val ordinal = progress.stage.ordinal
+                            if (ordinal > highestProgressStageOrdinal) {
+                                highestProgressStageOrdinal = ordinal
+                                onProgress(progress)
+                            }
+                        },
+                        onLog = attemptLogs::append
+                    )
+                } catch (error: ProcessExitException) {
+                    val canRetry =
+                        isMemoryFailureExitCode(error.exitCode) &&
+                            attemptLimitMb >
+                                MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM
+                    if (!canRetry) {
+                        attemptLogs.replayTo(onLog)
+                        error.stderrLines.forEach { line ->
+                            onLog("[process stderr] $line")
+                        }
+                        throw error
+                    }
+                    attemptLimitMb = nextRetryMemoryLimitMb(attemptLimitMb)
+                    continue
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Throwable) {
+                    attemptLogs.replayTo(onLog)
+                    throw error
+                }
+                attemptLogs.replayTo(onLog)
+                return result
+            } finally {
+                attemptLogs.close()
+            }
+        }
+    }
+
+    private suspend fun executeOnce(
+        metadataArchive: File,
+        targetApk: File,
+        outputApk: File,
+        workspace: File,
+        mode: SignatureMetadataInjectionMode,
+        memoryLimitMb: Int,
         onProgress: (SignatureMetadataInjectorProgress) -> Unit,
         onLog: (String) -> Unit
     ): SignatureMetadataInjectorEngineResult = coroutineScope {
         workspace.mkdirs()
         val resultFile = workspace.resolve("injector-result.properties")
         resultFile.delete()
-        val command = listOf(
-            resolveAppProcessBin(),
-            "-Djava.io.tmpdir=${context.cacheDir.absolutePath}",
-            "/",
-            "--nice-name=${context.packageName}:SignatureMetadataInjector",
-            SignatureMetadataInjectorProcess::class.java.name,
-            metadataArchive.absolutePath,
-            targetApk.absolutePath,
-            outputApk.absolutePath,
-            mode.name,
-            resultFile.absolutePath
+        outputApk.delete()
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
+        val effectiveMemoryLimitMb = MemoryLimitConfig.clampLimitMb(
+            context,
+            memoryLimitMb
         )
+        val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            findLibrary(context, "prop_override")
+        } else {
+            null
+        }
+        val command = buildList {
+            add(resolveAppProcessBin())
+            if (propOverride == null) {
+                add("-Xmx${effectiveMemoryLimitMb}m")
+                add("-XX:HeapGrowthLimit=${effectiveMemoryLimitMb}m")
+            }
+            add("-Djava.io.tmpdir=${context.cacheDir.absolutePath}")
+            add("/")
+            add("--nice-name=${context.packageName}:SignatureMetadataInjector")
+            add(SignatureMetadataInjectorProcess::class.java.name)
+            add(metadataArchive.absolutePath)
+            add(targetApk.absolutePath)
+            add(outputApk.absolutePath)
+            add(mode.name)
+            add(resultFile.absolutePath)
+        }
         val process = withContext(NonCancellable + Dispatchers.IO) {
             ProcessBuilder(command)
                 .directory(workspace)
                 .apply {
                     environment()["CLASSPATH"] = context.applicationInfo.sourceDir
+                    if (propOverride != null) {
+                        val limit = "${effectiveMemoryLimitMb}M"
+                        environment()["LD_PRELOAD"] = propOverride.absolutePath
+                        environment()["PROP_dalvik.vm.heapgrowthlimit"] = limit
+                        environment()["PROP_dalvik.vm.heapsize"] = limit
+                    }
                 }
                 .start()
                 .also { startedProcess ->
@@ -103,7 +193,6 @@ internal class SignatureMetadataInjectorProcessRuntime(
                                 stderrTail.removeFirst()
                             }
                         }
-                        onLog("[process stderr] $line")
                     }
                 }
             } catch (error: IOException) {
@@ -130,11 +219,14 @@ internal class SignatureMetadataInjectorProcessRuntime(
             if (isCancellationRequested(process)) {
                 throw CancellationException("Signature metadata process was cancelled")
             }
+            val stderrLines = synchronized(stderrTail) {
+                stderrTail.toList()
+            }
             if (exitCode != 0) {
-                val detail = synchronized(stderrTail) {
-                    stderrTail.lastOrNull()
-                }
-                throw ProcessExitException(exitCode, detail)
+                throw ProcessExitException(exitCode, stderrLines)
+            }
+            stderrLines.forEach { line ->
+                onLog("[process stderr] $line")
             }
             if (!outputApk.isFile || outputApk.length() <= 0L || !resultFile.isFile) {
                 throw IOException("Signature metadata process completed without a result.")
@@ -194,14 +286,20 @@ internal class SignatureMetadataInjectorProcessRuntime(
         runCatching { process.destroyForcibly() }
     }
 
+    private fun nextRetryMemoryLimitMb(failedLimitMb: Int): Int =
+        minOf(
+            failedLimitMb - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP,
+            MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_MAX_LIMIT_INITIALIZATION
+        ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM)
+
     class ProcessExitException(
-        exitCode: Int,
-        detail: String?
+        val exitCode: Int,
+        val stderrLines: List<String>
     ) : IOException(
         buildString {
             append("Signature metadata process exited with code ")
             append(exitCode)
-            if (!detail.isNullOrBlank()) {
+            stderrLines.lastOrNull()?.takeIf(String::isNotBlank)?.let { detail ->
                 append(": ")
                 append(detail)
             }
@@ -215,7 +313,15 @@ internal class SignatureMetadataInjectorProcessRuntime(
         private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         private const val STDERR_TAIL_LIMIT = 50
+        private const val OOM_EXIT_CODE = 134
+        private const val LOW_MEMORY_KILL_EXIT_CODE = 137
+        private const val SEGMENTATION_FAULT_EXIT_CODE = 139
         internal const val LIST_SEPARATOR = "\u001f"
+
+        private fun isMemoryFailureExitCode(exitCode: Int): Boolean =
+            exitCode == OOM_EXIT_CODE ||
+                exitCode == LOW_MEMORY_KILL_EXIT_CODE ||
+                exitCode == SEGMENTATION_FAULT_EXIT_CODE
     }
 }
 

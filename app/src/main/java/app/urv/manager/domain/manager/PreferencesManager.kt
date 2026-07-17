@@ -6,10 +6,12 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.base.BasePreferencesManager
 import app.urv.manager.domain.manager.base.EditorContext
 import app.urv.manager.patcher.logger.PatcherLogMode
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.theme.Theme
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.isDebuggable
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import java.nio.file.Paths
 import kotlin.io.path.isDirectory
@@ -96,6 +98,14 @@ class PreferencesManager(
     val skipApkSigning = booleanPreference("skip_apk_signing", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/domain/manager/PreferencesManager.kt
+    val processMemoryLimit = intPreference(
+        // Keep the legacy key so existing installations retain their configured limit.
+        "patch_memory_limit",
+        MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_NOT_SET
+    )
     val patchedAppExportFormat = stringPreference(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
@@ -359,6 +369,24 @@ class PreferencesManager(
         booleanPreference("auto_save_downloader_latest_only", false)
     val searchEngineHost = stringPreference("search_engine_host", "google.com")
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/domain/manager/PreferencesManager.kt
+    init {
+        runBlocking {
+            val storedLimit = processMemoryLimit.get()
+            val configuredLimit = if (
+                storedLimit == MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_NOT_SET
+            ) {
+                MemoryLimitConfig.initialMemoryLimitMb(context)
+            } else {
+                MemoryLimitConfig.clampConfiguredMemoryLimitMb(storedLimit)
+            }
+            if (configuredLimit != storedLimit) {
+                processMemoryLimit.update(configuredLimit)
+            }
+        }
+    }
+
     @Serializable
     data class SettingsSnapshot(
         val dynamicColor: Boolean? = null,
@@ -383,6 +411,8 @@ class PreferencesManager(
         val skipApkSigning: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
+        val processMemoryLimit: Int? = null,
+        val patcherProcessMemoryLimit: Int? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -599,6 +629,7 @@ class PreferencesManager(
             skipApkSigning = skipApkSigning.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
+            processMemoryLimit = processMemoryLimit.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
             autoExpandRunningSteps = autoExpandRunningSteps.get(),
@@ -768,6 +799,10 @@ class PreferencesManager(
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
         snapshot.patcherLogMode?.let { patcherLogMode.value = it }
+        (snapshot.processMemoryLimit ?: snapshot.patcherProcessMemoryLimit)?.let {
+            processMemoryLimit.value =
+                MemoryLimitConfig.clampConfiguredMemoryLimitMb(it)
+        }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }

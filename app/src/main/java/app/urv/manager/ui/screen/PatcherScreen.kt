@@ -100,6 +100,7 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.FilenameUtils
@@ -135,6 +136,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val processMemoryLimit by prefs.processMemoryLimit.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
@@ -211,6 +213,42 @@ fun PatcherScreen(
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
     var logExportFileDialogState by remember { mutableStateOf<LogExportDialogState?>(null) }
     var pendingLogExportConfirmation by remember { mutableStateOf<PendingLogExportConfirmation?>(null) }
+
+    viewModel.memoryAdjustmentDialog?.let { state ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissMemoryAdjustmentDialog,
+            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
+            title = {
+                CenteredDialogTitle(
+                    stringResource(R.string.process_memory_limit_oom_title)
+                )
+            },
+            text = {
+                Text(
+                    text = if (state.adjusted) {
+                        stringResource(
+                            R.string.process_memory_limit_adjusted_message,
+                            state.previousLimit,
+                            state.newLimit
+                        )
+                    } else {
+                        stringResource(
+                            R.string.process_memory_limit_minimum_message,
+                            state.newLimit
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissMemoryAdjustmentDialog) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
             if (granted) {
@@ -1155,7 +1193,17 @@ fun PatcherScreen(
             ) {
                 if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
                     item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(samples = viewModel.patcherMemoryUsageSamples)
+                        PatcherMemoryUsageCard(
+                            samples = viewModel.patcherMemoryUsageSamples,
+                            limitMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                MemoryLimitConfig.resolveMemoryLimitMb(
+                                    context,
+                                    processMemoryLimit
+                                ).toLong()
+                            } else {
+                                null
+                            }
+                        )
                     }
                 }
                 items(

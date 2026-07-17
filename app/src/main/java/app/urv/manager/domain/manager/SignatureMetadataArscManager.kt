@@ -2,6 +2,7 @@ package app.urv.manager.domain.manager
 
 import android.app.Application
 import android.os.Build
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import com.android.apksig.ApkVerifier
@@ -89,11 +90,18 @@ private sealed interface SignatureBlockExpectation {
 class SignatureMetadataInjectorManager(
     private val archiveMetadataReader: ApkArchiveMetadataReader,
     private val app: Application,
-    private val keystoreManager: KeystoreManager
+    private val keystoreManager: KeystoreManager,
+    private val preferencesManager: PreferencesManager
 ) {
     private val analyzer = SignatureMetadataInputAnalyzer(archiveMetadataReader)
     private val processRuntime = SignatureMetadataInjectorProcessRuntime(app)
     private val splitMergeRuntime = SplitMergeProcessRuntime(app)
+
+    private fun configuredProcessMemoryLimitMb(): Int =
+        MemoryLimitConfig.resolveMemoryLimitMb(
+            app,
+            preferencesManager.processMemoryLimit.getBlocking()
+        )
 
     suspend fun analyzeSignatureSource(file: File): SignatureMetadataSourceInfo =
         analyzer.analyzeSignatureSource(file)
@@ -291,6 +299,7 @@ class SignatureMetadataInjectorManager(
                                 stripNativeLibs = false,
                                 skipUnneededSplits = false,
                                 includedModules = includedSplitModules,
+                                memoryLimitMb = configuredProcessMemoryLimitMb(),
                                 onProgress = { message ->
                                     onLog("[split merge] $message")
                                 },
@@ -411,6 +420,7 @@ class SignatureMetadataInjectorManager(
                         outputApk = partialOutput,
                         workspace = operationWorkspace,
                         mode = mode,
+                        memoryLimitMb = configuredProcessMemoryLimitMb(),
                         onProgress = onProgress,
                         onLog = onLog
                     )

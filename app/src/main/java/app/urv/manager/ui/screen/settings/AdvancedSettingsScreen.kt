@@ -192,6 +192,7 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
+import app.urv.manager.ui.component.settings.ProcessMemoryLimitDialog
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.domain.installer.InstallerManager
@@ -829,6 +830,41 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
+            var showProcessMemoryLimitDialog by rememberSaveable { mutableStateOf(false) }
+            val processMemoryLimit by viewModel.prefs.processMemoryLimit.getAsState()
+            if (showProcessMemoryLimitDialog) {
+                ProcessMemoryLimitDialog(
+                    currentLimit = processMemoryLimit,
+                    onDismiss = { showProcessMemoryLimitDialog = false },
+                    onLimitChange = viewModel::setProcessMemoryLimit
+                )
+            }
+            GroupHeader(
+                stringResource(R.string.separate_processes_section),
+                icon = SettingsSectionIcons.SeparateProcesses
+            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                // Code adapted from Morphe, see third-party/NOTICE for more information
+                // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/screen/settings/system/PerformanceSection.kt
+                SettingsSearchHighlight(
+                    targetKey = R.string.process_memory_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.process_memory_limit),
+                        supportingContent = stringResource(
+                            R.string.process_memory_limit_value,
+                            processMemoryLimit
+                        ),
+                        onClick = { showProcessMemoryLimitDialog = true }
+                    )
+                }
+            }
             GroupHeader(
                 stringResource(R.string.safeguards_compatibility_section),
                 icon = SettingsSectionIcons.SafeguardsCompatibility

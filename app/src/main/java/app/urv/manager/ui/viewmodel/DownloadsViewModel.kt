@@ -19,6 +19,7 @@ import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
+import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -153,6 +154,10 @@ class DownloadsViewModel(
                     workspace = installWorkspace,
                     stripNativeLibs = prefs.stripUnusedNativeLibs.getBlocking(),
                     skipUnneededSplits = prefs.skipUnneededSplitApks.getBlocking(),
+                    memoryLimitMb = MemoryLimitConfig.resolveMemoryLimitMb(
+                        appContext,
+                        prefs.processMemoryLimit.get()
+                    ),
                     onProgress = ::updateInstallProgress,
                     onSubSteps = {},
                     onLog = ::appendMergeLog
