@@ -3,9 +3,24 @@ package app.urv.manager.ui.theme
 import android.app.Activity
 import android.graphics.Color as AndroidColor
 import android.os.Build
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
+import androidx.compose.foundation.layout.windowInsetsEndWidth
+import androidx.compose.foundation.layout.windowInsetsStartWidth
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -97,29 +112,41 @@ fun ReVancedManagerTheme(
 
         darkTheme -> DarkColorScheme
         else -> LightColorScheme
-    }.let {
-        if (darkTheme && pureBlackTheme) {
-            val pureBlack = Color.Black
-            it.copy(
-                background = pureBlack,
-                surface = pureBlack,
-                surfaceDim = pureBlack
-            )
-        } else it
     }
 
     val schemeWithAccent = parseCustomColor(accentColorHex)?.let {
         applyCustomAccent(baseScheme, it, darkTheme)
     } ?: baseScheme
 
-    val finalScheme = parseCustomColor(themeColorHex)?.let {
+    val schemeWithThemeColor = parseCustomColor(themeColorHex)?.let {
         applyCustomThemeColor(schemeWithAccent, it, darkTheme)
     } ?: schemeWithAccent
+    val finalScheme = if (darkTheme && pureBlackTheme) {
+        val pureBlack = Color.Black
+        schemeWithThemeColor.copy(
+            background = pureBlack,
+            onBackground = schemeWithAccent.onBackground,
+            surface = pureBlack,
+            onSurface = schemeWithAccent.onSurface,
+            surfaceVariant = Color(0xFF161616),
+            surfaceDim = pureBlack,
+            surfaceBright = Color(0xFF202020),
+            surfaceContainerLowest = pureBlack,
+            surfaceContainerLow = Color(0xFF050505),
+            surfaceContainer = Color(0xFF0A0A0A),
+            surfaceContainerHigh = Color(0xFF101010),
+            surfaceContainerHighest = Color(0xFF161616)
+        )
+    } else {
+        schemeWithThemeColor
+    }
     val resolvedScheme = if (hasCustomBackground) {
         finalScheme.copy(background = Color.Transparent)
     } else {
         finalScheme
     }
+    val systemBarBackground = finalScheme.surface
+    val useDarkSystemBarIcons = systemBarBackground.contrastingForeground() == Color.Black
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -131,16 +158,51 @@ fun ReVancedManagerTheme(
             activity.window.statusBarColor = Color.Transparent.toArgb()
             activity.window.navigationBarColor = Color.Transparent.toArgb()
 
-            WindowCompat.getInsetsController(activity.window, view).isAppearanceLightStatusBars = !darkTheme
-            WindowCompat.getInsetsController(activity.window, view).isAppearanceLightNavigationBars = !darkTheme
+            WindowCompat.getInsetsController(activity.window, view).apply {
+                isAppearanceLightStatusBars = useDarkSystemBarIcons
+                isAppearanceLightNavigationBars = useDarkSystemBarIcons
+            }
         }
     }
 
     MaterialTheme(
         colorScheme = resolvedScheme,
-        typography = Typography,
-        content = content
-    )
+        typography = Typography
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content()
+            if (hasCustomBackground) {
+                Spacer(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .windowInsetsTopHeight(WindowInsets.statusBars)
+                        .background(systemBarBackground)
+                )
+                Spacer(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .windowInsetsBottomHeight(WindowInsets.navigationBars)
+                        .background(systemBarBackground)
+                )
+                Spacer(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .fillMaxHeight()
+                        .windowInsetsStartWidth(WindowInsets.navigationBars)
+                        .background(systemBarBackground)
+                )
+                Spacer(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .windowInsetsEndWidth(WindowInsets.navigationBars)
+                        .background(systemBarBackground)
+                )
+            }
+        }
+    }
 }
 
 @Serializable
@@ -230,6 +292,8 @@ private fun Color.adjustLightness(delta: Float): Color {
 }
 
 private fun Color.contrastingForeground(): Color {
-    val luminance = ColorUtils.calculateLuminance(this.toArgb())
-    return if (luminance > 0.5) Color.Black else Color.White
+    val background = toArgb() or 0xFF000000.toInt()
+    val blackContrast = ColorUtils.calculateContrast(AndroidColor.BLACK, background)
+    val whiteContrast = ColorUtils.calculateContrast(AndroidColor.WHITE, background)
+    return if (blackContrast >= whiteContrast) Color.Black else Color.White
 }

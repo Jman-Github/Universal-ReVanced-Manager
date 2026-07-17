@@ -226,6 +226,8 @@
 - Added Signature metadata injector & cloner tool under APK signature tools
 - Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
 - Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
+- Added Monochrome and Material You theme presets, including optional Pure Black styling for Material You
+- Improved theme and accent preset selection, layout, indicators, and previews
 
 
 # Bug fixes
@@ -378,6 +380,7 @@
 - Fixed bundle update labels not appearing when a saved app's patch bundle was imported again through settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/581
 - Fixed bundle recommendations continuing to use the first selected bundle's patches after switching bundles while preserving custom patch selections https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/579
 - Fixed patch bundle update and import progress bars showing a filled marker at the end before completion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/589
+- Fixed serval bugs around themeing & customization
 
 
 # Refactors

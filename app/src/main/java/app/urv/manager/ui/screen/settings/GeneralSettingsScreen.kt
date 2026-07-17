@@ -7,7 +7,6 @@ import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,8 +16,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -28,7 +25,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.CircleShape
@@ -97,7 +93,6 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.BooleanItem
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
-import app.urv.manager.ui.theme.Theme
 import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
 import app.urv.manager.ui.viewmodel.GeneralSettingsViewModel
 import app.urv.manager.ui.viewmodel.ThemePreset
@@ -120,7 +115,7 @@ import java.nio.file.Path
 import kotlin.math.roundToInt
 import app.urv.manager.ui.component.CenteredDialogTitle
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GeneralSettingsScreen(
     onBackClick: () -> Unit,
@@ -142,12 +137,11 @@ fun GeneralSettingsScreen(
     val showToolsTab by prefs.showToolsTab.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val backgroundImageInputDirectory by prefs.backgroundImageInputLastDirectory.getAsState()
-    val theme by prefs.theme.getAsState()
     var showCustomBackgroundImagePicker by rememberSaveable { mutableStateOf(false) }
     var showCustomBackgroundImagePreview by rememberSaveable { mutableStateOf(false) }
     // Allow selecting the AMOLED preset regardless of the current theme since selecting it switches to dark mode anyway.
     val allowPureBlackPreset = true
-    val dynamicColorEnabled by prefs.dynamicColor.getAsState()
+    val materialYouPureBlackThemeEnabled by prefs.materialYouPureBlackTheme.getAsState()
     val themePresetSelectionEnabled by prefs.themePresetSelectionEnabled.getAsState()
     val selectedThemePresetName by prefs.themePresetSelectionName.getAsState()
     val pureBlackOnSystemDark by prefs.pureBlackOnSystemDark.getAsState()
@@ -166,8 +160,13 @@ fun GeneralSettingsScreen(
             if (!supportsDynamicColor && preset == ThemePreset.DYNAMIC) ThemePreset.DEFAULT else preset
         }
     }
+    val followSystemPresetSelected = selectedThemePreset == ThemePreset.DEFAULT
+    val materialYouPresetSelected = selectedThemePreset == ThemePreset.DYNAMIC
     val canAdjustThemeColor = selectedThemePreset == null
-    val canAdjustAccentColor = selectedThemePreset != ThemePreset.DYNAMIC
+    val canAdjustAccentColor = selectedThemePreset !in setOf(
+        ThemePreset.DYNAMIC,
+        ThemePreset.MONOCHROME
+    )
     val themeControlsAlpha = if (canAdjustThemeColor) 1f else 0.5f
     val accentControlsAlpha = if (canAdjustAccentColor) 1f else 0.5f
     if (!canAdjustThemeColor && showThemeColorPicker) showThemeColorPicker = false
@@ -454,6 +453,7 @@ fun GeneralSettingsScreen(
                     add(ThemePresetSwatch(ThemePreset.DEFAULT, R.string.theme_preset_default, listOf(Color(0xFF4CD964), Color(0xFF4A90E2))))
                     add(ThemePresetSwatch(ThemePreset.LIGHT, R.string.light, listOf(Color(0xFFEEF2FF), Color(0xFFE2E6FB))))
                     add(ThemePresetSwatch(ThemePreset.DARK, R.string.dark, listOf(Color(0xFF1C1B1F), Color(0xFF2A2830))))
+                    add(ThemePresetSwatch(ThemePreset.MONOCHROME, R.string.theme_preset_monochrome, listOf(Color(0xFFF2F2F2), Color(0xFF202020))))
                     if (supportsDynamicColor) {
                         add(ThemePresetSwatch(ThemePreset.DYNAMIC, R.string.theme_preset_dynamic, listOf(Color(0xFF6750A4), Color(0xFF4285F4))))
                     }
@@ -483,25 +483,30 @@ fun GeneralSettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        baseThemeSwatches.forEach { option ->
-                            Box(
-                                modifier = Modifier.weight(1f),
-                                contentAlignment = Alignment.Center
+                        baseThemeSwatches.chunked(3).forEach { rowOptions ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                ThemeSwatchChip(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = stringResource(option.labelRes),
-                                    colors = option.colors,
-                                    isSelected = selectedThemePreset == option.preset,
-                                    enabled = option.preset != ThemePreset.PURE_BLACK || allowPureBlackPreset,
-                                    onClick = { viewModel.toggleThemePreset(option.preset) }
-                                )
+                                rowOptions.forEach { option ->
+                                    ThemeSwatchChip(
+                                        modifier = Modifier.weight(1f),
+                                        label = stringResource(option.labelRes),
+                                        colors = option.colors,
+                                        isSelected = selectedThemePreset == option.preset,
+                                        enabled = option.preset != ThemePreset.PURE_BLACK || allowPureBlackPreset,
+                                        onClick = { viewModel.toggleThemePreset(option.preset) }
+                                    )
+                                }
+                                repeat(3 - rowOptions.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
                     }
@@ -585,19 +590,39 @@ fun GeneralSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
-                        modifier = highlightModifier,
+                        modifier = highlightModifier.alpha(
+                            if (followSystemPresetSelected) 1f else 0.5f
+                        ),
                         headlineContent = stringResource(R.string.pure_black_follow_system),
                         supportingContent = stringResource(R.string.pure_black_follow_system_description),
                         trailingContent = {
                             ExpressiveSettingsSwitch(
                                 checked = pureBlackOnSystemDark,
                                 onCheckedChange = viewModel::setPureBlackOnSystemDark,
-                                enabled = theme == Theme.SYSTEM
+                                enabled = followSystemPresetSelected
                             )
                         },
-                        enabled = theme == Theme.SYSTEM,
+                        enabled = followSystemPresetSelected,
                         onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
                     )
+                }
+                AnimatedVisibility(visible = materialYouPresetSelected) {
+                    Column {
+                        ExpressiveSettingsDivider()
+                        ExpressiveSettingsItem(
+                            headlineContent = stringResource(R.string.pure_black_material_you),
+                            supportingContent = stringResource(R.string.pure_black_material_you_description),
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = materialYouPureBlackThemeEnabled,
+                                    onCheckedChange = viewModel::setMaterialYouPureBlackTheme
+                                )
+                            },
+                            onClick = {
+                                viewModel.setMaterialYouPureBlackTheme(!materialYouPureBlackThemeEnabled)
+                            }
+                        )
+                    }
                 }
             }
 
@@ -682,7 +707,9 @@ fun GeneralSettingsScreen(
                                 )
                                 .background(preset, RoundedCornerShape(12.dp))
                                 .clickable(enabled = canAdjustAccentColor) {
-                                    viewModel.setCustomAccentColor(preset)
+                                    viewModel.setCustomAccentColor(
+                                        if (isSelected) null else preset
+                                    )
                                 }
                         ) {
                             if (isSelected) {
@@ -733,11 +760,6 @@ fun GeneralSettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-            )
-            ThemePreview(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
             )
             ExpressiveThemePreview(
                 modifier = Modifier
@@ -958,7 +980,30 @@ private fun ThemeSwatchChip(
                         else -> Brush.linearGradient(colors.ifEmpty { listOf(MaterialTheme.colorScheme.primary) })
                     }
                 )
-        )
+        ) {
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(3.dp)
+                        .size(18.dp)
+                        .background(MaterialTheme.colorScheme.surface, CircleShape)
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.primary,
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
+            }
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
@@ -1162,59 +1207,6 @@ private fun ColorChannelSlider(
                 thumbColor = trackColor
             )
         )
-    }
-}
-
-@Composable
-private fun ThemePreview(modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(18.dp)
-    Surface(
-        modifier = modifier
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)
-            .clip(shape),
-        shape = shape,
-        tonalElevation = 1.dp,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                            RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Text(
-                        text = "UR",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.theme_preview_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 }
 

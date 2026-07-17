@@ -301,10 +301,13 @@
     <string name="theme_preview_title">Theme preview</string>
     <string name="theme_preview_description">Updates instantly when changing theme settings</string>
     <string name="theme_presets">Theme presets</string>
-    <string name="theme_presets_description">Pick how the app follows system, light, dark, Material You, or pure black</string>
+    <string name="theme_presets_description">Pick how the app follows system, light, dark, monochrome, Material You, or pure black</string>
     <string name="theme_preset_default">Follow system</string>
     <string name="theme_preset_amoled">Pure black</string>
     <string name="theme_preset_dynamic">Material You</string>
+    <string name="theme_preset_monochrome">Monochrome</string>
+    <string name="pure_black_material_you">Use pure black with Material You</string>
+    <string name="pure_black_material_you_description">Switch to a pure black dark theme while keeping Material You colors</string>
     <string name="custom_background_image">Custom background image</string>
     <string name="custom_background_image_description">Set a background image for the app. Supported types: JPEG, PNG, GIF, SVG, TIFF, WebP</string>
     <string name="custom_background_image_selected">Current image: %1$s</string>

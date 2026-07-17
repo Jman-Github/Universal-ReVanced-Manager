@@ -25,6 +25,7 @@ enum class ThemePreset {
     LIGHT,
     DARK,
     DYNAMIC,
+    MONOCHROME,
     PURE_BLACK
 }
 
@@ -73,6 +74,11 @@ class GeneralSettingsViewModel(
             theme = Theme.SYSTEM,
             dynamicColor = true
         ),
+        ThemePreset.MONOCHROME to ThemePresetConfig(
+            theme = Theme.SYSTEM,
+            customAccentHex = "#808080",
+            customThemeHex = "#808080"
+        ),
         ThemePreset.PURE_BLACK to ThemePresetConfig(
             theme = Theme.DARK,
             pureBlackTheme = true
@@ -83,6 +89,7 @@ class GeneralSettingsViewModel(
         prefs.theme.update(Theme.SYSTEM)
         prefs.dynamicColor.update(false)
         prefs.pureBlackTheme.update(false)
+        prefs.materialYouPureBlackTheme.update(false)
         prefs.pureBlackOnSystemDark.update(false)
         prefs.themePresetSelectionEnabled.update(true)
         prefs.themePresetSelectionName.update(ThemePreset.DEFAULT.name)
@@ -105,6 +112,11 @@ class GeneralSettingsViewModel(
 
     fun setPureBlackOnSystemDark(enabled: Boolean) = viewModelScope.launch {
         prefs.pureBlackOnSystemDark.update(enabled)
+    }
+
+    fun setMaterialYouPureBlackTheme(enabled: Boolean) = viewModelScope.launch {
+        prefs.materialYouPureBlackTheme.update(enabled)
+        resetListItemColorsCached()
     }
 
     fun setCustomBackgroundImageUri(uri: String) = viewModelScope.launch {
@@ -188,7 +200,10 @@ class GeneralSettingsViewModel(
         val current = getCurrentThemePreset()
         if (current == preset) {
             val resetTheme = if (preset == ThemePreset.LIGHT) Theme.SYSTEM else null
-            clearThemePresetSelection(resetTheme)
+            clearThemePresetSelection(
+                resetTheme = resetTheme,
+                clearPresetColors = preset == ThemePreset.MONOCHROME
+            )
         } else {
             applyThemePreset(preset)
         }
@@ -206,12 +221,20 @@ class GeneralSettingsViewModel(
         resetListItemColorsCached()
     }
 
-    private suspend fun clearThemePresetSelection(resetTheme: Theme? = null) {
+    private suspend fun clearThemePresetSelection(
+        resetTheme: Theme? = null,
+        clearPresetColors: Boolean = false
+    ) {
         prefs.themePresetSelectionEnabled.update(false)
         prefs.themePresetSelectionName.update("")
         prefs.dynamicColor.update(false)
         prefs.pureBlackTheme.update(false)
+        if (clearPresetColors) {
+            prefs.customAccentColor.update("")
+            prefs.customThemeColor.update("")
+        }
         resetTheme?.let { prefs.theme.update(it) }
+        resetListItemColorsCached()
     }
 
     private suspend fun getCurrentThemePreset(): ThemePreset? {

@@ -26,6 +26,7 @@ import app.urv.manager.util.AnnouncementDeepLinkIntent
 import app.urv.manager.util.BundleDeepLink
 import app.urv.manager.util.BundleDeepLinkIntent
 import app.urv.manager.util.ManagerUpdateDeepLinkIntent
+import app.urv.manager.util.resetListItemColorsCached
 import app.urv.manager.util.SplitArchiveIntent
 import app.urv.manager.util.SplitArchiveIntentParser
 import app.urv.manager.util.tag
@@ -189,16 +190,33 @@ class MainViewModel(
     }
 
     private fun applyLegacySettings(settings: LegacySettings) = viewModelScope.launch {
-        settings.themeMode?.let { theme ->
-            val themeMap = mapOf(
-                0 to Theme.SYSTEM,
-                1 to Theme.LIGHT,
-                2 to Theme.DARK
-            )
-            prefs.theme.update(themeMap[theme] ?: Theme.SYSTEM)
+        val importedTheme = settings.themeMode?.let { theme ->
+            when (theme) {
+                1 -> Theme.LIGHT
+                2 -> Theme.DARK
+                else -> Theme.SYSTEM
+            }
         }
-        settings.useDynamicTheme?.let { dynamicColor ->
-            prefs.dynamicColor.update(dynamicColor)
+        importedTheme?.let { prefs.theme.update(it) }
+        settings.useDynamicTheme?.let { prefs.dynamicColor.update(it) }
+        if (importedTheme != null || settings.useDynamicTheme != null) {
+            val resolvedTheme = importedTheme ?: prefs.theme.get()
+            val dynamicColor = settings.useDynamicTheme ?: prefs.dynamicColor.get()
+            val preset = when {
+                dynamicColor && resolvedTheme == Theme.SYSTEM -> ThemePreset.DYNAMIC
+                dynamicColor -> null
+                resolvedTheme == Theme.SYSTEM -> ThemePreset.DEFAULT
+                resolvedTheme == Theme.LIGHT -> ThemePreset.LIGHT
+                else -> ThemePreset.DARK
+            }
+            if (preset != null) {
+                prefs.pureBlackTheme.update(false)
+                prefs.customAccentColor.update("")
+                prefs.customThemeColor.update("")
+                resetListItemColorsCached()
+            }
+            prefs.themePresetSelectionName.update(preset?.name.orEmpty())
+            prefs.themePresetSelectionEnabled.update(preset != null)
         }
         settings.usePrereleases?.let { prereleases ->
             prefs.useManagerPrereleases.update(prereleases)

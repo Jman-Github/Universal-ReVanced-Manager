@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -99,9 +100,10 @@ import app.urv.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.urv.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.urv.manager.ui.theme.ReVancedManagerTheme
 import app.urv.manager.ui.theme.Theme
-import app.urv.manager.ui.viewmodel.MainViewModel
 import app.urv.manager.ui.viewmodel.DashboardViewModel
+import app.urv.manager.ui.viewmodel.MainViewModel
 import app.urv.manager.ui.viewmodel.SelectedAppInfoViewModel
+import app.urv.manager.ui.viewmodel.ThemePreset
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.AppForeground
 import app.universal.revanced.manager.R
@@ -136,15 +138,39 @@ class MainActivity : AppCompatActivity() {
             val theme by vm.prefs.theme.getAsState()
             val dynamicColor by vm.prefs.dynamicColor.getAsState()
             val pureBlackTheme by vm.prefs.pureBlackTheme.getAsState()
+            val materialYouPureBlackTheme by vm.prefs.materialYouPureBlackTheme.getAsState()
             val pureBlackOnSystemDark by vm.prefs.pureBlackOnSystemDark.getAsState()
+            val themePresetSelectionEnabled by vm.prefs.themePresetSelectionEnabled.getAsState()
+            val selectedThemePresetName by vm.prefs.themePresetSelectionName.getAsState()
             val customAccentColor by vm.prefs.customAccentColor.getAsState()
             val customThemeColor by vm.prefs.customThemeColor.getAsState()
             val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
             val customBackgroundImageOpacity by vm.prefs.customBackgroundImageOpacity.getAsState()
             val preventAccidentalTouching by vm.prefs.preventAccidentalTouching.getAsState()
             val systemDark = isSystemInDarkTheme()
-            val darkThemeEnabled = theme == Theme.SYSTEM && systemDark || theme == Theme.DARK
-            val pureBlackEnabled = pureBlackTheme || (pureBlackOnSystemDark && theme == Theme.SYSTEM && systemDark)
+            val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            val materialYouPureBlackSelected = supportsDynamicColor &&
+                themePresetSelectionEnabled &&
+                selectedThemePresetName == ThemePreset.DYNAMIC.name &&
+                materialYouPureBlackTheme
+            val pureBlackPresetSelected = themePresetSelectionEnabled &&
+                selectedThemePresetName == ThemePreset.PURE_BLACK.name &&
+                pureBlackTheme
+            val darkThemeEnabled = materialYouPureBlackSelected ||
+                theme == Theme.SYSTEM && systemDark ||
+                theme == Theme.DARK
+            val followSystemPresetSelected = themePresetSelectionEnabled &&
+                (
+                    selectedThemePresetName == ThemePreset.DEFAULT.name ||
+                        !supportsDynamicColor &&
+                        selectedThemePresetName == ThemePreset.DYNAMIC.name
+                )
+            val pureBlackEnabled = materialYouPureBlackSelected ||
+                pureBlackPresetSelected ||
+                pureBlackOnSystemDark &&
+                followSystemPresetSelected &&
+                theme == Theme.SYSTEM &&
+                systemDark
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
