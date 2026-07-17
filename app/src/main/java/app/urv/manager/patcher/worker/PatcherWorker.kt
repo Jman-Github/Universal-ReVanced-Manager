@@ -1538,6 +1538,10 @@ class PatcherWorker(
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
             val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
+            val configuredProcessMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
+                applicationContext,
+                prefs.patcherProcessMemoryLimit.get()
+            )
             var runtimeInputFile = inputFile
             var manualSplitSelectionApplied = false
             if (inputIsSplitArchive && args.splitSelection != null) {
@@ -1561,6 +1565,7 @@ class PatcherWorker(
                         stripNativeLibs = selection.stripNativeLibs,
                         skipUnneededSplits = false,
                         includedModules = selection.includedModules,
+                        memoryLimitMb = configuredProcessMemoryLimit,
                         onProgress = { message ->
                             eventDispatcher(
                                 ProgressEvent.Progress(
@@ -1596,11 +1601,13 @@ class PatcherWorker(
             val effectiveSkipUnneededSplits =
                 if (manualSplitSelectionApplied) false else skipUnneededSplits
             val selectedCount = totalPatchCount
-            val useProcessRuntime = Build.VERSION.SDK_INT > Build.VERSION_CODES.Q
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/worker/PatcherWorker.kt
+            val useProcessRuntime = prefs.useProcessRuntime.get()
             val useRevancedPatcher22 =
                 bundleType == PatchBundleType.REVANCED &&
                     patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
-            val effectiveLimit = MemoryLimitConfig.maxLimitMb(applicationContext)
+            val effectiveLimit = configuredProcessMemoryLimit
 
             workerLogger.info(
                 "Patching started at ${System.currentTimeMillis()} " +
