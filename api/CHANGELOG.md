@@ -225,6 +225,7 @@
 - Added an optional root-only LSPosed tab with support for LSPosed, Vector, and compatible builds, including local and GitHub module management, update checks, manager and settings shortcuts, and customizable module actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/596 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/598
 - Added Signature metadata injector & cloner tool under APK signature tools
 - Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
+- Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
 
 
 # Bug fixes

@@ -112,6 +112,7 @@
 - Updated newly generated manager signing keystores to use `alias` as the alias and `password` as the password while preserving compatibility with existing and legacy manager keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/538
 - Added Signature metadata injector & cloner tool under APK signature tools
 - Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
+- Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
 
 
 # Bug fixes
