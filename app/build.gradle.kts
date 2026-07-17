@@ -466,7 +466,7 @@ tasks {
     }
 
     val copyNoticeFile by registering(Copy::class) {
-        from(rootProject.file("third-party/NOTICE"))
+        from(rootProject.file("third-party/NOTICE.txt"))
         into(legalResourcesDir.map { it.dir("raw") })
         rename { "notice.txt" }
     }

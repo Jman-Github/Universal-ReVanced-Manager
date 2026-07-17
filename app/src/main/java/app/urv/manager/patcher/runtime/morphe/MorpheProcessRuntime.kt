@@ -43,8 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.io.File
 
 class MorpheProcessRuntime(
-    private val context: Context,
-    private val memoryLimitMb: Int = MemoryLimitConfig.maxLimitMb(context)
+    private val context: Context
 ) : MorpheRuntime(context) {
     private val binderRef = AtomicReference<IMorphePatcherProcess?>()
     private val eventHandlerRef = AtomicReference<IPatcherEvents?>()
@@ -121,9 +120,7 @@ class MorpheProcessRuntime(
             put("CLASSPATH", runtimeClassPath)
         }
 
-        // Code adapted from Morphe, see third-party/NOTICE for more information
-        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
-        val limit = "${MemoryLimitConfig.resolveMemoryLimitMb(context, memoryLimitMb)}M"
+        val limit = "${MemoryLimitConfig.maxLimitMb(context)}M"
         val propOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             resolvePropOverride(context)?.absolutePath
                 ?: throw Exception("Couldn't find prop override library")
@@ -320,8 +317,6 @@ class MorpheProcessRuntime(
         private const val APP_PROCESS_BIN_PATH_64 = "/system/bin/app_process64"
         private const val APP_PROCESS_BIN_PATH_32 = "/system/bin/app_process32"
         const val OOM_EXIT_CODE = 134
-        const val LOW_MEMORY_KILL_EXIT_CODE = 137
-        const val SEGMENTATION_FAULT_EXIT_CODE = 139
         private const val MORPHE_PROCESS_CLASS_NAME =
             "app.urv.manager.patcher.runtime.process.MorphePatcherProcess"
 
