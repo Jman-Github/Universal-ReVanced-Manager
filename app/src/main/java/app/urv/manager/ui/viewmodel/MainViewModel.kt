@@ -26,6 +26,8 @@ import app.urv.manager.util.AnnouncementDeepLinkIntent
 import app.urv.manager.util.BundleDeepLink
 import app.urv.manager.util.BundleDeepLinkIntent
 import app.urv.manager.util.ManagerUpdateDeepLinkIntent
+import app.urv.manager.util.PatchBundleFileIntent
+import app.urv.manager.util.PatchBundleFileIntentParser
 import app.urv.manager.util.resetListItemColorsCached
 import app.urv.manager.util.SplitArchiveIntent
 import app.urv.manager.util.SplitArchiveIntentParser
@@ -62,6 +64,9 @@ class MainViewModel(
     val announcementDeepLinkFlow = announcementDeepLinkChannel.receiveAsFlow()
     private val splitArchiveIntentChannel = Channel<SplitArchiveIntent>(Channel.BUFFERED)
     val splitArchiveIntentFlow = splitArchiveIntentChannel.receiveAsFlow()
+    private val patchBundleFileIntentChannel = Channel<PatchBundleFileIntent>(Channel.BUFFERED)
+    val patchBundleFileIntentFlow = patchBundleFileIntentChannel.receiveAsFlow()
+    private var initialIntentHandled = false
 
     private suspend fun suggestedVersion(packageName: String) =
         patchBundleRepository.suggestedVersions.first()[packageName]
@@ -130,9 +135,21 @@ class MainViewModel(
 
     fun selectApp(packageName: String) = selectApp(packageName, null, null, true)
 
+    fun handleInitialIntent(intent: Intent?) {
+        if (initialIntentHandled) return
+        initialIntentHandled = true
+        handleIntent(intent)
+    }
+
     fun handleIntent(intent: Intent?) {
         if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
             managerUpdateDeepLinkChannel.trySend(Unit)
+        }
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/blob/6688aa17ea35b5ab398a3c1922be13626290cbf1/app/src/main/java/app/morphe/manager/MainActivity.kt#L102-L118
+        PatchBundleFileIntentParser.fromIntent(intent, app.contentResolver)?.let { patchBundleFileIntent ->
+            patchBundleFileIntentChannel.trySend(patchBundleFileIntent)
+            return
         }
         SplitArchiveIntentParser.fromIntent(intent, app.contentResolver)?.let { splitArchiveIntent ->
             splitArchiveIntentChannel.trySend(splitArchiveIntent)

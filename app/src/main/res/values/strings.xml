@@ -5,6 +5,8 @@
     <string name="patches">Patches</string>
     <string name="patch_bundles">Patch Bundles</string>
     <string name="patch_bundle">Patch Bundle</string>
+    <string name="patch_bundle_file_import_dialog_title">Add patch bundle?</string>
+    <string name="patch_bundle_file_import_dialog_message">Add this patch bundle file as a local patch bundle?</string>
     <string name="manager">Manager</string>
     <string name="plugin_host_permission_label">URV Manager plugin host</string>
     <string name="plugin_host_permission_description">Used to control access to URV Manager plugins. Only URV Manager has this.</string>

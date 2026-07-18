@@ -47,6 +47,9 @@ import app.urv.manager.plugin.downloader.OutputDownloadScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.PatchBundleFileIntent
+import app.urv.manager.util.PatchBundleFileIntentParser
+import app.urv.manager.util.PatchBundleFileManifest
 import app.urv.manager.util.PatchedAppExportData
 import java.io.File
 import java.io.FileInputStream
@@ -80,6 +83,11 @@ import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
+
+data class PatchBundleFileImportState(
+    val fileIntent: PatchBundleFileIntent,
+    val manifest: PatchBundleFileManifest? = null
+)
 
 @OptIn(PluginHostApi::class)
 class DashboardViewModel(
@@ -124,6 +132,9 @@ class DashboardViewModel(
         private set
     var showBatteryOptimizationsWarning by mutableStateOf(false)
         private set
+    var pendingPatchBundleFileImport: PatchBundleFileImportState? by mutableStateOf(null)
+        private set
+    private var patchBundleFileManifestJob: Job? = null
 
     private val bundleListEventsChannel = Channel<BundleListViewModel.Event>()
     val bundleListEventsFlow = bundleListEventsChannel.receiveAsFlow()
@@ -322,6 +333,33 @@ class DashboardViewModel(
             toastRepeater.cancel()
             withContext(Dispatchers.Main) { progressToast.cancel() }
         }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/6688aa17ea35b5ab398a3c1922be13626290cbf1/app/src/main/java/app/morphe/manager/ui/viewmodel/HomeViewModel.kt#L201-L226
+    fun preparePatchBundleFileImport(fileIntent: PatchBundleFileIntent) {
+        patchBundleFileManifestJob?.cancel()
+        pendingPatchBundleFileImport = PatchBundleFileImportState(fileIntent)
+        patchBundleFileManifestJob = viewModelScope.launch {
+            val manifest = withContext(Dispatchers.IO) {
+                PatchBundleFileIntentParser.readManifest(contentResolver, fileIntent.uri)
+            }
+            if (pendingPatchBundleFileImport?.fileIntent == fileIntent) {
+                pendingPatchBundleFileImport = PatchBundleFileImportState(fileIntent, manifest)
+            }
+        }
+    }
+
+    fun confirmPatchBundleFileImport() {
+        val fileIntent = pendingPatchBundleFileImport?.fileIntent ?: return
+        dismissPatchBundleFileImport()
+        createLocalSource(fileIntent.uri)
+    }
+
+    fun dismissPatchBundleFileImport() {
+        patchBundleFileManifestJob?.cancel()
+        patchBundleFileManifestJob = null
+        pendingPatchBundleFileImport = null
     }
 
     @SuppressLint("Recycle")

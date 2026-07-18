@@ -175,6 +175,7 @@ import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.UniversalFallbackVersionDialog
 import app.urv.manager.ui.component.bundle.BundleTopBar
 import app.urv.manager.ui.component.bundle.ImportPatchBundleDialog
+import app.urv.manager.ui.component.bundle.PatchBundleFileImportDialog
 import app.urv.manager.ui.component.haptics.HapticFloatingActionButton
 import app.urv.manager.ui.component.haptics.HapticTab
 import app.urv.manager.ui.component.patches.PathSelectorDialog
@@ -209,6 +210,7 @@ import app.urv.manager.ui.viewmodel.SplitMergeStepStatus
 import app.urv.manager.util.RequestInstallAppsContract
 import app.urv.manager.util.AppInfo
 import app.urv.manager.util.BundleDeepLink
+import app.urv.manager.util.PatchBundleFileIntent
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.PatchedAppExportData
@@ -268,7 +270,9 @@ fun DashboardScreen(
     onAnnouncementClick: (Announcement.Payload) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
-    onBundleDeepLinkConsumed: () -> Unit = {}
+    onBundleDeepLinkConsumed: () -> Unit = {},
+    patchBundleFileIntent: PatchBundleFileIntent? = null,
+    onPatchBundleFileIntentConsumed: () -> Unit = {}
 ) {
     val installedAppsViewModel: InstalledAppsViewModel = koinViewModel()
     val patchProfilesViewModel: PatchProfilesViewModel = koinViewModel()
@@ -1138,6 +1142,23 @@ fun DashboardScreen(
         }
     }
 
+    LaunchedEffect(patchBundleFileIntent) {
+        val fileIntent = patchBundleFileIntent ?: return@LaunchedEffect
+        try {
+            val bundleIndex = pageIndexByType[DashboardPage.BUNDLES]
+            if (bundleIndex != null && pagerState.currentPage != bundleIndex) {
+                runCatching {
+                    scrollToVisiblePage(DashboardPage.BUNDLES, animated = true)
+                }.onFailure {
+                    scrollToVisiblePage(DashboardPage.BUNDLES, animated = false)
+                }
+            }
+            vm.preparePatchBundleFileImport(fileIntent)
+        } finally {
+            onPatchBundleFileIntentConsumed()
+        }
+    }
+
     LaunchedEffect(bundleDeepLink) {
         val deepLink = bundleDeepLink ?: return@LaunchedEffect
         highlightBundleUid = deepLink.bundleUid
@@ -1532,6 +1553,15 @@ fun DashboardScreen(
             },
             selectedLocalPath = selectedBundlePath,
             initialRemoteUrl = initialAddBundleRemoteUrl
+        )
+    }
+
+    vm.pendingPatchBundleFileImport?.let { pendingImport ->
+        PatchBundleFileImportDialog(
+            manifest = pendingImport.manifest,
+            fileName = pendingImport.fileIntent.displayName,
+            onConfirm = vm::confirmPatchBundleFileImport,
+            onDismiss = vm::dismissPatchBundleFileImport
         )
     }
 

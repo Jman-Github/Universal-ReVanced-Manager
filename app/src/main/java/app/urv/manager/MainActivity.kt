@@ -106,6 +106,7 @@ import app.urv.manager.ui.viewmodel.SelectedAppInfoViewModel
 import app.urv.manager.ui.viewmodel.ThemePreset
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.AppForeground
+import app.urv.manager.util.PatchBundleFileIntent
 import app.universal.revanced.manager.R
 import coil.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -128,7 +129,7 @@ class MainActivity : AppCompatActivity() {
         installSplashScreen()
 
         val vm: MainViewModel = getActivityViewModel()
-        vm.handleIntent(intent)
+        vm.handleInitialIntent(intent)
 
         setContent {
             val launcher = rememberLauncherForActivityResult(
@@ -206,6 +207,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         val vm: MainViewModel = getActivityViewModel()
         vm.handleIntent(intent)
     }
@@ -311,6 +313,7 @@ private fun ReVancedManager(
     val dashboardVm: DashboardViewModel = koinViewModel()
     var pendingBundleDeepLink by remember { mutableStateOf<app.urv.manager.util.BundleDeepLink?>(null) }
     var pendingSplitArchiveIntent by remember { mutableStateOf<app.urv.manager.util.SplitArchiveIntent?>(null) }
+    var pendingPatchBundleFileIntent by remember { mutableStateOf<PatchBundleFileIntent?>(null) }
     val context = LocalContext.current
 
     EventEffect(vm.appSelectFlow) { params ->
@@ -348,6 +351,16 @@ private fun ReVancedManager(
             announcement
         ) {
             launchSingleTop = true
+        }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/6688aa17ea35b5ab398a3c1922be13626290cbf1/app/src/main/java/app/morphe/manager/MainActivity.kt#L222-L228
+    EventEffect(vm.patchBundleFileIntentFlow) { patchBundleFileIntent ->
+        pendingPatchBundleFileIntent = patchBundleFileIntent
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
         }
     }
 
@@ -476,7 +489,9 @@ private fun ReVancedManager(
                     )
                 },
                 bundleDeepLink = pendingBundleDeepLink,
-                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null }
+                onBundleDeepLinkConsumed = { pendingBundleDeepLink = null },
+                patchBundleFileIntent = pendingPatchBundleFileIntent,
+                onPatchBundleFileIntentConsumed = { pendingPatchBundleFileIntent = null }
             )
         }
 
