@@ -88,6 +88,7 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.LinkedHashSet
 import kotlin.collections.joinToString
 import kotlin.collections.map
@@ -223,6 +224,8 @@ class PatchBundleRepository(
     private val manualUpdateInfoFlow = MutableStateFlow<Map<Int, ManualBundleUpdateInfo>>(emptyMap())
     val manualUpdateInfo: StateFlow<Map<Int, ManualBundleUpdateInfo>> = manualUpdateInfoFlow.asStateFlow()
 
+    private val bundleProgressOrder = AtomicLong(0L)
+    private val bundleImportProgressLock = Any()
     private val bundleUpdateProgressFlow = MutableStateFlow<BundleUpdateProgress?>(null)
     val bundleUpdateProgress: StateFlow<BundleUpdateProgress?> = bundleUpdateProgressFlow.asStateFlow()
     private val bundleImportProgressFlow = MutableStateFlow<ImportProgress?>(null)
@@ -270,29 +273,50 @@ class PatchBundleRepository(
         ignoreUnknownKeys = true
     }
 
-    fun setBundleImportProgress(progress: ImportProgress?) {
-        bundleImportProgressFlow.value = progress
-        bundleImportAutoClearJob?.cancel()
-        if (progress == null) return
+    private fun nextBundleProgressOrder(): Long = bundleProgressOrder.incrementAndGet()
 
+    private fun isBundleImportComplete(progress: ImportProgress): Boolean {
         val isDownloadComplete = progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
             progress.bytesRead >= total
         } ?: false
-
-        val isDone = progress.processed >= progress.total &&
+        return progress.processed >= progress.total &&
             (progress.phase != BundleImportPhase.Downloading || isDownloadComplete)
+    }
 
-        if (!isDone) return
+    private fun bundleUpdateProgressOrder(): Long = bundleUpdateProgressFlow.value
+        ?.takeIf { it.total > 0 && it.completed < it.total }
+        ?.startedOrder
+        ?.takeIf { it > 0L }
+        ?: nextBundleProgressOrder()
 
+    fun setBundleImportProgress(progress: ImportProgress?) {
+        val orderedProgress = synchronized(bundleImportProgressLock) {
+            val previous = bundleImportProgressFlow.value
+            val next = progress?.let { value ->
+                val startsNewOperation = previous == null ||
+                    (isBundleImportComplete(previous) && !isBundleImportComplete(value))
+                val startedOrder = when {
+                    value.startedOrder > 0L -> value.startedOrder
+                    startsNewOperation -> nextBundleProgressOrder()
+                    else -> previous.startedOrder.takeIf { it > 0L } ?: nextBundleProgressOrder()
+                }
+                value.copy(startedOrder = startedOrder)
+            }
+            bundleImportProgressFlow.value = next
+            next
+        }
+
+        bundleImportAutoClearJob?.cancel()
+        if (orderedProgress == null || !isBundleImportComplete(orderedProgress)) return
+
+        val completedOperationOrder = orderedProgress.startedOrder
         bundleImportAutoClearJob = scope.launch {
             delay(8_000)
             val current = bundleImportProgressFlow.value ?: return@launch
-            val currentDownloadComplete = current.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                current.bytesRead >= total
-            } ?: false
-            val currentDone = current.processed >= current.total &&
-                (current.phase != BundleImportPhase.Downloading || currentDownloadComplete)
-            if (currentDone) {
+            if (
+                current.startedOrder == completedOperationOrder &&
+                isBundleImportComplete(current)
+            ) {
                 bundleImportProgressFlow.value = null
             }
         }
@@ -308,10 +332,15 @@ class PatchBundleRepository(
         val current = bundleUpdateProgressFlow.value ?: return
         if (current.total <= 0 || current.completed < current.total) return
 
+        val completedOperationOrder = current.startedOrder
         bundleUpdateAutoClearJob = scope.launch {
             delay(8_000)
             val progress = bundleUpdateProgressFlow.value ?: return@launch
-            if (progress.total > 0 && progress.completed >= progress.total) {
+            if (
+                progress.startedOrder == completedOperationOrder &&
+                progress.total > 0 &&
+                progress.completed >= progress.total
+            ) {
                 bundleUpdateProgressFlow.value = null
             }
         }
@@ -2884,6 +2913,7 @@ class PatchBundleRepository(
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)?,
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
+        val progressStartedOrder = if (showProgress) bundleUpdateProgressOrder() else 0L
         try {
             if (showProgress) {
                 cancelBundleUpdateAutoClear()
@@ -2918,6 +2948,7 @@ class PatchBundleRepository(
                     total = currentUpdateTotal(targets.size),
                     completed = 0,
                     phase = BundleUpdatePhase.Checking,
+                    startedOrder = progressStartedOrder,
                 )
             }
 
@@ -2961,6 +2992,7 @@ class PatchBundleRepository(
                             phase = BundleUpdatePhase.Checking,
                             bytesRead = 0L,
                             bytesTotal = null,
+                            startedOrder = progressStartedOrder,
                         )
                     }
                     onPerBundleProgress?.invoke(bundle, 0L, null)
@@ -3307,6 +3339,7 @@ class PatchBundleRepository(
         val phase: BundleUpdatePhase = BundleUpdatePhase.Checking,
         val bytesRead: Long = 0L,
         val bytesTotal: Long? = null,
+        val startedOrder: Long = 0L,
     )
 
     enum class BundleUpdatePhase {
@@ -3324,6 +3357,7 @@ class PatchBundleRepository(
         val bytesTotal: Long? = null,
         val isStepBased: Boolean = false,
         val bundleCount: Int = total,
+        val startedOrder: Long = 0L,
     ) {
         val ratio: Float?
             get() {

@@ -49,6 +49,7 @@
 - Added support for opening `.rvp` and `.mpp` patch bundle files directly in URV, adapted from Morphe Manager's implementation https://github.com/MorpheApp/morphe-manager/pull/483
 - Made the `Recommended for this device` split APK merge preset deselectable while preserving the selected language and density cleanup filters https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/550
 - Sorted new downloader and runtime plugin dashboard notifications by plugin installation time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/557
+- Sorted patch bundle import and update progress banners by when each operation started https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/587
 
 
 # Bug fixes

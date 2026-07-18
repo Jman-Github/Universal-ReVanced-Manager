@@ -115,6 +115,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -245,6 +246,11 @@ enum class DashboardPage(
     PROFILES(R.string.tab_profiles, Icons.Outlined.Bookmarks),
     LSPOSED(R.string.tab_lsposed, Icons.Outlined.DeviceHub),
     TOOLS(R.string.tab_tools, Icons.Outlined.Build),
+}
+
+private enum class BundleProgressBannerType {
+    IMPORT,
+    UPDATE,
 }
 
 @SuppressLint("BatteryLife")
@@ -942,197 +948,222 @@ fun DashboardScreen(
         val bannerSizeSpec = tween<IntSize>(durationMillis = 260, easing = FastOutSlowInEasing)
         val bannerOffsetSpec = tween<IntOffset>(durationMillis = 260, easing = FastOutSlowInEasing)
         val bannerExitAlphaSpec = tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
+        var lastImportBannerOrder by remember { mutableStateOf(Long.MAX_VALUE) }
+        var lastUpdateBannerOrder by remember { mutableStateOf(Long.MAX_VALUE) }
+        val importBannerOrder = bundleImportProgress?.startedOrder ?: lastImportBannerOrder
+        val updateBannerOrder = bundleUpdateProgress?.startedOrder ?: lastUpdateBannerOrder
+        val bannerOrder = remember(importBannerOrder, updateBannerOrder) {
+            BundleProgressBannerType.entries.sortedWith(
+                compareBy<BundleProgressBannerType> { bannerType ->
+                    when (bannerType) {
+                        BundleProgressBannerType.IMPORT -> importBannerOrder
+                        BundleProgressBannerType.UPDATE -> updateBannerOrder
+                    }
+                }.thenBy { it.ordinal }
+            )
+        }
+        SideEffect {
+            bundleImportProgress?.startedOrder?.let { lastImportBannerOrder = it }
+            bundleUpdateProgress?.startedOrder?.let { lastUpdateBannerOrder = it }
+        }
+
         Column(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            AnimatedVisibility(
-                visible = bundleImportProgress != null,
-                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
-                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
-                    slideInVertically(
-                        initialOffsetY = { height -> -height / 3 },
-                        animationSpec = bannerOffsetSpec
-                    ),
-                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
-                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
-                    slideOutVertically(
-                        targetOffsetY = { height -> -height / 3 },
-                        animationSpec = bannerOffsetSpec
-                    )
-            ) {
-                bundleImportProgress?.let { progress ->
-                    val context = LocalContext.current
-                    val total = progress.total.coerceAtLeast(1)
-                    val bundleCount = progress.bundleCount.coerceAtLeast(1)
-                    val collapsedCount = if (progress.isStepBased) {
-                        (progress.processed + 1).coerceIn(1, total)
-                    } else {
-                        progress.processed.coerceIn(0, total)
-                    }
-                    val subtitleParts = buildList {
-                        val stepLabel = if (progress.isStepBased) {
-                            val step = collapsedCount
-                            stringResource(R.string.import_patch_bundles_banner_steps, step, total)
-                        } else {
-                            stringResource(R.string.import_patch_bundles_banner_subtitle, collapsedCount, total)
-                        }
-                        add(stepLabel)
-                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                        val phaseText = if (progress.isStepBased) {
-                            when (progress.phase) {
-                                BundleImportPhase.Downloading ->
-                                    stringResource(R.string.bundle_import_phase_copying)
-                                BundleImportPhase.Processing ->
-                                    stringResource(R.string.bundle_import_phase_writing)
-                                BundleImportPhase.Finalizing ->
-                                    stringResource(R.string.bundle_import_phase_finalizing)
-                            }
-                        } else {
-                            when (progress.phase) {
-                                BundleImportPhase.Processing ->
-                                    stringResource(R.string.bundle_import_phase_processing)
-                                BundleImportPhase.Downloading ->
-                                    stringResource(R.string.bundle_import_phase_downloading)
-                                BundleImportPhase.Finalizing ->
-                                    stringResource(R.string.bundle_import_phase_finalizing_short)
-                            }
-                        }
-                        val detail = buildString {
-                            append(phaseText)
-                            append(": ")
-                            append(name)
-                            if (progress.bytesTotal?.takeIf { it > 0L } != null) {
-                                append(" (")
-                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                    append("/")
-                                    append(Formatter.formatShortFileSize(context, total))
+            bannerOrder.forEach { bannerType ->
+                key(bannerType) {
+                    when (bannerType) {
+                        BundleProgressBannerType.IMPORT -> AnimatedVisibility(
+                            visible = bundleImportProgress != null,
+                            enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                                expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
+                                slideInVertically(
+                                    initialOffsetY = { height -> -height / 3 },
+                                    animationSpec = bannerOffsetSpec
+                                ),
+                            exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                                shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
+                                slideOutVertically(
+                                    targetOffsetY = { height -> -height / 3 },
+                                    animationSpec = bannerOffsetSpec
+                                )
+                        ) {
+                            bundleImportProgress?.let { progress ->
+                                val context = LocalContext.current
+                                val total = progress.total.coerceAtLeast(1)
+                                val bundleCount = progress.bundleCount.coerceAtLeast(1)
+                                val collapsedCount = if (progress.isStepBased) {
+                                    (progress.processed + 1).coerceIn(1, total)
+                                } else {
+                                    progress.processed.coerceIn(0, total)
                                 }
-                                append(")")
-                            }
-                        }
-                        add(detail)
-                    }
-                    DownloadProgressBanner(
-                        title = pluralStringResource(
-                            R.plurals.import_patch_bundles_banner_title_quantity,
-                            bundleCount
-                        ),
-                        subtitle = subtitleParts.joinToString(" - "),
-                        progress = progress.ratio,
-                        collapsedLabel = pluralStringResource(
-                            R.plurals.import_patch_bundles_banner_collapsed_quantity,
-                            bundleCount,
-                            collapsedCount,
-                            total
-                        ),
-                        collapsed = bundleImportBannerCollapsed,
-                        onToggleCollapsed = {
-                            composableScope.launch {
-                                prefs.dashboardBundleImportBannerCollapsed.update(
-                                    !bundleImportBannerCollapsed
+                                val subtitleParts = buildList {
+                                    val stepLabel = if (progress.isStepBased) {
+                                        val step = collapsedCount
+                                        stringResource(R.string.import_patch_bundles_banner_steps, step, total)
+                                    } else {
+                                        stringResource(R.string.import_patch_bundles_banner_subtitle, collapsedCount, total)
+                                    }
+                                    add(stepLabel)
+                                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                                    val phaseText = if (progress.isStepBased) {
+                                        when (progress.phase) {
+                                            BundleImportPhase.Downloading ->
+                                                stringResource(R.string.bundle_import_phase_copying)
+                                            BundleImportPhase.Processing ->
+                                                stringResource(R.string.bundle_import_phase_writing)
+                                            BundleImportPhase.Finalizing ->
+                                                stringResource(R.string.bundle_import_phase_finalizing)
+                                        }
+                                    } else {
+                                        when (progress.phase) {
+                                            BundleImportPhase.Processing ->
+                                                stringResource(R.string.bundle_import_phase_processing)
+                                            BundleImportPhase.Downloading ->
+                                                stringResource(R.string.bundle_import_phase_downloading)
+                                            BundleImportPhase.Finalizing ->
+                                                stringResource(R.string.bundle_import_phase_finalizing_short)
+                                        }
+                                    }
+                                    val detail = buildString {
+                                        append(phaseText)
+                                        append(": ")
+                                        append(name)
+                                        if (progress.bytesTotal?.takeIf { it > 0L } != null) {
+                                            append(" (")
+                                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                                append("/")
+                                                append(Formatter.formatShortFileSize(context, total))
+                                            }
+                                            append(")")
+                                        }
+                                    }
+                                    add(detail)
+                                }
+                                DownloadProgressBanner(
+                                    title = pluralStringResource(
+                                        R.plurals.import_patch_bundles_banner_title_quantity,
+                                        bundleCount
+                                    ),
+                                    subtitle = subtitleParts.joinToString(" - "),
+                                    progress = progress.ratio,
+                                    collapsedLabel = pluralStringResource(
+                                        R.plurals.import_patch_bundles_banner_collapsed_quantity,
+                                        bundleCount,
+                                        collapsedCount,
+                                        total
+                                    ),
+                                    collapsed = bundleImportBannerCollapsed,
+                                    onToggleCollapsed = {
+                                        composableScope.launch {
+                                            prefs.dashboardBundleImportBannerCollapsed.update(
+                                                !bundleImportBannerCollapsed
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
                                 )
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = bundleUpdateProgress != null,
-                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
-                    expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
-                    slideInVertically(
-                        initialOffsetY = { height -> -height / 3 },
-                        animationSpec = bannerOffsetSpec
-                    ),
-                exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
-                    shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
-                    slideOutVertically(
-                        targetOffsetY = { height -> -height / 3 },
-                        animationSpec = bannerOffsetSpec
-                    )
-            ) {
-                bundleUpdateProgress?.let { progress ->
-                    val context = LocalContext.current
-                    val perBundleFraction = progress.bytesTotal
-                        ?.takeIf { it > 0L }
-                        ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
-
-                    val progressFraction: Float? = when {
-                        progress.total == 0 -> 0f
-                        progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
-                            ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
-                        progress.phase == BundleUpdatePhase.Downloading ->
-                            null
-
-                        else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
-                    }
-
-                    val subtitleParts = buildList {
-                        add(
-                            pluralStringResource(
-                                R.plurals.bundle_update_progress_quantity,
-                                progress.total,
-                                progress.completed,
-                                progress.total
-                            )
-                        )
-                        val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
-                        val phaseText = when (progress.phase) {
-                            BundleUpdatePhase.Checking ->
-                                stringResource(R.string.bundle_update_phase_checking)
-                            BundleUpdatePhase.Downloading ->
-                                stringResource(R.string.bundle_update_phase_downloading)
-                            BundleUpdatePhase.Finalizing ->
-                                stringResource(R.string.bundle_update_phase_finalizing)
                         }
 
-                        val detail = buildString {
-                            append(phaseText)
-                            append(": ")
-                            append(name)
-                            if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
-                                append(" (")
-                                append(Formatter.formatShortFileSize(context, progress.bytesRead))
-                                progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
-                                    append("/")
-                                    append(Formatter.formatShortFileSize(context, total))
+                        BundleProgressBannerType.UPDATE -> AnimatedVisibility(
+                            visible = bundleUpdateProgress != null,
+                            enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)) +
+                                expandVertically(expandFrom = Alignment.Top, animationSpec = bannerSizeSpec) +
+                                slideInVertically(
+                                    initialOffsetY = { height -> -height / 3 },
+                                    animationSpec = bannerOffsetSpec
+                                ),
+                            exit = fadeOut(animationSpec = bannerExitAlphaSpec) +
+                                shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = bannerSizeSpec) +
+                                slideOutVertically(
+                                    targetOffsetY = { height -> -height / 3 },
+                                    animationSpec = bannerOffsetSpec
+                                )
+                        ) {
+                            bundleUpdateProgress?.let { progress ->
+                                val context = LocalContext.current
+                                val perBundleFraction = progress.bytesTotal
+                                    ?.takeIf { it > 0L }
+                                    ?.let { total -> (progress.bytesRead.toFloat() / total).coerceIn(0f, 1f) }
+
+                                val progressFraction: Float? = when {
+                                    progress.total == 0 -> 0f
+                                    progress.phase == BundleUpdatePhase.Downloading && perBundleFraction != null ->
+                                        ((progress.completed.toFloat() + perBundleFraction) / progress.total).coerceIn(0f, 1f)
+                                    progress.phase == BundleUpdatePhase.Downloading ->
+                                        null
+
+                                    else -> (progress.completed.toFloat() / progress.total).coerceIn(0f, 1f)
                                 }
-                                append(")")
-                            }
-                        }
-                        add(detail)
-                    }
-                    DownloadProgressBanner(
-                        title = pluralStringResource(
-                            R.plurals.bundle_update_banner_title_quantity,
-                            progress.total,
-                        ),
-                        subtitle = subtitleParts.joinToString(" - "),
-                        progress = progressFraction,
-                        collapsedLabel = pluralStringResource(
-                            R.plurals.bundle_update_banner_collapsed_quantity,
-                            progress.total,
-                            progress.completed.coerceAtMost(progress.total),
-                            progress.total
-                        ),
-                        collapsed = bundleUpdateBannerCollapsed,
-                        onToggleCollapsed = {
-                            composableScope.launch {
-                                prefs.dashboardBundleUpdateBannerCollapsed.update(
-                                    !bundleUpdateBannerCollapsed
+
+                                val subtitleParts = buildList {
+                                    add(
+                                        pluralStringResource(
+                                            R.plurals.bundle_update_progress_quantity,
+                                            progress.total,
+                                            progress.completed,
+                                            progress.total
+                                        )
+                                    )
+                                    val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
+                                    val phaseText = when (progress.phase) {
+                                        BundleUpdatePhase.Checking ->
+                                            stringResource(R.string.bundle_update_phase_checking)
+                                        BundleUpdatePhase.Downloading ->
+                                            stringResource(R.string.bundle_update_phase_downloading)
+                                        BundleUpdatePhase.Finalizing ->
+                                            stringResource(R.string.bundle_update_phase_finalizing)
+                                    }
+
+                                    val detail = buildString {
+                                        append(phaseText)
+                                        append(": ")
+                                        append(name)
+                                        if (progress.phase == BundleUpdatePhase.Downloading && progress.bytesRead > 0L) {
+                                            append(" (")
+                                            append(Formatter.formatShortFileSize(context, progress.bytesRead))
+                                            progress.bytesTotal?.takeIf { it > 0L }?.let { total ->
+                                                append("/")
+                                                append(Formatter.formatShortFileSize(context, total))
+                                            }
+                                            append(")")
+                                        }
+                                    }
+                                    add(detail)
+                                }
+                                DownloadProgressBanner(
+                                    title = pluralStringResource(
+                                        R.plurals.bundle_update_banner_title_quantity,
+                                        progress.total,
+                                    ),
+                                    subtitle = subtitleParts.joinToString(" - "),
+                                    progress = progressFraction,
+                                    collapsedLabel = pluralStringResource(
+                                        R.plurals.bundle_update_banner_collapsed_quantity,
+                                        progress.total,
+                                        progress.completed.coerceAtMost(progress.total),
+                                        progress.total
+                                    ),
+                                    collapsed = bundleUpdateBannerCollapsed,
+                                    onToggleCollapsed = {
+                                        composableScope.launch {
+                                            prefs.dashboardBundleUpdateBannerCollapsed.update(
+                                                !bundleUpdateBannerCollapsed
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
                                 )
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = dashboardSidePadding, vertical = 8.dp)
-                    )
+                        }
+                    }
                 }
             }
         }
