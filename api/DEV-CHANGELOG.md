@@ -40,6 +40,13 @@
 - Added an option to choose which split APKs are merged before patching https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/592
 - Automatically remove unavailable patches and their saved options from saved selections, and show a toast indicating which patches were removed https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/595
 - Added an optional root-only LSPosed tab with support for LSPosed, Vector, and compatible builds, including local and GitHub module management, update checks, manager and settings shortcuts, and customizable module actions https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/596 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/598
+- Added Signature metadata injector & cloner tool under APK signature tools
+- Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
+- Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
+- Added Monochrome and Material You theme presets, including optional Pure Black styling for Material You
+- Improved theme and accent preset selection, layout, indicators, and previews
+- Expanded Storage & Cache Management with separate cleanup options for signing files, patcher runtime plugins, and saved LSPosed module APKs, with safeguards against clearing files while they are in use
+- Added support for opening `.rvp` and `.mpp` patch bundle files directly in URV, adapted from Morphe Manager's implementation https://github.com/MorpheApp/morphe-manager/pull/483
 
 
 # Bug fixes
@@ -58,6 +65,9 @@
 - Fixed bundle update labels not appearing when a saved app's patch bundle was imported again through settings https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/581
 - Fixed bundle recommendations continuing to use the first selected bundle's patches after switching bundles while preserving custom patch selections https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/579
 - Fixed patch bundle update and import progress bars showing a filled marker at the end before completion https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/589
+- Fixed serval bugs around themeing & customization
+- Fixed duplicate entries appearing in Previous changelogs
+- Fixed Patch Profiles sometimes only showing storage as an APK source
 
 
 # Refactors
@@ -110,13 +120,6 @@
 - Added a default-enabled New patches filter that shows newly added patches from each bundle at the top of the patch selection screen https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/236
 - Centered the signature mismatch dialog body text across the patcher, app info, and quick action install flows https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/544
 - Updated newly generated manager signing keystores to use `alias` as the alias and `password` as the password while preserving compatibility with existing and legacy manager keystores https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/538
-- Added Signature metadata injector & cloner tool under APK signature tools
-- Improved the Split installer tools log, making it consistent with the Signaute metadata injector & cloner tools log design
-- Added a configurable memory limit of up to 2 GB for separate-process patching runtimes. Overal improved the memory system, being adapted from Morphe Managers implementation, URV now is able handle heavier patching and split APK merging on Android 11+ devices
-- Added Monochrome and Material You theme presets, including optional Pure Black styling for Material You
-- Improved theme and accent preset selection, layout, indicators, and previews
-- Expanded Storage & Cache Management with separate cleanup options for signing files, patcher runtime plugins, and saved LSPosed module APKs, with safeguards against clearing files while they are in use
-- Added support for opening `.rvp` and `.mpp` patch bundle files directly in URV, adapted from Morphe Manager's implementation https://github.com/MorpheApp/morphe-manager/pull/483
 
 
 # Bug fixes
@@ -126,9 +129,6 @@
 - Fixed color option detection so path-like fields are not mistaken for color values
 - Fixed bundle update notifications disappearing after repeat checks while respecting intentionally dismissed alerts https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/535
 - Fixed Android back navigation on the patch selector so it matches the toolbar back behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/408
-- Fixed serval bugs around themeing & customization
-- Fixed duplicate entries appearing in Previous changelogs
-- Fixed Patch Profiles sometimes only showing storage as an APK source
 
 
 # v1.8.1-dev.18 (2026-06-02)
