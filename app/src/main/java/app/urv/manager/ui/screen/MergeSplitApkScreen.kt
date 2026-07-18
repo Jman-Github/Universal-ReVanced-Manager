@@ -95,6 +95,7 @@ import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
 import app.urv.manager.ui.viewmodel.DashboardViewModel
+import app.urv.manager.ui.viewmodel.SPLIT_MERGE_PRESET_UNSELECTED
 import app.urv.manager.ui.viewmodel.SplitMergeState
 import app.urv.manager.ui.viewmodel.SplitMergeStepState
 import app.urv.manager.ui.viewmodel.SplitMergeStepStatus
@@ -1046,10 +1047,14 @@ internal fun SplitMergeSelectionDialog(
         effectiveInitialModules,
         presetOptions
     ) {
-        initialPresetKey
-            .takeIf { it == "all" || it == "none" || it == "recommended" }
-            ?.takeIf { it in matchingPresetKeys(effectiveInitialModules) }
-            ?: inferPresetKey(effectiveInitialModules)
+        if (initialPresetKey == SPLIT_MERGE_PRESET_UNSELECTED) {
+            SPLIT_MERGE_PRESET_UNSELECTED
+        } else {
+            initialPresetKey
+                .takeIf { it == "all" || it == "none" || it == "recommended" }
+                ?.takeIf { it in matchingPresetKeys(effectiveInitialModules) }
+                ?: inferPresetKey(effectiveInitialModules)
+        }
     }
     var selectedPresetKey by remember(selection, rememberedInitialPresetKey) {
         mutableStateOf(rememberedInitialPresetKey)
@@ -1085,6 +1090,23 @@ internal fun SplitMergeSelectionDialog(
         densityCleanupAvailable
     ) {
         derivedStateOf { isDensityCleanupSelected(selectedModules) }
+    }
+
+    fun applyCleanupFilters(
+        modules: Set<String>,
+        excludeUnusedLanguages: Boolean,
+        excludeExtraDensities: Boolean
+    ): Set<String> {
+        var filteredModules = modules
+        if (excludeUnusedLanguages) {
+            filteredModules =
+                (filteredModules - optionalLanguageModules) + trimmedOptionalLanguageModules
+        }
+        if (excludeExtraDensities) {
+            filteredModules =
+                (filteredModules - optionalDensityModules) + trimmedOptionalDensityModules
+        }
+        return filteredModules
     }
 
     fun updateSelection(
@@ -1195,19 +1217,36 @@ internal fun SplitMergeSelectionDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         presetOptions.forEach { preset ->
+                            val selected = selectedPresetKey == preset.key
                             CheckedFilterChip(
-                                selected = selectedPresetKey == preset.key,
+                                selected = selected,
                                 onClick = {
-                                    val normalizedModules = updateSelection(
-                                        modules = preset.modules,
-                                        stripUnusedNativeLibs = false,
-                                        preferredPresetKey = preset.key
-                                    )
-                                    rememberCurrentFilterSelection(
-                                        modules = normalizedModules,
-                                        stripUnusedNativeLibs = false,
-                                        presetKey = preset.key
-                                    )
+                                    if (preset.key == "recommended" && selected) {
+                                        val normalizedModules = updateSelection(
+                                            modules = applyCleanupFilters(
+                                                modules = allModules,
+                                                excludeUnusedLanguages = languageCleanupSelected,
+                                                excludeExtraDensities = densityCleanupSelected
+                                            ),
+                                            stripUnusedNativeLibs = stripNativeLibs,
+                                            preferredPresetKey = SPLIT_MERGE_PRESET_UNSELECTED
+                                        )
+                                        rememberCurrentFilterSelection(
+                                            modules = normalizedModules,
+                                            stripUnusedNativeLibs = stripNativeLibs
+                                        )
+                                    } else {
+                                        val normalizedModules = updateSelection(
+                                            modules = preset.modules,
+                                            stripUnusedNativeLibs = false,
+                                            preferredPresetKey = preset.key
+                                        )
+                                        rememberCurrentFilterSelection(
+                                            modules = normalizedModules,
+                                            stripUnusedNativeLibs = false,
+                                            presetKey = preset.key
+                                        )
+                                    }
                                 },
                                 colors = chipColors,
                                 label = { Text(stringResource(preset.labelRes)) }

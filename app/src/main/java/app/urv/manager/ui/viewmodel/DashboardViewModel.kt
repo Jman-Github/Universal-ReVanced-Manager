@@ -83,6 +83,7 @@ import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
+internal const val SPLIT_MERGE_PRESET_UNSELECTED = "unselected"
 
 data class PatchBundleFileImportState(
     val fileIntent: PatchBundleFileIntent,
@@ -2011,7 +2012,7 @@ class DashboardViewModel(
 
 
 private fun normalizeSplitMergePresetKey(value: String?): String = when (value) {
-    "none", "recommended" -> value
+    "none", "recommended", SPLIT_MERGE_PRESET_UNSELECTED -> value
     else -> "all"
 }
 
