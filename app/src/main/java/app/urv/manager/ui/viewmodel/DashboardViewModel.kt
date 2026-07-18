@@ -3,8 +3,10 @@ package app.urv.manager.ui.viewmodel
 import android.app.Activity
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.ContentResolver
 import android.content.Intent
+import android.content.pm.PackageInstaller as AndroidPackageInstaller
 import android.net.Uri
 import android.os.Build
 import android.os.Parcelable
@@ -15,12 +17,15 @@ import androidx.activity.result.ActivityResult
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.AnnouncementRepository
@@ -51,6 +56,7 @@ import app.urv.manager.util.PatchBundleFileIntent
 import app.urv.manager.util.PatchBundleFileIntentParser
 import app.urv.manager.util.PatchBundleFileManifest
 import app.urv.manager.util.PatchedAppExportData
+import app.urv.manager.util.simpleMessage
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -81,10 +87,19 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
+import ru.solrudev.ackpine.installer.InstallFailure
+import ru.solrudev.ackpine.installer.PackageInstaller
+import ru.solrudev.ackpine.installer.createSession
+import ru.solrudev.ackpine.session.Session
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
+private const val SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
+private const val SPLIT_MERGE_INSTALL_POLL_INTERVAL_MS = 1_000L
 internal const val SPLIT_MERGE_PRESET_UNSELECTED = "unselected"
 
 internal enum class NewPluginNotification {
@@ -113,6 +128,9 @@ class DashboardViewModel(
     private val networkInfo: NetworkInfo,
     val prefs: PreferencesManager,
     private val keystoreManager: KeystoreManager,
+    private val installerManager: InstallerManager,
+    private val shizukuInstaller: ShizukuInstaller,
+    private val ackpineInstaller: PackageInstaller,
     private val pm: PM,
 ) : ViewModel() {
     val availablePatches =
@@ -180,6 +198,8 @@ class DashboardViewModel(
     private var splitMergeJob: Job? = null
     private var splitMergePluginJob: Job? = null
     private var splitMergeCancellationJob: Job? = null
+    private var splitMergeInstallJob: Job? = null
+    private var splitMergeExternalInstall: InstallerManager.InstallPlan.External? = null
     private var splitMergePlugin: LoadedDownloaderPlugin? = null
     private var pendingSplitMergeSource: PendingSplitMergeSource? = null
     private var lastSplitMergeNotificationSubStepIndex = -1
@@ -795,6 +815,10 @@ class DashboardViewModel(
     }
 
     private fun invalidateCachedSplitMergeOutput() {
+        splitMergeInstallJob?.cancel()
+        splitMergeInstallJob = null
+        splitMergeExternalInstall?.let(installerManager::cleanup)
+        splitMergeExternalInstall = null
         cachedMergedApk?.let(::cleanupCachedMergedApk)
         cachedMergedApk = null
     }
@@ -932,8 +956,8 @@ class DashboardViewModel(
                 status = SplitMergeStepStatus.WAITING,
                 message = app.getString(R.string.merge_split_apk_selection_ready)
             ),
+            writeStep = SplitMergeStepState(),
             signStep = SplitMergeStepState(),
-            saveStep = SplitMergeStepState(),
             outputName = defaultMergedOutputName(inputDisplayName),
             currentMessage = app.getString(R.string.merge_split_apk_selection_ready),
             inputName = inputDisplayName,
@@ -1063,55 +1087,160 @@ class DashboardViewModel(
     }
 
     fun saveLastMergedToPath(outputPath: String) = viewModelScope.launch {
-        if (splitMergeStateFlow.value.saveStep.status == SplitMergeStepStatus.RUNNING) return@launch
+        val current = splitMergeStateFlow.value
+        if (current.savingOutput || current.installing) return@launch
         val merged = cachedMergedApk
         if (merged == null || !merged.exists()) {
-            splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-                error = app.getString(R.string.merge_split_apk_no_output),
-                saveStep = splitMergeStateFlow.value.saveStep.copy(
-                    status = SplitMergeStepStatus.FAILED,
-                    message = app.getString(R.string.merge_split_apk_no_output)
-                )
-            )
+            reportMissingSplitMergeOutput()
             return@launch
         }
         val outputFile = File(outputPath)
-        updateSaveStepRunning(app.getString(R.string.merge_split_apk_saving))
+        updateSplitMergeExporting(true)
         runCatching {
             withContext(Dispatchers.IO) {
                 outputFile.parentFile?.mkdirs()
                 merged.copyTo(outputFile, overwrite = true)
             }
         }.onSuccess {
-            updateSaveStepCompleted(outputFile.name)
-        }.onFailure { error ->
-            updateSaveStepFailed(error)
-        }
+            completeSplitMergeExport(outputFile.name)
+        }.onFailure(::failSplitMergeExport)
     }
 
     fun saveLastMergedToUri(
         outputUri: Uri,
         outputDisplayName: String? = null
     ) = viewModelScope.launch {
-        if (splitMergeStateFlow.value.saveStep.status == SplitMergeStepStatus.RUNNING) return@launch
+        val current = splitMergeStateFlow.value
+        if (current.savingOutput || current.installing) return@launch
         val merged = cachedMergedApk
         if (merged == null || !merged.exists()) {
-            splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-                error = app.getString(R.string.merge_split_apk_no_output),
-                saveStep = splitMergeStateFlow.value.saveStep.copy(
-                    status = SplitMergeStepStatus.FAILED,
-                    message = app.getString(R.string.merge_split_apk_no_output)
-                )
-            )
+            reportMissingSplitMergeOutput()
             return@launch
         }
-        updateSaveStepRunning(app.getString(R.string.merge_split_apk_saving))
+        updateSplitMergeExporting(true)
         runCatching {
             saveFileToUri(merged, outputUri)
         }.onSuccess {
-            updateSaveStepCompleted(outputDisplayName ?: merged.name)
-        }.onFailure { error ->
-            updateSaveStepFailed(error)
+            completeSplitMergeExport(outputDisplayName ?: merged.name)
+        }.onFailure(::failSplitMergeExport)
+    }
+
+    fun splitMergeInstallerOptions(): List<InstallerManager.Entry> {
+        val output = cachedMergedApk
+        val entries = if (output?.exists() == true) {
+            installerManager.listEntriesForFile(
+                target = InstallerManager.InstallTarget.PATCHER,
+                includeNone = false,
+                sourceFile = output
+            )
+        } else {
+            installerManager.listEntries(
+                InstallerManager.InstallTarget.PATCHER,
+                includeNone = false
+            )
+        }
+        return entries.filterNot { it.token == InstallerManager.Token.AutoSaved }
+    }
+
+    fun openSplitMergeShizukuApp(): Boolean = installerManager.openShizukuApp()
+
+    fun installLastMerged(installerToken: InstallerManager.Token? = null) {
+        val current = splitMergeStateFlow.value
+        if (current.inProgress || current.savingOutput || current.installing) return
+        val merged = cachedMergedApk
+        if (merged == null || !merged.exists()) {
+            reportMissingSplitMergeOutput()
+            return
+        }
+
+        splitMergeInstallJob?.cancel()
+        splitMergeExternalInstall?.let(installerManager::cleanup)
+        splitMergeExternalInstall = null
+        splitMergeInstallJob = viewModelScope.launch {
+            val ownerJob = coroutineContext[Job]
+            val cacheUseToken = CacheCleanupGuard.begin()
+            try {
+                val installingMessage = app.getString(R.string.installing_ellipsis)
+                splitMergeStateFlow.update {
+                    it.copy(
+                        installing = true,
+                        installStatus = installingMessage,
+                        error = null
+                    )
+                }
+                appendSplitMergeLog(installingMessage)
+
+                val packageInfo = withContext(Dispatchers.IO) { pm.getPackageInfo(merged) }
+                    ?: throw IOException(app.getString(R.string.failed_to_load_apk))
+                val packageName = packageInfo.packageName
+                val label = with(pm) { packageInfo.label() }
+                val plan = withContext(Dispatchers.IO) {
+                    installerToken?.let { token ->
+                        require(token != InstallerManager.Token.AutoSaved) {
+                            app.getString(R.string.installer_status_not_supported)
+                        }
+                        installerManager.resolvePlanForToken(
+                            token = token,
+                            target = InstallerManager.InstallTarget.PATCHER,
+                            sourceFile = merged,
+                            expectedPackage = packageName,
+                            sourceLabel = label
+                        ) ?: throw IOException(
+                            app.getString(R.string.installer_status_not_supported)
+                        )
+                    } ?: resolveConfiguredSplitMergeInstallerPlan(
+                        output = merged,
+                        packageName = packageName,
+                        label = label
+                    )
+                }
+                appendSplitMergeLog("Installer plan: ${plan::class.java.simpleName}")
+
+                val installed = when (plan) {
+                    is InstallerManager.InstallPlan.Internal ->
+                        installMergedApkInternally(merged)
+                    is InstallerManager.InstallPlan.Mount ->
+                        throw IOException(app.getString(R.string.installer_status_not_supported))
+                    is InstallerManager.InstallPlan.Shizuku -> {
+                        val result = shizukuInstaller.install(
+                            merged,
+                            packageName,
+                            plan.installerPackageNameOverride
+                        )
+                        if (result.status != AndroidPackageInstaller.STATUS_SUCCESS) {
+                            throw IOException(
+                                result.message ?: app.getString(R.string.split_installer_failed)
+                            )
+                        }
+                        true
+                    }
+                    is InstallerManager.InstallPlan.External -> {
+                        splitMergeExternalInstall = plan
+                        launchAndMonitorSplitMergeExternalInstall(plan)
+                    }
+                }
+                if (installed) {
+                    completeSplitMergeInstall(packageName)
+                } else {
+                    splitMergeStateFlow.update { it.copy(installStatus = null) }
+                    appendSplitMergeLog(
+                        app.getString(R.string.installation_cancelled_dialog_title)
+                    )
+                }
+            } catch (_: CancellationException) {
+                splitMergeStateFlow.update { it.copy(installStatus = null) }
+                appendSplitMergeLog(app.getString(R.string.installation_cancelled_dialog_title))
+            } catch (error: Throwable) {
+                failSplitMergeInstall(error)
+            } finally {
+                splitMergeExternalInstall?.let(installerManager::cleanup)
+                splitMergeExternalInstall = null
+                splitMergeStateFlow.update { it.copy(installing = false) }
+                runCatching { cacheUseToken.close() }
+                if (splitMergeInstallJob === ownerJob) {
+                    splitMergeInstallJob = null
+                }
+            }
         }
     }
 
@@ -1122,6 +1251,10 @@ class DashboardViewModel(
         splitMergeJob = null
         splitMergePluginJob?.cancel()
         splitMergePluginJob = null
+        splitMergeInstallJob?.cancel()
+        splitMergeInstallJob = null
+        splitMergeExternalInstall?.let(installerManager::cleanup)
+        splitMergeExternalInstall = null
         splitMergePlugin = null
         clearPendingSplitMergeSource()
         cleanupSplitMergeRunWorkspace(activeSplitMergeRunWorkspace)
@@ -1186,6 +1319,13 @@ class DashboardViewModel(
                     splitMergeStateFlow.value.mergeStep.message
                 }
             ),
+            writeStep = splitMergeStateFlow.value.writeStep.copy(
+                message = if (splitMergeStateFlow.value.writeStep.status == SplitMergeStepStatus.RUNNING) {
+                    stoppingMessage
+                } else {
+                    splitMergeStateFlow.value.writeStep.message
+                }
+            ),
             signStep = splitMergeStateFlow.value.signStep.copy(
                 message = if (splitMergeStateFlow.value.signStep.status == SplitMergeStepStatus.RUNNING) {
                     stoppingMessage
@@ -1244,6 +1384,9 @@ class DashboardViewModel(
             selectionIncludedModules = emptySet(),
             selectionStripNativeLibs = false,
             cancellationInProgress = false,
+            savingOutput = false,
+            installing = false,
+            installStatus = null,
             downloadStep = previous.downloadStep.copy(
                 status = if (previous.downloadStep.status == SplitMergeStepStatus.RUNNING) {
                     SplitMergeStepStatus.FAILED
@@ -1272,9 +1415,17 @@ class DashboardViewModel(
                     previous.signStep.message
                 }
             ),
-            saveStep = previous.saveStep.copy(
-                status = SplitMergeStepStatus.WAITING,
-                message = null
+            writeStep = previous.writeStep.copy(
+                status = if (previous.writeStep.status == SplitMergeStepStatus.RUNNING) {
+                    SplitMergeStepStatus.FAILED
+                } else {
+                    previous.writeStep.status
+                },
+                message = if (previous.writeStep.status == SplitMergeStepStatus.RUNNING) {
+                    cancelledMessage
+                } else {
+                    previous.writeStep.message
+                }
             )
         )
     }
@@ -1326,11 +1477,11 @@ class DashboardViewModel(
                 status = SplitMergeStepStatus.RUNNING,
                 message = app.getString(R.string.merge_split_apk_preparing)
             ),
-            signStep = SplitMergeStepState(
+            writeStep = SplitMergeStepState(
                 status = SplitMergeStepStatus.WAITING,
                 message = null
             ),
-            saveStep = SplitMergeStepState(
+            signStep = SplitMergeStepState(
                 status = SplitMergeStepStatus.WAITING,
                 message = null
             ),
@@ -1369,13 +1520,27 @@ class DashboardViewModel(
                             appendSplitMergeLog(message)
                         }
                         updateSplitMergeStateIfCurrent(ownerJob) { current ->
-                            current.copy(
-                                currentMessage = message,
-                                mergeStep = current.mergeStep.copy(
-                                    status = SplitMergeStepStatus.RUNNING,
-                                    message = message
+                            if (isSplitMergeWriteProgressMessage(message)) {
+                                current.copy(
+                                    currentMessage = message,
+                                    mergeStep = current.mergeStep.copy(
+                                        status = SplitMergeStepStatus.COMPLETED,
+                                        message = app.getString(R.string.merge_split_apk_merged)
+                                    ),
+                                    writeStep = current.writeStep.copy(
+                                        status = SplitMergeStepStatus.RUNNING,
+                                        message = message
+                                    )
                                 )
-                            )
+                            } else {
+                                current.copy(
+                                    currentMessage = message,
+                                    mergeStep = current.mergeStep.copy(
+                                        status = SplitMergeStepStatus.RUNNING,
+                                        message = message
+                                    )
+                                )
+                            }
                         }
                     },
                     onSubSteps = { subSteps ->
@@ -1399,10 +1564,15 @@ class DashboardViewModel(
                         status = SplitMergeStepStatus.COMPLETED,
                         message = app.getString(R.string.merge_split_apk_merged)
                     ),
-                    currentMessage = app.getString(R.string.merge_split_apk_merged)
+                    writeStep = splitMergeStateFlow.value.writeStep.copy(
+                        status = SplitMergeStepStatus.COMPLETED,
+                        message = app.getString(R.string.merge_split_apk_written)
+                    ),
+                    currentMessage = app.getString(R.string.merge_split_apk_written)
                 )
                 updateSplitMergeNotification()
                 appendSplitMergeLog(app.getString(R.string.merge_split_apk_merged))
+                appendSplitMergeLog(app.getString(R.string.merge_split_apk_written))
 
                 val signedCopy = runWorkspace.resolve("last-merged.apk")
                 signedCopy.parentFile?.mkdirs()
@@ -1444,9 +1614,9 @@ class DashboardViewModel(
                         status = SplitMergeStepStatus.COMPLETED,
                         message = app.getString(R.string.merge_split_apk_signed)
                     ),
-                    saveStep = splitMergeStateFlow.value.saveStep.copy(
-                        status = SplitMergeStepStatus.WAITING,
-                        message = null
+                    writeStep = splitMergeStateFlow.value.writeStep.copy(
+                        status = SplitMergeStepStatus.COMPLETED,
+                        message = app.getString(R.string.merge_split_apk_written)
                     ),
                     currentMessage = app.getString(R.string.merge_split_apk_signed)
                 )
@@ -1470,8 +1640,22 @@ class DashboardViewModel(
                     canSaveAgain = cachedMergedApk?.exists() == true,
                     error = resolvedErrorMessage,
                     mergeStep = current.mergeStep.copy(
-                        status = SplitMergeStepStatus.FAILED,
-                        message = resolvedErrorMessage
+                        status = if (
+                            current.writeStep.status != SplitMergeStepStatus.WAITING ||
+                            current.signStep.status != SplitMergeStepStatus.WAITING
+                        ) {
+                            SplitMergeStepStatus.COMPLETED
+                        } else {
+                            SplitMergeStepStatus.FAILED
+                        },
+                        message = if (
+                            current.writeStep.status != SplitMergeStepStatus.WAITING ||
+                            current.signStep.status != SplitMergeStepStatus.WAITING
+                        ) {
+                            app.getString(R.string.merge_split_apk_merged)
+                        } else {
+                            resolvedErrorMessage
+                        }
                     ),
                     signStep = current.signStep.copy(
                         status = if (current.signStep.status == SplitMergeStepStatus.RUNNING) {
@@ -1485,13 +1669,17 @@ class DashboardViewModel(
                             current.signStep.message
                         }
                     ),
-                    saveStep = current.saveStep.copy(
-                        status = if (current.saveStep.status == SplitMergeStepStatus.RUNNING) {
+                    writeStep = current.writeStep.copy(
+                        status = if (current.writeStep.status == SplitMergeStepStatus.RUNNING) {
                             SplitMergeStepStatus.FAILED
                         } else {
-                            current.saveStep.status
+                            current.writeStep.status
                         },
-                        message = current.saveStep.message
+                        message = if (current.writeStep.status == SplitMergeStepStatus.RUNNING) {
+                            resolvedErrorMessage
+                        } else {
+                            current.writeStep.message
+                        }
                     ),
                     downloadStep = current.downloadStep.copy(
                         status = if (current.downloadStep.status == SplitMergeStepStatus.RUNNING) {
@@ -1541,7 +1729,7 @@ class DashboardViewModel(
 
     private fun updateSplitMergeNotification(state: SplitMergeState = splitMergeStateFlow.value) {
         val shouldShow = !state.cancellationInProgress &&
-            (state.inProgress || state.saveStep.status == SplitMergeStepStatus.RUNNING)
+            (state.inProgress || state.writeStep.status == SplitMergeStepStatus.RUNNING)
         if (!shouldShow) {
             SplitMergeNotification.clear(app)
             return
@@ -1561,12 +1749,12 @@ class DashboardViewModel(
             state.mergeStep.status == SplitMergeStepStatus.RUNNING ->
                 app.getString(R.string.merge_split_apk_step_merge) to
                     splitMergeNotificationDetail(state.mergeStep.message, state.currentMessage)
+            state.writeStep.status == SplitMergeStepStatus.RUNNING ->
+                app.getString(R.string.merge_split_apk_step_write) to
+                    splitMergeNotificationDetail(state.writeStep.message, state.currentMessage)
             state.signStep.status == SplitMergeStepStatus.RUNNING ->
                 app.getString(R.string.merge_split_apk_step_sign) to
                     splitMergeNotificationDetail(state.signStep.message, state.currentMessage)
-            state.saveStep.status == SplitMergeStepStatus.RUNNING ->
-                app.getString(R.string.merge_split_apk_step_save) to
-                    splitMergeNotificationDetail(state.saveStep.message, state.currentMessage)
             else -> null to splitMergeNotificationDetail(state.currentMessage, null)
         }
         return when {
@@ -1608,6 +1796,7 @@ class DashboardViewModel(
         if (
             !state.showDownloadStep &&
             state.mergeStep.status == SplitMergeStepStatus.WAITING &&
+            state.writeStep.status == SplitMergeStepStatus.WAITING &&
             state.signStep.status == SplitMergeStepStatus.WAITING
         ) {
             return 0f
@@ -1625,6 +1814,9 @@ class DashboardViewModel(
 
         totalUnits += 1f
         completedUnits += splitMergeNotificationMergeFraction(state)
+
+        totalUnits += 1f
+        completedUnits += state.writeStep.notificationProgressFraction(defaultRunningFraction = 0.5f)
 
         totalUnits += 1f
         completedUnits += state.signStep.notificationProgressFraction(defaultRunningFraction = 0.5f)
@@ -1671,16 +1863,28 @@ class DashboardViewModel(
         }
     }
 
+    private fun isSplitMergeWriteProgressMessage(message: String): Boolean =
+        when (message.trim().lowercase()) {
+            "writing merged apk",
+            "stripping native libraries",
+            "finalizing merged apk" -> true
+            else -> false
+        }
+
     private fun splitMergeNotificationSubSteps(
         state: SplitMergeState
     ): List<SplitMergeNotificationSubStep> {
-        val entries = state.mergeSubSteps.map { raw ->
-            val skipped = raw.startsWith("[skipped]")
-            SplitMergeNotificationSubStep(
-                title = raw.removePrefix("[skipped]").trim(),
-                skipped = skipped
-            )
-        }
+        val entries = state.mergeSubSteps
+            .filterNot { raw ->
+                isSplitMergeWriteProgressMessage(raw.removePrefix("[skipped]").trim())
+            }
+            .map { raw ->
+                val skipped = raw.startsWith("[skipped]")
+                SplitMergeNotificationSubStep(
+                    title = raw.removePrefix("[skipped]").trim(),
+                    skipped = skipped
+                )
+            }
         val extraction = entries.filter {
             it.title.equals("Extracting split APKs", ignoreCase = true)
         }
@@ -1827,18 +2031,190 @@ class DashboardViewModel(
         return filePath.startsWith(basePath)
     }
 
-    private fun updateSaveStepRunning(message: String) {
-        splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-            inProgress = false,
-            saveStep = splitMergeStateFlow.value.saveStep.copy(
-                status = SplitMergeStepStatus.RUNNING,
-                message = message
-            ),
-            currentMessage = message,
-            error = null
-        )
-        updateSplitMergeNotification()
+    private fun reportMissingSplitMergeOutput() {
+        val message = app.getString(R.string.merge_split_apk_no_output)
+        splitMergeStateFlow.update {
+            it.copy(
+                completed = false,
+                canSaveAgain = false,
+                outputName = null,
+                installStatus = null,
+                error = message
+            )
+        }
         appendSplitMergeLog(message)
+        app.toast(message)
+    }
+
+    private fun updateSplitMergeExporting(exporting: Boolean) {
+        splitMergeStateFlow.update {
+            it.copy(
+                savingOutput = exporting,
+                error = if (exporting) null else it.error
+            )
+        }
+    }
+
+    private fun completeSplitMergeExport(outputName: String) {
+        val message = app.getString(R.string.merge_split_apk_saved)
+        splitMergeStateFlow.update {
+            it.copy(
+                savingOutput = false,
+                outputName = outputName,
+                error = null
+            )
+        }
+        appendSplitMergeLog("$message ($outputName)")
+        app.toast(message)
+    }
+
+    private fun failSplitMergeExport(error: Throwable) {
+        val message = error.simpleMessage()
+            ?: error.message
+            ?: app.getString(R.string.merge_split_apk_failed)
+        splitMergeStateFlow.update {
+            it.copy(
+                savingOutput = false,
+                error = message
+            )
+        }
+        appendSplitMergeLog(message)
+        app.toast(message)
+    }
+
+    private fun resolveConfiguredSplitMergeInstallerPlan(
+        output: File,
+        packageName: String,
+        label: String?
+    ): InstallerManager.InstallPlan {
+        val target = InstallerManager.InstallTarget.PATCHER
+        fun resolve(token: InstallerManager.Token): InstallerManager.InstallPlan? {
+            if (
+                token == InstallerManager.Token.None ||
+                token == InstallerManager.Token.AutoSaved
+            ) {
+                return null
+            }
+            return installerManager.resolvePlanForToken(
+                token = token,
+                target = target,
+                sourceFile = output,
+                expectedPackage = packageName,
+                sourceLabel = label
+            )
+        }
+
+        val primary = installerManager.getPrimaryToken()
+        resolve(primary)?.let { return it }
+        val fallback = installerManager.getFallbackToken()
+        if (fallback != primary) {
+            resolve(fallback)?.let {
+                appendSplitMergeLog(
+                    "Primary installer is unavailable for merged APK output; using fallback"
+                )
+                return it
+            }
+        }
+        appendSplitMergeLog(
+            "Configured installers are unavailable for merged APK output; using system installer"
+        )
+        return InstallerManager.InstallPlan.Internal(target)
+    }
+
+    private suspend fun installMergedApkInternally(apk: File): Boolean {
+        if (!pm.requestInstallPackagesPermission()) {
+            throw IOException(
+                app.getString(R.string.downloaded_app_install_permission_required)
+            )
+        }
+        val result = withContext(Dispatchers.IO) {
+            ackpineInstaller.createSession(Uri.fromFile(apk)) {
+                confirmation = Confirmation.IMMEDIATE
+            }.await()
+        }
+        return when (result) {
+            Session.State.Succeeded -> true
+            is Session.State.Failed<InstallFailure> -> {
+                if (result.failure is InstallFailure.Aborted) {
+                    false
+                } else {
+                    throw IOException(
+                        result.failure.message
+                            ?: app.getString(R.string.installer_hint_generic)
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun launchAndMonitorSplitMergeExternalInstall(
+        plan: InstallerManager.InstallPlan.External
+    ): Boolean {
+        val baseline = withContext(Dispatchers.IO) {
+            pm.getPackageInfo(plan.expectedPackage)?.let { info ->
+                pm.getVersionCode(info) to info.lastUpdateTime
+            }
+        }
+        try {
+            ContextCompat.startActivity(app, plan.intent, null)
+        } catch (error: ActivityNotFoundException) {
+            throw IOException(error.simpleMessage(), error)
+        }
+        val launchedMessage = app.getString(
+            R.string.installer_external_launched,
+            plan.installerLabel
+        )
+        splitMergeStateFlow.update { it.copy(installStatus = launchedMessage) }
+        appendSplitMergeLog(launchedMessage)
+        app.toast(launchedMessage)
+
+        return withTimeoutOrNull(SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS) {
+            do {
+                val current = withContext(Dispatchers.IO) {
+                    pm.getPackageInfo(plan.expectedPackage)
+                }
+                val changed = if (baseline == null) {
+                    current != null
+                } else {
+                    current != null &&
+                        (pm.getVersionCode(current) != baseline.first ||
+                            current.lastUpdateTime != baseline.second)
+                }
+                if (!changed) {
+                    delay(SPLIT_MERGE_INSTALL_POLL_INTERVAL_MS)
+                }
+            } while (!changed)
+            true
+        } ?: throw IOException(
+            app.getString(R.string.installer_external_timeout, plan.installerLabel)
+        )
+    }
+
+    private fun completeSplitMergeInstall(packageName: String) {
+        val message = app.getString(R.string.install_app_success)
+        splitMergeStateFlow.update {
+            it.copy(
+                installStatus = message,
+                error = null
+            )
+        }
+        appendSplitMergeLog("$message ($packageName)")
+        app.toast(message)
+    }
+
+    private fun failSplitMergeInstall(error: Throwable) {
+        val reason = error.simpleMessage()
+            ?: error.message
+            ?: app.getString(R.string.installer_hint_generic)
+        val message = app.getString(R.string.install_app_fail, reason)
+        splitMergeStateFlow.update {
+            it.copy(
+                installStatus = null,
+                error = message
+            )
+        }
+        appendSplitMergeLog(message)
+        app.toast(message)
     }
 
     private fun updateDownloadStepRunning(downloaded: Long, total: Long?) {
@@ -1872,37 +2248,6 @@ class DashboardViewModel(
         )
         updateSplitMergeNotification()
         appendSplitMergeLog(app.getString(R.string.merge_split_apk_downloaded))
-    }
-
-    private fun updateSaveStepCompleted(outputName: String) {
-        splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-            completed = true,
-            canSaveAgain = true,
-            outputName = outputName,
-            error = null,
-            saveStep = splitMergeStateFlow.value.saveStep.copy(
-                status = SplitMergeStepStatus.COMPLETED,
-                message = app.getString(R.string.merge_split_apk_saved)
-            ),
-            currentMessage = app.getString(R.string.merge_split_apk_saved)
-        )
-        SplitMergeNotification.clear(app)
-        appendSplitMergeLog("${app.getString(R.string.merge_split_apk_saved)} ($outputName)")
-        app.toast(app.getString(R.string.merge_split_apk_saved))
-    }
-
-    private fun updateSaveStepFailed(error: Throwable) {
-        val resolvedMessage = error.message ?: app.getString(R.string.merge_split_apk_failed)
-        splitMergeStateFlow.value = splitMergeStateFlow.value.copy(
-            error = resolvedMessage,
-            saveStep = splitMergeStateFlow.value.saveStep.copy(
-                status = SplitMergeStepStatus.FAILED,
-                message = resolvedMessage
-            ),
-            currentMessage = resolvedMessage
-        )
-        SplitMergeNotification.clear(app)
-        appendSplitMergeLog(resolvedMessage)
     }
 
     private fun appendSplitMergeLog(message: String) {
@@ -2043,6 +2388,10 @@ class DashboardViewModel(
         splitMergeJob = null
         splitMergePluginJob?.cancel()
         splitMergePluginJob = null
+        splitMergeInstallJob?.cancel()
+        splitMergeInstallJob = null
+        splitMergeExternalInstall?.let(installerManager::cleanup)
+        splitMergeExternalInstall = null
         splitMergePlugin = null
         clearPendingSplitMergeSource()
         cleanupSplitMergeRunWorkspace(activeSplitMergeRunWorkspace)
@@ -2073,6 +2422,9 @@ data class SplitMergeState(
     val inProgress: Boolean = false,
     val completed: Boolean = false,
     val canSaveAgain: Boolean = false,
+    val savingOutput: Boolean = false,
+    val installing: Boolean = false,
+    val installStatus: String? = null,
     val showDownloadStep: Boolean = false,
     val inputName: String? = null,
     val outputName: String? = null,
@@ -2087,8 +2439,8 @@ data class SplitMergeState(
     val selectionPresetKey: String = "all",
     val downloadStep: SplitMergeStepState = SplitMergeStepState(),
     val mergeStep: SplitMergeStepState = SplitMergeStepState(),
+    val writeStep: SplitMergeStepState = SplitMergeStepState(),
     val signStep: SplitMergeStepState = SplitMergeStepState(),
-    val saveStep: SplitMergeStepState = SplitMergeStepState(),
     val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList()
 )
 

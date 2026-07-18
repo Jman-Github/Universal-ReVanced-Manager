@@ -233,6 +233,7 @@
 - Made the `Recommended for this device` split APK merge preset deselectable while preserving the selected language and density cleanup filters https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/550
 - Sorted new downloader and runtime plugin dashboard notifications by plugin installation time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/557
 - Sorted patch bundle import and update progress banners by when each operation started https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/587
+- Added direct installation from the split APK merger and replaced its save progress step with a write step https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/600
 
 
 # Bug fixes

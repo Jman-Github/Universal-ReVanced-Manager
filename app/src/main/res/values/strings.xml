@@ -1281,8 +1281,8 @@ Patch profiles are not affected.</string>
     <string name="tools_merge_split_action_merge">Merge</string>
     <string name="merge_split_apk_step_download">Download split archive</string>
     <string name="merge_split_apk_step_merge">Merge split archive</string>
+    <string name="merge_split_apk_step_write">Write merged APK</string>
     <string name="merge_split_apk_step_sign">Sign merged APK</string>
-    <string name="merge_split_apk_step_save">Save merged APK</string>
     <string name="merge_split_apk_downloading">Downloading split archive…</string>
     <string name="merge_split_apk_downloading_bytes">Downloaded %1$s</string>
     <string name="merge_split_apk_download_cancel">Cancel download</string>
@@ -1290,8 +1290,9 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_preparing">Preparing split archive…</string>
     <string name="merge_split_apk_input_missing">Selected split archive no longer exists.</string>
     <string name="merge_split_apk_input_invalid">Selected file is not a supported split archive (.xapk, .apkm, .apks, .zip)</string>
-    <string name="merge_split_apk_no_output">No merged APK is available to save yet.</string>
+    <string name="merge_split_apk_no_output">No merged APK is available to save or install yet.</string>
     <string name="merge_split_apk_saving">Saving merged APK…</string>
+    <string name="merge_split_apk_written">Merged APK written.</string>
     <string name="merge_split_apk_saved">Merged APK saved.</string>
     <string name="merge_split_apk_signing">Signing merged APK…</string>
     <string name="merge_split_apk_signed">Merged APK signed.</string>

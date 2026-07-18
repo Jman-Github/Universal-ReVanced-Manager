@@ -35,6 +35,7 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.Sort
@@ -83,7 +84,9 @@ import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.ProgressPercentageBadge
+import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
@@ -121,6 +124,7 @@ fun MergeSplitApkScreen(
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val mergedApkExportDirectory by prefs.mergedApkExportLastDirectory.getAsState()
     val mergeLogExportDirectory by prefs.mergeLogExportLastDirectory.getAsState()
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
@@ -141,6 +145,7 @@ fun MergeSplitApkScreen(
     var showOutputPicker by rememberSaveable { mutableStateOf(false) }
     var outputFileDialogState by remember { mutableStateOf<OutputFileDialogState?>(null) }
     var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportFileDialogState by remember { mutableStateOf<OutputFileDialogState?>(null) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
@@ -192,9 +197,12 @@ fun MergeSplitApkScreen(
         pendingLogExportFileName = null
     }
 
-    val canSaveNow = state.canSaveAgain &&
+    val canUseMergedOutput = state.canSaveAgain &&
         !state.inProgress &&
-        state.saveStep.status != SplitMergeStepStatus.RUNNING
+        !state.savingOutput &&
+        !state.installing
+    val canSaveNow = canUseMergedOutput
+    val canInstallNow = canUseMergedOutput
     val mergeCancelledMessage = stringResource(R.string.merge_split_apk_cancelled)
     val canOpenLogActions = state.logEntries.isNotEmpty() &&
         !state.preparingSelection &&
@@ -213,6 +221,15 @@ fun MergeSplitApkScreen(
             }
         } else {
             outputDocumentLauncher.launch(defaultName)
+        }
+    }
+
+    fun requestInstall() {
+        if (!canInstallNow) return
+        if (chooseInstallerPerInstall) {
+            showInstallerPicker = true
+        } else {
+            vm.installLastMerged()
         }
     }
 
@@ -244,7 +261,7 @@ fun MergeSplitApkScreen(
 
     fun onPageBack() {
         when {
-            state.cancellationInProgress -> Unit
+            state.cancellationInProgress || state.installing || state.savingOutput -> Unit
             state.selection != null -> {
                 vm.clearSplitMergeState()
                 onBackClick()
@@ -258,7 +275,7 @@ fun MergeSplitApkScreen(
 
     InterceptBackHandler(onBack = ::onPageBack)
 
-    if (state.inProgress) {
+    if (state.inProgress || state.installing) {
         DisposableEffect(context) {
             val window = (context as? Activity)?.window
             window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -279,6 +296,25 @@ fun MergeSplitApkScreen(
             title = stringResource(R.string.merge_split_apk_stop_confirm_title),
             description = stringResource(R.string.merge_split_apk_stop_confirm_description),
             icon = Icons.Outlined.Cancel
+        )
+    }
+
+    if (showInstallerPicker) {
+        InstallerPickerDialog(
+            title = stringResource(R.string.installer_choose_for_this_install_title),
+            options = vm.splitMergeInstallerOptions(),
+            onDismiss = { showInstallerPicker = false },
+            onConfirm = vm::installLastMerged,
+            onOpenShizuku = vm::openSplitMergeShizukuApp
+        )
+    }
+
+    when {
+        state.installing -> TransparentLoadingDialog(
+            message = state.installStatus ?: stringResource(R.string.installing_ellipsis)
+        )
+        state.savingOutput -> TransparentLoadingDialog(
+            message = stringResource(R.string.merge_split_apk_saving)
         )
     }
 
@@ -480,18 +516,16 @@ fun MergeSplitApkScreen(
                 StepCategory.PREPARING to preparingSteps,
                 StepCategory.SAVING to listOf(
                     Step(
+                        id = StepId.WriteAPK,
+                        title = context.getString(R.string.merge_split_apk_step_write),
+                        category = StepCategory.SAVING,
+                        state = state.writeStep.status.toUiState()
+                    ),
+                    Step(
                         id = StepId.SignAPK,
                         title = context.getString(R.string.merge_split_apk_step_sign),
                         category = StepCategory.SAVING,
-                        state = state.signStep.status.toUiState(),
-                        message = state.signStep.message
-                    ),
-                    Step(
-                        id = StepId.WriteAPK,
-                        title = context.getString(R.string.merge_split_apk_step_save),
-                        category = StepCategory.SAVING,
-                        state = state.saveStep.status.toUiState(),
-                        message = state.saveStep.message
+                        state = state.signStep.status.toUiState()
                     )
                 )
             )
@@ -582,6 +616,12 @@ fun MergeSplitApkScreen(
             BottomAppBar(
                 actions = {
                     IconButton(
+                        onClick = ::requestSave,
+                        enabled = canSaveNow
+                    ) {
+                        Icon(Icons.Outlined.Save, stringResource(R.string.save))
+                    }
+                    IconButton(
                         onClick = { showLogActionsDialog = true },
                         enabled = canOpenLogActions
                     ) {
@@ -589,11 +629,11 @@ fun MergeSplitApkScreen(
                     }
                 },
                 floatingActionButton = {
-                    AnimatedVisibility(visible = canSaveNow) {
+                    AnimatedVisibility(visible = canInstallNow) {
                         HapticExtendedFloatingActionButton(
-                            text = { Text(stringResource(R.string.save)) },
-                            icon = { Icon(Icons.Outlined.Save, null) },
-                            onClick = ::requestSave
+                            text = { Text(stringResource(R.string.install_app)) },
+                            icon = { Icon(Icons.Outlined.FileDownload, null) },
+                            onClick = ::requestInstall
                         )
                     }
                 }
@@ -682,14 +722,25 @@ private data class MergeSubStep(
     val skipped: Boolean
 )
 
+private fun isWriteMergedApkSubStep(title: String): Boolean = when (title.trim().lowercase()) {
+    "writing merged apk",
+    "stripping native libraries",
+    "finalizing merged apk" -> true
+    else -> false
+}
+
 private fun parseMergeSubSteps(state: SplitMergeState): List<MergeSubStep> {
-    val entries = state.mergeSubSteps.map { raw ->
-        val skipped = raw.startsWith("[skipped]")
-        MergeSubStep(
-            title = raw.removePrefix("[skipped]").trim(),
-            skipped = skipped
-        )
-    }
+    val entries = state.mergeSubSteps
+        .filterNot { raw ->
+            isWriteMergedApkSubStep(raw.removePrefix("[skipped]").trim())
+        }
+        .map { raw ->
+            val skipped = raw.startsWith("[skipped]")
+            MergeSubStep(
+                title = raw.removePrefix("[skipped]").trim(),
+                skipped = skipped
+            )
+        }
     val extraction = entries.filter {
         it.title.equals("Extracting split APKs", ignoreCase = true)
     }
@@ -739,6 +790,7 @@ private fun calculateSplitMergeProgress(
     if (
         !state.showDownloadStep &&
         state.mergeStep.status == SplitMergeStepStatus.WAITING &&
+        state.writeStep.status == SplitMergeStepStatus.WAITING &&
         state.signStep.status == SplitMergeStepStatus.WAITING
     ) {
         return 0f
@@ -759,6 +811,9 @@ private fun calculateSplitMergeProgress(
         entries = mergeEntries,
         currentSubStepIndex = currentSubStepIndex
     )
+
+    totalPhases += 1
+    completedPhases += state.writeStep.progressFraction(defaultRunningFraction = 0f)
 
     totalPhases += 1
     completedPhases += state.signStep.progressFraction(defaultRunningFraction = 0f)

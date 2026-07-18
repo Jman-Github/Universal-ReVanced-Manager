@@ -16,6 +16,7 @@ private class ApkEditorLogger(
 ) : APKLogger {
     private companion object {
         const val TAG = "APKEditor"
+        const val WRITE_MERGED_APK_MESSAGE = "Writing merged APK"
         val MERGE_PATTERN = Regex("Merging\\s*:?\\s*(.+)", RegexOption.IGNORE_CASE)
     }
 
@@ -49,7 +50,12 @@ private class ApkEditorLogger(
     }
 
     private fun emitMergeProgress(message: String) {
-        val match = MERGE_PATTERN.find(message) ?: return
+        val trimmed = message.trim()
+        if (trimmed.equals(WRITE_MERGED_APK_MESSAGE, ignoreCase = true)) {
+            onProgress?.invoke(WRITE_MERGED_APK_MESSAGE)
+            return
+        }
+        val match = MERGE_PATTERN.find(trimmed) ?: return
         val moduleName = match.groupValues.getOrNull(1)?.trim().orEmpty()
         val normalized = normalizeMergeModuleName(moduleName)
         if (normalized.isBlank()) return
