@@ -205,6 +205,7 @@ import app.urv.manager.ui.model.InstalledAppAction
 import app.urv.manager.ui.viewmodel.InstallResult
 import app.urv.manager.ui.viewmodel.MountWarningAction
 import app.urv.manager.ui.viewmodel.MountWarningReason
+import app.urv.manager.ui.viewmodel.NewPluginNotification
 import app.urv.manager.ui.viewmodel.SplitMergeState
 import app.urv.manager.ui.viewmodel.SplitMergeStepStatus
 import app.urv.manager.util.RequestInstallAppsContract
@@ -330,12 +331,7 @@ fun DashboardScreen(
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
     val patchBundlesLoading by vm.patchBundlesLoading.collectAsStateWithLifecycle()
     val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
-    val showNewDownloaderPluginsNotification by vm.newDownloaderPluginsAvailable.collectAsStateWithLifecycle(
-        false
-    )
-    val showNewPatcherRuntimePluginsNotification by vm.newPatcherRuntimePluginsAvailable.collectAsStateWithLifecycle(
-        false
-    )
+    val newPluginNotifications by vm.newPluginNotifications.collectAsStateWithLifecycle(emptyList())
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
     val storageRoots = remember { fs.storageRoots() }
     val appInputEnabled = !patchBundlesLoading
@@ -2520,32 +2516,35 @@ fun DashboardScreen(
                         )
                     }
                 } else null,
-                if (showNewDownloaderPluginsNotification) {
+                if (newPluginNotifications.isNotEmpty()) {
                     {
-                        NotificationCard(
-                            text = stringResource(R.string.new_downloader_plugins_notification),
-                            icon = Icons.Outlined.Download,
-                            modifier = Modifier.clickable(onClick = onDownloaderPluginClick),
-                            actions = {
-                                TextButton(onClick = vm::ignoreNewDownloaderPlugins) {
-                                    Text(stringResource(R.string.dismiss))
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            newPluginNotifications.forEach { notification ->
+                                when (notification) {
+                                    NewPluginNotification.DOWNLOADER -> NotificationCard(
+                                        text = stringResource(R.string.new_downloader_plugins_notification),
+                                        icon = Icons.Outlined.Download,
+                                        modifier = Modifier.clickable(onClick = onDownloaderPluginClick),
+                                        actions = {
+                                            TextButton(onClick = vm::ignoreNewDownloaderPlugins) {
+                                                Text(stringResource(R.string.dismiss))
+                                            }
+                                        }
+                                    )
+
+                                    NewPluginNotification.PATCHER_RUNTIME -> NotificationCard(
+                                        text = stringResource(R.string.new_patcher_runtime_plugins_notification),
+                                        icon = Icons.Outlined.Build,
+                                        modifier = Modifier.clickable(onClick = onPatcherRuntimePluginClick),
+                                        actions = {
+                                            TextButton(onClick = vm::ignoreNewPatcherRuntimePlugins) {
+                                                Text(stringResource(R.string.dismiss))
+                                            }
+                                        }
+                                    )
                                 }
                             }
-                        )
-                    }
-                } else null,
-                if (showNewPatcherRuntimePluginsNotification) {
-                    {
-                        NotificationCard(
-                            text = stringResource(R.string.new_patcher_runtime_plugins_notification),
-                            icon = Icons.Outlined.Build,
-                            modifier = Modifier.clickable(onClick = onPatcherRuntimePluginClick),
-                            actions = {
-                                TextButton(onClick = vm::ignoreNewPatcherRuntimePlugins) {
-                                    Text(stringResource(R.string.dismiss))
-                                }
-                            }
-                        )
+                        }
                     }
                 } else null,
                 if (announcementSystemEnabled) vm.unreadAnnouncement?.let { announcement ->

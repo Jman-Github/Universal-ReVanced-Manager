@@ -68,8 +68,10 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -84,6 +86,16 @@ import kotlin.coroutines.coroutineContext
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
 internal const val SPLIT_MERGE_PRESET_UNSELECTED = "unselected"
+
+internal enum class NewPluginNotification {
+    DOWNLOADER,
+    PATCHER_RUNTIME
+}
+
+private data class NewPluginNotificationOrder(
+    val notification: NewPluginNotification,
+    val firstInstallTime: Long
+)
 
 data class PatchBundleFileImportState(
     val fileIntent: PatchBundleFileIntent,
@@ -111,10 +123,26 @@ class DashboardViewModel(
     private val contentResolver: ContentResolver = app.contentResolver
     private val powerManager = app.getSystemService<PowerManager>()!!
 
-    val newDownloaderPluginsAvailable =
-        downloaderPluginRepository.newPluginPackageNames.map { it.isNotEmpty() }
-    val newPatcherRuntimePluginsAvailable =
-        patcherRuntimePluginRepository.newPluginPackageNames.map { it.isNotEmpty() }
+    internal val newPluginNotifications = combine(
+        downloaderPluginRepository.newPluginPackageNames,
+        patcherRuntimePluginRepository.newPluginPackageNames
+    ) { downloaderPackageNames, patcherRuntimePackageNames ->
+        listOfNotNull(
+            newPluginNotificationOrder(
+                notification = NewPluginNotification.DOWNLOADER,
+                packageNames = downloaderPackageNames
+            ),
+            newPluginNotificationOrder(
+                notification = NewPluginNotification.PATCHER_RUNTIME,
+                packageNames = patcherRuntimePackageNames
+            )
+        )
+            .sortedWith(
+                compareBy<NewPluginNotificationOrder> { it.firstInstallTime }
+                    .thenBy { it.notification.ordinal }
+            )
+            .map { it.notification }
+    }.flowOn(Dispatchers.IO)
     val loadedDownloaderPlugins = downloaderPluginRepository.loadedPluginsFlow
 
     /**
@@ -177,6 +205,23 @@ class DashboardViewModel(
                     !powerManager.isIgnoringBatteryOptimizations(app.packageName)
             }
         }
+    }
+
+    private fun newPluginNotificationOrder(
+        notification: NewPluginNotification,
+        packageNames: Set<String>
+    ): NewPluginNotificationOrder? {
+        if (packageNames.isEmpty()) return null
+
+        val firstInstallTime = packageNames
+            .mapNotNull { packageName ->
+                pm.getPackageInfo(packageName)
+                    ?.firstInstallTime
+                    ?.takeIf { it > 0L }
+            }
+            .minOrNull()
+            ?: Long.MAX_VALUE
+        return NewPluginNotificationOrder(notification, firstInstallTime)
     }
 
     fun ignoreNewDownloaderPlugins() = viewModelScope.launch {

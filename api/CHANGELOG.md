@@ -231,6 +231,7 @@
 - Expanded Storage & Cache Management with separate cleanup options for signing files, patcher runtime plugins, and saved LSPosed module APKs, with safeguards against clearing files while they are in use
 - Added support for opening `.rvp` and `.mpp` patch bundle files directly in URV, adapted from Morphe Manager's implementation https://github.com/MorpheApp/morphe-manager/pull/483
 - Made the `Recommended for this device` split APK merge preset deselectable while preserving the selected language and density cleanup filters https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/550
+- Sorted new downloader and runtime plugin dashboard notifications by plugin installation time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/557
 
 
 # Bug fixes
