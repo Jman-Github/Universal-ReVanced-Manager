@@ -402,6 +402,7 @@
 
 - All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
 - Updated manager release APK filenames to use canonical ABI labels such as arm64-v8a, armeabi-v7a, and universal, and updated the in-app updater/workflows to match the new asset names while preserving compatibility with older releases https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/428
+- Added JVM unit test checks before dev and release APK builds
 
 
 # v1.8.0 (2026-02-15)

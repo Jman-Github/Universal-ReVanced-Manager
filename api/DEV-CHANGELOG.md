@@ -6,6 +6,11 @@
 - Added support for typed Morphe patch options and bumped the Morphe Patcher to `1.7.0` https://github.com/MorpheApp/morphe-manager/pull/706 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/635
 
 
+# CI
+
+- Added JVM unit test checks before dev and release APK builds
+
+
 # v1.8.1-dev.20 (2026-07-18)
 
 

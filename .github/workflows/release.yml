@@ -87,6 +87,15 @@ jobs:
         run: |
           echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
 
+      - name: Run JVM unit tests
+        env:
+          GITHUB_ACTOR: ${{ secrets.GPR_USER }}
+          GITHUB_TOKEN: ${{ secrets.GPR_READ_PACKAGES_TOKEN }}
+        run: |
+          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
+            -PsignAsDebug \
+            :app:testReleaseUnitTest
+
       - name: Build release
         env:
           GITHUB_ACTOR: ${{ secrets.GPR_USER }}
