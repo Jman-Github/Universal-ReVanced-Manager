@@ -33,6 +33,7 @@ import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
+import app.urv.manager.domain.repository.PatchOptionInputManager
 import app.urv.manager.domain.repository.PatchProfile
 import app.urv.manager.domain.repository.PatchProfileRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
@@ -108,6 +109,7 @@ class SelectedAppInfoViewModel(
     private val bundleRepository: PatchBundleRepository = get()
     private val selectionRepository: PatchSelectionRepository = get()
     private val optionsRepository: PatchOptionsRepository = get()
+    private val patchOptionInputManager: PatchOptionInputManager = get()
     private val pluginsRepository: DownloaderPluginRepository = get()
     private val downloadedAppRepository: DownloadedAppRepository = get()
     private val patchProfileRepository: PatchProfileRepository = get()
@@ -120,6 +122,7 @@ class SelectedAppInfoViewModel(
     val prefs: PreferencesManager = get()
     private var selectionLoadJob: Job? = null
     private var optionsLoadJob: Job? = null
+    private var configurationUpdateJob: Job? = null
     // Recommendation mode scopes the active selection to one bundle, so retain each bundle's custom choices here.
     private val rememberedBundleSelections = mutableMapOf<Int, Set<String>>()
     val plugins = pluginsRepository.loadedPluginsFlow
@@ -315,6 +318,15 @@ class SelectedAppInfoViewModel(
         mutableStateOf<Options>(emptyMap())
     }
         private set
+    private val pendingOptionInputOwnership = patchOptionInputManager.pendingInputOwnership(
+        initiallyReferenced = patchOptionInputManager.pendingInputsIn(options)
+    )
+
+    private fun replaceOptions(value: Options) {
+        options = value
+        val currentPendingInputs = patchOptionInputManager.pendingInputsIn(value)
+        pendingOptionInputOwnership.reconcile(currentPendingInputs)
+    }
 
     data class RemovedPatchesNotice(val patchNames: List<String>)
 
@@ -335,9 +347,11 @@ class SelectedAppInfoViewModel(
                     .associate { scoped -> scoped.uid to scoped.patches.associateBy { it.name } }
             }
 
-            options = withContext(Dispatchers.Default) {
-                optionsRepository.getOptions(packageName, bundlePatches)
-            }
+            replaceOptions(
+                withContext(Dispatchers.Default) {
+                    optionsRepository.getOptions(packageName, bundlePatches)
+                }
+            )
         }
     }
 
@@ -532,16 +546,16 @@ class SelectedAppInfoViewModel(
         if (!persistConfiguration) return
         when (event) {
             OptionsResetEvent.All -> if (options.isNotEmpty()) {
-                options = emptyMap()
+                replaceOptions(emptyMap())
             }
 
             is OptionsResetEvent.Package -> if (event.packageName == packageName && options.isNotEmpty()) {
-                options = emptyMap()
+                replaceOptions(emptyMap())
             }
 
             is OptionsResetEvent.Bundle -> {
                 if (event.bundleUid in options) {
-                    options = options.filterKeys { it != event.bundleUid }
+                    replaceOptions(options.filterKeys { it != event.bundleUid })
                 }
             }
         }
@@ -708,12 +722,14 @@ class SelectedAppInfoViewModel(
         }.toMap()
 
         selectionState = SelectionState.Customized(cleanedSelection)
-        options = options.mapNotNull { (bundleUid, patchOptions) ->
-            val removedForBundle = removedPatchesByBundle[bundleUid].orEmpty()
-            patchOptions.filterKeys { it !in removedForBundle }
-                .takeIf { it.isNotEmpty() }
-                ?.let { bundleUid to it }
-        }.toMap()
+        replaceOptions(
+            options.mapNotNull { (bundleUid, patchOptions) ->
+                val removedForBundle = removedPatchesByBundle[bundleUid].orEmpty()
+                patchOptions.filterKeys { it !in removedForBundle }
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { bundleUid to it }
+            }.toMap()
+        )
         selectionRepository.updateSelection(packageName, cleanedSelection)
         optionsRepository.removeOptionsForPatches(packageName, removedPatchesByBundle)
         val pendingNames = removedPatchesNotice?.patchNames.orEmpty()
@@ -764,7 +780,7 @@ class SelectedAppInfoViewModel(
 
         val filteredOptions = options.filtered(bundles)
         if (filteredOptions != options) {
-            options = filteredOptions
+            replaceOptions(filteredOptions)
         }
     }
 
@@ -1400,6 +1416,7 @@ class SelectedAppInfoViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        pendingOptionInputOwnership.releaseAll()
         preparedApkCleanup?.invoke()
         preparedApkCleanup = null
         temporaryLocalCleanupPaths
@@ -1414,6 +1431,7 @@ class SelectedAppInfoViewModel(
     }
 
     suspend fun getPatcherParams(): Patcher.ViewModelParams {
+        configurationUpdateJob?.join()
         selectionLoadJob?.join()
         optionsLoadJob?.join()
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
@@ -1443,41 +1461,46 @@ class SelectedAppInfoViewModel(
         selection: PatchSelection?,
         options: Options,
         persistState: Boolean = persistConfiguration,
-        filterOptions: Boolean = true
-    ) = viewModelScope.launch {
-        optionsLoadJob?.cancel()
-        optionsLoadJob = null
+        filterOptions: Boolean = true,
+        pendingInputs: Set<String> = emptySet()
+    ): Job {
+        pendingOptionInputOwnership.accept(patchOptionInputManager.pendingInputsIn(pendingInputs))
+        configurationUpdateJob?.cancel()
+        return viewModelScope.launch {
+            optionsLoadJob?.cancel()
+            optionsLoadJob = null
 
-        rememberedBundleSelections.clear()
-        selection?.let(::rememberBundleSelections)
-        selectionState = selection?.let(SelectionState::Customized) ?: SelectionState.Default
+            rememberedBundleSelections.clear()
+            selection?.let(::rememberBundleSelections)
+            selectionState = selection?.let(SelectionState::Customized) ?: SelectionState.Default
 
-        val filteredOptions = withContext(Dispatchers.Default) {
-            if (filterOptions) {
-                options.filtered(bundleInfoFlow.first())
-            } else {
-                options
+            val filteredOptions = withContext(Dispatchers.Default) {
+                if (filterOptions) {
+                    options.filtered(bundleInfoFlow.first())
+                } else {
+                    options
+                }
             }
-        }
-        withContext(Dispatchers.Main) {
-            this@SelectedAppInfoViewModel.options = filteredOptions
-        }
-
-        if (!persistConfiguration || !persistState) return@launch
-        viewModelScope.launch(Dispatchers.Default) {
-            val seenPatchesByBundle = bundleInfoFlow.first().associate { bundle ->
-                bundle.uid to bundle.patches.map(PatchInfo::name).toSet()
+            withContext(Dispatchers.Main) {
+                replaceOptions(filteredOptions)
             }
-            selection?.let {
-                selectionRepository.updateSelectionWithSeenPatches(
-                    packageName,
-                    it,
-                    seenPatchesByBundle
-                )
-            } ?: selectionRepository.resetSelectionForPackage(packageName)
 
-            optionsRepository.saveOptions(packageName, filteredOptions)
-        }
+            if (!persistConfiguration || !persistState) return@launch
+            withContext(Dispatchers.Default) {
+                val seenPatchesByBundle = bundleInfoFlow.first().associate { bundle ->
+                    bundle.uid to bundle.patches.map(PatchInfo::name).toSet()
+                }
+                selection?.let {
+                    selectionRepository.updateSelectionWithSeenPatches(
+                        packageName,
+                        it,
+                        seenPatchesByBundle
+                    )
+                } ?: selectionRepository.resetSelectionForPackage(packageName)
+
+                optionsRepository.saveOptions(packageName, filteredOptions)
+            }
+        }.also { configurationUpdateJob = it }
     }
 
     fun updateSelectedApp(app: SelectedApp) {

@@ -9,7 +9,8 @@ import app.urv.manager.util.PatchSelection
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 class InstalledAppRepository(
-    db: AppDatabase
+    db: AppDatabase,
+    private val patchOptionInputManager: PatchOptionInputManager
 ) {
     private val dao = db.installedAppDao()
 
@@ -33,34 +34,36 @@ class InstalledAppRepository(
         resetCreatedAt: Boolean = false,
         createdAtOverride: Long? = null
     ) {
-        val existingApp = dao.get(currentPackageName)
-        val existingSortOrder = dao.getSortOrder(currentPackageName)
-        val sortOrder = existingSortOrder ?: ((dao.getMaxSortOrder() ?: -1) + 1)
-        val createdAt = createdAtOverride ?: when {
-            existingApp == null -> System.currentTimeMillis()
-            resetCreatedAt -> System.currentTimeMillis()
-            else -> existingApp.createdAt
-        }
-        dao.upsertApp(
-            InstalledApp(
-                currentPackageName = currentPackageName,
-                originalPackageName = originalPackageName,
-                version = version,
-                installType = installType,
-                sortOrder = sortOrder,
-                selectionPayload = selectionPayload,
-                createdAt = createdAt
-            ),
-            patchSelection.flatMap { (uid, patches) ->
-                patches.map { patch ->
-                    AppliedPatch(
-                        packageName = currentPackageName,
-                        bundle = uid,
-                        patchName = patch
-                    )
-                }
+        patchOptionInputManager.updateReferences {
+            val existingApp = dao.get(currentPackageName)
+            val existingSortOrder = dao.getSortOrder(currentPackageName)
+            val sortOrder = existingSortOrder ?: ((dao.getMaxSortOrder() ?: -1) + 1)
+            val createdAt = createdAtOverride ?: when {
+                existingApp == null -> System.currentTimeMillis()
+                resetCreatedAt -> System.currentTimeMillis()
+                else -> existingApp.createdAt
             }
-        )
+            dao.upsertApp(
+                InstalledApp(
+                    currentPackageName = currentPackageName,
+                    originalPackageName = originalPackageName,
+                    version = version,
+                    installType = installType,
+                    sortOrder = sortOrder,
+                    selectionPayload = selectionPayload,
+                    createdAt = createdAt
+                ),
+                patchSelection.flatMap { (uid, patches) ->
+                    patches.map { patch ->
+                        AppliedPatch(
+                            packageName = currentPackageName,
+                            bundle = uid,
+                            patchName = patch
+                        )
+                    }
+                }
+            )
+        }
     }
 
     suspend fun reorderApps(orderedPackageNames: List<String>) {
@@ -70,10 +73,14 @@ class InstalledAppRepository(
     }
 
     suspend fun delete(installedApp: InstalledApp) {
-        dao.delete(installedApp)
+        patchOptionInputManager.updateReferences {
+            dao.delete(installedApp)
+        }
     }
 
     suspend fun deleteByInstallType(installType: InstallType) {
-        dao.deleteByInstallType(installType)
+        patchOptionInputManager.updateReferences {
+            dao.deleteByInstallType(installType)
+        }
     }
 }

@@ -31,6 +31,9 @@ abstract class OptionDao {
     @Query("SELECT package_name FROM option_groups")
     abstract fun getPackagesWithOptions(): Flow<List<String>>
 
+    @Query("SELECT value FROM options")
+    abstract suspend fun getAllValues(): List<Option.SerializedValue>
+
     @Insert
     abstract suspend fun createOptionGroup(group: OptionGroup)
 

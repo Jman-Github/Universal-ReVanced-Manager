@@ -14,6 +14,9 @@ interface InstalledAppDao {
     @Query("SELECT * FROM installed_app ORDER BY sort_order ASC, current_package_name ASC")
     fun getAll(): Flow<List<InstalledApp>>
 
+    @Query("SELECT * FROM installed_app")
+    suspend fun getAllSnapshot(): List<InstalledApp>
+
     @Query("SELECT * FROM installed_app WHERE current_package_name = :packageName")
     suspend fun get(packageName: String): InstalledApp?
 

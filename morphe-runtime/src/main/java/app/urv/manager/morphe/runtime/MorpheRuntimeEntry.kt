@@ -2,6 +2,11 @@ package app.urv.manager.morphe.runtime
 
 import android.os.Build
 import app.morphe.patcher.dex.BytecodeMode
+import app.morphe.patcher.patch.ColorOption
+import app.morphe.patcher.patch.FilePathOption
+import app.morphe.patcher.patch.FilesOption
+import app.morphe.patcher.patch.FolderOption
+import app.morphe.patcher.patch.ImageOption
 import app.morphe.patcher.patch.Option
 import app.morphe.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
@@ -408,6 +413,29 @@ object MorpheRuntimeEntry {
         result["type"] = option.type.toString()
         result["default"] = normalizeValue(option.default)
         result["presets"] = option.values?.mapValues { (_, value) -> normalizeValue(value) }
+
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/pull/706
+        result["explicitKind"] = when (option) {
+            is FolderOption -> "Folder"
+            is FilePathOption -> "FilePath"
+            is FilesOption -> "Files"
+            is ImageOption -> "Image"
+            is ColorOption -> "Color"
+            else -> null
+        }
+        result["allowedExtensions"] = when (option) {
+            is FilePathOption -> option.allowedExtensions
+            is FilesOption -> option.allowedExtensions
+            is ImageOption -> option.allowedExtensions
+            else -> null
+        }
+        result["recommendedSize"] = when (option) {
+            is ImageOption -> option.recommendedSize?.let { size ->
+                mapOf("width" to size.width, "height" to size.height)
+            }
+            else -> null
+        }
         return result
     }
 

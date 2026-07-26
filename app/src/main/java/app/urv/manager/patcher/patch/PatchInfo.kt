@@ -116,6 +116,12 @@ data class CompatiblePackage(
     val versionCodes: ImmutableMap<String, ImmutableSet<Long>>? = null
 )
 
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/pull/706
+enum class ExplicitOptionKind { Folder, FilePath, Files, Image, Color }
+
+data class ImageSize(val width: Int, val height: Int)
+
 @Immutable
 data class Option<T>(
     val title: String,
@@ -126,6 +132,9 @@ data class Option<T>(
     val default: T?,
     val presets: Map<String, T?>?,
     val validator: (T?) -> Boolean,
+    val explicitKind: ExplicitOptionKind? = null,
+    val allowedExtensions: ImmutableList<String>? = null,
+    val recommendedSize: ImageSize? = null,
 ) {
     companion object {
         private val scalarTypes = mapOf(
@@ -157,6 +166,23 @@ data class Option<T>(
                 presetKey to presetValue
             }?.toMap()?.takeIf { it.isNotEmpty() }
 
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/706
+            val explicitKind = metadata["explicitKind"]
+                ?.toString()
+                ?.let { rawKind ->
+                    ExplicitOptionKind.entries.firstOrNull { it.name == rawKind }
+                }
+            val allowedExtensions = (metadata["allowedExtensions"] as? Iterable<*>)
+                ?.mapNotNull { it?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+                ?.toImmutableList()
+                ?.takeIf { it.isNotEmpty() }
+            val recommendedSize = (metadata["recommendedSize"] as? Map<*, *>)?.let { size ->
+                val width = (size["width"] as? Number)?.toInt() ?: return@let null
+                val height = (size["height"] as? Number)?.toInt() ?: return@let null
+                ImageSize(width, height)
+            }
+
             return Option(
                 title = title,
                 key = key,
@@ -165,7 +191,10 @@ data class Option<T>(
                 type = type,
                 default = default,
                 presets = presets,
-                validator = { true }
+                validator = { true },
+                explicitKind = explicitKind,
+                allowedExtensions = allowedExtensions,
+                recommendedSize = recommendedSize,
             )
         }
 
@@ -235,5 +264,29 @@ data class Option<T>(
                 else -> value.toString()
             }
         }
+    }
+}
+
+@PublishedApi
+internal fun Option<*>.hasRequiredValue(values: Map<String, Any?>): Boolean {
+    if (!required) return true
+    if (explicitKind == null) return default != null || key in values
+
+    val value = if (key in values) values[key] else default
+    return when (explicitKind) {
+        ExplicitOptionKind.Folder,
+        ExplicitOptionKind.FilePath,
+        ExplicitOptionKind.Image,
+        ExplicitOptionKind.Color -> (value as? String)?.isNotBlank() == true
+
+        ExplicitOptionKind.Files -> {
+            val paths = value as? Iterable<*> ?: return false
+            val iterator = paths.iterator()
+            iterator.hasNext() && iterator.asSequence().all { path ->
+                path is String && path.isNotBlank()
+            }
+        }
+
+        null -> false
     }
 }

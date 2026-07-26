@@ -152,11 +152,7 @@ sealed class PatchBundleInfo {
                     if (it.options.isNullOrEmpty()) return@patch true
                     val opts by lazy { optionsForPatch(bundle, it).orEmpty() }
 
-                    it.options.all option@{ option ->
-                        if (!option.required || option.default != null) return@option true
-
-                        option.key in opts
-                    }
+                    it.options.all { option -> option.hasRequiredValue(opts) }
                 }
         }
     }

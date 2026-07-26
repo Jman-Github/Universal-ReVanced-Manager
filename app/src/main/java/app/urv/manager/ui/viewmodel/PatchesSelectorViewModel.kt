@@ -29,6 +29,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.DuplicatePatchProfileNameException
 import app.urv.manager.domain.repository.PatchProfileRepository
+import app.urv.manager.domain.repository.PatchOptionInputManager
 import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.patcher.patch.Option
@@ -36,6 +37,7 @@ import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.patcher.patch.hasRequiredValue
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.model.SelectedApp
@@ -84,6 +86,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     val prefs: PreferencesManager = get()
     private val patchBundleRepository: PatchBundleRepository = get()
     private val patchSelectionRepository: PatchSelectionRepository = get()
+    private val patchOptionInputManager: PatchOptionInputManager = get()
     val missingPatchNames: List<String>? = input.missingPatchNames
     private val patchProfileRepository: PatchProfileRepository = get()
 
@@ -295,6 +298,11 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             allPatches.mapValues { (_, options) -> options.toPersistentMap() }.toPersistentMap()
         }
     }
+    private val inheritedPendingOptionInputs = patchOptionInputManager.pendingInputsIn(input.options)
+    private val pendingOptionInputOwnership = patchOptionInputManager.pendingInputOwnership(
+        inherited = inheritedPendingOptionInputs,
+        initiallyReferenced = patchOptionInputManager.pendingInputsIn(patchOptions)
+    )
 
     /**
      * Show the patch options dialog for this patch.
@@ -317,7 +325,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 isSelected(
                     bundle.uid,
                     patch
-                ) && patch.options?.any { it.required && it.default == null && it.key !in opts } ?: false
+                ) && patch.options?.any { option -> !option.hasRequiredValue(opts) } ?: false
             }.toList()
         }.filter { (_, patches) -> patches.isNotEmpty() }
     }
@@ -401,6 +409,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     fun reset() {
         recordSnapshot(actionLabel(R.string.patch_selection_action_all_defaults))
         patchOptions.clear()
+        reconcilePendingOptionInputs()
         customPatchSelection = null
         hasModifiedSelection = false
         app.toast(app.getString(R.string.patch_selection_reset_toast))
@@ -411,6 +420,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         hasModifiedSelection = true
         customPatchSelection = persistentMapOf()
         patchOptions.clear()
+        reconcilePendingOptionInputs()
         app.toast(app.getString(R.string.patch_selection_deselected_all_toast))
     }
 
@@ -519,6 +529,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         hasModifiedSelection = true
         customPatchSelection = baseSelection.put(bundleUid, persistentSetOf())
         patchOptions.remove(bundleUid)
+        reconcilePendingOptionInputs()
         app.toast(
             app.getString(
                 R.string.patch_selection_deselected_bundle_toast,
@@ -568,6 +579,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             baseSelection.put(bundleUid, defaultSelection)
         }
         patchOptions.remove(bundleUid)
+        reconcilePendingOptionInputs()
         app.toast(
             app.getString(
                 R.string.patch_selection_reset_bundle_toast,
@@ -599,11 +611,14 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             .put(key, value)
 
         patchOptions[bundle] = patchesToOpts.put(patch.name, patchToOpts)
+        reconcilePendingOptionInputs()
     }
 
     fun resetOptions(bundle: Int, patch: PatchInfo) {
         app.toast(app.getString(R.string.patch_options_reset_toast))
-        patchOptions[bundle] = patchOptions[bundle]?.remove(patch.name) ?: return
+        val bundleOptions = patchOptions[bundle] ?: return
+        patchOptions[bundle] = bundleOptions.remove(patch.name)
+        reconcilePendingOptionInputs()
     }
 
     private fun pruneSelectionsAndOptions() {
@@ -633,6 +648,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
                 filtered.size != bundleOptions.size -> patchOptions[bundleUid] = filtered
             }
         }
+        reconcilePendingOptionInputs()
     }
 
     val profiles = combine(
@@ -1004,6 +1020,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private fun recordSnapshot(actionDescription: String) {
         history.addLast(HistoryEntry(currentSnapshot(), actionDescription))
         future.clear()
+        reconcilePendingOptionInputs()
         updateHistoryState()
     }
 
@@ -1021,7 +1038,31 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             }.toPersistentMap()
             patchOptions[bundleUid] = persistent
         }
+        reconcilePendingOptionInputs()
         hasModifiedSelection = true
+    }
+
+    private fun reconcilePendingOptionInputs() {
+        val currentPendingInputs = patchOptionInputManager.pendingInputsIn(
+            listOf(
+                patchOptions,
+                history.map { it.snapshot.options },
+                future.map { it.snapshot.options }
+            )
+        )
+        pendingOptionInputOwnership.reconcile(currentPendingInputs)
+    }
+
+    fun transferPendingOptionInputs(): Set<String> {
+        val transfer = pendingOptionInputOwnership.transfer(
+            patchOptionInputManager.pendingInputsIn(patchOptions)
+        )
+        return transfer.transferred
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pendingOptionInputOwnership.releaseAll()
     }
 
     private fun updateHistoryState() {

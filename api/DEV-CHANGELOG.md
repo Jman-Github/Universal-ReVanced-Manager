@@ -1,3 +1,11 @@
+# v1.8.1-dev.21 (2026-07-24)
+
+
+# Features
+
+- Added support for typed Morphe patch options and bumped the Morphe Patcher to `1.7.0` https://github.com/MorpheApp/morphe-manager/pull/706 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/635
+
+
 # v1.8.1-dev.20 (2026-07-18)
 
 

@@ -50,3 +50,8 @@ val SPLIT_ARCHIVE_MIME_TYPES = arrayOf(
 )
 const val JSON_MIMETYPE = "application/json"
 const val BIN_MIMETYPE = "application/octet-stream"
+
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/pull/706
+const val IMAGE_MIMETYPE = "image/*"
+const val WILDCARD_MIMETYPE = "*/*"

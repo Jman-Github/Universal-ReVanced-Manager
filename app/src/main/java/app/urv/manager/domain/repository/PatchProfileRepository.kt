@@ -9,7 +9,8 @@ import kotlinx.serialization.Serializable
 import java.io.File
 
 class PatchProfileRepository(
-    db: AppDatabase
+    db: AppDatabase,
+    private val patchOptionInputManager: PatchOptionInputManager
 ) {
     private val dao = db.patchProfileDao()
 
@@ -24,13 +25,13 @@ class PatchProfileRepository(
         appVersion: String?,
         name: String,
         payload: PatchProfilePayload
-    ): PatchProfile {
+    ): PatchProfile = patchOptionInputManager.updateReferences {
         val existing = dao.findByPackageAndName(packageName, name)
         if (existing != null) {
             throw DuplicatePatchProfileNameException(packageName, name)
         }
         val sortOrder = (dao.getMaxSortOrder() ?: -1) + 1
-        val entity = PatchProfileEntity(
+        PatchProfileEntity(
             uid = AppDatabase.generateUid(),
             packageName = packageName,
             appVersion = appVersion,
@@ -45,16 +46,20 @@ class PatchProfileRepository(
             payload = payload,
             createdAt = System.currentTimeMillis(),
             sortOrder = sortOrder
-        )
-        dao.upsert(entity)
-        return entity.toDomain()
+        ).also { dao.upsert(it) }.toDomain()
     }
 
-    suspend fun deleteProfile(uid: Int) = dao.delete(uid)
+    suspend fun deleteProfile(uid: Int) {
+        patchOptionInputManager.updateReferences {
+            dao.delete(uid)
+        }
+    }
 
     suspend fun deleteProfiles(uids: Collection<Int>) {
         if (uids.isEmpty()) return
-        dao.delete(uids.toList())
+        patchOptionInputManager.updateReferences {
+            dao.delete(uids.toList())
+        }
     }
 
     suspend fun updateProfile(
@@ -64,8 +69,8 @@ class PatchProfileRepository(
         name: String,
         payload: PatchProfilePayload,
         useSelectedApkVersion: Boolean? = null
-    ): PatchProfile? {
-        val existing = dao.get(uid) ?: return null
+    ): PatchProfile? = patchOptionInputManager.updateReferences {
+        val existing = dao.get(uid) ?: return@updateReferences null
         val conflicting = dao.findByPackageAndName(packageName, name)
         if (conflicting != null && conflicting.uid != uid) {
             throw DuplicatePatchProfileNameException(packageName, name)
@@ -80,7 +85,7 @@ class PatchProfileRepository(
             sortOrder = existing.sortOrder
         )
         dao.upsert(entity)
-        return entity.toDomain()
+        entity.toDomain()
     }
 
     suspend fun updateProfileApk(
@@ -131,51 +136,53 @@ class PatchProfileRepository(
 
     suspend fun importProfiles(entries: Collection<PatchProfileExportEntry>): ImportProfilesResult {
         if (entries.isEmpty()) return ImportProfilesResult(0, 0, 0)
-        var imported = 0
-        var updated = 0
-        var skipped = 0
-        var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
-        for (entry in entries) {
-            val existing = dao.findByPackageAndName(entry.packageName, entry.name)
-            if (existing != null) {
-                val updatedEntity = existing.copy(
+        return patchOptionInputManager.updateReferences {
+            var imported = 0
+            var updated = 0
+            var skipped = 0
+            var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
+            for (entry in entries) {
+                val existing = dao.findByPackageAndName(entry.packageName, entry.name)
+                if (existing != null) {
+                    val updatedEntity = existing.copy(
+                        appVersion = entry.appVersion,
+                        useSelectedApkVersion = entry.useSelectedApkVersion,
+                        autoPatch = entry.autoPatch,
+                        installerToken = entry.installerToken,
+                        autoInstall = entry.autoInstall && entry.installerToken != null,
+                        payload = entry.payload,
+                        createdAt = entry.createdAt ?: existing.createdAt
+                    )
+                    if (updatedEntity != existing) {
+                        dao.upsert(updatedEntity)
+                        updated++
+                    } else {
+                        skipped++
+                    }
+                    continue
+                }
+                val entity = PatchProfileEntity(
+                    uid = AppDatabase.generateUid(),
+                    packageName = entry.packageName,
                     appVersion = entry.appVersion,
+                    apkPath = null,
+                    apkSourcePath = null,
+                    apkVersion = null,
                     useSelectedApkVersion = entry.useSelectedApkVersion,
                     autoPatch = entry.autoPatch,
                     installerToken = entry.installerToken,
                     autoInstall = entry.autoInstall && entry.installerToken != null,
+                    name = entry.name,
                     payload = entry.payload,
-                    createdAt = entry.createdAt ?: existing.createdAt
+                    createdAt = entry.createdAt ?: System.currentTimeMillis(),
+                    sortOrder = nextSortOrder
                 )
-                if (updatedEntity != existing) {
-                    dao.upsert(updatedEntity)
-                    updated++
-                } else {
-                    skipped++
-                }
-                continue
+                dao.upsert(entity)
+                imported++
+                nextSortOrder += 1
             }
-            val entity = PatchProfileEntity(
-                uid = AppDatabase.generateUid(),
-                packageName = entry.packageName,
-                appVersion = entry.appVersion,
-                apkPath = null,
-                apkSourcePath = null,
-                apkVersion = null,
-                useSelectedApkVersion = entry.useSelectedApkVersion,
-                autoPatch = entry.autoPatch,
-                installerToken = entry.installerToken,
-                autoInstall = entry.autoInstall && entry.installerToken != null,
-                name = entry.name,
-                payload = entry.payload,
-                createdAt = entry.createdAt ?: System.currentTimeMillis(),
-                sortOrder = nextSortOrder
-            )
-            dao.upsert(entity)
-            imported++
-            nextSortOrder += 1
+            ImportProfilesResult(imported, updated, skipped)
         }
-        return ImportProfilesResult(imported, updated, skipped)
     }
 
     suspend fun reorderProfiles(orderedUids: List<Int>) {

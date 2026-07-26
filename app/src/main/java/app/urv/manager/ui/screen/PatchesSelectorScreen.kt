@@ -185,7 +185,7 @@ import app.urv.manager.ui.component.CenteredDialogTitle
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PatchesSelectorScreen(
-    onSave: (PatchSelection?, Options) -> Unit,
+    onSave: (PatchSelection?, Options, Set<String>) -> Unit,
     onBackClick: () -> Unit,
     viewModel: PatchesSelectorViewModel
 ) {
@@ -1723,7 +1723,11 @@ fun PatchesSelectorScreen(
                             enabled = showSaveButton,
                             onClick = {
                                 viewModel.dismissDialogs()
-                                onSave(viewModel.getCustomSelection(), viewModel.getOptions())
+                                onSave(
+                                    viewModel.getCustomSelection(),
+                                    viewModel.getOptions(),
+                                    viewModel.transferPendingOptionInputs()
+                                )
                             }
                         )
                     }

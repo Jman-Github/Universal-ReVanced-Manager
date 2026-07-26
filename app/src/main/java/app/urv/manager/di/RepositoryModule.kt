@@ -20,6 +20,9 @@ val repositoryModule = module {
     }
     singleOf(::NetworkInfo)
     singleOf(::PatchSelectionRepository)
+    singleOf(::PatchOptionInputManager) {
+        createdAtStart()
+    }
     singleOf(::PatchOptionsRepository)
     singleOf(::PatchProfileRepository)
     singleOf(::PatchBundleRepository) {

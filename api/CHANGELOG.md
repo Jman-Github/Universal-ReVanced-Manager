@@ -234,6 +234,7 @@
 - Sorted new downloader and runtime plugin dashboard notifications by plugin installation time https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/557
 - Sorted patch bundle import and update progress banners by when each operation started https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/587
 - Added direct installation from the split APK merger and replaced its save progress step with a write step https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/600
+- Added support for typed Morphe patch options and bumped the Morphe Patcher to `1.7.0` https://github.com/MorpheApp/morphe-manager/pull/706 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/635
 
 
 # Bug fixes

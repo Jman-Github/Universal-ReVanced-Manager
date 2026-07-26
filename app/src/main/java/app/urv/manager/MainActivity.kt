@@ -760,8 +760,12 @@ private fun ReVancedManager(
 
                 PatchesSelectorScreen(
                     onBackClick = navController::popBackStack,
-                    onSave = { patches, options ->
-                        selectedAppInfoVm.updateConfiguration(patches, options)
+                    onSave = { patches, options, pendingInputs ->
+                        selectedAppInfoVm.updateConfiguration(
+                            patches,
+                            options,
+                            pendingInputs = pendingInputs
+                        )
                         navController.popBackStack()
                     },
                     viewModel = koinViewModel { parametersOf(data) }
@@ -782,8 +786,12 @@ private fun ReVancedManager(
 
                 RequiredOptionsScreen(
                     onBackClick = navController::popBackStack,
-                    onContinue = { patches, options ->
-                        selectedAppInfoVm.updateConfiguration(patches, options)
+                    onContinue = { patches, options, pendingInputs ->
+                        selectedAppInfoVm.updateConfiguration(
+                            patches,
+                            options,
+                            pendingInputs = pendingInputs
+                        )
                         it.lifecycleScope.launch {
                             navController.navigateComplex(
                                 Patcher,

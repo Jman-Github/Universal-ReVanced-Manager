@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RequiredOptionsScreen(
-    onContinue: (PatchSelection?, Options) -> Unit,
+    onContinue: (PatchSelection?, Options, Set<String>) -> Unit,
     onBackClick: () -> Unit,
     vm: PatchesSelectorViewModel
 ) {
@@ -97,7 +97,11 @@ fun RequiredOptionsScreen(
                     ?: true,
                 onClick = {
                     vm.dismissDialogs()
-                    onContinue(vm.getCustomSelection(), vm.getOptions())
+                    onContinue(
+                        vm.getCustomSelection(),
+                        vm.getOptions(),
+                        vm.transferPendingOptionInputs()
+                    )
                 }
             )
         },

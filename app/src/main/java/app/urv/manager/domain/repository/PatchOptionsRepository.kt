@@ -13,7 +13,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
 
-class PatchOptionsRepository(db: AppDatabase) {
+class PatchOptionsRepository(
+    db: AppDatabase,
+    private val patchOptionInputManager: PatchOptionInputManager
+) {
     private val dao = db.optionDao()
     private val resetEventsFlow = MutableSharedFlow<ResetEvent>(extraBufferCapacity = 4)
     val resetEvents: SharedFlow<ResetEvent> = resetEventsFlow.asSharedFlow()
@@ -60,23 +63,26 @@ class PatchOptionsRepository(db: AppDatabase) {
         }
     }
 
-    suspend fun saveOptions(packageName: String, options: Options) =
-        dao.updateOptions(options.entries.associate { (sourceUid, bundlePatchOptions) ->
-            val groupId = getOrCreateGroup(sourceUid, packageName)
+    suspend fun saveOptions(packageName: String, options: Options) {
+        patchOptionInputManager.updateReferences {
+            dao.updateOptions(options.entries.associate { (sourceUid, bundlePatchOptions) ->
+                val groupId = getOrCreateGroup(sourceUid, packageName)
 
-            groupId to bundlePatchOptions.flatMap { (patchName, patchOptions) ->
-                patchOptions.mapNotNull { (key, value) ->
-                    val serialized = try {
-                        Option.SerializedValue.fromValue(value)
-                    } catch (e: Option.SerializationException) {
-                        Log.e(tag, "Option $patchName:$key could not be serialized", e)
-                        return@mapNotNull null
+                groupId to bundlePatchOptions.flatMap { (patchName, patchOptions) ->
+                    patchOptions.mapNotNull { (key, value) ->
+                        val serialized = try {
+                            Option.SerializedValue.fromValue(value)
+                        } catch (e: Option.SerializationException) {
+                            Log.e(tag, "Option $patchName:$key could not be serialized", e)
+                            return@mapNotNull null
+                        }
+
+                        Option(groupId, patchName, key, serialized)
                     }
-
-                    Option(groupId, patchName, key, serialized)
                 }
-            }
-        })
+            })
+        }
+    }
 
     suspend fun export(bundleUid: Int): SerializedOptions =
         buildMap {
@@ -93,17 +99,19 @@ class PatchOptionsRepository(db: AppDatabase) {
         }
 
     suspend fun import(bundleUid: Int, options: SerializedOptions) {
-        dao.resetOptionsForPatchBundle(bundleUid)
+        patchOptionInputManager.updateReferences {
+            dao.resetOptionsForPatchBundle(bundleUid)
 
-        if (options.isNotEmpty()) {
-            dao.updateOptions(options.entries.associate { (packageName, packageOptions) ->
-                val groupId = getOrCreateGroup(bundleUid, packageName)
-                groupId to packageOptions.flatMap { (patchName, patchOptions) ->
-                    patchOptions.map { (key, value) ->
-                        Option(groupId, patchName, key, value)
+            if (options.isNotEmpty()) {
+                dao.updateOptions(options.entries.associate { (packageName, packageOptions) ->
+                    val groupId = getOrCreateGroup(bundleUid, packageName)
+                    groupId to packageOptions.flatMap { (patchName, patchOptions) ->
+                        patchOptions.map { (key, value) ->
+                            Option(groupId, patchName, key, value)
+                        }
                     }
-                }
-            })
+                })
+            }
         }
 
         resetEventsFlow.emit(ResetEvent.Bundle(bundleUid))
@@ -116,25 +124,33 @@ class PatchOptionsRepository(db: AppDatabase) {
         packageName: String,
         patchesByBundle: Map<Int, Set<String>>
     ) {
-        patchesByBundle.forEach { (bundleUid, patchNames) ->
-            if (patchNames.isNotEmpty()) {
-                dao.removeOptionsForPatches(bundleUid, packageName, patchNames.toList())
+        patchOptionInputManager.updateReferences {
+            patchesByBundle.forEach { (bundleUid, patchNames) ->
+                if (patchNames.isNotEmpty()) {
+                    dao.removeOptionsForPatches(bundleUid, packageName, patchNames.toList())
+                }
             }
         }
     }
 
     suspend fun resetOptionsForPackage(packageName: String) {
-        dao.resetOptionsForPackage(packageName)
+        patchOptionInputManager.updateReferences {
+            dao.resetOptionsForPackage(packageName)
+        }
         resetEventsFlow.emit(ResetEvent.Package(packageName))
     }
 
     suspend fun resetOptionsForPatchBundle(uid: Int) {
-        dao.resetOptionsForPatchBundle(uid)
+        patchOptionInputManager.updateReferences {
+            dao.resetOptionsForPatchBundle(uid)
+        }
         resetEventsFlow.emit(ResetEvent.Bundle(uid))
     }
 
     suspend fun reset() {
-        dao.reset()
+        patchOptionInputManager.updateReferences {
+            dao.reset()
+        }
         resetEventsFlow.emit(ResetEvent.All)
     }
 
