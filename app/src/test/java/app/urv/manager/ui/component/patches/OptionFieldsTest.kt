@@ -129,7 +129,7 @@ class OptionFieldsTest {
     fun requiredFilesOptionDoesNotSubmitAnEmptyList() {
         assertFalse(
             shouldSubmitListOption(
-                currentValues = emptyList(),
+                currentValues = emptyList<String>(),
                 nextValues = normalizeListOptionValues(
                     values = listOf<String?>(null),
                     explicitKind = ExplicitOptionKind.Files
@@ -141,7 +141,7 @@ class OptionFieldsTest {
         assertFalse(
             shouldSubmitListOption(
                 currentValues = listOf("/managed/original"),
-                nextValues = emptyList(),
+                nextValues = emptyList<String>(),
                 explicitKind = ExplicitOptionKind.Files,
                 required = true
             )
@@ -149,7 +149,7 @@ class OptionFieldsTest {
         assertTrue(
             shouldSubmitListOption(
                 currentValues = listOf(""),
-                nextValues = emptyList(),
+                nextValues = emptyList<String>(),
                 explicitKind = ExplicitOptionKind.Files,
                 required = false
             )
