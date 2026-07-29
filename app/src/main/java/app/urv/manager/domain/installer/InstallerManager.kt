@@ -341,6 +341,39 @@ class InstallerManager(
         return createPlan(token, target, sourceFile, expectedPackage, sourceLabel)
     }
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/blob/b394eb8c4319ff16198193b49e204dfd352d208f/app/src/main/java/app/morphe/manager/domain/installer/SessionInstaller.kt
+    fun createSystemFallbackPlan(
+        target: InstallTarget,
+        sourceFile: File,
+        expectedPackage: String,
+        sourceLabel: String?
+    ): InstallPlan.External {
+        val shared = copyToShareDir(sourceFile)
+        val uri = InstallerFileProvider.buildUri(app, shared)
+        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+            setDataAndType(uri, APK_MIME)
+            addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_ACTIVITY_NEW_TASK
+            )
+            clipData = ClipData.newRawUri("APK", uri)
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            putExtra(Intent.EXTRA_RETURN_RESULT, false)
+            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, app.packageName)
+        }
+        return InstallPlan.External(
+            target = target,
+            intent = intent,
+            sharedFile = shared,
+            uri = uri,
+            expectedPackage = expectedPackage,
+            installerLabel = app.getString(R.string.installer_internal_name),
+            sourceLabel = sourceLabel,
+            token = Token.Internal
+        )
+    }
+
     fun cleanup(plan: InstallPlan.External) {
         runCatching {
             app.revokeUriPermission(plan.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)

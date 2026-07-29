@@ -4,8 +4,10 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.PackageManager.ApplicationInfoFlags
 import android.content.pm.PackageManager.PackageInfoFlags
 import android.content.pm.PackageManager.NameNotFoundException
 import androidx.core.content.pm.PackageInfoCompat
@@ -32,6 +34,7 @@ import ru.solrudev.ackpine.uninstaller.PackageUninstaller
 import ru.solrudev.ackpine.uninstaller.createSession
 import ru.solrudev.ackpine.uninstaller.parameters.UninstallParametersDsl
 import java.io.File
+import java.security.MessageDigest
 
 @Immutable
 @Parcelize
@@ -141,6 +144,23 @@ class PM(
                 app.packageManager.getPackageInfo(packageName, PackageInfoFlags.of(flags.toLong()))
             else
                 app.packageManager.getPackageInfo(packageName, flags)
+        } catch (_: NameNotFoundException) {
+            null
+        }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/598
+    @Suppress("DEPRECATION")
+    fun getApplicationInfo(packageName: String, flags: Int = 0): ApplicationInfo? =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                app.packageManager.getApplicationInfo(
+                    packageName,
+                    ApplicationInfoFlags.of(flags.toLong())
+                )
+            } else {
+                app.packageManager.getApplicationInfo(packageName, flags)
+            }
         } catch (_: NameNotFoundException) {
             null
         }
@@ -302,4 +322,69 @@ class PM(
         return candidate.ifBlank { trimmed }
     }
 
+}
+
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/pull/598
+fun File.sha256OrNull(): String? = runCatching {
+    if (!isFile) return@runCatching null
+    val digest = MessageDigest.getInstance("SHA-256")
+    inputStream().use { input ->
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (!Thread.currentThread().isInterrupted) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            digest.update(buffer, 0, read)
+        }
+    }
+    if (Thread.currentThread().isInterrupted) return@runCatching null
+    digest.digest().joinToString("") { byte -> "%02x".format(byte) }
+}.getOrNull()
+
+data class InstalledPackageSnapshot(
+    val lastUpdateTime: Long,
+    val apkHashes: List<String>?
+) {
+    fun changedSince(previous: InstalledPackageSnapshot?): Boolean =
+        previous == null ||
+            lastUpdateTime != previous.lastUpdateTime ||
+            (apkHashes != null &&
+                previous.apkHashes != null &&
+                apkHashes != previous.apkHashes)
+
+    fun matches(apkFiles: List<File>): Boolean {
+        val installedHashes = apkHashes ?: return false
+        val expectedHashes = apkFiles.map { file ->
+            file.sha256OrNull() ?: return false
+        }.sorted()
+        return installedHashes == expectedHashes
+    }
+}
+
+fun PM.installedPackageSnapshot(
+    packageName: String,
+    includeHashes: Boolean = true
+): InstalledPackageSnapshot? {
+    val packageInfo = getPackageInfo(packageName) ?: return null
+    val applicationInfo = getApplicationInfo(packageName)
+    val installedApks = applicationInfo?.let { info ->
+        buildList {
+            info.sourceDir
+                ?.takeIf(String::isNotBlank)
+                ?.let { add(File(it)) }
+            info.splitSourceDirs
+                ?.map(::File)
+                ?.let(::addAll)
+        }
+    }.orEmpty()
+    val hashes = installedApks
+        .takeIf { includeHashes && it.isNotEmpty() }
+        ?.map(File::sha256OrNull)
+        ?.takeIf { values -> values.none { it == null } }
+        ?.filterNotNull()
+        ?.sorted()
+    return InstalledPackageSnapshot(
+        lastUpdateTime = packageInfo.lastUpdateTime,
+        apkHashes = hashes
+    )
 }

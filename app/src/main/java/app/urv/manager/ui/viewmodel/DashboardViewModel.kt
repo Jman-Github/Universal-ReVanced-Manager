@@ -24,7 +24,11 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
@@ -90,12 +94,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.FileNotFoundException
 import kotlin.coroutines.coroutineContext
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller
-import ru.solrudev.ackpine.installer.createSession
-import ru.solrudev.ackpine.session.Session
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
 
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
 private const val SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
@@ -130,7 +128,7 @@ class DashboardViewModel(
     private val keystoreManager: KeystoreManager,
     private val installerManager: InstallerManager,
     private val shizukuInstaller: ShizukuInstaller,
-    private val ackpineInstaller: PackageInstaller,
+    private val sessionInstaller: SessionInstaller,
     private val pm: PM,
 ) : ViewModel() {
     val availablePatches =
@@ -1198,7 +1196,7 @@ class DashboardViewModel(
 
                 val installed = when (plan) {
                     is InstallerManager.InstallPlan.Internal ->
-                        installMergedApkInternally(merged)
+                        installMergedApkInternally(merged, packageName, label)
                     is InstallerManager.InstallPlan.Mount ->
                         throw IOException(app.getString(R.string.installer_status_not_supported))
                     is InstallerManager.InstallPlan.Shizuku -> {
@@ -2121,29 +2119,42 @@ class DashboardViewModel(
         return InstallerManager.InstallPlan.Internal(target)
     }
 
-    private suspend fun installMergedApkInternally(apk: File): Boolean {
+    private suspend fun installMergedApkInternally(
+        apk: File,
+        packageName: String,
+        label: String?
+    ): Boolean {
         if (!pm.requestInstallPackagesPermission()) {
             throw IOException(
                 app.getString(R.string.downloaded_app_install_permission_required)
             )
         }
-        val result = withContext(Dispatchers.IO) {
-            ackpineInstaller.createSession(Uri.fromFile(apk)) {
-                confirmation = Confirmation.IMMEDIATE
-            }.await()
+        val result = try {
+            sessionInstaller.install(apk, packageName)
+        } catch (_: InstallCancelledException) {
+            return false
+        } catch (_: SessionDeadException) {
+            val fallbackPlan = installerManager.createSystemFallbackPlan(
+                target = InstallerManager.InstallTarget.PATCHER,
+                sourceFile = apk,
+                expectedPackage = packageName,
+                sourceLabel = label
+            )
+            return launchAndMonitorSplitMergeExternalInstall(fallbackPlan)
         }
         return when (result) {
-            Session.State.Succeeded -> true
-            is Session.State.Failed<InstallFailure> -> {
-                if (result.failure is InstallFailure.Aborted) {
-                    false
-                } else {
-                    throw IOException(
-                        result.failure.message
-                            ?: app.getString(R.string.installer_hint_generic)
-                    )
-                }
-            }
+            InstallResult.Success -> true
+            is InstallResult.Conflict -> throw IOException(
+                installerManager.formatFailureHint(
+                    AndroidPackageInstaller.STATUS_FAILURE_CONFLICT,
+                    result.message
+                ) ?: result.message ?: app.getString(R.string.installer_hint_generic)
+            )
+            is InstallResult.Failure -> throw IOException(
+                installerManager.formatFailureHint(result.status, result.message)
+                    ?: result.message
+                    ?: app.getString(R.string.installer_hint_generic)
+            )
         }
     }
 

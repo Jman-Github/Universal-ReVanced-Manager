@@ -15,7 +15,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.data.room.lsposed.LsposedModule
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.lsposed.LsposedFrameworkState
 import app.urv.manager.domain.lsposed.LsposedInstalledPackageState
@@ -33,24 +37,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.get
 import org.koin.core.component.inject
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller
 import ru.solrudev.ackpine.uninstaller.UninstallFailure
-import ru.solrudev.ackpine.installer.createSession
 import ru.solrudev.ackpine.session.Session
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
 
 class LsposedViewModel : ViewModel(), KoinComponent {
     private val app: Application by inject()
     private val repository: LsposedRepository by inject()
     private val installerManager: InstallerManager by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
+    private val sessionInstaller: SessionInstaller by inject()
     private val prefs: PreferencesManager by inject()
     private val pm: PM by inject()
-    private val ackpineInstaller: PackageInstaller = get()
 
     val modules = repository.modules
 
@@ -387,18 +385,43 @@ class LsposedViewModel : ViewModel(), KoinComponent {
             app.toast(app.getString(R.string.lsposed_allow_installs))
             return
         }
-        val result = withContext(Dispatchers.IO) {
-            ackpineInstaller.createSession(Uri.fromFile(candidate.file)) {
-                confirmation = Confirmation.IMMEDIATE
-            }.await()
+        val result = try {
+            sessionInstaller.install(candidate.file, candidate.packageName)
+        } catch (_: InstallCancelledException) {
+            pendingModule = candidate
+            return
+        } catch (error: SessionDeadException) {
+            android.util.Log.w(
+                "LsposedViewModel",
+                "PackageInstaller session died; using intent fallback",
+                error
+            )
+            launchExternal(
+                installerManager.createSystemFallbackPlan(
+                    target = InstallerManager.InstallTarget.LSPOSED_MODULE,
+                    sourceFile = candidate.file,
+                    expectedPackage = candidate.packageName,
+                    sourceLabel = candidate.displayName
+                ),
+                candidate
+            )
+            return
         }
         when (result) {
-            Session.State.Succeeded -> completeInstall(candidate)
-            is Session.State.Failed<InstallFailure> -> {
+            InstallResult.Success -> completeInstall(candidate)
+            is InstallResult.Conflict -> {
                 pendingModule = candidate
-                if (result.failure is InstallFailure.Aborted) return
-                val message = result.failure.message ?: app.getString(R.string.lsposed_install_failed)
-                throw IllegalStateException(message)
+                throw IllegalStateException(
+                    result.message ?: app.getString(R.string.lsposed_install_failed)
+                )
+            }
+            is InstallResult.Failure -> {
+                pendingModule = candidate
+                throw IllegalStateException(
+                    installerManager.formatFailureHint(result.status, result.message)
+                        ?: result.message
+                        ?: app.getString(R.string.lsposed_install_failed)
+                )
             }
         }
     }

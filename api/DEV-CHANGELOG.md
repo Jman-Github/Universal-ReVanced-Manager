@@ -12,6 +12,7 @@
   - Added repair, use-stock, remount, cleanup, and diagnostic export actions
   - Added stricter package, APK, signing, Android-user, and mount-ownership safety checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/646
   - Improved rooted-app progress, status messages, action layouts, and installer routing https://github.com/MorpheApp/morphe-manager/pull/779
+- Improved system installer handling across patching, saved apps, downloads, manager updates, LSPosed modules, and split APK tools so APKs install directly from app storage, with OEM callback verification and an intent fallback https://github.com/MorpheApp/morphe-manager/pull/598
 
 
 # Bug fixes

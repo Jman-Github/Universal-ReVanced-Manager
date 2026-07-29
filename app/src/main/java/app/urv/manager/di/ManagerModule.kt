@@ -1,6 +1,7 @@
 package app.urv.manager.di
 
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.AndroidApkArchiveMetadataReader
 import app.urv.manager.domain.manager.ApkArchiveMetadataReader
@@ -16,5 +17,6 @@ val managerModule = module {
     singleOf(::SignatureMetadataInjectorManager)
     singleOf(::PM)
     singleOf(::ShizukuInstaller)
+    singleOf(::SessionInstaller)
     singleOf(::InstallerManager)
 }

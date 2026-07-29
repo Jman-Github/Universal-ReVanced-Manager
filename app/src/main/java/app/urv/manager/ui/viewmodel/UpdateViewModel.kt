@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -22,7 +21,11 @@ import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.network.service.HttpService
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.DownloadProgressNotifier
@@ -40,13 +43,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import org.koin.core.component.get
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller
-import ru.solrudev.ackpine.installer.createSession
-import ru.solrudev.ackpine.session.Session
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
 
 class UpdateViewModel(
     private val downloadOnScreenEntry: Boolean
@@ -60,8 +56,8 @@ class UpdateViewModel(
     private val fs: Filesystem by inject()
     private val prefs: PreferencesManager by inject()
     private val installerManager: InstallerManager by inject()
+    private val sessionInstaller: SessionInstaller by inject()
     private val downloadProgressNotifier: DownloadProgressNotifier by inject()
-    private val ackpineInstaller: PackageInstaller = get()
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
@@ -194,26 +190,49 @@ class UpdateViewModel(
                     return@launch
                 }
                 state = State.INSTALLING
-                val result = withContext(Dispatchers.IO) {
-                    ackpineInstaller.createSession(Uri.fromFile(location)) {
-                        confirmation = Confirmation.IMMEDIATE
-                    }.await()
+                val result = try {
+                    sessionInstaller.install(location, app.packageName)
+                } catch (_: InstallCancelledException) {
+                    state = State.CAN_INSTALL
+                    return@launch
+                } catch (error: SessionDeadException) {
+                    android.util.Log.w(
+                        "UpdateViewModel",
+                        "PackageInstaller session died; using intent fallback",
+                        error
+                    )
+                    launchExternalInstaller(
+                        installerManager.createSystemFallbackPlan(
+                            target = InstallerManager.InstallTarget.MANAGER_UPDATE,
+                            sourceFile = location,
+                            expectedPackage = app.packageName,
+                            sourceLabel = app.getString(R.string.app_name)
+                        )
+                    )
+                    return@launch
                 }
                 when (result) {
-                    is Session.State.Failed<InstallFailure> -> when (val failure = result.failure) {
-                        is InstallFailure.Aborted -> state = State.CAN_INSTALL
-                        else -> {
-                            val msg = failure.message.orEmpty()
-                            app.toast(app.getString(R.string.install_app_fail, msg))
-                            installError = msg
-                            state = State.FAILED
-                        }
-                    }
-
-                    Session.State.Succeeded -> {
+                    InstallResult.Success -> {
                         installError = ""
                         state = State.SUCCESS
                         app.toast(app.getString(R.string.update_completed))
+                    }
+
+                    is InstallResult.Conflict -> {
+                        val message = result.message.orEmpty()
+                        app.toast(app.getString(R.string.install_app_fail, message))
+                        installError = message
+                        state = State.FAILED
+                    }
+
+                    is InstallResult.Failure -> {
+                        val message = installerManager.formatFailureHint(
+                            result.status,
+                            result.message
+                        ) ?: result.message.orEmpty()
+                        app.toast(app.getString(R.string.install_app_fail, message))
+                        installError = message
+                        state = State.FAILED
                     }
                 }
             }

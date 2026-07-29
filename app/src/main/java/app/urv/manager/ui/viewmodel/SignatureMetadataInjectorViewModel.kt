@@ -10,7 +10,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
@@ -34,7 +38,9 @@ import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.APK_MIMETYPE
 import app.urv.manager.util.APK_SIGNATURE_METADATA_INJECTOR_CACHE_DIR
+import app.urv.manager.util.InstalledPackageSnapshot
 import app.urv.manager.util.PM
+import app.urv.manager.util.installedPackageSnapshot
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
 import java.io.BufferedWriter
@@ -60,12 +66,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller
-import ru.solrudev.ackpine.installer.createSession
-import ru.solrudev.ackpine.session.Session
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
 
 enum class SignatureMetadataInputRole {
     SIGNATURE_SOURCE,
@@ -146,7 +146,7 @@ class SignatureMetadataInjectorViewModel(
     private val installerManager: InstallerManager,
     private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
-    private val ackpineInstaller: PackageInstaller,
+    private val sessionInstaller: SessionInstaller,
     private val pm: PM
 ) : ViewModel() {
     private val stateFlow = MutableStateFlow(SignatureMetadataInjectorUiState())
@@ -698,9 +698,9 @@ class SignatureMetadataInjectorViewModel(
                     when (plan) {
                         is InstallerManager.InstallPlan.Internal -> {
                             if (splitOutput) {
-                                installSplitInternally(installFiles)
+                                installSplitInternally(installFiles, packageName)
                             } else {
-                                installInternally(result.outputFile)
+                                installInternally(result.outputFile, packageName, label)
                             }
                         }
                         is InstallerManager.InstallPlan.Mount -> {
@@ -801,37 +801,70 @@ class SignatureMetadataInjectorViewModel(
         installJob?.cancel(CancellationException("User cancelled installation"))
     }
 
-    private suspend fun installInternally(apk: File) {
+    private suspend fun installInternally(
+        apk: File,
+        packageName: String,
+        label: String?
+    ) {
         if (!pm.requestInstallPackagesPermission()) {
             throw IOException(
                 app.getString(R.string.downloaded_app_install_permission_required)
             )
         }
         appendLog("Launching internal Package Installer")
-        val installResult = withContext(Dispatchers.IO) {
-            ackpineInstaller.createSession(Uri.fromFile(apk)) {
-                confirmation = Confirmation.IMMEDIATE
-            }.await()
+        val installResult = try {
+            sessionInstaller.install(apk, packageName)
+        } catch (_: InstallCancelledException) {
+            appendLog("Package Installer was cancelled")
+            return
+        } catch (_: SessionDeadException) {
+            appendLog("Package Installer session ended early; launching system fallback")
+            val fallbackPlan = installerManager.createSystemFallbackPlan(
+                target = InstallerManager.InstallTarget.PATCHER,
+                sourceFile = apk,
+                expectedPackage = packageName,
+                sourceLabel = label
+            )
+            pendingExternalInstall = fallbackPlan
+            ContextCompat.startActivity(app, fallbackPlan.intent, null)
+            val message = app.getString(
+                R.string.installer_external_launched,
+                fallbackPlan.installerLabel
+            )
+            appendLog(message)
+            app.toast(message)
+            stateFlow.update { it.copy(installStatus = message) }
+            return
         }
         when (installResult) {
-            Session.State.Succeeded -> installationSucceeded()
-            is Session.State.Failed<InstallFailure> -> {
-                if (installResult.failure is InstallFailure.Aborted) {
-                    appendLog("Package Installer was cancelled")
-                    return
-                }
-                throw IOException(installResult.failure.message.orEmpty())
-            }
+            InstallResult.Success -> installationSucceeded()
+            is InstallResult.Conflict -> throw IOException(
+                installerManager.formatFailureHint(
+                    AndroidPackageInstaller.STATUS_FAILURE_CONFLICT,
+                    installResult.message
+                ) ?: installResult.message ?: app.getString(R.string.installer_hint_generic)
+            )
+            is InstallResult.Failure -> throw IOException(
+                installerManager.formatFailureHint(installResult.status, installResult.message)
+                    ?: installResult.message
+                    ?: app.getString(R.string.installer_hint_generic)
+            )
         }
     }
 
-    private suspend fun installSplitInternally(apkFiles: List<File>) {
+    private suspend fun installSplitInternally(
+        apkFiles: List<File>,
+        expectedPackage: String
+    ) {
         if (!pm.requestInstallPackagesPermission()) {
             throw IOException(
                 app.getString(R.string.downloaded_app_install_permission_required)
             )
         }
         appendLog("Launching internal Package Installer for ${apkFiles.size} split APKs")
+        val beforeInstall = withContext(Dispatchers.IO) {
+            pm.installedPackageSnapshot(expectedPackage, includeHashes = false)
+        }
         val outcome = withContext(Dispatchers.IO) {
             val packageInstaller = app.packageManager.packageInstaller
             val params = AndroidPackageInstaller.SessionParams(
@@ -924,12 +957,33 @@ class SignatureMetadataInjectorViewModel(
                 }
             }
         }
-        if (outcome.status != AndroidPackageInstaller.STATUS_SUCCESS) {
+        val installedDespiteFailure =
+            outcome.status != AndroidPackageInstaller.STATUS_SUCCESS &&
+                confirmSplitInstallCompleted(apkFiles, expectedPackage, beforeInstall)
+        if (outcome.status != AndroidPackageInstaller.STATUS_SUCCESS && !installedDespiteFailure) {
             throw IOException(
                 outcome.message ?: app.getString(R.string.split_installer_failed)
             )
         }
+        if (installedDespiteFailure) {
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/598
+            appendLog(
+                "Package Installer reported failure but APK verification succeeded for " +
+                    expectedPackage
+            )
+        }
         installationSucceeded()
+    }
+
+    private suspend fun confirmSplitInstallCompleted(
+        apkFiles: List<File>,
+        expectedPackage: String,
+        beforeInstall: InstalledPackageSnapshot?
+    ): Boolean = withContext(Dispatchers.IO) {
+        val afterInstall = pm.installedPackageSnapshot(expectedPackage)
+            ?: return@withContext false
+        afterInstall.changedSince(beforeInstall) && afterInstall.matches(apkFiles)
     }
 
     private fun resolveConfiguredInstallerPlan(

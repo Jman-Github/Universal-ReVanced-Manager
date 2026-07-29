@@ -12,8 +12,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.urv.manager.data.room.apps.downloaded.DownloadedApp
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
@@ -46,14 +50,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller
-import ru.solrudev.ackpine.installer.createSession
 import ru.solrudev.ackpine.session.Session
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
 import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import java.nio.file.Files
 import java.nio.file.Path
@@ -67,7 +67,7 @@ class DownloadsViewModel(
     private val shizukuInstaller: ShizukuInstaller,
     private val keystoreManager: KeystoreManager,
     private val prefs: PreferencesManager,
-    private val ackpineInstaller: PackageInstaller,
+    private val sessionInstaller: SessionInstaller,
     val pm: PM
 ) : ViewModel() {
     sealed interface RemoteSourceBusyState {
@@ -289,22 +289,44 @@ class DownloadsViewModel(
             return
         }
 
-        val result = withContext(Dispatchers.IO) {
-            ackpineInstaller.createSession(Uri.fromFile(apk)) {
-                confirmation = Confirmation.IMMEDIATE
-            }.await()
+        val packageInfo = withContext(Dispatchers.IO) {
+            pm.getPackageInfo(apk)
+                ?: throw IOException(appContext.getString(R.string.installer_hint_generic))
         }
-        when (result) {
-            Session.State.Succeeded -> showInstallSuccess()
-            is Session.State.Failed<InstallFailure> -> {
-                if (result.failure is InstallFailure.Aborted) return
-                appContext.toast(
-                    appContext.getString(
-                        R.string.install_app_fail,
-                        result.failure.message.orEmpty()
-                    )
+        val packageName = packageInfo.packageName
+        val sourceLabel = with(pm) { packageInfo.label() }
+        val result = try {
+            sessionInstaller.install(apk, packageName)
+        } catch (_: InstallCancelledException) {
+            return
+        } catch (error: SessionDeadException) {
+            Log.w(TAG, "PackageInstaller session died; using intent fallback", error)
+            launchExternalInstaller(
+                installerManager.createSystemFallbackPlan(
+                    target = InstallerManager.InstallTarget.SAVED_APP,
+                    sourceFile = apk,
+                    expectedPackage = packageName,
+                    sourceLabel = sourceLabel
                 )
-            }
+            )
+            return
+        }
+
+        when (result) {
+            InstallResult.Success -> showInstallSuccess()
+            is InstallResult.Conflict -> appContext.toast(
+                appContext.getString(
+                    R.string.install_app_fail,
+                    result.message.orEmpty()
+                )
+            )
+            is InstallResult.Failure -> appContext.toast(
+                appContext.getString(
+                    R.string.install_app_fail,
+                    installerManager.formatFailureHint(result.status, result.message)
+                        ?: result.message.orEmpty()
+                )
+            )
         }
     }
 

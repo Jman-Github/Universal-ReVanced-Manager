@@ -46,9 +46,13 @@ import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
+import app.urv.manager.domain.installer.InstallCancelledException
+import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
+import app.urv.manager.domain.installer.SessionDeadException
+import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountPhase
@@ -93,7 +97,6 @@ import app.urv.manager.ui.model.navigation.Patcher
 import app.urv.manager.service.PatchingTaskMonitorService
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.util.PM
-import app.urv.manager.util.asCode
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
@@ -135,9 +138,6 @@ import kotlin.coroutines.resume
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
-import ru.solrudev.ackpine.installer.InstallFailure
-import ru.solrudev.ackpine.installer.PackageInstaller as AckpinePackageInstaller
-import ru.solrudev.ackpine.installer.createSession
 import ru.solrudev.ackpine.session.Session
 import ru.solrudev.ackpine.session.await
 import ru.solrudev.ackpine.session.parameters.Confirmation
@@ -176,10 +176,10 @@ class PatcherViewModel(
     private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val installerManager: InstallerManager by inject()
+    private val sessionInstaller: SessionInstaller by inject()
     private val prefs: PreferencesManager by inject()
     private val skipApkSigning = prefs.skipApkSigning.getBlocking()
     private val savedStateHandle: SavedStateHandle = get()
-    private val ackpineInstaller: AckpinePackageInstaller = get()
     private val ackpineUninstaller: PackageUninstaller = get()
     private val selectionBundleType by lazy(LazyThreadSafetyMode.NONE) {
         runBlocking { patchBundleRepository.selectionBundleType(input.selectedPatches) }
@@ -1158,13 +1158,6 @@ fun proceedAfterMissingPatchWarning() {
             startInstallProgressToasts()
         }
     }
-
-    private fun launchInstallConfirmationToast(session: Session<*>): Job =
-        viewModelScope.launch {
-            if (session.awaitUserConfirmation()) {
-                enableInstallProgressToasts()
-            }
-        }
 
     private fun stopInstallProgressToasts() {
         installProgressToastJob?.cancel()
@@ -2330,52 +2323,30 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         ).requireSuccess()
                     }
 
-                    val session = ackpineInstaller.createSession(Uri.fromFile(outputFile)) {
-                        confirmation = Confirmation.IMMEDIATE
-                    }
-                    val toastJob = if (deferInstallProgressToasts) {
-                        launchInstallConfirmationToast(session)
-                    } else {
-                        null
-                    }
                     val result = try {
-                        withContext(Dispatchers.IO) {
-                            session.await()
-                        }
-                    } finally {
-                        toastJob?.cancel()
+                        sessionInstaller.install(
+                            outputFile,
+                            currentPackageInfo.packageName,
+                            ::enableInstallProgressToasts
+                        )
+                    } catch (_: InstallCancelledException) {
+                        installStatus = null
+                        updateInstallingState(false)
+                        return
+                    } catch (error: SessionDeadException) {
+                        Log.w(TAG, "PackageInstaller session died; using intent fallback", error)
+                        val fallbackPlan = installerManager.createSystemFallbackPlan(
+                            target = InstallerManager.InstallTarget.PATCHER,
+                            sourceFile = outputFile,
+                            expectedPackage = currentPackageInfo.packageName,
+                            sourceLabel = null
+                        )
+                        launchExternalInstaller(fallbackPlan)
+                        return
                     }
 
                     when (result) {
-                        is Session.State.Failed<InstallFailure> -> {
-                            val failure = result.failure
-                            val failureMessage = failure.message
-                            if (failure is InstallFailure.Aborted) {
-                                installStatus = null
-                                updateInstallingState(false)
-                                stopInstallProgressToasts()
-                                return
-                            }
-                            if (activeInstallType != InstallType.MOUNT &&
-                                installerManager.isSignatureMismatch(failureMessage)
-                            ) {
-                                val plan = installerManager.resolvePlan(
-                                    InstallerManager.InstallTarget.PATCHER,
-                                    outputFile,
-                                    currentPackageInfo.packageName,
-                                    null,
-                                    allowMount = currentPackageInfo.packageName == packageName && rootMountInputSupported
-                                )
-                                showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
-                                return
-                            }
-                            val backendReason = failureMessage ?: failure.javaClass.simpleName
-                            val hint = installerManager.formatFailureHint(failure.asCode(), backendReason)
-                            val message = hint ?: backendReason ?: failure.asCode().toString()
-                            showInstallFailure(app.getString(R.string.install_app_fail, message))
-                        }
-
-                        Session.State.Succeeded -> {
+                        InstallResult.Success -> {
                             val persisted = persistPatchedApp(currentPackageInfo.packageName, installType)
                             if (!persisted) {
                                 Log.w(TAG, "Failed to persist installed patched app metadata")
@@ -2387,6 +2358,35 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             lastSuccessInstallType = installType
                             lastSuccessAtMs = System.currentTimeMillis()
                             updateInstallingState(false)
+                        }
+
+                        is InstallResult.Conflict -> {
+                            val backendReason = result.message
+                            if (installerManager.isSignatureMismatch(backendReason)) {
+                                val plan = installerManager.resolvePlan(
+                                    InstallerManager.InstallTarget.PATCHER,
+                                    outputFile,
+                                    currentPackageInfo.packageName,
+                                    null,
+                                    allowMount = currentPackageInfo.packageName == packageName && rootMountInputSupported
+                                )
+                                showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
+                                return
+                            }
+                            val message = installerManager.formatFailureHint(
+                                PackageInstaller.STATUS_FAILURE_CONFLICT,
+                                backendReason
+                            ) ?: backendReason ?: app.getString(R.string.installer_hint_conflict_generic)
+                            showInstallFailure(app.getString(R.string.install_app_fail, message))
+                        }
+
+                        is InstallResult.Failure -> {
+                            val backendReason = result.message
+                            val message = installerManager.formatFailureHint(
+                                result.status,
+                                backendReason
+                            ) ?: backendReason ?: app.getString(R.string.installer_hint_generic)
+                            showInstallFailure(app.getString(R.string.install_app_fail, message))
                         }
                     }
                 }

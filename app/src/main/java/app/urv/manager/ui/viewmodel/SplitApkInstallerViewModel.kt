@@ -20,6 +20,9 @@ import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.util.InstalledPackageSnapshot
+import app.urv.manager.util.PM
+import app.urv.manager.util.installedPackageSnapshot
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
 import java.io.File
@@ -50,7 +53,8 @@ import kotlinx.coroutines.withTimeout
 class SplitApkInstallerViewModel(
     private val app: Application,
     private val rootInstaller: RootInstaller,
-    private val shizukuInstaller: ShizukuInstaller
+    private val shizukuInstaller: ShizukuInstaller,
+    private val pm: PM
 ) : ViewModel() {
     private val stateFlow = MutableStateFlow(SplitApkInstallerState())
     val state = stateFlow.asStateFlow()
@@ -177,7 +181,7 @@ class SplitApkInstallerViewModel(
                             it.copy(statusMessage = status)
                         }
                         appendLog(status)
-                        installWithPackageInstaller(apkFiles)
+                        installWithPackageInstaller(apkFiles, expectedPackageName)
                     }
 
                     SplitInstallMode.PRIVILEGED -> {
@@ -333,7 +337,13 @@ class SplitApkInstallerViewModel(
         }
     }
 
-    private suspend fun installWithPackageInstaller(apkFiles: List<File>) = withContext(Dispatchers.IO) {
+    private suspend fun installWithPackageInstaller(
+        apkFiles: List<File>,
+        expectedPackage: String?
+    ) = withContext(Dispatchers.IO) {
+        val beforeInstall = expectedPackage?.let { packageName ->
+            pm.installedPackageSnapshot(packageName, includeHashes = false)
+        }
         val packageInstaller = app.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
             setInstallReason(PackageManager.INSTALL_REASON_USER)
@@ -486,8 +496,20 @@ class SplitApkInstallerViewModel(
                 resultDeferred.await()
             }
 
-            if (outcome.status != PackageInstaller.STATUS_SUCCESS) {
+            val installedDespiteFailure =
+                outcome.status != PackageInstaller.STATUS_SUCCESS &&
+                    expectedPackage != null &&
+                    confirmInstallCompleted(apkFiles, expectedPackage, beforeInstall)
+            if (outcome.status != PackageInstaller.STATUS_SUCCESS && !installedDespiteFailure) {
                 throw IOException(outcome.message ?: app.getString(R.string.split_installer_failed))
+            }
+            if (installedDespiteFailure) {
+                // Code adapted from Morphe, see third-party/NOTICE for more information
+                // https://github.com/MorpheApp/morphe-manager/pull/598
+                appendLog(
+                    "Package Installer reported failure but APK verification succeeded for " +
+                        expectedPackage
+                )
             }
             completed = true
         } finally {
@@ -501,6 +523,17 @@ class SplitApkInstallerViewModel(
                 runCatching { packageInstaller.abandonSession(sessionId) }
             }
         }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/598
+    private fun confirmInstallCompleted(
+        apkFiles: List<File>,
+        expectedPackage: String,
+        beforeInstall: InstalledPackageSnapshot?
+    ): Boolean {
+        val afterInstall = pm.installedPackageSnapshot(expectedPackage) ?: return false
+        return afterInstall.changedSince(beforeInstall) && afterInstall.matches(apkFiles)
     }
 
     private suspend fun installWithRootPackageManager(apkFiles: List<File>) {
