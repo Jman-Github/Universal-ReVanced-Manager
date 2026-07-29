@@ -13,9 +13,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 
-abstract class BasePreferencesManager(private val context: Context, name: String) {
-    private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = name)
-    protected val dataStore get() = context.dataStore
+private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+abstract class BasePreferencesManager(private val context: Context) {
+    protected val dataStore get() = context.settingsDataStore
 
     suspend fun preload() {
         dataStore.data.first()

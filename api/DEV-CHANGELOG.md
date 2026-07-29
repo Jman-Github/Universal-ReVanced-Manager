@@ -17,6 +17,7 @@
 # Bug fixes
 
 - Fixed some APKs merged with the Split APK Merger tool failing when later used for patching
+- Fixed the bundle update WebSocket service crashing after a background restart due to multiple DataStore instances accessing the same preferences file https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/647
 
 
 # v1.8.1-dev.21 (2026-07-25)

@@ -45,7 +45,7 @@ enum class BundleUpdateDeliveryMode(val displayName: Int) {
 
 class PreferencesManager(
     context: Context
-) : BasePreferencesManager(context, "settings") {
+) : BasePreferencesManager(context) {
     companion object {
         private val MANAGER_PRERELEASE_VERSION_REGEX = Regex("""\d+\.\d+\.\d+-.+""")
         private fun isManagerPrereleaseVersion(versionName: String): Boolean =

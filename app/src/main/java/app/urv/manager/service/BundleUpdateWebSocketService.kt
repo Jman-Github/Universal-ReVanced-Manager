@@ -15,8 +15,11 @@ import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import kotlinx.coroutines.runBlocking
+import org.koin.android.ext.android.inject
 
 class BundleUpdateWebSocketService : Service() {
+    private val prefs: PreferencesManager by inject()
+
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
@@ -108,7 +111,6 @@ class BundleUpdateWebSocketService : Service() {
             )
         }
 
-        val prefs = PreferencesManager(applicationContext)
         val listenBundle = runBlocking {
             prefs.searchForUpdatesBackgroundInterval.get() != SearchForUpdatesBackgroundInterval.NEVER
         }
