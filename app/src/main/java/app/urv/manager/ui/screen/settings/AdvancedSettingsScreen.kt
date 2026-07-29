@@ -3412,6 +3412,8 @@ private fun previewIconForSavedAppAction(key: SavedAppActionKey): ImageVector =
         SavedAppActionKey.OPEN -> Icons.AutoMirrored.Outlined.OpenInNew
         SavedAppActionKey.EXPORT -> Icons.Outlined.Save
         SavedAppActionKey.INSTALL_UPDATE -> Icons.Outlined.InstallMobile
+        SavedAppActionKey.REPAIR_ROOT_MOUNT -> Icons.Outlined.SettingsBackupRestore
+        SavedAppActionKey.EXPORT_ROOT_MOUNT_DIAGNOSTICS -> Icons.Outlined.Save
         SavedAppActionKey.DELETE -> Icons.Outlined.Delete
         SavedAppActionKey.REPATCH -> Icons.Outlined.Update
     }

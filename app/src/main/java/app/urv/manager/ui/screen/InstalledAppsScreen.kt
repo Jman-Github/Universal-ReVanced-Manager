@@ -31,6 +31,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.Save
@@ -74,6 +75,7 @@ import app.urv.manager.ui.viewmodel.InstalledAppsViewModel.AppBundleSummary
 import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.relativeTime
 import app.urv.manager.util.savedAppBasePackage
+import app.urv.manager.util.supportsRootMount
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
@@ -127,8 +129,7 @@ fun InstalledAppsScreen(
                 } else {
                     app.currentPackageName
                 }
-                val packageInfo = viewModel.packageInfoMap[app.currentPackageName]
-                val label = packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString().orEmpty()
+                val label = viewModel.appLabelMap[app.currentPackageName].orEmpty()
                 val searchText = buildString {
                     append(packageName)
                     if (packageName != app.currentPackageName) {
@@ -197,7 +198,9 @@ fun InstalledAppsScreen(
                         val packageName = installedApp.currentPackageName
                         val packageInfo = viewModel.packageInfoMap[packageName]
                         val hasPackageInfo = viewModel.packageInfoMap.containsKey(packageName)
-                        val isSaved = installedApp.installType == InstallType.SAVED
+                        val supportsRootMount = installedApp.supportsRootMount(packageInfo?.packageName)
+                        val isSaved = installedApp.installType == InstallType.SAVED ||
+                            (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
                         val isBundleMetaLoaded = !isSaved || packageName in viewModel.bundleSummaryLoaded
                         val showPlaceholder = !hasPackageInfo || !isBundleMetaLoaded
                         val isMissingInstall = packageName in viewModel.missingPackages
@@ -206,7 +209,9 @@ fun InstalledAppsScreen(
                         val isInstalledOnDevice = viewModel.installedOnDeviceMap[packageName] == true
                         val hasSavedCopy = viewModel.savedCopyMap[packageName] == true
                         val savedApkAbiLabel = viewModel.savedApkAbiLabelMap[packageName]
-                        val isMounted = if (installedApp.installType == InstallType.MOUNT) {
+                        val isMounted = if (
+                            installedApp.installType == InstallType.MOUNT && supportsRootMount
+                        ) {
                             viewModel.mountedOnDeviceMap[packageName]
                                 ?: (viewModel.installedOnDeviceMap[packageName] == true)
                         } else {
@@ -220,6 +225,7 @@ fun InstalledAppsScreen(
                             InstalledAppCard(
                                 installedApp = installedApp,
                                 packageInfo = packageInfo,
+                                appLabel = viewModel.appLabelMap[packageName],
                                 isSelected = isSelected,
                                 selectionActive = selectionActive,
                                 isSelectable = isSelectable,
@@ -228,6 +234,7 @@ fun InstalledAppsScreen(
                                 hasSavedCopy = hasSavedCopy,
                                 savedApkAbiLabel = savedApkAbiLabel,
                                 isMounted = isMounted,
+                                supportsRootMount = supportsRootMount,
                                 bundleSummaries = bundleSummaries,
                                 showBundleUpdateBadges = showSavedAppBundleUpdateBadges,
                                 timeTick = timeTick,
@@ -256,6 +263,7 @@ fun InstalledAppsScreen(
         AppsOrderDialog(
             apps = installedApps.orEmpty(),
             appInfoMap = viewModel.packageInfoMap,
+            appLabelMap = viewModel.appLabelMap,
             onDismissRequest = onDismissOrderDialog,
             onConfirm = { ordered ->
                 viewModel.reorderApps(ordered.map { it.currentPackageName })
@@ -270,6 +278,7 @@ fun InstalledAppsScreen(
 private fun InstalledAppCard(
     installedApp: InstalledApp,
     packageInfo: PackageInfo?,
+    appLabel: String?,
     isSelected: Boolean,
     selectionActive: Boolean,
     isSelectable: Boolean,
@@ -278,6 +287,7 @@ private fun InstalledAppCard(
     hasSavedCopy: Boolean,
     savedApkAbiLabel: String?,
     isMounted: Boolean,
+    supportsRootMount: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
     showBundleUpdateBadges: Boolean,
     timeTick: Long,
@@ -288,7 +298,13 @@ private fun InstalledAppCard(
     onAppAction: (InstalledApp, InstalledAppAction) -> Unit
 ) {
     val context = LocalContext.current
-    val isSaved = installedApp.installType == InstallType.SAVED
+    val isSaved = installedApp.installType == InstallType.SAVED ||
+        (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
+    val displayInstallType = if (isSaved && installedApp.installType == InstallType.MOUNT) {
+        InstallType.SAVED
+    } else {
+        installedApp.installType
+    }
     val displayPackageName = if (isSaved) {
         installedApp.originalPackageName.takeIf { it.isNotBlank() }
             ?: savedAppBasePackage(installedApp.currentPackageName)
@@ -355,6 +371,7 @@ private fun InstalledAppCard(
                     val titleScrollState = rememberScrollState()
                     AppLabel(
                         packageInfo = packageInfo,
+                        labelOverride = appLabel,
                         style = MaterialTheme.typography.titleMedium,
                         defaultText = displayPackageName,
                         modifier = Modifier
@@ -368,7 +385,7 @@ private fun InstalledAppCard(
                     horizontalAlignment = Alignment.End
                 ) {
                     AppMetaPill(
-                        text = stringResource(installedApp.installType.stringResource)
+                        text = stringResource(displayInstallType.stringResource)
                     )
                 }
             }
@@ -464,19 +481,32 @@ private fun InstalledAppCard(
                                         onClick = { onAppAction(installedApp, InstalledAppAction.EXPORT) }
                                     )
                                     SavedAppActionKey.INSTALL_UPDATE -> {
-                                        if (installedApp.installType == InstallType.MOUNT) {
+                                        if (
+                                            installedApp.installType == InstallType.MOUNT &&
+                                            supportsRootMount
+                                        ) {
                                             val mountLabel = if (isMounted) {
-                                                stringResource(R.string.remount_saved_app)
+                                                stringResource(R.string.root_mount_use_stock)
                                             } else {
                                                 stringResource(R.string.mount)
                                             }
                                             AppActionPill(
                                                 text = mountLabel,
-                                                icon = Icons.Outlined.SettingsBackupRestore,
-                                                onClick = { onAppAction(installedApp, InstalledAppAction.INSTALL_OR_UPDATE) },
-                                                onLongClick = if (isMounted) {
-                                                    { onAppAction(installedApp, InstalledAppAction.UNINSTALL) }
-                                                } else null
+                                                icon = if (isMounted) {
+                                                    Icons.Outlined.Circle
+                                                } else {
+                                                    Icons.Outlined.SettingsBackupRestore
+                                                },
+                                                onClick = {
+                                                    onAppAction(
+                                                        installedApp,
+                                                        if (isMounted) {
+                                                            InstalledAppAction.UNINSTALL
+                                                        } else {
+                                                            InstalledAppAction.INSTALL_OR_UPDATE
+                                                        }
+                                                    )
+                                                }
                                             )
                                         } else {
                                             val installLabel = if (isInstalledOnDevice) {
@@ -491,6 +521,42 @@ private fun InstalledAppCard(
                                                 onLongClick = if (isInstalledOnDevice) {
                                                     { onAppAction(installedApp, InstalledAppAction.UNINSTALL) }
                                                 } else null
+                                            )
+                                        }
+                                    }
+                                    SavedAppActionKey.REPAIR_ROOT_MOUNT -> {
+                                        if (
+                                            installedApp.installType == InstallType.MOUNT &&
+                                            supportsRootMount
+                                        ) {
+                                            AppActionPill(
+                                                text = stringResource(R.string.root_mount_repair),
+                                                icon = Icons.Outlined.SettingsBackupRestore,
+                                                onClick = {
+                                                    onAppAction(
+                                                        installedApp,
+                                                        InstalledAppAction.REPAIR_ROOT_MOUNT
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                    SavedAppActionKey.EXPORT_ROOT_MOUNT_DIAGNOSTICS -> {
+                                        if (
+                                            installedApp.installType == InstallType.MOUNT &&
+                                            supportsRootMount
+                                        ) {
+                                            AppActionPill(
+                                                text = stringResource(
+                                                    R.string.root_mount_export_diagnostics
+                                                ),
+                                                icon = Icons.Outlined.Save,
+                                                onClick = {
+                                                    onAppAction(
+                                                        installedApp,
+                                                        InstalledAppAction.EXPORT_ROOT_MOUNT_DIAGNOSTICS
+                                                    )
+                                                }
                                             )
                                         }
                                     }
@@ -644,6 +710,7 @@ private fun AppActionPill(
 private fun AppsOrderDialog(
     apps: List<InstalledApp>,
     appInfoMap: Map<String, PackageInfo?>,
+    appLabelMap: Map<String, String>,
     onDismissRequest: () -> Unit,
     onConfirm: (List<InstalledApp>) -> Unit
 ) {
@@ -686,6 +753,7 @@ private fun AppsOrderDialog(
                                 index = index,
                                 app = app,
                                 packageInfo = appInfoMap[app.currentPackageName],
+                                appLabel = appLabelMap[app.currentPackageName],
                                 interactionSource = interactionSource
                             )
                         }
@@ -701,6 +769,7 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
     index: Int,
     app: InstalledApp,
     packageInfo: PackageInfo?,
+    appLabel: String?,
     interactionSource: MutableInteractionSource
 ) {
     val displayPackageName = if (app.installType == InstallType.SAVED) {
@@ -724,6 +793,7 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
         Column(modifier = Modifier.weight(1f)) {
             AppLabel(
                 packageInfo = packageInfo,
+                labelOverride = appLabel,
                 style = MaterialTheme.typography.bodyLarge,
                 defaultText = displayPackageName
             )

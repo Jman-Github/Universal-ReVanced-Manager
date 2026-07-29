@@ -77,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ConfirmDialog
@@ -164,6 +165,7 @@ fun PatcherScreen(
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
+    val supportsRootMount = viewModel.supportsRootMount && viewModel.rootMountInputSupported
     val primaryInstallerIsMount = remember(primaryInstallerValue) {
         installerManager.parseToken(primaryInstallerValue) is InstallerManager.Token.AutoSaved
     }
@@ -171,9 +173,16 @@ fun PatcherScreen(
         installerManager.parseToken(fallbackInstallerValue) is InstallerManager.Token.AutoSaved
     }
     var mountInstallerAvailable by remember { mutableStateOf(false) }
-    LaunchedEffect(chooseInstallerPerInstall, primaryInstallerIsMount, fallbackInstallerIsMount) {
+    LaunchedEffect(
+        chooseInstallerPerInstall,
+        primaryInstallerIsMount,
+        fallbackInstallerIsMount,
+        supportsRootMount
+    ) {
         mountInstallerAvailable = if (
-            !chooseInstallerPerInstall && (primaryInstallerIsMount || fallbackInstallerIsMount)
+            supportsRootMount &&
+            !chooseInstallerPerInstall &&
+            (primaryInstallerIsMount || fallbackInstallerIsMount)
         ) {
             withContext(Dispatchers.IO) {
                 installerManager.describeEntry(
@@ -902,6 +911,20 @@ fun PatcherScreen(
             }
         )
     }
+
+    viewModel.rootMountRecoveryMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearRootMountRecoveryMessage,
+            title = { CenteredDialogTitle(stringResource(R.string.root_mount_recovered_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::clearRootMountRecoveryMessage) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
     viewModel.installFailureMessage?.let { message ->
         AlertDialog(
             onDismissRequest = viewModel::dismissInstallFailureMessage,
@@ -924,8 +947,32 @@ fun PatcherScreen(
     viewModel.installStatus?.let { status ->
         when (status) {
             PatcherViewModel.InstallCompletionStatus.InProgress -> {
-                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     CircularProgressIndicator()
+                    viewModel.rootMountPhase?.let { phase ->
+                        Text(
+                            text = stringResource(
+                                when (phase) {
+                                    RootMountPhase.PREPARING -> R.string.root_mount_phase_preparing
+                                    RootMountPhase.STOPPING_APP -> R.string.root_mount_phase_stopping
+                                    RootMountPhase.REMOVING_OLD_MOUNTS -> R.string.root_mount_phase_unmounting
+                                    RootMountPhase.SNAPSHOTTING -> R.string.root_mount_phase_snapshotting
+                                    RootMountPhase.INSTALLING_STOCK,
+                                    RootMountPhase.WAITING_FOR_PACKAGE_MANAGER -> R.string.root_mount_phase_stock_update
+                                    RootMountPhase.STAGING_PATCHED_PAYLOAD -> R.string.root_mount_phase_staging
+                                    RootMountPhase.MOUNTING -> R.string.root_mount_phase_mounting
+                                    RootMountPhase.VERIFYING -> R.string.root_mount_phase_verifying
+                                    RootMountPhase.COMMITTING -> R.string.root_mount_phase_committing
+                                    RootMountPhase.ROLLING_BACK -> R.string.root_mount_phase_rollback
+                                    RootMountPhase.COMPLETED -> R.string.root_mount_phase_completed
+                                }
+                            )
+                        )
+                    }
                 }
             }
 
@@ -1018,13 +1065,33 @@ fun PatcherScreen(
         }
     }
 
+    if (viewModel.rootDowngradeConfirmationPending) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRootDowngradeConfirmation,
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmRootDowngrade) {
+                    Text(stringResource(R.string.continue_))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRootDowngradeConfirmation) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { CenteredDialogTitle(stringResource(R.string.root_mount_downgrade_title)) },
+            text = { Text(stringResource(R.string.root_mount_downgrade_confirmation)) }
+        )
+    }
+
     if (showInstallerPicker) {
         InstallerPickerDialog(
             title = stringResource(R.string.installer_choose_for_this_install_title),
             options = installerManager.listEntries(
                 target = InstallerManager.InstallTarget.PATCHER,
                 includeNone = false
-            ),
+            ).filterNot { entry ->
+                entry.token == InstallerManager.Token.AutoSaved && !supportsRootMount
+            },
             onDismiss = { showInstallerPicker = false },
             onConfirm = viewModel::installWithToken,
             onOpenShizuku = installerManager::openShizukuApp

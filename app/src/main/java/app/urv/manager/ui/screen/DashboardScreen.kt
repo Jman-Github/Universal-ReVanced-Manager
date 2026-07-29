@@ -2,6 +2,8 @@ package app.urv.manager.ui.screen
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.net.Uri
@@ -70,6 +72,7 @@ import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.DeviceHub
 import androidx.compose.material.icons.outlined.Close
@@ -215,6 +218,7 @@ import app.urv.manager.util.BundleDeepLink
 import app.urv.manager.util.PatchBundleFileIntent
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.isAllowedPatchBundleFile
@@ -320,6 +324,8 @@ fun DashboardScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val dashboardApkInputDirectory by prefs.dashboardApkInputLastDirectory.getAsState()
     val dashboardQuickExportDirectory by prefs.dashboardQuickExportLastDirectory.getAsState()
+    val rootMountDiagnosticsExportDirectory by
+        prefs.rootMountDiagnosticsExportLastDirectory.getAsState()
     val dashboardBundleInputDirectory by prefs.dashboardBundleInputLastDirectory.getAsState()
     val dashboardSplitInputDirectory by prefs.dashboardSplitInputLastDirectory.getAsState()
     val dashboardSavedAppsExportDirectory by
@@ -492,9 +498,18 @@ fun DashboardScreen(
     var quickDeleteIsEntry by remember { mutableStateOf(false) }
     var quickDeleteApp by remember { mutableStateOf<InstalledApp?>(null) }
     var showQuickSavedUninstallDialog by remember { mutableStateOf(false) }
-    var showQuickUnmountDialog by remember { mutableStateOf(false) }
     var showQuickInstallerPicker by remember { mutableStateOf(false) }
     var quickMountPromptMode by remember { mutableStateOf<SavedAppMountPromptMode?>(null) }
+    var showQuickRootDiagnosticsActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showQuickRootDiagnosticsExportPicker by rememberSaveable { mutableStateOf(false) }
+    var quickRootDiagnosticsExportFileDialogState by remember {
+        mutableStateOf<QuickRootDiagnosticsExportDialogState?>(null)
+    }
+    var pendingQuickRootDiagnosticsExportConfirmation by remember {
+        mutableStateOf<PendingQuickRootDiagnosticsExportConfirmation?>(null)
+    }
+    var quickRootDiagnosticsExportInProgress by rememberSaveable { mutableStateOf(false) }
+    var pendingQuickRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
     var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
 
@@ -624,13 +639,59 @@ fun DashboardScreen(
         quickActionViewModel?.onBackClick = {}
     }
 
+    val quickRootDiagnosticsPermissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showQuickRootDiagnosticsExportPicker = true
+            }
+        }
+    val quickRootDiagnosticsDocumentLauncher = rememberLauncherForActivityResult(
+        contract = RememberedCreateDocument("text/plain") {
+            rootMountDiagnosticsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
+        val actionViewModel = quickActionViewModel
+        if (uri != null && actionViewModel != null) {
+            composableScope.launch {
+                prefs.rootMountDiagnosticsExportLastDirectory.update(
+                    uri.toPickerDirectoryUri().toString()
+                )
+            }
+            quickRootDiagnosticsExportInProgress = true
+            actionViewModel.exportRootMountDiagnosticsToUri(uri) { success ->
+                quickRootDiagnosticsExportInProgress = false
+                if (success) showQuickRootDiagnosticsExportPicker = false
+            }
+        }
+        pendingQuickRootDiagnosticsFileName = null
+    }
+    fun openQuickRootDiagnosticsExportPicker() {
+        val packageName = quickActionViewModel?.installedApp?.currentPackageName
+            ?: quickActionPackage
+            ?: "diagnostics"
+        val fileName = FilenameUtils.timestampedLogFileName("root-mount-$packageName")
+        pendingQuickRootDiagnosticsFileName = fileName
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showQuickRootDiagnosticsExportPicker = true
+            } else {
+                quickRootDiagnosticsPermissionLauncher.launch(permissionName)
+            }
+        } else {
+            quickRootDiagnosticsDocumentLauncher.launch(fileName)
+        }
+    }
+
     if (showQuickInstallerPicker && quickActionViewModel != null) {
         InstallerPickerDialog(
             title = stringResource(R.string.installer_choose_for_this_install_title),
             options = installerManager.listEntries(
                 target = InstallerManager.InstallTarget.SAVED_APP,
                 includeNone = false
-            ),
+            ).filterNot { entry ->
+                entry.token == InstallerManager.Token.AutoSaved &&
+                    !quickActionViewModel.supportsRootMount
+            },
             onDismiss = { showQuickInstallerPicker = false },
             onConfirm = quickActionViewModel::installSavedApp,
             onOpenShizuku = installerManager::openShizukuApp
@@ -655,23 +716,185 @@ fun DashboardScreen(
             onRemount = {
                 quickMountPromptMode = null
                 actionViewModel.remountSavedInstallation()
-            },
-            onUnmount = {
-                quickMountPromptMode = null
-                actionViewModel.mountOrUnmount()
             }
+        )
+    }
+
+    if (showQuickRootDiagnosticsActionsDialog) {
+        quickActionViewModel?.let { actionViewModel ->
+            RootMountDiagnosticsActionsDialog(
+                onDismiss = { showQuickRootDiagnosticsActionsDialog = false },
+                onCopy = {
+                    showQuickRootDiagnosticsActionsDialog = false
+                    composableScope.launch {
+                        val content = actionViewModel.readRootMountDiagnostics() ?: return@launch
+                        val clipboard = androidContext.getSystemService(ClipboardManager::class.java)
+                        if (clipboard == null) {
+                            androidContext.toast(
+                                androidContext.getString(R.string.root_mount_diagnostics_copy_failed)
+                            )
+                            return@launch
+                        }
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText("Root mount diagnostics", content)
+                        )
+                        androidContext.toast(
+                            androidContext.getString(R.string.root_mount_diagnostics_copy_success)
+                        )
+                    }
+                },
+                onExport = {
+                    showQuickRootDiagnosticsActionsDialog = false
+                    openQuickRootDiagnosticsExportPicker()
+                }
+            )
+        }
+    }
+
+    if (showQuickRootDiagnosticsExportPicker && useCustomFilePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showQuickRootDiagnosticsExportPicker = false
+                    pendingQuickRootDiagnosticsFileName = null
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            fileTypeLabel = ".txt",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                quickRootDiagnosticsExportFileDialogState =
+                    QuickRootDiagnosticsExportDialogState(
+                        directory = directory,
+                        fileName = pendingQuickRootDiagnosticsFileName
+                            ?: FilenameUtils.timestampedLogFileName("root-mount")
+                    )
+            },
+            lastDirectoryPreference = prefs.rootMountDiagnosticsExportLastDirectory
+        )
+    }
+
+    quickRootDiagnosticsExportFileDialogState?.let { state ->
+        ExportRootDiagnosticsFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = {
+                quickRootDiagnosticsExportFileDialogState = null
+                pendingQuickRootDiagnosticsFileName = null
+            },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportRootDiagnosticsFileNameDialog
+                val finalName = if (trimmedName.endsWith(".txt", ignoreCase = true)) {
+                    trimmedName
+                } else {
+                    "$trimmedName.txt"
+                }
+                quickRootDiagnosticsExportFileDialogState = null
+                pendingQuickRootDiagnosticsFileName = null
+                val target = state.directory.resolve(finalName)
+                if (Files.exists(target)) {
+                    pendingQuickRootDiagnosticsExportConfirmation =
+                        PendingQuickRootDiagnosticsExportConfirmation(
+                            state.directory,
+                            finalName
+                        )
+                } else {
+                    val actionViewModel = quickActionViewModel
+                    if (actionViewModel != null) {
+                        quickRootDiagnosticsExportInProgress = true
+                        actionViewModel.exportRootMountDiagnosticsToPath(target) { success ->
+                            quickRootDiagnosticsExportInProgress = false
+                            if (success) showQuickRootDiagnosticsExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    pendingQuickRootDiagnosticsExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingQuickRootDiagnosticsExportConfirmation = null
+                quickRootDiagnosticsExportFileDialogState =
+                    QuickRootDiagnosticsExportDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingQuickRootDiagnosticsExportConfirmation = null
+                val actionViewModel = quickActionViewModel
+                if (actionViewModel != null) {
+                    quickRootDiagnosticsExportInProgress = true
+                    actionViewModel.exportRootMountDiagnosticsToPath(
+                        state.directory.resolve(state.fileName)
+                    ) { success ->
+                        quickRootDiagnosticsExportInProgress = false
+                        if (success) showQuickRootDiagnosticsExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(
+                R.string.export_overwrite_description,
+                state.fileName
+            ),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+
+    if (quickRootDiagnosticsExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.root_mount_diagnostics_save_title),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.root_mount_diagnostics_exporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
 
     LaunchedEffect(
         quickActionViewModel?.installedApp?.currentPackageName,
-        quickActionViewModel?.isMounted
+        quickActionViewModel?.isMounted,
+        quickActionViewModel?.supportsRootMount
     ) {
         val app = quickActionViewModel?.installedApp ?: return@LaunchedEffect
         val packageName = app.currentPackageName
-        if (app.installType == InstallType.MOUNT) {
+        if (app.installType == InstallType.MOUNT && quickActionViewModel.supportsRootMount) {
             installedAppsViewModel.mountedOnDeviceMap[packageName] =
-                quickActionViewModel?.isMounted == true
+                quickActionViewModel.isMounted
         } else {
             installedAppsViewModel.mountedOnDeviceMap.remove(packageName)
         }
@@ -940,6 +1163,10 @@ fun DashboardScreen(
             pendingSplitPermissionRequest = null
             quickExportDialogState = null
             pendingQuickExportConfirmation = null
+            showQuickRootDiagnosticsExportPicker = false
+            quickRootDiagnosticsExportFileDialogState = null
+            pendingQuickRootDiagnosticsExportConfirmation = null
+            pendingQuickRootDiagnosticsFileName = null
         }
     }
 
@@ -1228,7 +1455,10 @@ fun DashboardScreen(
                 pendingQuickAction = null
             }
             InstalledAppAction.INSTALL_OR_UPDATE -> {
-                if (actionApp.installType == InstallType.MOUNT) {
+                if (
+                    actionApp.installType == InstallType.MOUNT &&
+                    actionViewModel.supportsRootMount
+                ) {
                     if (chooseInstallerPerInstall) {
                         if (actionViewModel.isMounted) {
                             if (!actionViewModel.rootInstaller.hasRootAccess()) {
@@ -1258,7 +1488,10 @@ fun DashboardScreen(
                     }
                 } else if (chooseInstallerPerInstall) {
                     showQuickInstallerPicker = true
-                } else if (actionViewModel.primaryInstallerIsMount) {
+                } else if (
+                    actionViewModel.primaryInstallerIsMount &&
+                    actionViewModel.supportsRootMount
+                ) {
                     val mountAction = if (actionViewModel.isInstalledOnDevice) {
                         MountWarningAction.UPDATE
                     } else {
@@ -1273,23 +1506,24 @@ fun DashboardScreen(
                 }
                 pendingQuickAction = null
             }
+            InstalledAppAction.REPAIR_ROOT_MOUNT -> {
+                actionViewModel.repairRootMount()
+                pendingQuickAction = null
+            }
+            InstalledAppAction.EXPORT_ROOT_MOUNT_DIAGNOSTICS -> {
+                showQuickRootDiagnosticsActionsDialog = true
+                pendingQuickAction = null
+            }
             InstalledAppAction.UNINSTALL -> {
-                if (actionApp.installType == InstallType.MOUNT) {
-                    if (chooseInstallerPerInstall) {
-                        if (!actionViewModel.rootInstaller.hasRootAccess()) {
-                            androidContext.toast(androidContext.getString(R.string.installer_status_requires_root))
-                        } else {
-                            quickMountPromptMode = SavedAppMountPromptMode.UNMOUNT
-                        }
-                    } else if (!actionViewModel.primaryInstallerIsMount) {
-                        actionViewModel.showMountWarning(
-                            MountWarningAction.UNINSTALL,
-                            MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
-                        )
-                    } else {
-                        showQuickUnmountDialog = true
-                    }
-                } else if (actionViewModel.primaryInstallerIsMount) {
+                if (
+                    actionApp.installType == InstallType.MOUNT &&
+                    actionViewModel.supportsRootMount
+                ) {
+                    actionViewModel.unmountSavedInstallation()
+                } else if (
+                    actionViewModel.primaryInstallerIsMount &&
+                    actionViewModel.supportsRootMount
+                ) {
                     actionViewModel.showMountWarning(
                         MountWarningAction.UNINSTALL,
                         MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP
@@ -1904,18 +2138,7 @@ fun DashboardScreen(
         )
     }
 
-    if (showQuickUnmountDialog) {
-        ConfirmDialog(
-            onDismiss = { showQuickUnmountDialog = false },
-            onConfirm = {
-                showQuickUnmountDialog = false
-                quickActionViewModel?.unmountSavedInstallation()
-            },
-            title = stringResource(R.string.unmount),
-            description = stringResource(R.string.unmount_confirm_description),
-            icon = Icons.Outlined.Circle
-        )
-    }
+
 
     if (showQuickSavedUninstallDialog) {
         ConfirmDialog(
@@ -1933,6 +2156,8 @@ fun DashboardScreen(
     if (showQuickDeleteDialog) {
         val deleteEntry = quickDeleteIsEntry
         val deleteApp = quickDeleteApp
+        val removesRootMount = deleteApp?.installType == InstallType.MOUNT ||
+            (deleteApp == null && quickActionViewModel?.installedApp?.installType == InstallType.MOUNT)
         ConfirmDialog(
             onDismiss = {
                 showQuickDeleteDialog = false
@@ -1950,10 +2175,18 @@ fun DashboardScreen(
                 }
             },
             title = stringResource(
-                if (deleteEntry) R.string.delete_saved_entry_title else R.string.delete_saved_app_title
+                when {
+                    removesRootMount -> R.string.delete_root_mount_saved_app_title
+                    deleteEntry -> R.string.delete_saved_entry_title
+                    else -> R.string.delete_saved_app_title
+                }
             ),
             description = stringResource(
-                if (deleteEntry) R.string.delete_saved_entry_description else R.string.delete_saved_app_description
+                when {
+                    removesRootMount -> R.string.delete_root_mount_saved_app_description
+                    deleteEntry -> R.string.delete_saved_entry_description
+                    else -> R.string.delete_saved_app_description
+                }
             ),
             icon = Icons.Outlined.Delete
         )
@@ -3124,6 +3357,16 @@ private fun ToolsTabScreen(
 }
 
 private data class PendingQuickExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class QuickRootDiagnosticsExportDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingQuickRootDiagnosticsExportConfirmation(
     val directory: Path,
     val fileName: String
 )

@@ -6,11 +6,13 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageInfo
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
+import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
@@ -20,6 +22,10 @@ import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.remapAndExtractSelection
@@ -33,7 +39,11 @@ import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedApkAbiLabel
+import app.urv.manager.util.simpleMessage
+import app.urv.manager.util.supportsRootMount
+import app.urv.manager.util.toast
 import app.urv.manager.patcher.patch.PatchBundleInfo
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -51,6 +61,7 @@ class InstalledAppsViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val pm: PM,
     private val rootInstaller: RootInstaller,
+    private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val filesystem: Filesystem,
     private val prefs: PreferencesManager
 ) : ViewModel() {
@@ -67,6 +78,7 @@ class InstalledAppsViewModel(
     val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
     val savedApkAbiLabelMap = mutableStateMapOf<String, String>()
+    val appLabelMap = mutableStateMapOf<String, String>()
     private val devicePackageLookupMap = mutableStateMapOf<String, String>()
     private var normalizingSavedEntries = false
     val selectedApps = mutableStateSetOf<String>()
@@ -102,6 +114,7 @@ class InstalledAppsViewModel(
                     mountedOnDeviceMap.remove(packageName)
                     savedCopyMap.remove(packageName)
                     savedApkAbiLabelMap.remove(packageName)
+                    appLabelMap.remove(packageName)
                     devicePackageLookupMap.remove(packageName)
                     missingPackages.remove(packageName)
                     selectedApps.remove(packageName)
@@ -232,12 +245,12 @@ class InstalledAppsViewModel(
 
     fun removeSavedApp(app: InstalledApp) = viewModelScope.launch {
         if (app.installType != InstallType.SAVED) return@launch
-        clearSavedData(app, deleteRecord = true)
+        if (!clearSavedData(app, deleteRecord = true)) return@launch
         savedCopyMap[app.currentPackageName] = false
     }
 
     fun deleteSavedEntry(app: InstalledApp) = viewModelScope.launch {
-        clearSavedData(app, deleteRecord = true)
+        if (!clearSavedData(app, deleteRecord = true)) return@launch
         savedCopyMap[app.currentPackageName] = false
     }
 
@@ -297,17 +310,13 @@ class InstalledAppsViewModel(
             return@launch
         }
 
-        toDelete.forEach { installedAppsRepository.delete(it) }
-        withContext(Dispatchers.IO) {
-            toDelete.filter { it.installType == InstallType.SAVED }.forEach { app ->
-                val file = filesystem.getPatchedAppFile(app.currentPackageName, app.version)
-                if (file.exists()) {
-                    file.delete()
-                }
+        val removedPackages = mutableSetOf<String>()
+        toDelete.forEach { app ->
+            if (deleteAppEntry(app)) {
+                removedPackages += app.currentPackageName
             }
         }
 
-        val removedPackages = toDelete.map { it.currentPackageName }.toSet()
         selectedApps.removeAll(removedPackages)
         removedPackages.forEach { packageName ->
             packageInfoMap.remove(packageName)
@@ -405,6 +414,9 @@ class InstalledAppsViewModel(
         withContext(Dispatchers.IO) {
             val packageName = installedApp.currentPackageName
             val savedCopy = savedApkFile(installedApp)
+            val savedPackageInfo = savedCopy?.let(pm::getPackageInfo)
+            val savedArchiveLabel = savedCopy?.let { pm.getArchiveLabel(it, savedPackageInfo) }
+            val supportsRootMount = installedApp.supportsRootMount(savedPackageInfo?.packageName)
             val hasSavedCopy = savedCopy != null
             savedCopyMap[packageName] = hasSavedCopy
             val savedAbiLabel = savedCopy?.savedApkAbiLabel(pm.application)
@@ -416,30 +428,32 @@ class InstalledAppsViewModel(
             try {
                 if (
                     installedApp.installType == InstallType.MOUNT &&
+                    supportsRootMount &&
                     !rootInstaller.isAppInstalled(packageName)
                 ) {
-                    installedAppsRepository.delete(installedApp)
-                    return@withContext null
+                    if (clearSavedData(installedApp, deleteRecord = true)) {
+                        return@withContext null
+                    }
                 }
             } catch (_: RootServiceException) {
                 // Ignore root service availability issues for mounted apps and fall back to package info lookup.
             }
 
-            if (installedApp.installType == InstallType.MOUNT) {
-                val mounted = runCatching { rootInstaller.isAppMounted(packageName) }
-                    .getOrDefault(false)
-                mountedOnDeviceMap[packageName] = mounted
+            val mounted = if (installedApp.installType == InstallType.MOUNT && supportsRootMount) {
+                runCatching { rootInstaller.isAppMounted(packageName) }.getOrDefault(false).also {
+                    mountedOnDeviceMap[packageName] = it
+                }
             } else {
                 mountedOnDeviceMap.remove(packageName)
+                false
             }
 
-            when (installedApp.installType) {
-                InstallType.SAVED -> {
-                    val resolvedFile = savedApkFile(installedApp)
-                    if (resolvedFile == null) {
-                        return@withContext null
-                    }
-                    val archivePackageInfo = pm.getPackageInfo(resolvedFile)
+            var resolvedLabel = savedArchiveLabel
+            val resolvedPackageInfo = when {
+                installedApp.installType == InstallType.SAVED ||
+                    (installedApp.installType == InstallType.MOUNT && !supportsRootMount) -> {
+                    if (savedCopy == null) return@withContext null
+                    val archivePackageInfo = savedPackageInfo
                     val devicePackageName = archivePackageInfo?.packageName
                         ?.takeIf { it.isNotBlank() }
                         ?: installedApp.originalPackageName.takeIf { it.isNotBlank() }
@@ -448,14 +462,29 @@ class InstalledAppsViewModel(
 
                     val installedInfo = pm.getPackageInfo(devicePackageName)
                     installedOnDeviceMap[packageName] = installedInfo != null
+                    if (resolvedLabel.isNullOrBlank()) {
+                        resolvedLabel = installedInfo?.let { info ->
+                            runCatching { with(pm) { info.label() } }.getOrNull()
+                        }
+                    }
                     val archiveVersion = archivePackageInfo?.versionName?.takeIf { it.isNotBlank() }
-                    if (archiveVersion != null && archiveVersion != installedApp.version) {
+                    val resolvedInstallType = if (
+                        installedApp.installType == InstallType.MOUNT && !supportsRootMount
+                    ) {
+                        InstallType.SAVED
+                    } else {
+                        installedApp.installType
+                    }
+                    if (
+                        resolvedInstallType != installedApp.installType ||
+                        (archiveVersion != null && archiveVersion != installedApp.version)
+                    ) {
                         val selection = installedAppsRepository.getAppliedPatches(packageName)
                         installedAppsRepository.addOrUpdate(
                             currentPackageName = installedApp.currentPackageName,
                             originalPackageName = installedApp.originalPackageName,
-                            version = archiveVersion,
-                            installType = installedApp.installType,
+                            version = archiveVersion ?: installedApp.version,
+                            installType = resolvedInstallType,
                             patchSelection = selection,
                             selectionPayload = installedApp.selectionPayload,
                             createdAtOverride = installedApp.createdAt
@@ -468,12 +497,32 @@ class InstalledAppsViewModel(
                     devicePackageLookupMap[packageName] = packageName
                     val installedInfo = pm.getPackageInfo(packageName)
                     installedOnDeviceMap[packageName] = installedInfo != null
+                    if (resolvedLabel.isNullOrBlank() && !mounted) {
+                        resolvedLabel = installedInfo?.let { info ->
+                            runCatching { with(pm) { info.label() } }.getOrNull()
+                        }
+                    }
                     installedInfo ?: run {
                         val savedFile = filesystem.getPatchedAppFile(packageName, installedApp.version)
                         if (savedFile.exists()) pm.getPackageInfo(savedFile) else null
                     }
                 }
             }
+
+            val fallbackLabel = if (
+                installedApp.installType == InstallType.SAVED ||
+                (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
+            ) {
+                installedApp.originalPackageName.takeIf { it.isNotBlank() }
+                    ?: savedAppBasePackage(packageName)
+            } else {
+                packageName
+            }
+            appLabelMap[packageName] = resolvedLabel
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: fallbackLabel
+            resolvedPackageInfo
         }
 
     private fun exportSelectedSavedAppsInternal(
@@ -512,11 +561,8 @@ class InstalledAppsViewModel(
         } else {
             app.currentPackageName
         }
-        val label = packageInfo?.applicationInfo
-            ?.loadLabel(pm.application.packageManager)
-            ?.toString()
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
+        val label = appLabelMap[app.currentPackageName]
+            ?: pm.getArchiveLabel(source, packageInfo)
             ?: displayPackageName
         val summaries = bundleSummaries[app.currentPackageName].orEmpty()
         val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
@@ -569,13 +615,58 @@ class InstalledAppsViewModel(
             ?: filesystem.findPatchedAppFile(app.originalPackageName)
     }
 
-    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean) {
-        if (deleteRecord) {
+    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean): Boolean {
+        if (deleteRecord) return deleteAppEntry(app)
+
+        return try {
+            withContext(Dispatchers.IO) {
+                savedApkFile(app)?.delete()
+            }
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            reportSavedAppDeleteFailure(error)
+            false
+        }
+    }
+
+    private suspend fun deleteAppEntry(app: InstalledApp): Boolean {
+        return try {
+            if (app.installType == InstallType.MOUNT) {
+                removeRootMountModule(app)
+            }
             installedAppsRepository.delete(app)
+            if (app.installType == InstallType.SAVED || app.installType == InstallType.MOUNT) {
+                withContext(Dispatchers.IO) {
+                    savedApkFile(app)?.delete()
+                }
+            }
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            reportSavedAppDeleteFailure(error)
+            false
         }
-        withContext(Dispatchers.IO) {
-            savedApkFile(app)?.delete()
-        }
+    }
+
+    private suspend fun removeRootMountModule(app: InstalledApp) {
+        rootMountCoordinator.execute(
+            RootMountRequest(
+                packageName = app.currentPackageName,
+                userId = android.os.Process.myUid() / 100_000,
+                operation = RootMountOperation.UNMOUNT,
+                removeModuleAfterUnmount = true
+            )
+        ).requireSuccess()
+    }
+
+    private fun reportSavedAppDeleteFailure(error: Exception) {
+        Log.e("InstalledAppsViewModel", "Failed to delete saved app", error)
+        pm.application.toast(
+            pm.application.getString(R.string.saved_app_delete_failed, error.simpleMessage())
+        )
     }
 
     private suspend fun loadAppliedPatches(packageName: String): PatchSelection =

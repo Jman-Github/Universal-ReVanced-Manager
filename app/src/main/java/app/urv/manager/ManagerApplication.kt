@@ -9,6 +9,9 @@ import android.util.Log
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.di.*
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
@@ -20,6 +23,8 @@ import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.patcher.runtime.PatcherRuntimePluginRegistry
+import app.urv.manager.worker.RootMountReconcileWorker
+import app.urv.manager.worker.RootMountReconciliationScheduler
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.DownloadProgressNotifier
@@ -28,6 +33,7 @@ import app.urv.manager.util.PatchListCatalog
 import app.urv.manager.util.SplitMergeNotification
 import app.urv.manager.util.applyAppLanguage
 import app.universal.revanced.manager.BuildConfig
+import app.universal.revanced.manager.R
 import kotlinx.coroutines.Dispatchers
 import coil.Coil
 import coil.ImageLoader
@@ -59,6 +65,8 @@ class ManagerApplication : Application() {
     private val fs: Filesystem by inject()
     private val httpService: HttpService by inject()
     private val downloadProgressNotifier: DownloadProgressNotifier by inject()
+    private val rootInstaller: RootInstaller by inject()
+    private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -115,6 +123,7 @@ class ManagerApplication : Application() {
 
         val shellBuilder = BuilderImpl.create().setFlags(Shell.FLAG_MOUNT_MASTER)
         Shell.setDefaultBuilder(shellBuilder)
+        RootMountReconciliationScheduler.syncReceiverEnabledState(this)
 
         bundleUpdateWebSocketCoordinator.start()
 
@@ -146,6 +155,22 @@ class ManagerApplication : Application() {
                 prefs.appLanguage.update(storedLanguage)
             }
             applyAppLanguage(storedLanguage)
+            scope.launch(Dispatchers.IO) {
+                val reconciliationExpected = RootMountReconciliationScheduler.isEnabled(this@ManagerApplication)
+                val rootAlreadyAvailable = rootInstaller.peekRootAccess() == true
+                if ((reconciliationExpected || rootAlreadyAvailable) &&
+                    runCatching { rootInstaller.hasRootAccess() }.getOrDefault(false)
+                ) {
+                    val userId = android.os.Process.myUid() / 100_000
+                    runCatching { rootMountCoordinator.recoverIncompleteTransactions(userId) }
+                        .onFailure { Log.e(tag, "Failed to scan incomplete root mount transactions", it) }
+                        .onSuccess(::notifyRootMountResults)
+                    runCatching {
+                        rootMountCoordinator.reconcileCommittedTransactions(userId)
+                    }.onFailure { Log.e(tag, "Failed to reconcile committed root mounts", it) }
+                        .onSuccess(::notifyRootMountResults)
+                }
+            }
             scope.launch(Dispatchers.Default) {
                 runCatching {
                     with(downloaderPluginRepository) {
@@ -245,6 +270,52 @@ class ManagerApplication : Application() {
     private fun cancelActivePatchingOnAppClose() {
         workerRepository.cancelUniqueWork(PatcherWorker.UNIQUE_WORK_NAME)
         PatcherWorker.clearNotification(this)
+    }
+
+    private fun notifyRootMountResults(results: Map<String, RootMountResult>) {
+        results.forEach { (packageName, result) ->
+            when (result) {
+                is RootMountResult.Success -> RootMountReconcileWorker.clearAttentionNotification(
+                    this,
+                    packageName
+                )
+                is RootMountResult.RecoveredToPreviousMount -> RootMountReconcileWorker.notifyAttentionRequired(
+                    this,
+                    packageName,
+                    getString(R.string.root_mount_recovered_title),
+                    getString(
+                        R.string.root_mount_recovered_previous_message,
+                        result.diagnosticId
+                    )
+                )
+                is RootMountResult.RecoveredToStock -> RootMountReconcileWorker.notifyAttentionRequired(
+                    this,
+                    packageName,
+                    getString(R.string.root_mount_recovered_title),
+                    getString(
+                        R.string.root_mount_recovered_stock_message,
+                        result.diagnosticId
+                    )
+                )
+                is RootMountResult.RequiresRepatch -> RootMountReconcileWorker.notifyAttentionRequired(
+                    this,
+                    packageName,
+                    getString(R.string.root_mount_repatch_title),
+                    result.reason
+                )
+                is RootMountResult.Failure -> RootMountReconcileWorker.notifyAttentionRequired(
+                    this,
+                    packageName,
+                    getString(R.string.root_mount_repair_notification_title),
+                    getString(
+                        R.string.root_mount_repair_notification_message,
+                        result.message,
+                        result.diagnosticId
+                    )
+                )
+                else -> Unit
+            }
+        }
     }
 
     private companion object {

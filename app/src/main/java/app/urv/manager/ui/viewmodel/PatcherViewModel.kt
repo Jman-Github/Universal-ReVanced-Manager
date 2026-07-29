@@ -50,6 +50,13 @@ import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountPhase
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.describeRecovery
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadResult
 import app.urv.manager.domain.repository.DownloadedAppRepository
@@ -166,6 +173,7 @@ class PatcherViewModel(
     private val downloaderPluginRepository: DownloaderPluginRepository by inject()
     private val downloadedAppRepository: DownloadedAppRepository by inject()
     private val rootInstaller: RootInstaller by inject()
+    private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()
     private val installerManager: InstallerManager by inject()
     private val prefs: PreferencesManager by inject()
@@ -209,6 +217,14 @@ class PatcherViewModel(
     private var pendingInstallFailureMessage: String? = null
     var keystoreMissingDialog by mutableStateOf(false)
         private set
+    var rootDowngradeConfirmationPending by mutableStateOf(false)
+        private set
+    var rootMountPhase by mutableStateOf<RootMountPhase?>(null)
+        private set
+    var supportsRootMount by mutableStateOf(true)
+        private set
+    val rootMountInputSupported: Boolean
+        get() = !requiresSplitPreparation
 
     private var installedApp: InstalledApp? = null
     private val selectedApp = input.selectedApp
@@ -688,6 +704,8 @@ fun proceedAfterMissingPatchWarning() {
 
     var installFailureMessage by mutableStateOf<String?>(null)
         private set
+    var rootMountRecoveryMessage by mutableStateOf<String?>(null)
+        private set
     var fallbackInstallPrompt by mutableStateOf<FallbackInstallPrompt?>(null)
         private set
     private var suppressFailureAfterSuccess = false
@@ -749,12 +767,16 @@ fun proceedAfterMissingPatchWarning() {
         val fallbackEntry = installerManager.describeEntry(fallbackToken, target) ?: return null
         if (!fallbackEntry.availability.available) return null
         val expectedPackage = lastInstallExpectedPackage ?: packageName
+        if (fallbackToken == InstallerManager.Token.AutoSaved && expectedPackage != packageName) {
+            return null
+        }
         val plan = installerManager.resolvePlanForToken(
             token = fallbackToken,
             target = target,
             sourceFile = outputFile,
             expectedPackage = expectedPackage,
-            sourceLabel = lastInstallSourceLabel
+            sourceLabel = lastInstallSourceLabel,
+            allowMount = expectedPackage == packageName && rootMountInputSupported
         ) ?: return null
         if (plan is InstallerManager.InstallPlan.Internal && fallbackToken is InstallerManager.Token.Component) {
             return null
@@ -781,12 +803,22 @@ fun proceedAfterMissingPatchWarning() {
     }
 
     private fun applyInstallFailure(message: String) {
+        rootMountRecoveryMessage = null
         installFailureMessage = message
         installStatus = InstallCompletionStatus.Failure(message)
         cleanupFailedInstall()
     }
 
-    private fun showInstallFailure(message: String) {
+    private fun showRootMountRecovery(message: String) {
+        fallbackInstallPrompt = null
+        pendingInstallFailureMessage = null
+        installFailureMessage = null
+        installStatus = null
+        rootMountRecoveryMessage = message
+        cleanupFailedInstall()
+    }
+
+    private fun showInstallFailure(message: String, allowFallback: Boolean = true) {
         val now = System.currentTimeMillis()
         if (activeInstallType == InstallType.SHIZUKU && suppressFailureAfterSuccess) return
         if (lastSuccessInstallType == InstallType.SHIZUKU && now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS) return
@@ -800,7 +832,7 @@ fun proceedAfterMissingPatchWarning() {
         if (activeInstallType != null) {
             lastInstallType = activeInstallType
         }
-        val fallbackPrompt = buildFallbackPrompt(adjusted)
+        val fallbackPrompt = if (allowFallback) buildFallbackPrompt(adjusted) else null
         if (fallbackPrompt != null) {
             pendingInstallFailureMessage = adjusted
             installFailureMessage = null
@@ -1863,13 +1895,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         externalInstallStartTime = null
 
         if (input.selectedApp is SelectedApp.Installed &&
-            installedApp?.installType == InstallType.MOUNT &&
             installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
         ) {
             GlobalScope.launch(Dispatchers.Main) {
+                val shouldRemount = withContext(Dispatchers.IO) {
+                    installedAppRepository.get(packageName)?.installType == InstallType.MOUNT
+                }
+                if (!shouldRemount) return@launch
                 uiSafe(app, R.string.failed_to_mount, "Failed to mount") {
                     withTimeout(Duration.ofMinutes(1L)) {
-                        rootInstaller.mount(packageName)
+                        rootMountCoordinator.execute(
+                            RootMountRequest(
+                                packageName,
+                                userId = android.os.Process.myUid() / 100_000,
+                                operation = RootMountOperation.MOUNT_ONLY
+                            )
+                        ).requireSuccess()
                     }
                 }
             }
@@ -2243,8 +2284,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun open() = installedPackageName?.let(pm::launch)
 
-    private suspend fun performInstall(installType: InstallType) {
+    private suspend fun performInstall(
+        installType: InstallType,
+        downgradeFallbackConfirmed: Boolean = false
+    ) {
         try {
+            rootMountRecoveryMessage = null
             activeInstallType = installType
             deferInstallProgressToasts = installType != InstallType.MOUNT
             updateInstallingState(true)
@@ -2256,7 +2301,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
             // If the app is currently installed
             val existingPackageInfo = pm.getPackageInfo(currentPackageInfo.packageName)
-            if (existingPackageInfo != null) {
+            if (existingPackageInfo != null && installType != InstallType.MOUNT) {
                 // Check if the app version is less than the installed version
                 if (pm.getVersionCode(currentPackageInfo) < pm.getVersionCode(existingPackageInfo)) {
                     val hint = app.getString(R.string.installer_hint_downgrade)
@@ -2276,7 +2321,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     // Check if the app is mounted as root
                     // If it is, unmount it first, silently
                     if (rootInstaller.hasRootAccess() && rootInstaller.isAppMounted(packageName)) {
-                        rootInstaller.unmount(packageName)
+                        rootMountCoordinator.execute(
+                            RootMountRequest(
+                                packageName,
+                                userId = android.os.Process.myUid() / 100_000,
+                                operation = RootMountOperation.UNMOUNT
+                            )
+                        ).requireSuccess()
                     }
 
                     val session = ackpineInstaller.createSession(Uri.fromFile(outputFile)) {
@@ -2312,7 +2363,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                     InstallerManager.InstallTarget.PATCHER,
                                     outputFile,
                                     currentPackageInfo.packageName,
-                                    null
+                                    null,
+                                    allowMount = currentPackageInfo.packageName == packageName && rootMountInputSupported
                                 )
                                 showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
                                 return
@@ -2339,91 +2391,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     }
                 }
 
-                InstallType.MOUNT -> {
-                    try {
-                        val packageInfo = pm.getPackageInfo(outputFile)
-                            ?: throw Exception("Failed to load application info")
-                        val label = with(pm) {
-                            packageInfo.label()
-                        }
-                        if (!withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() }) {
-                            throw RootServiceException()
-                        }
-
-                        val installedBaseInfo = pm.getPackageInfo(packageName)
-                        basePackageInstalled = installedBaseInfo != null
-                        val splitInstallWorkspace = tempDir.resolve("root-stock-splits").apply {
-                            deleteRecursively()
-                            mkdirs()
-                        }
-                        try {
-                            val stockApks = if (installedBaseInfo == null) {
-                                val originalInput = inputFile ?: run {
-                                    showInstallFailure(
-                                        app.getString(
-                                            R.string.install_app_fail,
-                                            app.getString(R.string.install_app_fail_missing_stock)
-                                        )
-                                    )
-                                    return
-                                }
-                                if (SplitApkPreparer.isSplitArchive(originalInput)) {
-                                    val inspection = SplitApkPreparer.inspect(originalInput)
-                                    SplitApkPreparer.extractForInstall(
-                                        source = originalInput,
-                                        targetDir = splitInstallWorkspace,
-                                        includedModules = inspection.recommendedModules
-                                    )
-                                } else {
-                                    listOf(originalInput)
-                                }
-                            } else {
-                                null
-                            }
-                            val inputVersion = input.selectedApp.version
-                                ?: stockApks?.asSequence()
-                                    ?.mapNotNull(pm::getPackageInfo)
-                                    ?.mapNotNull { it.versionName }
-                                    ?.firstOrNull()
-                                ?: installedBaseInfo?.versionName
-                                ?: packageInfo.versionName
-                                ?: throw Exception("Failed to determine input APK version")
-
-                            rootInstaller.install(
-                                patchedAPK = outputFile,
-                                stockAPKs = stockApks,
-                                packageName = packageName,
-                                version = inputVersion,
-                                label = label
-                            )
-                        } finally {
-                            splitInstallWorkspace.deleteRecursively()
-                        }
-
-                        if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
-                            Log.w(TAG, "Failed to persist mounted patched app metadata")
-                        }
-
-                        rootInstaller.mount(packageName)
-
-                        installedPackageName = packageName
-                        markInstallSuccess(packageName)
-                        updateInstallingState(false)
-                    } catch (e: Exception) {
-                        Log.e(tag, "Failed to install as root", e)
-                        packageInstallerStatus = null
-                        showInstallFailure(
-                            app.getString(
-                                R.string.install_app_fail,
-                                e.simpleMessage() ?: e.javaClass.simpleName.orEmpty()
-                            )
-                        )
-                        try {
-                            rootInstaller.uninstall(packageName)
-                        } catch (_: Exception) {
-                        }
-                    }
-                }
+                InstallType.MOUNT -> performRootMount(currentPackageInfo, downgradeFallbackConfirmed)
             }
         } catch (e: Exception) {
             Log.e(tag, "Failed to install", e)
@@ -2435,6 +2403,115 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             )
         }
+    }
+
+    private suspend fun performRootMount(
+        packageInfo: PackageInfo,
+        downgradeFallbackConfirmed: Boolean
+    ) {
+        check(packageInfo.packageName == packageName) {
+            app.getString(R.string.root_mount_renamed_package_not_supported)
+        }
+        if (!withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() }) throw RootServiceException()
+        val installedBaseInfo = pm.getPackageInfo(packageName)
+        basePackageInstalled = installedBaseInfo != null
+        val targetVersionCode = pm.getVersionCode(packageInfo)
+        val stockNeedsReplacement = installedBaseInfo == null ||
+            pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
+            installedBaseInfo.versionName != packageInfo.versionName
+        val originalInput = inputFile
+        if (originalInput != null && SplitApkPreparer.isSplitArchive(originalInput)) {
+            throw IllegalArgumentException(app.getString(R.string.mount_split_not_supported))
+        }
+        val stockApks = if (stockNeedsReplacement) {
+            val stock = originalInput ?: throw IllegalStateException(
+                app.getString(R.string.install_app_fail_missing_stock)
+            )
+            listOf(stock)
+        } else if (rootInstaller.isAppMounted(packageName)) {
+            // applicationInfo.sourceDir resolves through the active bind mount. It is the
+            // patched payload, not independent proof of the raw stock APK.
+            emptyList()
+        } else {
+            listOfNotNull(originalInput)
+        }
+        val label = with(pm) { packageInfo.label() }
+        val result = try {
+            rootMountCoordinator.execute(
+                RootMountRequest(
+                    packageName = packageInfo.packageName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = if (stockNeedsReplacement) {
+                        RootMountOperation.REPLACE_STOCK_AND_MOUNT
+                    } else {
+                        RootMountOperation.SWITCH_PATCHED_BUILD
+                    },
+                    patchedApk = outputFile,
+                    stockApks = stockApks,
+                    expectedVersionName = packageInfo.versionName,
+                    expectedVersionCode = targetVersionCode,
+                    label = label,
+                    downgradeFallbackConfirmed = downgradeFallbackConfirmed
+                )
+            ) { phase -> rootMountPhase = phase }
+        } finally {
+            rootMountPhase = null
+        }
+        when (result) {
+            is RootMountResult.Success -> {
+                rootDowngradeConfirmationPending = false
+                if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
+                    Log.w(TAG, "Failed to persist mounted patched app metadata")
+                }
+                installedPackageName = packageInfo.packageName
+                markInstallSuccess(packageInfo.packageName)
+                updateInstallingState(false)
+            }
+
+            is RootMountResult.RequiresDowngradeConfirmation -> {
+                rootDowngradeConfirmationPending = true
+                installStatus = null
+                updateInstallingState(false)
+            }
+
+            is RootMountResult.RecoveredToPreviousMount -> {
+                showRootMountRecovery(
+                    app.getString(R.string.root_mount_recovered_previous_message, result.diagnosticId)
+                )
+            }
+            is RootMountResult.RecoveredToStock -> {
+                showRootMountRecovery(
+                    app.getString(R.string.root_mount_recovered_stock_message, result.diagnosticId)
+                )
+            }
+            is RootMountResult.RequiresRepatch -> {
+                showInstallFailure(result.reason, allowFallback = false)
+            }
+            is RootMountResult.Busy -> {
+                val detail = result.reason ?: "Persisted phase: " +
+                    (result.phase?.name?.lowercase()?.replace('_', ' ') ?: "preparing")
+                showInstallFailure(
+                    app.getString(R.string.root_mount_recovery_in_progress, detail),
+                    allowFallback = false
+                )
+            }
+            is RootMountResult.Failure -> throw IllegalStateException(
+                "${result.message} ${result.recoveryState.describeRecovery()} " +
+                    "Diagnostic ${result.diagnosticId}."
+            )
+        }
+    }
+
+    fun confirmRootDowngrade() {
+        rootDowngradeConfirmationPending = false
+        viewModelScope.launch { performInstall(InstallType.MOUNT, downgradeFallbackConfirmed = true) }
+    }
+
+    fun dismissRootDowngradeConfirmation() {
+        rootDowngradeConfirmationPending = false
+        installStatus = null
+        activeInstallType = null
+        updateInstallingState(false)
     }
 
     private suspend fun performShizukuInstall(installerPackageNameOverride: String? = null) {
@@ -2457,7 +2534,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             if (rootInstaller.hasRootAccess() && rootInstaller.isAppMounted(packageName)) {
-                rootInstaller.unmount(packageName)
+                rootMountCoordinator.execute(
+                    RootMountRequest(
+                        packageName,
+                        userId = android.os.Process.myUid() / 100_000,
+                        operation = RootMountOperation.UNMOUNT
+                    )
+                ).requireSuccess()
             }
 
             val result = shizukuInstaller.install(
@@ -2685,7 +2768,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     InstallerManager.InstallTarget.PATCHER,
                     outputFile,
                     expectedPackage,
-                    null
+                    null,
+                    allowMount = expectedPackage == packageName && rootMountInputSupported
                 )
                 Log.d(TAG, "install() resolved plan=${plan::class.java.simpleName}")
                 if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -2725,7 +2809,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     target = InstallerManager.InstallTarget.PATCHER,
                     sourceFile = outputFile,
                     expectedPackage = expectedPackage,
-                    sourceLabel = null
+                    sourceLabel = null,
+                    allowMount = expectedPackage == packageName && rootMountInputSupported
                 ) ?: throw IllegalStateException("Selected installer is unavailable")
                 Log.d(TAG, "installWithToken() resolved plan=${plan::class.java.simpleName}")
                 if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -2756,7 +2841,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 InstallerManager.InstallTarget.PATCHER,
                 outputFile,
                 expectedPackage,
-                null
+                null,
+                allowMount = expectedPackage == packageName && rootMountInputSupported
             )
             recordInstallPlan(plan, expectedPackage, null)
             when (plan) {
@@ -2882,6 +2968,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         installStatus = null
     }
 
+    fun clearRootMountRecoveryMessage() {
+        rootMountRecoveryMessage = null
+    }
+
     fun confirmFallbackInstallPrompt() {
         val prompt = fallbackInstallPrompt ?: return
         val expectedPackage = lastInstallExpectedPackage ?: packageName
@@ -2890,7 +2980,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             target = prompt.target,
             sourceFile = outputFile,
             expectedPackage = expectedPackage,
-            sourceLabel = lastInstallSourceLabel
+            sourceLabel = lastInstallSourceLabel,
+            allowMount = expectedPackage == packageName && rootMountInputSupported
         )
         fallbackInstallPrompt = null
         pendingInstallFailureMessage = null
@@ -4528,6 +4619,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     )
                     reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
+                    // Code adapted from Morphe, see third-party/NOTICE for more information
+                    // https://github.com/MorpheApp/morphe-manager/pull/779
+                    supportsRootMount = pm.getPackageInfo(outputFile)?.packageName == packageName
                     _patcherSucceeded.value = true
                 }
 

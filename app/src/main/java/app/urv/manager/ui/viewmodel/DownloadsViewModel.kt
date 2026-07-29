@@ -14,6 +14,10 @@ import androidx.lifecycle.viewModelScope
 import app.urv.manager.data.room.apps.downloaded.DownloadedApp
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
@@ -59,6 +63,7 @@ class DownloadsViewModel(
     private val downloaderPluginRepository: DownloaderPluginRepository,
     private val installerManager: InstallerManager,
     private val rootInstaller: RootInstaller,
+    private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
     private val keystoreManager: KeystoreManager,
     private val prefs: PreferencesManager,
@@ -308,14 +313,37 @@ class DownloadsViewModel(
         packageInfo: PackageInfo,
         label: String
     ) {
-        rootInstaller.install(
-            patchedAPK = apk,
-            stockAPKs = listOf(apk),
-            packageName = packageInfo.packageName,
-            version = packageInfo.versionName.orEmpty(),
-            label = label
-        )
-        rootInstaller.mount(packageInfo.packageName)
+        val installed = pm.getPackageInfo(packageInfo.packageName)
+            ?: error(appContext.getString(R.string.root_mount_requires_installed_stock))
+        check(pm.getVersionCode(installed) == pm.getVersionCode(packageInfo) &&
+            installed.versionName == packageInfo.versionName
+        ) {
+            appContext.getString(R.string.root_mount_download_version_mismatch)
+        }
+        val alreadyMounted = rootInstaller.isAppMounted(packageInfo.packageName)
+        val stockApks = if (alreadyMounted) {
+            emptyList()
+        } else {
+            val stockPath = installed.applicationInfo?.sourceDir
+                ?: error(appContext.getString(R.string.install_app_fail_missing_stock))
+            val stockApk = File(stockPath)
+            check(stockApk.isFile) {
+                appContext.getString(R.string.install_app_fail_missing_stock)
+            }
+            listOf(stockApk)
+        }
+        rootMountCoordinator.execute(
+            RootMountRequest(
+                packageName = packageInfo.packageName,
+                userId = android.os.Process.myUid() / 100_000,
+                operation = RootMountOperation.SWITCH_PATCHED_BUILD,
+                patchedApk = apk,
+                stockApks = stockApks,
+                expectedVersionName = packageInfo.versionName,
+                expectedVersionCode = pm.getVersionCode(packageInfo),
+                label = label
+            )
+        ).requireSuccess()
         showInstallSuccess()
     }
 

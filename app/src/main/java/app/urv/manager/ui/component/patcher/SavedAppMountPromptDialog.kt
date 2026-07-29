@@ -17,8 +17,7 @@ import app.urv.manager.ui.component.CenteredDialogTitle
 
 enum class SavedAppMountPromptMode {
     MOUNT_OR_INSTALL,
-    REMOUNT,
-    UNMOUNT
+    REMOUNT
 }
 
 @Composable
@@ -28,18 +27,15 @@ fun SavedAppMountPromptDialog(
     onDismiss: () -> Unit,
     onMount: () -> Unit,
     onChooseDifferentInstaller: () -> Unit,
-    onRemount: () -> Unit,
-    onUnmount: () -> Unit
+    onRemount: () -> Unit
 ) {
     val titleRes = when (mode) {
         SavedAppMountPromptMode.MOUNT_OR_INSTALL -> R.string.mount
         SavedAppMountPromptMode.REMOUNT -> R.string.remount_saved_app
-        SavedAppMountPromptMode.UNMOUNT -> R.string.unmount
     }
     val descriptionRes = when (mode) {
         SavedAppMountPromptMode.MOUNT_OR_INSTALL -> R.string.saved_app_mount_choice_description
         SavedAppMountPromptMode.REMOUNT -> R.string.saved_app_remount_choice_description
-        SavedAppMountPromptMode.UNMOUNT -> R.string.saved_app_unmount_choice_description
     }
 
     AlertDialog(
@@ -69,22 +65,8 @@ fun SavedAppMountPromptDialog(
 
                     SavedAppMountPromptMode.REMOUNT -> {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = onUnmount) {
-                                Text(stringResource(R.string.unmount))
-                            }
                             TextButton(onClick = onRemount, enabled = canMount) {
                                 Text(stringResource(R.string.continue_))
-                            }
-                            TextButton(onClick = onDismiss) {
-                                Text(stringResource(R.string.cancel))
-                            }
-                        }
-                    }
-
-                    SavedAppMountPromptMode.UNMOUNT -> {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = onUnmount) {
-                                Text(stringResource(R.string.unmount))
                             }
                             TextButton(onClick = onDismiss) {
                                 Text(stringResource(R.string.cancel))

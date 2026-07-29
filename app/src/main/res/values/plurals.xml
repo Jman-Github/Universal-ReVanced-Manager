@@ -16,8 +16,8 @@
         <item quantity="other">%d apps selected</item>
         </plurals>
     <plurals name="selected_apps_delete_dialog_description_quantity">
-        <item quantity="one">Are you sure you want to delete the selected app?\nInstalled apps on your device will stay untouched.</item>
-        <item quantity="other">Are you sure you want to delete the selected apps?\nInstalled apps on your device will stay untouched.</item>
+        <item quantity="one">Are you sure you want to delete the selected app?\nRooted mount entries will also be unmounted and their root modules removed. Stock apps will remain installed.</item>
+        <item quantity="other">Are you sure you want to delete the selected apps?\nRooted mount entries will also be unmounted and their root modules removed. Stock apps will remain installed.</item>
         </plurals>
     <plurals name="patches_delete_multiple_dialog_description_quantity">
         <item quantity="one">Are you sure you want to delete the selected patch bundle?</item>

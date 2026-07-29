@@ -122,6 +122,7 @@ class PreferencesManager(
     val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
     val dashboardLsposedFabCollapsed = booleanPreference("dashboard_lsposed_fab_collapsed", false)
+    val rootMountToolsCollapsed = booleanPreference("root_mount_tools_collapsed", false)
     private val dashboardProgressBannerCollapsed =
         booleanPreference("dashboard_progress_banner_collapsed", false)
     private val dashboardBundleBannerStateMigrated =
@@ -319,6 +320,8 @@ class PreferencesManager(
         stringPreference("file_picker_patch_option_file_input_directory", "")
     val mergeLogExportLastDirectory = stringPreference("file_picker_merge_log_export_directory", "")
     val patcherLogExportLastDirectory = stringPreference("file_picker_patcher_log_export_directory", "")
+    val rootMountDiagnosticsExportLastDirectory =
+        stringPreference("file_picker_root_mount_diagnostics_export_directory", "")
     val patchBundleDiscoveryExportLastDirectory =
         stringPreference("file_picker_patch_bundle_discovery_export_directory", "")
     val splitInstallerInputLastDirectory =
@@ -427,6 +430,7 @@ class PreferencesManager(
         val enableSavedApps: Boolean? = null,
         val disableSavedAppOverwrite: Boolean? = null,
         val showSavedAppBundleUpdateBadges: Boolean? = null,
+        val rootMountToolsCollapsed: Boolean? = null,
         val patchedAppExportFormat: String? = null,
         val mergedApkExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
@@ -640,6 +644,7 @@ class PreferencesManager(
             enableSavedApps = enableSavedApps.get(),
             disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
             showSavedAppBundleUpdateBadges = showSavedAppBundleUpdateBadges.get(),
+            rootMountToolsCollapsed = rootMountToolsCollapsed.get(),
             patchedAppExportFormat = patchedAppExportFormat.get(),
             mergedApkExportFormat = mergedApkExportFormat.get(),
             chooseInstallerPerInstall = chooseInstallerPerInstall.get(),
@@ -814,6 +819,7 @@ class PreferencesManager(
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }
         snapshot.disableSavedAppOverwrite?.let { disableSavedAppOverwrite.value = it }
         snapshot.showSavedAppBundleUpdateBadges?.let { showSavedAppBundleUpdateBadges.value = it }
+        snapshot.rootMountToolsCollapsed?.let { rootMountToolsCollapsed.value = it }
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.mergedApkExportFormat?.let { mergedApkExportFormat.value = it }
         snapshot.chooseInstallerPerInstall?.let { chooseInstallerPerInstall.value = it }

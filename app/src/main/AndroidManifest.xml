@@ -145,6 +145,19 @@
             android:name="app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name="app.urv.manager.receiver.PackageChangeReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_FULLY_REMOVED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="app.urv.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"

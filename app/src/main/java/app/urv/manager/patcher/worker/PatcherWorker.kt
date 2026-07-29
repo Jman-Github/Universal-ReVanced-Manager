@@ -23,7 +23,10 @@ import app.urv.manager.MainActivity
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
-import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadResult
@@ -108,7 +111,7 @@ class PatcherWorker(
     private val pm: PM by inject()
     private val fs: Filesystem by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
-    private val rootInstaller: RootInstaller by inject()
+    private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
     private var activeRuntime: app.urv.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.urv.manager.patcher.runtime.morphe.MorpheRuntime? = null
@@ -1392,7 +1395,13 @@ class PatcherWorker(
             if (args.input is SelectedApp.Installed) {
                 installedAppRepository.get(args.packageName)?.let {
                     if (it.installType == InstallType.MOUNT) {
-                        rootInstaller.unmount(args.packageName)
+                        rootMountCoordinator.execute(
+                            RootMountRequest(
+                                args.packageName,
+                                userId = android.os.Process.myUid() / 100_000,
+                                operation = RootMountOperation.UNMOUNT
+                            )
+                        ).requireSuccess()
                     }
                 }
             }

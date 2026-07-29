@@ -1,13 +1,15 @@
 package app.urv.manager.ui.screen
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.net.Uri
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -28,14 +30,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowRight
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -43,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
@@ -59,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -80,9 +89,11 @@ import app.urv.manager.ui.component.AppliedPatchBundleUi
 import app.urv.manager.ui.component.AppliedPatchesDialog
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.AppVersion
+import app.urv.manager.ui.component.ArrowButton
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.SegmentedButton
+import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
@@ -100,6 +111,7 @@ import app.urv.manager.ui.viewmodel.MountWarningAction
 import app.urv.manager.ui.viewmodel.MountWarningReason
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.isAllowedApkFile
@@ -140,7 +152,10 @@ fun InstalledAppInfoScreen(
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val savedAppExportDirectory by prefs.savedAppExportLastDirectory.getAsState()
+    val rootMountDiagnosticsExportDirectory by
+        prefs.rootMountDiagnosticsExportLastDirectory.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
+    val rootMountToolsCollapsed by prefs.rootMountToolsCollapsed.getAsState()
     val installerManager: InstallerManager = koinInject()
     var showAppliedPatchesDialog by rememberSaveable { mutableStateOf(false) }
     var showUniversalBlockedDialog by rememberSaveable { mutableStateOf(false) }
@@ -151,11 +166,20 @@ fun InstalledAppInfoScreen(
     var exportFileDialogState by remember { mutableStateOf<ExportSavedApkDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingSavedExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    var showRootDiagnosticsActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showRootDiagnosticsExportPicker by rememberSaveable { mutableStateOf(false) }
+    var rootDiagnosticsExportFileDialogState by remember {
+        mutableStateOf<RootDiagnosticsExportDialogState?>(null)
+    }
+    var pendingRootDiagnosticsExportConfirmation by remember {
+        mutableStateOf<PendingRootDiagnosticsExportConfirmation?>(null)
+    }
+    var rootDiagnosticsExportInProgress by rememberSaveable { mutableStateOf(false) }
+    var pendingRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingAction by rememberSaveable { mutableStateOf(initialAction) }
     var showSavedEntryDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showSavedAppDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
-    var showUnmountConfirmation by rememberSaveable { mutableStateOf(false) }
     var showSavedAppInstallerPicker by rememberSaveable { mutableStateOf(false) }
     var savedAppMountPromptMode by rememberSaveable { mutableStateOf<SavedAppMountPromptMode?>(null) }
     val appliedSelection = viewModel.appliedPatches
@@ -168,6 +192,12 @@ fun InstalledAppInfoScreen(
         rememberLauncherForActivityResult(permissionContract) { granted ->
             if (granted) {
                 showExportPicker = true
+            }
+        }
+    val rootDiagnosticsPermissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showRootDiagnosticsExportPicker = true
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
@@ -183,6 +213,25 @@ fun InstalledAppInfoScreen(
         viewModel.exportSavedApp(uri)
         showExportPicker = false
     }
+    val rootDiagnosticsDocumentLauncher = rememberLauncherForActivityResult(
+        contract = RememberedCreateDocument("text/plain") {
+            rootMountDiagnosticsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                prefs.rootMountDiagnosticsExportLastDirectory.update(
+                    uri.toPickerDirectoryUri().toString()
+                )
+            }
+            rootDiagnosticsExportInProgress = true
+            viewModel.exportRootMountDiagnosticsToUri(uri) { success ->
+                rootDiagnosticsExportInProgress = false
+                if (success) showRootDiagnosticsExportPicker = false
+            }
+        }
+        pendingRootDiagnosticsFileName = null
+    }
     fun openExportPicker() {
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
@@ -192,6 +241,20 @@ fun InstalledAppInfoScreen(
             }
         } else {
             showExportPicker = true
+        }
+    }
+    fun openRootDiagnosticsExportPicker() {
+        val packageName = installedAppState?.currentPackageName ?: "diagnostics"
+        val fileName = FilenameUtils.timestampedLogFileName("root-mount-$packageName")
+        pendingRootDiagnosticsFileName = fileName
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showRootDiagnosticsExportPicker = true
+            } else {
+                rootDiagnosticsPermissionLauncher.launch(permissionName)
+            }
+        } else {
+            rootDiagnosticsDocumentLauncher.launch(fileName)
         }
     }
     val selectionPayload = installedAppState?.selectionPayload
@@ -352,7 +415,9 @@ fun InstalledAppInfoScreen(
             options = installerManager.listEntries(
                 target = InstallerManager.InstallTarget.SAVED_APP,
                 includeNone = false
-            ),
+            ).filterNot { entry ->
+                entry.token == InstallerManager.Token.AutoSaved && !viewModel.supportsRootMount
+            },
             onDismiss = { showSavedAppInstallerPicker = false },
             onConfirm = viewModel::installSavedApp,
             onOpenShizuku = installerManager::openShizukuApp
@@ -375,10 +440,6 @@ fun InstalledAppInfoScreen(
             onRemount = {
                 savedAppMountPromptMode = null
                 viewModel.remountSavedInstallation()
-            },
-            onUnmount = {
-                savedAppMountPromptMode = null
-                viewModel.mountOrUnmount()
             }
         )
     }
@@ -770,6 +831,158 @@ fun InstalledAppInfoScreen(
         )
     }
 
+    if (showRootDiagnosticsActionsDialog) {
+        RootMountDiagnosticsActionsDialog(
+            onDismiss = { showRootDiagnosticsActionsDialog = false },
+            onCopy = {
+                showRootDiagnosticsActionsDialog = false
+                scope.launch {
+                    val content = viewModel.readRootMountDiagnostics() ?: return@launch
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    if (clipboard == null) {
+                        context.toast(context.getString(R.string.root_mount_diagnostics_copy_failed))
+                        return@launch
+                    }
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText("Root mount diagnostics", content)
+                    )
+                    context.toast(context.getString(R.string.root_mount_diagnostics_copy_success))
+                }
+            },
+            onExport = {
+                showRootDiagnosticsActionsDialog = false
+                openRootDiagnosticsExportPicker()
+            }
+        )
+    }
+
+    if (showRootDiagnosticsExportPicker && useCustomFilePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showRootDiagnosticsExportPicker = false
+                    pendingRootDiagnosticsFileName = null
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            fileTypeLabel = ".txt",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                rootDiagnosticsExportFileDialogState = RootDiagnosticsExportDialogState(
+                    directory = directory,
+                    fileName = pendingRootDiagnosticsFileName
+                        ?: FilenameUtils.timestampedLogFileName("root-mount")
+                )
+            },
+            lastDirectoryPreference = prefs.rootMountDiagnosticsExportLastDirectory
+        )
+    }
+
+    rootDiagnosticsExportFileDialogState?.let { state ->
+        ExportRootDiagnosticsFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = {
+                rootDiagnosticsExportFileDialogState = null
+                pendingRootDiagnosticsFileName = null
+            },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportRootDiagnosticsFileNameDialog
+                val finalName = if (trimmedName.endsWith(".txt", ignoreCase = true)) {
+                    trimmedName
+                } else {
+                    "$trimmedName.txt"
+                }
+                rootDiagnosticsExportFileDialogState = null
+                pendingRootDiagnosticsFileName = null
+                val target = state.directory.resolve(finalName)
+                if (Files.exists(target)) {
+                    pendingRootDiagnosticsExportConfirmation =
+                        PendingRootDiagnosticsExportConfirmation(state.directory, finalName)
+                } else {
+                    rootDiagnosticsExportInProgress = true
+                    viewModel.exportRootMountDiagnosticsToPath(target) { success ->
+                        rootDiagnosticsExportInProgress = false
+                        if (success) showRootDiagnosticsExportPicker = false
+                    }
+                }
+            }
+        )
+    }
+
+    pendingRootDiagnosticsExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingRootDiagnosticsExportConfirmation = null
+                rootDiagnosticsExportFileDialogState =
+                    RootDiagnosticsExportDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingRootDiagnosticsExportConfirmation = null
+                rootDiagnosticsExportInProgress = true
+                viewModel.exportRootMountDiagnosticsToPath(
+                    state.directory.resolve(state.fileName)
+                ) { success ->
+                    rootDiagnosticsExportInProgress = false
+                    if (success) showRootDiagnosticsExportPicker = false
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+
+    if (rootDiagnosticsExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.root_mount_diagnostics_save_title),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.root_mount_diagnostics_exporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
+        )
+    }
+
+    if (viewModel.isDeletingSavedRootApp) {
+        TransparentLoadingDialog(
+            message = stringResource(R.string.delete_root_mount_saved_app_progress)
+        )
+    }
+
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
 
     Scaffold(
@@ -782,7 +995,9 @@ fun InstalledAppInfoScreen(
                 }
             )
         },
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier
+            .blur(if (viewModel.isDeletingSavedRootApp) 16.dp else 0.dp)
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         InterceptBackHandler(enabled = viewModel.isInstalling) {
             showLeaveInstallDialog = true
@@ -793,16 +1008,73 @@ fun InstalledAppInfoScreen(
                 .padding(paddingValues)
         ) {
             val installedApp = installedAppState ?: return@ColumnWithScrollbar
-            val displayPackageName = if (installedApp.installType == InstallType.SAVED) {
+            val supportsRootMount = viewModel.supportsRootMount
+            val displayInstallType = if (
+                installedApp.installType == InstallType.MOUNT && !supportsRootMount
+            ) {
+                InstallType.SAVED
+            } else {
+                installedApp.installType
+            }
+            val displayPackageName = if (displayInstallType == InstallType.SAVED) {
                 installedApp.originalPackageName.takeIf { it.isNotBlank() }
                     ?: savedAppBasePackage(installedApp.currentPackageName)
             } else {
                 installedApp.currentPackageName
             }
 
+            if (displayInstallType == InstallType.MOUNT) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Outlined.WarningAmber,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.root_mount_update_guidance_title),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.root_mount_safe_update_notice),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
             AppInfo(
                 appInfo = viewModel.appInfo,
-                placeholderLabel = null
+                labelOverride = viewModel.appLabel,
+                placeholderLabel = displayPackageName
             ) {
                 AppVersion(
                     appInfo = viewModel.appInfo,
@@ -817,7 +1089,7 @@ fun InstalledAppInfoScreen(
                     )
                 }
 
-                if (installedApp.installType == InstallType.MOUNT) {
+                if (displayInstallType == InstallType.MOUNT) {
                     val mountStatusText = when (viewModel.mountOperation) {
                         InstalledAppInfoViewModel.MountOperation.UNMOUNTING -> stringResource(R.string.unmounting)
                         InstalledAppInfoViewModel.MountOperation.MOUNTING -> stringResource(R.string.mounting_ellipsis)
@@ -838,10 +1110,10 @@ fun InstalledAppInfoScreen(
         installedApp.currentPackageName,
         installedApp.version,
         appliedBundles,
-        viewModel.appInfo
+        viewModel.appInfo,
+        viewModel.appLabel
     ) {
-        val label = viewModel.appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-            ?: displayPackageName
+        val label = viewModel.appLabel ?: displayPackageName
         val bundleVersions = appliedBundles.mapNotNull { it.version?.takeIf(String::isNotBlank) }
         val bundleNames = appliedBundles.map { it.title }.filter(String::isNotBlank)
         PatchedAppExportData(
@@ -882,6 +1154,9 @@ fun InstalledAppInfoScreen(
         if (!useCustomFilePicker) {
             exportFileDialogState = null
             pendingExportConfirmation = null
+            rootDiagnosticsExportFileDialogState = null
+            pendingRootDiagnosticsExportConfirmation = null
+            showRootDiagnosticsExportPicker = false
         }
     }
     exportFileDialogState?.let { state ->
@@ -979,16 +1254,22 @@ fun InstalledAppInfoScreen(
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(24.dp))
     ) {
-        val installType = remember(installedApp.installType, viewModel.primaryInstallerIsMount, chooseInstallerPerInstall, hasRoot) {
-            if (
+        val installType = remember(
+            installedApp.installType,
+            viewModel.primaryInstallerIsMount,
+            chooseInstallerPerInstall,
+            hasRoot,
+            supportsRootMount
+        ) {
+            when {
+                installedApp.installType == InstallType.MOUNT && !supportsRootMount ->
+                    InstallType.SAVED
                 !chooseInstallerPerInstall &&
-                installedApp.installType == InstallType.SAVED &&
-                viewModel.primaryInstallerIsMount &&
-                hasRoot
-            ) {
-                InstallType.MOUNT
-            } else {
-                installedApp.installType
+                    installedApp.installType == InstallType.SAVED &&
+                    viewModel.primaryInstallerIsMount &&
+                    hasRoot &&
+                    supportsRootMount -> InstallType.MOUNT
+                else -> installedApp.installType
             }
         }
         val rootRequiredText = stringResource(R.string.installer_status_requires_root)
@@ -998,7 +1279,11 @@ fun InstalledAppInfoScreen(
         fun triggerSavedAppInstall() {
             if (chooseInstallerPerInstall) {
                 showSavedAppInstallerPicker = true
-            } else if (primaryInstallerIsMount && installType != InstallType.MOUNT) {
+            } else if (
+                primaryInstallerIsMount &&
+                supportsRootMount &&
+                installType != InstallType.MOUNT
+            ) {
                 val action = if (isInstalledOnDevice) MountWarningAction.UPDATE else MountWarningAction.INSTALL
                 viewModel.showMountWarning(action, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
             } else {
@@ -1028,37 +1313,18 @@ fun InstalledAppInfoScreen(
                         if (isMounted) viewModel.remountSavedInstallation() else viewModel.mountOrUnmount()
                     }
                 }
-                else -> {
-                    triggerSavedAppInstall()
-                }
+                else -> triggerSavedAppInstall()
             }
         }
 
         fun handleUninstall() {
             when (installType) {
                 InstallType.MOUNT -> {
-                    if (isMounted) {
-                        if (chooseInstallerPerInstall) {
-                            if (!hasRoot) {
-                                Toast
-                                    .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                    .show()
-                            } else {
-                                savedAppMountPromptMode = SavedAppMountPromptMode.UNMOUNT
-                            }
-                        } else if (!primaryInstallerIsMount) {
-                            viewModel.showMountWarning(
-                                MountWarningAction.UNINSTALL,
-                                MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP
-                            )
-                        } else {
-                            showUnmountConfirmation = true
-                        }
-                    }
+                    if (isMounted) viewModel.unmountSavedInstallation()
                 }
                 InstallType.SAVED -> {
                     if (isInstalledOnDevice) {
-                        if (primaryInstallerIsMount) {
+                        if (primaryInstallerIsMount && supportsRootMount) {
                             viewModel.showMountWarning(
                                 MountWarningAction.UNINSTALL,
                                 MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP
@@ -1069,9 +1335,7 @@ fun InstalledAppInfoScreen(
                     }
                 }
                 else -> {
-                    if (isInstalledOnDevice) {
-                        showUninstallDialog = true
-                    }
+                    if (isInstalledOnDevice) showUninstallDialog = true
                 }
             }
         }
@@ -1098,6 +1362,14 @@ fun InstalledAppInfoScreen(
                     handleInstallOrUpdate()
                     pendingAction = null
                 }
+                InstalledAppAction.REPAIR_ROOT_MOUNT -> {
+                    viewModel.repairRootMount()
+                    pendingAction = null
+                }
+                InstalledAppAction.EXPORT_ROOT_MOUNT_DIAGNOSTICS -> {
+                    showRootDiagnosticsActionsDialog = true
+                    pendingAction = null
+                }
                 InstalledAppAction.UNINSTALL -> {
                     handleUninstall()
                     pendingAction = null
@@ -1120,7 +1392,7 @@ fun InstalledAppInfoScreen(
             }
         }
 
-        if (viewModel.appInfo != null) {
+        if (viewModel.appInfo != null && installType != InstallType.MOUNT) {
             key("open") {
                 SegmentedButton(
                     icon = Icons.AutoMirrored.Outlined.OpenInNew,
@@ -1173,101 +1445,24 @@ fun InstalledAppInfoScreen(
                             onClick = { showSavedEntryDeleteDialog = true }
                         )
                     }
-                } else {
-                    if (isInstalledOnDevice) {
-                        SegmentedButton(
-                            icon = Icons.Outlined.Delete,
-                            text = stringResource(R.string.uninstall),
-                            onClick = viewModel::uninstall
-                        )
-                    }
+                } else if (isInstalledOnDevice) {
+                    SegmentedButton(
+                        icon = Icons.Outlined.Delete,
+                        text = stringResource(R.string.uninstall),
+                        onClick = viewModel::uninstall
+                    )
                 }
 
                 key("repatch") {
                     SegmentedButton(
                         icon = Icons.Outlined.Update,
                         text = stringResource(R.string.repatch),
-                        onClick = {
-                            handleRepatchClick(installedApp.originalPackageName)
-                        }
+                        onClick = { handleRepatchClick(installedApp.originalPackageName) }
                     )
                 }
             }
 
             InstallType.MOUNT -> {
-                if (showUnmountConfirmation) {
-                    ConfirmDialog(
-                        onDismiss = { showUnmountConfirmation = false },
-                        onConfirm = {
-                            showUnmountConfirmation = false
-                            viewModel.unmountSavedInstallation()
-                        },
-                        title = stringResource(R.string.unmount),
-                        description = stringResource(R.string.unmount_confirm_description),
-                        icon = Icons.Outlined.Circle
-                    )
-                }
-
-                SegmentedButton(
-                    icon = Icons.Outlined.SettingsBackupRestore,
-                    text = if (viewModel.isMounted) stringResource(R.string.remount_saved_app) else stringResource(R.string.mount),
-                    onClick = {
-                        if (chooseInstallerPerInstall) {
-                            if (viewModel.isMounted) {
-                                if (!hasRoot) {
-                                    Toast
-                                        .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                        .show()
-                                } else {
-                                    savedAppMountPromptMode = SavedAppMountPromptMode.REMOUNT
-                                }
-                            } else {
-                                savedAppMountPromptMode = SavedAppMountPromptMode.MOUNT_OR_INSTALL
-                            }
-                            return@SegmentedButton
-                        }
-                        if (!hasRoot) {
-                            Toast
-                                .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                .show()
-                            return@SegmentedButton
-                        }
-                        if (!viewModel.primaryInstallerIsMount) {
-                            val action = if (viewModel.isMounted) MountWarningAction.UPDATE else MountWarningAction.INSTALL
-                            viewModel.showMountWarning(action, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
-                        } else {
-                            if (viewModel.isMounted) viewModel.remountSavedInstallation() else viewModel.mountOrUnmount()
-                        }
-                    },
-                    onLongClick = if (viewModel.isMounted) {
-                        {
-                            if (chooseInstallerPerInstall) {
-                                if (!hasRoot) {
-                                    Toast
-                                        .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                        .show()
-                                } else {
-                                    savedAppMountPromptMode = SavedAppMountPromptMode.UNMOUNT
-                                }
-                            } else if (!hasRoot) {
-                                Toast
-                                    .makeText(context, rootRequiredText, Toast.LENGTH_SHORT)
-                                    .show()
-                            } else {
-                                if (!viewModel.primaryInstallerIsMount) {
-                                    viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_NOT_MOUNT_FOR_MOUNT_APP)
-                                } else {
-                                    showUnmountConfirmation = true
-                                }
-                            }
-                        }
-                    } else null
-                )
-                SegmentedButton(
-                    icon = Icons.Outlined.Save,
-                    text = stringResource(R.string.export),
-                    onClick = { openExportPicker() }
-                )
                 if (showSavedEntryDeleteDialog) {
                     ConfirmDialog(
                         onDismiss = { showSavedEntryDeleteDialog = false },
@@ -1275,23 +1470,115 @@ fun InstalledAppInfoScreen(
                             showSavedEntryDeleteDialog = false
                             viewModel.deleteSavedEntry()
                         },
-                        title = stringResource(R.string.delete_saved_entry_title),
-                        description = stringResource(R.string.delete_saved_entry_description),
+                        title = stringResource(R.string.delete_root_mount_saved_app_title),
+                        description = stringResource(R.string.delete_root_mount_saved_app_description),
                         icon = Icons.Outlined.Delete
                     )
                 }
-                SegmentedButton(
-                    icon = Icons.Outlined.Delete,
-                    text = stringResource(R.string.delete),
-                    onClick = { showSavedEntryDeleteDialog = true }
-                )
-                SegmentedButton(
-                    icon = Icons.Outlined.Update,
-                    text = stringResource(R.string.repatch),
-                    onClick = {
-                        handleRepatchClick(installedApp.originalPackageName)
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        SegmentedButton(
+                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            text = stringResource(R.string.open_app),
+                            onClick = viewModel::launch,
+                            enabled = viewModel.appInfo != null && isInstalledOnDevice
+                        )
+                        SegmentedButton(
+                            icon = Icons.Outlined.Delete,
+                            text = stringResource(R.string.delete),
+                            onClick = { showSavedEntryDeleteDialog = true }
+                        )
+                        SegmentedButton(
+                            icon = Icons.Outlined.Save,
+                            text = stringResource(R.string.export),
+                            onClick = { openExportPicker() }
+                        )
+                        SegmentedButton(
+                            icon = Icons.Outlined.Update,
+                            text = stringResource(R.string.repatch),
+                            onClick = { handleRepatchClick(installedApp.originalPackageName) }
+                        )
                     }
-                )
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp),
+                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    scope.launch {
+                                        prefs.rootMountToolsCollapsed.update(!rootMountToolsCollapsed)
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.root_mount_tools),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ArrowButton(
+                                modifier = Modifier.size(22.dp),
+                                expanded = !rootMountToolsCollapsed,
+                                onClick = null
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = !rootMountToolsCollapsed) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                SegmentedButton(
+                                    icon = Icons.Outlined.Circle,
+                                    text = stringResource(
+                                        if (viewModel.isMounted) {
+                                            R.string.root_mount_use_stock
+                                        } else {
+                                            R.string.mount
+                                        }
+                                    ),
+                                    onClick = {
+                                        if (viewModel.isMounted) {
+                                            viewModel.unmountSavedInstallation()
+                                        } else {
+                                            viewModel.mountOrUnmount()
+                                        }
+                                    }
+                                )
+                                SegmentedButton(
+                                    icon = Icons.Outlined.SettingsBackupRestore,
+                                    text = stringResource(R.string.root_mount_repair),
+                                    onClick = viewModel::repairRootMount
+                                )
+                            }
+
+                            Row(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    icon = Icons.Outlined.Save,
+                                    text = stringResource(R.string.root_mount_export_diagnostics),
+                                    onClick = { showRootDiagnosticsActionsDialog = true }
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
             InstallType.SAVED -> {
@@ -1330,7 +1617,7 @@ fun InstalledAppInfoScreen(
                         onClick = ::triggerSavedAppInstall,
                         onLongClick = if (isInstalledOnDevice) {
                             {
-                                if (viewModel.primaryInstallerIsMount) {
+                                if (viewModel.primaryInstallerIsMount && supportsRootMount) {
                                     viewModel.showMountWarning(MountWarningAction.UNINSTALL, MountWarningReason.PRIMARY_IS_MOUNT_FOR_NON_MOUNT_APP)
                                 } else {
                                     showSavedUninstallDialog = true
@@ -1418,7 +1705,7 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.install_type),
-                    supportingContent = stringResource(installedApp.installType.stringResource)
+                    supportingContent = stringResource(displayInstallType.stringResource)
                 )
 
                 val bundleSummaryText = when {
@@ -1525,6 +1812,163 @@ fun UninstallDialog(
             Text(stringResource(R.string.cancel))
         }
     }
+)
+
+@Composable
+internal fun RootMountDiagnosticsActionsDialog(
+    onDismiss: () -> Unit,
+    onCopy: () -> Unit,
+    onExport: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.Description, contentDescription = null) },
+        title = {
+            CenteredDialogTitle(stringResource(R.string.root_mount_diagnostics_dialog_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.root_mount_diagnostics_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onCopy)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.root_mount_diagnostics_dialog_copy),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.root_mount_diagnostics_dialog_copy_description
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onExport)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Description,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = stringResource(R.string.root_mount_diagnostics_dialog_export),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.root_mount_diagnostics_dialog_export_description
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        dismissButton = {}
+    )
+}
+
+@Composable
+internal fun ExportRootDiagnosticsFileNameDialog(
+    initialName: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var fileName by rememberSaveable(initialName) { mutableStateOf(initialName) }
+    val trimmedName = fileName.trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                stringResource(R.string.root_mount_diagnostics_save_title),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        icon = {
+            Icon(
+                Icons.Outlined.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(trimmedName) },
+                enabled = trimmedName.isNotEmpty()
+            ) {
+                Text(stringResource(R.string.save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = stringResource(R.string.file_name),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = fileName,
+                    onValueChange = { fileName = it },
+                    placeholder = { Text(stringResource(R.string.dialog_input_placeholder)) },
+                    singleLine = true
+                )
+            }
+        }
+    )
+}
+
+private data class RootDiagnosticsExportDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingRootDiagnosticsExportConfirmation(
+    val directory: Path,
+    val fileName: String
 )
 
 private data class ExportSavedApkDialogState(

@@ -11,7 +11,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.installer.InstallerManager
-import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.SignatureMetadataApkInfo
 import app.urv.manager.domain.manager.SignatureMetadataInjectorProgress
@@ -97,6 +101,7 @@ data class SignatureMetadataInjectorUiState(
     val progress: SignatureMetadataInjectorProgress? = null,
     val result: SignatureMetadataInjectorResult? = null,
     val installStatus: String? = null,
+    val rootDowngradeConfirmationPending: Boolean = false,
     val logEntries: List<String> = emptyList(),
     val logRevision: Long = 0L,
     val logSessionId: Long = 0L,
@@ -139,7 +144,7 @@ class SignatureMetadataInjectorViewModel(
     private val app: Application,
     private val manager: SignatureMetadataInjectorManager,
     private val installerManager: InstallerManager,
-    private val rootInstaller: RootInstaller,
+    private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
     private val ackpineInstaller: PackageInstaller,
     private val pm: PM
@@ -161,6 +166,7 @@ class SignatureMetadataInjectorViewModel(
     private var splitSelectionJob: Job? = null
     private var installJob: Job? = null
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var pendingRootMountInstallerToken: InstallerManager.Token? = null
     private var workspaceCacheGuard: AutoCloseable? = null
     private var metadataGeneration = 0L
     private var apkGeneration = 0L
@@ -596,6 +602,13 @@ class SignatureMetadataInjectorViewModel(
     fun openShizuku(): Boolean = installerManager.openShizukuApp()
 
     fun install(installerToken: InstallerManager.Token? = null) {
+        startInstall(installerToken, downgradeFallbackConfirmed = false)
+    }
+
+    private fun startInstall(
+        installerToken: InstallerManager.Token?,
+        downgradeFallbackConfirmed: Boolean
+    ) {
         val currentState = stateFlow.value
         val result = currentState.result ?: return
         val stockApk = currentState.targetApk.stagedFile ?: return
@@ -605,8 +618,14 @@ class SignatureMetadataInjectorViewModel(
         installJob?.cancel()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
+        pendingRootMountInstallerToken = null
         stateFlow.update {
-            it.copy(installing = true, installStatus = null, error = null)
+            it.copy(
+                installing = true,
+                installStatus = null,
+                rootDowngradeConfirmationPending = false,
+                error = null
+            )
         }
         appendLog("Resolving configured installer")
         val splitOutput = result.outputType ==
@@ -685,15 +704,29 @@ class SignatureMetadataInjectorViewModel(
                             }
                         }
                         is InstallerManager.InstallPlan.Mount -> {
-                            rootInstaller.install(
-                                patchedAPK = result.outputFile,
-                                stockAPKs = listOf(stockApk),
-                                packageName = packageName,
-                                version = packageInfo.versionName.orEmpty(),
-                                label = label
+                            val mountResult = rootMountCoordinator.execute(
+                                RootMountRequest(
+                                    packageName = packageName,
+                                    userId = android.os.Process.myUid() / 100_000,
+                                    operation = RootMountOperation.REPLACE_STOCK_AND_MOUNT,
+                                    patchedApk = result.outputFile,
+                                    stockApks = listOf(stockApk),
+                                    expectedVersionName = packageInfo.versionName,
+                                    expectedVersionCode = pm.getVersionCode(packageInfo),
+                                    label = label,
+                                    downgradeFallbackConfirmed = downgradeFallbackConfirmed
+                                )
                             )
-                            rootInstaller.mount(packageName)
-                            installationSucceeded()
+                            when (mountResult) {
+                                is RootMountResult.Success -> installationSucceeded()
+                                is RootMountResult.RequiresDowngradeConfirmation -> {
+                                    pendingRootMountInstallerToken = installerToken
+                                    stateFlow.update {
+                                        it.copy(rootDowngradeConfirmationPending = true)
+                                    }
+                                }
+                                else -> mountResult.requireSuccess()
+                            }
                         }
                         is InstallerManager.InstallPlan.Shizuku -> {
                             if (splitOutput) {
@@ -750,6 +783,18 @@ class SignatureMetadataInjectorViewModel(
                 stateFlow.update { it.copy(installing = false) }
             }
         }
+    }
+
+    fun confirmRootDowngrade() {
+        if (!stateFlow.value.rootDowngradeConfirmationPending) return
+        val installerToken = pendingRootMountInstallerToken
+        pendingRootMountInstallerToken = null
+        startInstall(installerToken, downgradeFallbackConfirmed = true)
+    }
+
+    fun dismissRootDowngradeConfirmation() {
+        pendingRootMountInstallerToken = null
+        stateFlow.update { it.copy(rootDowngradeConfirmationPending = false) }
     }
 
     fun cancelInstall() {

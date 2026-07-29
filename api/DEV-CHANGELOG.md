@@ -1,3 +1,22 @@
+# v1.8.1-dev.22 (TBD)
+
+
+# Features
+
+- Reorganized rooted-mount app actions into one connected segmented layout with a remembered collapsible tools section
+- Rebuilt the rooted mount system with transactional operations, verified rollback, automatic recovery, boot and package-change reconciliation, legacy mount migration, and improved management tools https://github.com/MorpheApp/morphe-manager/pull/737
+  - Added persistent transaction tracking to safely recover interrupted mount, update, downgrade, and unmount operations
+  - Added verified stock APK backups and rollback before making package or module changes https://github.com/MorpheApp/morphe-manager/pull/673
+  - Added automatic mount reconciliation after reboot, manager startup, app updates, and package changes
+  - Added migration support for legacy URV and ReVanced root modules
+  - Added repair, use-stock, remount, cleanup, and diagnostic export actions
+  - Added stricter package, APK, signing, Android-user, and mount-ownership safety checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/646
+  - Improved rooted-app progress, status messages, action layouts, and installer routing https://github.com/MorpheApp/morphe-manager/pull/779
+
+
+# Bug fixes
+
+
 # v1.8.1-dev.21 (2026-07-25)
 
 

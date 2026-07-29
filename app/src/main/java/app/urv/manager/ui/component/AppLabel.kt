@@ -40,27 +40,32 @@ fun AppLabel(
             label = labelOverride
             return@LaunchedEffect
         }
+        label = null
         label = withContext(Dispatchers.IO) {
             val packageName = packageInfo?.packageName
-            val localLabelResult = runCatching {
+            val launcherLabel = packageName
+                ?.let { loadInstalledLauncherLabel(context, it) }
+                ?.let { cleanWeirdLabel(it, packageName) }
+                ?.takeIf { it.isNotBlank() && it != packageName }
+            if (launcherLabel != null) return@withContext launcherLabel
+
+            val installedLabel = packageName
+                ?.let { loadInstalledLabel(context, it) }
+                ?.let { cleanWeirdLabel(it, packageName) }
+                ?.takeIf { it.isNotBlank() && it != packageName }
+            if (installedLabel != null) return@withContext installedLabel
+
+            val localLabel = runCatching {
                 packageInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
-            }
-            val localLabel = localLabelResult.getOrNull()
+            }.getOrNull()
             val cleanedLocal = localLabel?.let { raw ->
                 val cleaned = cleanWeirdLabel(raw, packageName)
                 cleaned.takeIf { it.isNotBlank() && cleaned != packageName }
             }
             if (!cleanedLocal.isNullOrBlank()) return@withContext cleanedLocal
 
-            val installedLabel = if (localLabelResult.isFailure) {
-                packageName?.let { loadInstalledLabel(context, it) }
-            } else {
-                packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: packageName?.let { loadInstalledLabel(context, it) }
-            }
-
-            installedLabel
+            packageInfo?.applicationInfo?.nonLocalizedLabel?.toString()
+                ?.takeIf { it.isNotBlank() }
                 ?: packageName
                 ?: defaultText
         }
@@ -136,3 +141,14 @@ private fun loadInstalledLabel(context: android.content.Context, packageName: St
         val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
         appInfo.loadLabel(context.packageManager)?.toString()
     }.getOrNull()?.takeIf { it.isNotBlank() }
+
+private fun loadInstalledLauncherLabel(
+    context: android.content.Context,
+    packageName: String
+): String? = runCatching {
+    val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+        ?: return@runCatching null
+    launchIntent.resolveActivityInfo(context.packageManager, 0)
+        ?.loadLabel(context.packageManager)
+        ?.toString()
+}.getOrNull()?.takeIf { it.isNotBlank() }

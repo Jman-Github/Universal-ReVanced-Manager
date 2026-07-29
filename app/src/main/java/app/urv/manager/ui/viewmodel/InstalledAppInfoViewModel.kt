@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
@@ -29,6 +30,11 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.root.RootMountOperation
+import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.remapAndExtractSelection
@@ -45,11 +51,13 @@ import app.urv.manager.util.isSavedAppEntryForPackage
 import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedApkAbiLabel
+import app.urv.manager.util.supportsRootMount
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.tag
 import app.urv.manager.util.awaitUserConfirmation
 import app.urv.manager.util.toast
 import app.urv.manager.util.toastHandle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,9 +70,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import java.io.File
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import org.koin.core.component.inject
@@ -89,6 +99,7 @@ class InstalledAppInfoViewModel(
     private val patchBundleRepository: PatchBundleRepository by inject()
     private val prefs: PreferencesManager by inject()
     val rootInstaller: RootInstaller by inject()
+    private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
     private val installerManager: InstallerManager by inject()
     private val ackpineInstaller: AckpinePackageInstaller = get()
     private val ackpineUninstaller: PackageUninstaller = get()
@@ -114,12 +125,16 @@ class InstalledAppInfoViewModel(
     private var pendingSignatureMismatchPackage: String? = null
     var isInstalling by mutableStateOf(false)
         private set
+    var isDeletingSavedRootApp by mutableStateOf(false)
+        private set
 
     lateinit var onBackClick: () -> Unit
 
     var installedApp: InstalledApp? by mutableStateOf(null)
         private set
     var appInfo: PackageInfo? by mutableStateOf(null)
+        private set
+    var appLabel: String? by mutableStateOf(null)
         private set
     var appliedPatches: PatchSelection? by mutableStateOf(null)
     var isMounted by mutableStateOf(false)
@@ -143,6 +158,11 @@ class InstalledAppInfoViewModel(
 
     val primaryInstallerIsMount: Boolean
         get() = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+    val supportsRootMount: Boolean
+        get() {
+            val app = installedApp ?: return false
+            return app.supportsRootMount(appInfo?.packageName)
+        }
     val primaryInstallerToken: InstallerManager.Token
         get() = installerManager.getPrimaryToken()
 
@@ -578,14 +598,16 @@ class InstalledAppInfoViewModel(
         externalInstallBaseline = null
         externalInstallStartTime = null
         val targetPackage = resolveDevicePackageName(app, apk)
-        val sourceLabel = appInfo?.applicationInfo?.loadLabel(context.packageManager)?.toString()
+        val sourceLabel = appLabel ?: pm.getArchiveLabel(apk)
+        val allowMount = app.supportsRootMount(targetPackage)
         val plan = if (token != null) {
             installerManager.resolvePlanForToken(
                 token = token,
                 target = InstallerManager.InstallTarget.SAVED_APP,
                 sourceFile = apk,
                 expectedPackage = targetPackage,
-                sourceLabel = sourceLabel
+                sourceLabel = sourceLabel,
+                allowMount = allowMount
             ) ?: run {
                 markInstallFailure(context.getString(R.string.install_app_fail, context.getString(R.string.installer_status_not_supported)))
                 return@launch
@@ -595,7 +617,8 @@ class InstalledAppInfoViewModel(
                 InstallerManager.InstallTarget.SAVED_APP,
                 apk,
                 targetPackage,
-                sourceLabel
+                sourceLabel,
+                allowMount = allowMount
             )
         }
         if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -670,16 +693,22 @@ class InstalledAppInfoViewModel(
                         return@launch
                     }
                     val versionName = packageInfo.versionName ?: ""
-                    val label = with(pm) { packageInfo.label() }
+                    val label = pm.getArchiveLabel(apk, packageInfo)
+                        ?: appLabel
+                        ?: packageInfo.packageName
 
-                    rootInstaller.install(
-                        patchedAPK = apk,
-                        stockAPKs = null,
-                        packageName = packageInfo.packageName,
-                        version = versionName,
-                        label = label
-                    )
-                    rootInstaller.mount(packageInfo.packageName)
+                    rootMountCoordinator.execute(
+                        RootMountRequest(
+                            packageName = packageInfo.packageName,
+                            userId = android.os.Process.myUid() / 100_000,
+                            operation = RootMountOperation.SWITCH_PATCHED_BUILD,
+                            patchedApk = apk,
+                            stockApks = stockApksForRootSwitch(packageInfo.packageName),
+                            expectedVersionName = versionName,
+                            expectedVersionCode = pm.getVersionCode(packageInfo),
+                            label = label
+                        )
+                    ).requireSuccess()
 
                     val refreshedVersion = packageInfo.versionName ?: app.version
                     persistInstallMetadata(InstallType.MOUNT, refreshedVersion, packageInfo.packageName)
@@ -1034,30 +1063,21 @@ class InstalledAppInfoViewModel(
     fun remountSavedInstallation() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         val pkgName = resolveDevicePackageName(app)
-        // Reflect state immediately while the remount sequence runs.
-        mountOperation = MountOperation.UNMOUNTING
+        // The coordinator removes any old mount and activates the saved payload as one transaction.
+        mountOperation = MountOperation.MOUNTING
         isMounted = false
         try {
-            context.toast(context.getString(R.string.unmounting))
-            rootInstaller.unmount(pkgName)
-            context.toast(context.getString(R.string.unmounted))
-            mountOperation = MountOperation.MOUNTING
             context.toast(context.getString(R.string.mounting_ellipsis))
-            val moduleReady = ensureMountModule(pkgName, app)
-            if (!moduleReady) {
+            if (!mountSavedPayload(pkgName, app)) {
                 context.toast(context.getString(R.string.saved_app_install_failed))
                 return@launch
             }
-            rootInstaller.mount(pkgName)
             isMounted = rootInstaller.isAppMounted(pkgName)
             context.toast(context.getString(R.string.mounted))
         } catch (e: Exception) {
             context.toast(context.getString(R.string.failed_to_mount, e.simpleMessage()))
             Log.e(tag, "Failed to remount", e)
         } finally {
-            if (mountOperation == MountOperation.UNMOUNTING) {
-                isMounted = false
-            }
             if (mountOperation == MountOperation.MOUNTING) {
                 isMounted = rootInstaller.isAppMounted(pkgName)
             }
@@ -1065,28 +1085,95 @@ class InstalledAppInfoViewModel(
         }
     }
 
-    private suspend fun ensureMountModule(
+    private suspend fun mountSavedPayload(
         packageName: String,
         app: InstalledApp? = installedApp
     ): Boolean = withContext(Dispatchers.IO) {
+        if (app?.installType == InstallType.MOUNT && !rootInstaller.isAppMounted(packageName)) {
+            check(app.supportsRootMount(packageName)) {
+                context.getString(R.string.root_mount_renamed_package_not_supported)
+            }
+            val installedPackage = pm.getPackageInfo(packageName)
+            val fallbackPayload = savedApkFile(app)?.let { apk ->
+                pm.getPackageInfo(apk)
+                    ?.takeIf { savedPackage ->
+                        installedPackage != null &&
+                            savedPackage.packageName == packageName &&
+                            savedPackage.versionName == installedPackage.versionName &&
+                            pm.getVersionCode(savedPackage) == pm.getVersionCode(installedPackage)
+                    }
+                    ?.let { apk to it }
+            }
+            rootMountCoordinator.execute(
+                RootMountRequest(
+                    packageName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = RootMountOperation.MOUNT_ONLY,
+                    patchedApk = fallbackPayload?.first,
+                    stockApks = fallbackPayload?.let {
+                        stockApksForRootSwitch(packageName)
+                    }.orEmpty(),
+                    expectedVersionName = fallbackPayload?.second?.versionName,
+                    expectedVersionCode = fallbackPayload?.second?.let(pm::getVersionCode),
+                    label = fallbackPayload?.let { (apk, packageInfo) ->
+                        pm.getArchiveLabel(apk, packageInfo)
+                    } ?: appLabel.orEmpty()
+                )
+            ).requireSuccess()
+            return@withContext true
+        }
+
         val apk = app?.let(::savedApkFile) ?: filesystem.findPatchedAppFile(packageName)
         if (apk == null) {
-            return@withContext rootInstaller.isAppInstalled(packageName)
+            check(app?.supportsRootMount(packageName) != false) {
+                context.getString(R.string.root_mount_renamed_package_not_supported)
+            }
+            rootMountCoordinator.execute(
+                RootMountRequest(
+                    packageName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = RootMountOperation.MOUNT_ONLY
+                )
+            ).requireSuccess()
+            return@withContext true
         }
 
         val packageInfo = pm.getPackageInfo(apk) ?: return@withContext false
         if (packageInfo.packageName != packageName) return@withContext false
+        check(app?.supportsRootMount(packageInfo.packageName) != false) {
+            context.getString(R.string.root_mount_renamed_package_not_supported)
+        }
 
         val versionName = packageInfo.versionName ?: installedApp?.version.orEmpty()
-        val label = with(pm) { packageInfo.label() }
-        rootInstaller.install(
-            patchedAPK = apk,
-            stockAPKs = null,
-            packageName = packageInfo.packageName,
-            version = versionName,
-            label = label
-        )
+        val label = pm.getArchiveLabel(apk, packageInfo)
+            ?: appLabel
+            ?: packageInfo.packageName
+        rootMountCoordinator.execute(
+            RootMountRequest(
+                packageName = packageInfo.packageName,
+                userId = android.os.Process.myUid() / 100_000,
+                operation = RootMountOperation.SWITCH_PATCHED_BUILD,
+                patchedApk = apk,
+                stockApks = stockApksForRootSwitch(packageInfo.packageName),
+                expectedVersionName = versionName,
+                expectedVersionCode = pm.getVersionCode(packageInfo),
+                label = label
+            )
+        ).requireSuccess()
         true
+    }
+
+    private suspend fun stockApksForRootSwitch(packageName: String): List<File> {
+        if (rootInstaller.isAppMounted(packageName)) return emptyList()
+        val installed = pm.getPackageInfo(packageName)
+            ?: error(context.getString(R.string.root_mount_requires_installed_stock))
+        val stockPath = installed.applicationInfo?.sourceDir
+            ?: error(context.getString(R.string.install_app_fail_missing_stock))
+        val stockApk = File(stockPath)
+        check(stockApk.isFile) {
+            context.getString(R.string.install_app_fail_missing_stock)
+        }
+        return listOf(stockApk)
     }
 
     fun unmountSavedInstallation() = viewModelScope.launch {
@@ -1094,13 +1181,140 @@ class InstalledAppInfoViewModel(
         val pkgName = resolveDevicePackageName(app)
         try {
             context.toast(context.getString(R.string.unmounting))
-            rootInstaller.unmount(pkgName)
+            rootMountCoordinator.execute(
+                RootMountRequest(
+                    pkgName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = RootMountOperation.UNMOUNT
+                )
+            ).requireSuccess()
             isMounted = false
             context.toast(context.getString(R.string.unmounted))
         } catch (e: Exception) {
             context.toast(context.getString(R.string.failed_to_unmount, e.simpleMessage()))
             Log.e(tag, "Failed to unmount", e)
         }
+    }
+
+    fun repairRootMount() = viewModelScope.launch {
+        val app = installedApp ?: return@launch
+        val packageName = resolveDevicePackageName(app)
+        mountOperation = MountOperation.MOUNTING
+        try {
+            when (val recovery = rootMountCoordinator.execute(
+                RootMountRequest(
+                    packageName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = RootMountOperation.RECOVER
+                )
+            )) {
+                is RootMountResult.Success,
+                is RootMountResult.RecoveredToPreviousMount,
+                is RootMountResult.RecoveredToStock -> Unit
+                else -> recovery.requireSuccess()
+            }
+            check(mountSavedPayload(packageName, app)) {
+                "No compatible saved payload is available"
+            }
+            isMounted = rootInstaller.isAppMounted(packageName)
+            context.toast(context.getString(R.string.mounted))
+        } catch (error: Exception) {
+            context.toast(context.getString(R.string.failed_to_mount, error.simpleMessage()))
+            Log.e(tag, "Failed to repair root mount", error)
+        } finally {
+            mountOperation = null
+        }
+    }
+
+    suspend fun readRootMountDiagnostics(): String? {
+        val app = installedApp ?: return null
+        return runCatching {
+            val packageName = resolveDevicePackageName(app)
+            val report = rootMountCoordinator.exportDiagnostics(packageName).trim()
+            buildString {
+                appendLine("============================================================")
+                appendLine("Universal ReVanced Manager - Root Mount Diagnostics")
+                appendLine("============================================================")
+                appendLine("URV version: ${BuildConfig.VERSION_NAME}")
+                appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+                appendLine("Android: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
+                appendLine("Architecture: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+                appendLine()
+                appendLine(report)
+            }
+        }.onFailure { error ->
+            Log.e(tag, "Failed to read root mount diagnostics", error)
+            context.toast(context.getString(R.string.root_mount_diagnostics_read_failed))
+        }.getOrNull()
+    }
+
+    fun exportRootMountDiagnosticsToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        val content = readRootMountDiagnostics() ?: run {
+            onResult(false)
+            return@launch
+        }
+        val succeeded = runCatching {
+            withContext(Dispatchers.IO) {
+                target.parent?.let { parent -> Files.createDirectories(parent) }
+                Files.newBufferedWriter(
+                    target,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING
+                ).use { writer -> writer.write(content) }
+            }
+        }.onFailure { error ->
+            Log.e(tag, "Failed to export root mount diagnostics to $target", error)
+        }.isSuccess
+
+        context.toast(
+            context.getString(
+                if (succeeded) {
+                    R.string.root_mount_diagnostics_export_success
+                } else {
+                    R.string.root_mount_diagnostics_export_failed
+                }
+            )
+        )
+        onResult(succeeded)
+    }
+
+    fun exportRootMountDiagnosticsToUri(
+        target: Uri?,
+        onResult: (Boolean) -> Unit = {}
+    ) = viewModelScope.launch {
+        if (target == null) {
+            onResult(false)
+            return@launch
+        }
+        val content = readRootMountDiagnostics() ?: run {
+            onResult(false)
+            return@launch
+        }
+        val succeeded = runCatching {
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(target, "wt")
+                    ?.bufferedWriter(StandardCharsets.UTF_8)
+                    ?.use { writer -> writer.write(content) }
+                    ?: throw IOException("Could not open output stream for root mount diagnostics")
+            }
+        }.onFailure { error ->
+            Log.e(tag, "Failed to export root mount diagnostics to $target", error)
+        }.isSuccess
+
+        context.toast(
+            context.getString(
+                if (succeeded) {
+                    R.string.root_mount_diagnostics_export_success
+                } else {
+                    R.string.root_mount_diagnostics_export_failed
+                }
+            )
+        )
+        onResult(succeeded)
     }
 
     fun mountOrUnmount() = viewModelScope.launch {
@@ -1110,18 +1324,22 @@ class InstalledAppInfoViewModel(
             if (isMounted) {
                 mountOperation = MountOperation.UNMOUNTING
                 context.toast(context.getString(R.string.unmounting))
-                rootInstaller.unmount(pkgName)
+                rootMountCoordinator.execute(
+                    RootMountRequest(
+                        pkgName,
+                        userId = android.os.Process.myUid() / 100_000,
+                        operation = RootMountOperation.UNMOUNT
+                    )
+                ).requireSuccess()
                 isMounted = false
                 context.toast(context.getString(R.string.unmounted))
             } else {
                 mountOperation = MountOperation.MOUNTING
                 context.toast(context.getString(R.string.mounting_ellipsis))
-                val moduleReady = ensureMountModule(pkgName, app)
-                if (!moduleReady) {
+                if (!mountSavedPayload(pkgName, app)) {
                     context.toast(context.getString(R.string.saved_app_install_failed))
                     return@launch
                 }
-                rootInstaller.mount(pkgName)
                 isMounted = rootInstaller.isAppMounted(pkgName)
                 context.toast(context.getString(R.string.mounted))
             }
@@ -1162,9 +1380,26 @@ class InstalledAppInfoViewModel(
             }
 
             InstallType.MOUNT -> viewModelScope.launch {
-                rootInstaller.uninstall(app.currentPackageName)
-                installedAppRepository.delete(app)
-                onBackClick()
+                try {
+                    rootMountCoordinator.execute(
+                        RootMountRequest(
+                            app.currentPackageName,
+                            userId = android.os.Process.myUid() / 100_000,
+                            operation = RootMountOperation.UNMOUNT,
+                            removeModuleAfterUnmount = true
+                        )
+                    ).requireSuccess()
+                    installedAppRepository.delete(app)
+                    onBackClick()
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to remove mounted app", error)
+                    context.toast(
+                        context.getString(
+                            R.string.uninstall_app_fail,
+                            error.simpleMessage()
+                        )
+                    )
+                }
             }
 
             InstallType.SAVED -> uninstallSavedInstallation()
@@ -1224,7 +1459,7 @@ class InstalledAppInfoViewModel(
     fun removeSavedApp() = viewModelScope.launch {
         val app = installedApp ?: return@launch
         if (app.installType != InstallType.SAVED) return@launch
-        clearSavedData(app, deleteRecord = true)
+        if (!clearSavedData(app, deleteRecord = true)) return@launch
         installedApp = null
         appInfo = null
         appliedPatches = null
@@ -1235,30 +1470,61 @@ class InstalledAppInfoViewModel(
 
     fun deleteSavedEntry() = viewModelScope.launch {
         val app = installedApp ?: return@launch
-        clearSavedData(app, deleteRecord = true)
+        val deletingSavedRootApp = app.installType == InstallType.MOUNT
+        if (deletingSavedRootApp) isDeletingSavedRootApp = true
+        if (!clearSavedData(app, deleteRecord = true)) {
+            isDeletingSavedRootApp = false
+            return@launch
+        }
         installedApp = null
         appInfo = null
         appliedPatches = null
         isInstalledOnDevice = false
         context.toast(context.getString(R.string.saved_app_removed_toast))
         onBackClick()
+        isDeletingSavedRootApp = false
     }
 
     fun deleteSavedCopy() = viewModelScope.launch {
         val app = installedApp ?: return@launch
-        clearSavedData(app, deleteRecord = false)
+        if (!clearSavedData(app, deleteRecord = false)) return@launch
         context.toast(context.getString(R.string.saved_app_copy_removed_toast))
     }
 
-    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean) {
-        if (deleteRecord) {
-            installedAppRepository.delete(app)
+    private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean): Boolean {
+        return try {
+            if (deleteRecord && app.installType == InstallType.MOUNT) {
+                removeRootMountModule(app)
+            }
+            if (deleteRecord) {
+                installedAppRepository.delete(app)
+            }
+            withContext(Dispatchers.IO) {
+                savedApkFile(app)?.delete()
+            }
+            hasSavedCopy = false
+            savedApkAbiLabel = null
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(tag, "Failed to delete saved app", error)
+            context.toast(
+                context.getString(R.string.saved_app_delete_failed, error.simpleMessage())
+            )
+            false
         }
-        withContext(Dispatchers.IO) {
-            savedApkFile(app)?.delete()
-        }
-        hasSavedCopy = false
-        savedApkAbiLabel = null
+    }
+
+    private suspend fun removeRootMountModule(app: InstalledApp) {
+        rootMountCoordinator.execute(
+            RootMountRequest(
+                packageName = resolveDevicePackageName(app),
+                userId = android.os.Process.myUid() / 100_000,
+                operation = RootMountOperation.UNMOUNT,
+                removeModuleAfterUnmount = true
+            )
+        ).requireSuccess()
     }
 
     private fun savedApkFile(app: InstalledApp? = this.installedApp): File? {
@@ -1280,6 +1546,9 @@ class InstalledAppInfoViewModel(
         val savedInfo = withContext(Dispatchers.IO) {
             savedFile?.let(pm::getPackageInfo)
         }
+        val archiveLabel = withContext(Dispatchers.IO) {
+            savedFile?.let { pm.getArchiveLabel(it, savedInfo) }
+        }
         val displayInfo = if (app.installType == InstallType.SAVED) {
             savedInfo
         } else {
@@ -1288,10 +1557,37 @@ class InstalledAppInfoViewModel(
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
         }
+        val mountedNow = if (app.installType == InstallType.MOUNT) {
+            runCatching { rootInstaller.isAppMounted(devicePackageName) }.getOrDefault(isMounted)
+        } else {
+            false
+        }
+        isMounted = mountedNow
         hasSavedCopy = savedFile != null
         savedApkAbiLabel = withContext(Dispatchers.IO) {
             savedFile?.savedApkAbiLabel(context)
         }
+
+        val installedLabel = if (!mountedNow) {
+            installedInfo?.let { info ->
+                runCatching { with(pm) { info.label() } }.getOrNull()
+            }
+        } else {
+            null
+        }
+        val fallbackPackageName = if (app.installType == InstallType.SAVED) {
+            app.originalPackageName.takeIf { it.isNotBlank() }
+                ?: savedAppBasePackage(app.currentPackageName)
+        } else {
+            app.currentPackageName
+        }
+        appLabel = archiveLabel
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: installedLabel
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            ?: fallbackPackageName
 
         if (installedInfo != null) {
             isInstalledOnDevice = true

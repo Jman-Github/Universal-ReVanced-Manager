@@ -645,6 +645,24 @@ fun SignatureMetadataInjectorSection(
         )
     }
 
+    if (state.rootDowngradeConfirmationPending) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRootDowngradeConfirmation,
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmRootDowngrade) {
+                    Text(stringResource(R.string.continue_))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRootDowngradeConfirmation) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.root_mount_downgrade_title)) },
+            text = { Text(stringResource(R.string.root_mount_downgrade_confirmation)) }
+        )
+    }
+
     LaunchedEffect(useCustomFilePicker) {
         if (!useCustomFilePicker) {
             customInputRole = null

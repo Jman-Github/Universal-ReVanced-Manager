@@ -10,6 +10,8 @@ import android.content.pm.PackageManager.PackageInfoFlags
 import android.content.pm.PackageManager.NameNotFoundException
 import androidx.core.content.pm.PackageInfoCompat
 import android.content.pm.Signature
+import android.content.res.AssetManager
+import android.content.res.Resources
 import android.os.Build
 import android.os.Parcelable
 import android.provider.Settings
@@ -174,6 +176,44 @@ class PM(
         }
 
         return pkgInfo
+    }
+
+    /**
+     * Resolves an APK label against that APK's own resource table. PackageManager label loading can
+     * resolve the resource ID against a currently mounted package and return an unrelated string.
+     */
+    fun getArchiveLabel(file: File, packageInfo: PackageInfo? = getPackageInfo(file)): String? {
+        val info = packageInfo ?: return null
+        val applicationInfo = info.applicationInfo ?: return null
+        applicationInfo.nonLocalizedLabel?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return cleanLabel(it, info.packageName) }
+        if (applicationInfo.labelRes == 0) return null
+
+        val assetManager = runCatching {
+            AssetManager::class.java.getDeclaredConstructor().newInstance()
+        }.getOrNull() ?: return null
+        return try {
+            val addAssetPath = AssetManager::class.java
+                .getMethod("addAssetPath", String::class.java)
+            val cookie = addAssetPath.invoke(assetManager, file.absolutePath) as? Int ?: 0
+            if (cookie == 0) return null
+            val resources = Resources(
+                assetManager,
+                app.resources.displayMetrics,
+                app.resources.configuration
+            )
+            runCatching { resources.getText(applicationInfo.labelRes).toString() }
+                .getOrNull()
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { cleanLabel(it, info.packageName) }
+        } finally {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                runCatching { assetManager.close() }
+            }
+        }
     }
 
     fun getSignature(packageInfo: PackageInfo): Signature? =

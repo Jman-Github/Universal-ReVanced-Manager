@@ -307,9 +307,10 @@ class InstallerManager(
         target: InstallTarget,
         sourceFile: File,
         expectedPackage: String,
-        sourceLabel: String?
+        sourceLabel: String?,
+        allowMount: Boolean = true
     ): InstallPlan {
-        val sequence = buildSequence(target, sourceFile)
+        val sequence = buildSequence(target, sourceFile, allowMount)
         sequence.forEach { token ->
             createPlan(token, target, sourceFile, expectedPackage, sourceLabel)?.let { return it }
         }
@@ -323,8 +324,22 @@ class InstallerManager(
         target: InstallTarget,
         sourceFile: File,
         expectedPackage: String,
-        sourceLabel: String?
-    ): InstallPlan? = createPlan(token, target, sourceFile, expectedPackage, sourceLabel)
+        sourceLabel: String?,
+        allowMount: Boolean = true
+    ): InstallPlan? {
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/pull/779
+        if (!allowMount && token == Token.AutoSaved) {
+            return resolvePlan(
+                target = target,
+                sourceFile = sourceFile,
+                expectedPackage = expectedPackage,
+                sourceLabel = sourceLabel,
+                allowMount = false
+            )
+        }
+        return createPlan(token, target, sourceFile, expectedPackage, sourceLabel)
+    }
 
     fun cleanup(plan: InstallPlan.External) {
         runCatching {
@@ -514,7 +529,11 @@ class InstallerManager(
         return target
     }
 
-    private fun buildSequence(target: InstallTarget, sourceFile: File): List<Token> {
+    private fun buildSequence(
+        target: InstallTarget,
+        sourceFile: File,
+        allowMount: Boolean
+    ): List<Token> {
         val tokens = mutableListOf<Token>()
         val primary = getPrimaryToken()
         val fallback = getFallbackToken()
@@ -522,6 +541,9 @@ class InstallerManager(
 
         fun add(token: Token) {
             if (token == Token.None) return
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/779
+            if (!allowMount && token == Token.AutoSaved) return
             if (token in tokens) return
             if (!availabilityFor(
                     token,
@@ -536,9 +558,12 @@ class InstallerManager(
 
         add(primary)
 
+        val rejectedPrimaryMount = !allowMount && primary == Token.AutoSaved
+        if (rejectedPrimaryMount && fallback != primary) add(fallback)
+
         if (Token.Internal !in tokens) add(Token.Internal)
 
-        if (fallback != primary) add(fallback)
+        if (!rejectedPrimaryMount && fallback != primary) add(fallback)
 
         return tokens
     }
