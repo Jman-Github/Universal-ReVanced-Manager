@@ -1081,14 +1081,27 @@ internal fun SplitMergeSelectionDialog(
         }
     }
 
-    fun matchingPresetKeys(modules: Set<String>): Set<String> =
+    fun matchingPresetKeys(
+        modules: Set<String>,
+        stripUnusedNativeLibs: Boolean
+    ): Set<String> =
         presetOptions.asSequence()
-            .filter { preset -> preset.modules == modules }
+            .filter { preset ->
+                preset.modules == modules &&
+                    when (preset.key) {
+                        "all", "none" -> !stripUnusedNativeLibs
+                        "recommended" -> !showStripNativeLibsOption || stripUnusedNativeLibs
+                        else -> true
+                    }
+            }
             .map { preset -> preset.key }
             .toSet()
 
-    fun inferPresetKey(modules: Set<String>): String? {
-        val matchingKeys = matchingPresetKeys(modules)
+    fun inferPresetKey(
+        modules: Set<String>,
+        stripUnusedNativeLibs: Boolean
+    ): String? {
+        val matchingKeys = matchingPresetKeys(modules, stripUnusedNativeLibs)
         return when {
             modules == allModules && matchingKeys.contains("all") -> "all"
             modules == requiredModules && matchingKeys.contains("none") -> "none"
@@ -1099,16 +1112,28 @@ internal fun SplitMergeSelectionDialog(
 
     val rememberedInitialPresetKey = remember(
         initialPresetKey,
+        initialStripNativeLibs,
+        showStripNativeLibsOption,
         effectiveInitialModules,
         presetOptions
     ) {
-        if (initialPresetKey == SPLIT_MERGE_PRESET_UNSELECTED) {
-            SPLIT_MERGE_PRESET_UNSELECTED
-        } else {
-            initialPresetKey
-                .takeIf { it == "all" || it == "none" || it == "recommended" }
-                ?.takeIf { it in matchingPresetKeys(effectiveInitialModules) }
-                ?: inferPresetKey(effectiveInitialModules)
+        val recognizedInitialPresetKey = initialPresetKey.takeIf {
+            it == "all" || it == "none" || it == "recommended"
+        }
+        when {
+            initialPresetKey == SPLIT_MERGE_PRESET_UNSELECTED ->
+                SPLIT_MERGE_PRESET_UNSELECTED
+            recognizedInitialPresetKey == "recommended" &&
+                presetOptions.any { it.key == recognizedInitialPresetKey } ->
+                recognizedInitialPresetKey
+            recognizedInitialPresetKey != null ->
+                recognizedInitialPresetKey.takeIf {
+                    it in matchingPresetKeys(
+                        effectiveInitialModules,
+                        initialStripNativeLibs
+                    )
+                } ?: SPLIT_MERGE_PRESET_UNSELECTED
+            else -> inferPresetKey(effectiveInitialModules, initialStripNativeLibs)
         }
     }
     var selectedPresetKey by remember(selection, rememberedInitialPresetKey) {
@@ -1147,23 +1172,6 @@ internal fun SplitMergeSelectionDialog(
         derivedStateOf { isDensityCleanupSelected(selectedModules) }
     }
 
-    fun applyCleanupFilters(
-        modules: Set<String>,
-        excludeUnusedLanguages: Boolean,
-        excludeExtraDensities: Boolean
-    ): Set<String> {
-        var filteredModules = modules
-        if (excludeUnusedLanguages) {
-            filteredModules =
-                (filteredModules - optionalLanguageModules) + trimmedOptionalLanguageModules
-        }
-        if (excludeExtraDensities) {
-            filteredModules =
-                (filteredModules - optionalDensityModules) + trimmedOptionalDensityModules
-        }
-        return filteredModules
-    }
-
     fun updateSelection(
         modules: Set<String>,
         stripUnusedNativeLibs: Boolean,
@@ -1182,7 +1190,8 @@ internal fun SplitMergeSelectionDialog(
         stripNativeLibs = stripUnusedNativeLibs
         selectedPresetKey = when {
             preferredPresetKey != null -> preferredPresetKey
-            inferPresetFromModules -> inferPresetKey(normalizedModules)
+            inferPresetFromModules ->
+                inferPresetKey(normalizedModules, stripUnusedNativeLibs)
             else -> selectedPresetKey
         }
         return normalizedModules
@@ -1191,7 +1200,7 @@ internal fun SplitMergeSelectionDialog(
     fun rememberCurrentFilterSelection(
         modules: Set<String>,
         stripUnusedNativeLibs: Boolean,
-        presetKey: String = selectedPresetKey ?: "all"
+        presetKey: String = selectedPresetKey ?: SPLIT_MERGE_PRESET_UNSELECTED
     ) {
         onFilterSelectionChanged(
             presetKey,
@@ -1277,18 +1286,11 @@ internal fun SplitMergeSelectionDialog(
                                 selected = selected,
                                 onClick = {
                                     if (preset.key == "recommended" && selected) {
-                                        val normalizedModules = updateSelection(
-                                            modules = applyCleanupFilters(
-                                                modules = allModules,
-                                                excludeUnusedLanguages = languageCleanupSelected,
-                                                excludeExtraDensities = densityCleanupSelected
-                                            ),
-                                            stripUnusedNativeLibs = stripNativeLibs,
-                                            preferredPresetKey = SPLIT_MERGE_PRESET_UNSELECTED
-                                        )
+                                        selectedPresetKey = SPLIT_MERGE_PRESET_UNSELECTED
                                         rememberCurrentFilterSelection(
-                                            modules = normalizedModules,
-                                            stripUnusedNativeLibs = stripNativeLibs
+                                            modules = selectedModules,
+                                            stripUnusedNativeLibs = stripNativeLibs,
+                                            presetKey = SPLIT_MERGE_PRESET_UNSELECTED
                                         )
                                     } else {
                                         val presetStripNativeLibs =
@@ -1320,7 +1322,16 @@ internal fun SplitMergeSelectionDialog(
                                     } else {
                                         selectedModules + optionalLanguageModules
                                     }
-                                    val normalizedModules = updateSelection(nextModules, stripNativeLibs)
+                                    val normalizedModules = updateSelection(
+                                        modules = nextModules,
+                                        stripUnusedNativeLibs = stripNativeLibs,
+                                        preferredPresetKey =
+                                            if (selectedPresetKey == "recommended") {
+                                                "recommended"
+                                            } else {
+                                                SPLIT_MERGE_PRESET_UNSELECTED
+                                            }
+                                    )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,
                                         stripUnusedNativeLibs = stripNativeLibs
@@ -1342,7 +1353,16 @@ internal fun SplitMergeSelectionDialog(
                                     } else {
                                         selectedModules + optionalDensityModules
                                     }
-                                    val normalizedModules = updateSelection(nextModules, stripNativeLibs)
+                                    val normalizedModules = updateSelection(
+                                        modules = nextModules,
+                                        stripUnusedNativeLibs = stripNativeLibs,
+                                        preferredPresetKey =
+                                            if (selectedPresetKey == "recommended") {
+                                                "recommended"
+                                            } else {
+                                                SPLIT_MERGE_PRESET_UNSELECTED
+                                            }
+                                    )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,
                                         stripUnusedNativeLibs = stripNativeLibs
@@ -1364,19 +1384,15 @@ internal fun SplitMergeSelectionDialog(
                                     } else {
                                         selectedModules + optionalAbiModules
                                     }
-                                    val preferredPresetKey =
-                                        if (
-                                            !toggledStripNativeLibs &&
-                                            selectedPresetKey == "recommended"
-                                        ) {
-                                            SPLIT_MERGE_PRESET_UNSELECTED
-                                        } else {
-                                            null
-                                        }
                                     val normalizedModules = updateSelection(
                                         modules = nextModules,
                                         stripUnusedNativeLibs = toggledStripNativeLibs,
-                                        preferredPresetKey = preferredPresetKey
+                                        preferredPresetKey =
+                                            if (selectedPresetKey == "recommended") {
+                                                "recommended"
+                                            } else {
+                                                SPLIT_MERGE_PRESET_UNSELECTED
+                                            }
                                     )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,

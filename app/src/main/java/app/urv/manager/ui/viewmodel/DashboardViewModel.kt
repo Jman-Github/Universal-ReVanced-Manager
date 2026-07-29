@@ -1050,14 +1050,11 @@ class DashboardViewModel(
         val storedExcludeExtraDensities = prefs.splitMergeExcludeExtraDensities.getBlocking()
         val excludeUnusedLanguages = storedExcludeUnusedLanguages || legacyLanguagesPreset
         val excludeExtraDensities = storedExcludeExtraDensities || legacyDensityPreset
-        val storedExcludeExtraNativeLibs = prefs.splitMergeExcludeExtraNativeLibs.getBlocking()
-        val excludeExtraNativeLibs =
-            storedExcludeExtraNativeLibs || presetKey == "recommended"
+        val excludeExtraNativeLibs = prefs.splitMergeExcludeExtraNativeLibs.getBlocking()
         if (
             storedPresetKey != presetKey ||
             legacyLanguagesPreset ||
-            legacyDensityPreset ||
-            storedExcludeExtraNativeLibs != excludeExtraNativeLibs
+            legacyDensityPreset
         ) {
             viewModelScope.launch {
                 prefs.edit {
@@ -1068,12 +1065,7 @@ class DashboardViewModel(
                 }
             }
         }
-        val baseModules = when (presetKey) {
-            "none" -> requiredModules
-            "recommended" -> (inspection.recommendedModules + requiredModules)
-                .ifEmpty { requiredModules.ifEmpty { allModules } }
-            else -> allModules
-        }
+        val baseModules = if (presetKey == "none") requiredModules else allModules
         var modules = baseModules
         if (excludeUnusedLanguages) {
             modules = (modules - optionalLanguageModules) + trimmedLanguageModules
