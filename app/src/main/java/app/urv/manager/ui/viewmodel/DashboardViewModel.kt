@@ -1363,6 +1363,7 @@ class DashboardViewModel(
                 cleanupLegacySplitMergeArtifacts()
                 splitMergeStateFlow.value = cancelledSplitMergeState(splitMergeStateFlow.value)
                 appendSplitMergeLog(app.getString(R.string.merge_split_apk_cancelled))
+                SplitMergeNotification.clear(app)
                 splitMergeCancellationJob = null
             }
         }

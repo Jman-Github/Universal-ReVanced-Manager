@@ -408,6 +408,7 @@
 - Fixed RGB inputs in the custom YouTube color picker collapsing on shorter screens so entered values are retained and visible https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/628
 - Fixed the `Disable patch selection tab swipe` setting not being restored by manager settings and full backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/651
 - Fixed the patcher log export success message appearing late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/620
+- Fixed the merge notification remaining visible after cancellation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/623
 
 
 # Refactors
