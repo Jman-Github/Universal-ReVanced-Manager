@@ -403,6 +403,7 @@ class PreferencesManager(
         val customBackgroundImageOpacity: Float? = null,
         val hideMainTabLabels: Boolean? = null,
         val disableMainTabSwipe: Boolean? = null,
+        val disablePatchSelectionTabSwipe: Boolean? = null,
         val preventAccidentalTouching: Boolean? = null,
         val showPatchProfilesTab: Boolean? = null,
         val showToolsTab: Boolean? = null,
@@ -589,6 +590,7 @@ class PreferencesManager(
             customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
             hideMainTabLabels = hideMainTabLabels.get(),
             disableMainTabSwipe = disableMainTabSwipe.get(),
+            disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.get(),
             preventAccidentalTouching = preventAccidentalTouching.get(),
             showPatchProfilesTab = showPatchProfilesTab.get(),
             showToolsTab = showToolsTab.get(),
@@ -743,6 +745,7 @@ class PreferencesManager(
         snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
         snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
+        snapshot.disablePatchSelectionTabSwipe?.let { disablePatchSelectionTabSwipe.value = it }
         snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
         snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
         snapshot.showToolsTab?.let { showToolsTab.value = it }

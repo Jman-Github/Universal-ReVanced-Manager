@@ -406,6 +406,7 @@
 - Fixed the `All` and `None` split presets remaining selected after applying cleanup filters in the Split APK Merger and patcher https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/616
 - Fixed bundle information closing when opened before a notification-triggered bundle highlight finished
 - Fixed RGB inputs in the custom YouTube color picker collapsing on shorter screens so entered values are retained and visible https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/628
+- Fixed the `Disable patch selection tab swipe` setting not being restored by manager settings and full backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/651
 
 
 # Refactors
