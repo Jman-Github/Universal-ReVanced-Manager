@@ -235,6 +235,15 @@
 - Sorted patch bundle import and update progress banners by when each operation started https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/587
 - Added direct installation from the split APK merger and replaced its save progress step with a write step https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/600
 - Added support for typed Morphe patch options and bumped the Morphe Patcher to `1.7.0` https://github.com/MorpheApp/morphe-manager/pull/706 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/635
+- Reorganized rooted-mount app actions into one connected segmented layout with a remembered collapsible tools section
+- Rebuilt the rooted mount system with transactional operations, verified rollback, automatic recovery, boot and package-change reconciliation, legacy mount migration, and improved management tools https://github.com/MorpheApp/morphe-manager/pull/737
+  - Added persistent transaction tracking to safely recover interrupted mount, update, downgrade, and unmount operations
+  - Added verified stock APK backups and rollback before making package or module changes https://github.com/MorpheApp/morphe-manager/pull/673
+  - Added automatic mount reconciliation after reboot, manager startup, app updates, and package changes
+  - Added migration support for legacy URV and ReVanced root modules
+  - Added repair, use-stock, remount, cleanup, and diagnostic export actions
+  - Added stricter package, APK, signing, Android-user, and mount-ownership safety checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/646
+  - Improved rooted-app progress, status messages, action layouts, and installer routing https://github.com/MorpheApp/morphe-manager/pull/779
 
 
 # Bug fixes
@@ -390,6 +399,7 @@
 - Fixed serval bugs around themeing & customization
 - Fixed duplicate entries appearing in Previous changelogs
 - Fixed Patch Profiles sometimes only showing storage as an APK source
+- Fixed some APKs merged with the Split APK Merger tool failing when later used for patching
 
 
 # Refactors

@@ -16,6 +16,8 @@
 
 # Bug fixes
 
+- Fixed some APKs merged with the Split APK Merger tool failing when later used for patching
+
 
 # v1.8.1-dev.21 (2026-07-25)
 

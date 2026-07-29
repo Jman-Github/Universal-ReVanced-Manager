@@ -6,6 +6,8 @@ import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.header.TableHeader;
+import com.reandroid.archive.ZipEntryMap;
+import com.reandroid.archive.block.ApkSignatureBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -96,6 +98,7 @@ public final class ApkEditorMergeProcess {
         try {
             runCancellationCheckpoint(cancellationCheckpoint);
             ApkBundle bundle = new ApkBundle();
+            closeables.add(bundle);
             bundle.setAPKLogger(logger);
             bundle.loadApkDirectory(apkDir);
 
@@ -105,64 +108,92 @@ public final class ApkEditorMergeProcess {
             }
             ApkModule baseModule = resolveBaseModule(bundle, modules);
 
-            if (!skipModules.isEmpty()) {
-                Set<String> skipLookup = new HashSet<>();
-                for (String name : skipModules) {
-                    skipLookup.add(normalizeModuleName(name));
-                }
-                for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
-                    runCancellationCheckpoint(cancellationCheckpoint);
-                    if (module == baseModule) continue;
-                    String normalized = normalizeModuleName(module.getModuleName());
-                    if (skipLookup.contains(normalized)) {
-                        bundle.removeApkModule(module.getModuleName());
-                    }
-                }
-            }
+            removeSkippedModules(
+                    bundle,
+                    baseModule,
+                    skipModules,
+                    cancellationCheckpoint
+            );
 
-            closeables.add(bundle);
+            String expectedPackageName = baseModule.getPackageName();
+            int expectedVersionCode = baseModule.getVersionCode();
+            boolean expectedResourceTable = baseModule.hasTableBlock();
+            Throwable compatibilityFailure;
 
-            ApkModule mergedModule;
             try {
-                mergedModule = mergeIntoBaseModule(
+                // Match the patcher runtimes by merging into a fresh APK module.
+                ApkModule mergedModule = mergeIntoFreshModule(
                         bundle,
                         baseModule,
                         logger,
                         cancellationCheckpoint
                 );
-            } catch (Throwable error) {
-                Throwable cause = error.getCause();
-                if (error instanceof CoderMalfunctionError ||
-                        error instanceof IllegalArgumentException && error.getMessage() != null && error.getMessage().contains("newPosition > limit") ||
-                        cause instanceof CoderMalfunctionError ||
-                        cause instanceof IllegalArgumentException && cause.getMessage() != null && cause.getMessage().contains("newPosition > limit")) {
-                    throw new IOException(
-                            "Failed to merge split APK resources. The split set may be incomplete, corrupted, or unsupported.",
-                            error
+                try {
+                    writeAndVerifyMergedApk(
+                            mergedModule,
+                            outputApk,
+                            sortApkEntries,
+                            expectedPackageName,
+                            expectedVersionCode,
+                            expectedResourceTable,
+                            logger,
+                            cancellationCheckpoint
                     );
+                    return;
+                } finally {
+                    closeQuietly(mergedModule);
                 }
-                throw error;
+            } catch (Exception | CoderMalfunctionError error) {
+                compatibilityFailure = error;
             }
 
-            mergedModule.setAPKLogger(logger);
-            mergedModule.setLoadDefaultFramework(false);
             runCancellationCheckpoint(cancellationCheckpoint);
+            logger.logMessage(
+                    "Patch-compatible split merge did not complete validation; " +
+                            "retrying with the base-preserving fallback"
+            );
 
-            if (sortApkEntries) {
-                if (mergedModule.hasTableBlock()) {
-                    mergedModule.getTableBlock().sortPackages();
-                    mergedModule.getTableBlock().refresh();
+            closeables.remove(bundle);
+            closeQuietly(bundle);
+
+            try {
+                bundle = new ApkBundle();
+                closeables.add(bundle);
+                bundle.setAPKLogger(logger);
+                bundle.loadApkDirectory(apkDir);
+
+                modules = bundle.getApkModuleList();
+                if (modules.isEmpty()) {
+                    throw new FileNotFoundException("Nothing to merge, empty modules");
                 }
-                mergedModule.getZipEntryMap().autoSortApkFiles();
+                baseModule = resolveBaseModule(bundle, modules);
+                removeSkippedModules(
+                        bundle,
+                        baseModule,
+                        skipModules,
+                        cancellationCheckpoint
+                );
+
+                ApkModule mergedModule = mergeIntoBaseModule(
+                        bundle,
+                        baseModule,
+                        logger,
+                        cancellationCheckpoint
+                );
+                writeAndVerifyMergedApk(
+                        mergedModule,
+                        outputApk,
+                        sortApkEntries,
+                        expectedPackageName,
+                        expectedVersionCode,
+                        expectedResourceTable,
+                        logger,
+                        cancellationCheckpoint
+                );
+            } catch (Exception | CoderMalfunctionError error) {
+                error.addSuppressed(compatibilityFailure);
+                throw normalizeMergeFailure(error);
             }
-
-            SplitManifestCleaner.clean(mergedModule);
-            applyExtractNativeLibs(mergedModule);
-            runCancellationCheckpoint(cancellationCheckpoint);
-
-            outputApk.getParentFile().mkdirs();
-            logger.logMessage("Writing merged APK");
-            mergedModule.writeApk(outputApk);
         } finally {
             for (Closeable closeable : closeables) {
                 try {
@@ -217,6 +248,203 @@ public final class ApkEditorMergeProcess {
             }
         }
         return order;
+    }
+
+    private static void removeSkippedModules(
+            ApkBundle bundle,
+            ApkModule baseModule,
+            Set<String> skipModules,
+            Runnable cancellationCheckpoint
+    ) {
+        if (skipModules.isEmpty()) return;
+
+        Set<String> skipLookup = new HashSet<>();
+        for (String name : skipModules) {
+            skipLookup.add(normalizeModuleName(name));
+        }
+        for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
+            runCancellationCheckpoint(cancellationCheckpoint);
+            if (module == baseModule) continue;
+            String normalized = normalizeModuleName(module.getModuleName());
+            if (skipLookup.contains(normalized)) {
+                bundle.removeApkModule(module.getModuleName());
+            }
+        }
+    }
+
+    private static ApkModule mergeIntoFreshModule(
+            ApkBundle bundle,
+            ApkModule baseModule,
+            APKLogger logger,
+            Runnable cancellationCheckpoint
+    ) throws IOException {
+        ApkModule mergedModule = new ApkModule(
+                generateMergedModuleName(bundle),
+                new ZipEntryMap()
+        );
+        boolean completed = false;
+        try {
+            mergedModule.setAPKLogger(logger);
+            mergedModule.setLoadDefaultFramework(false);
+
+            runCancellationCheckpoint(cancellationCheckpoint);
+            logger.logMessage("Merging " + moduleDisplayName(baseModule));
+            mergedModule.merge(baseModule, false);
+
+            AndroidManifestBlockMerger manifestMerger = bundle.getManifestMerger();
+            if (manifestMerger != null) {
+                manifestMerger.reset();
+                manifestMerger.initializeBase(mergedModule.getAndroidManifest());
+            }
+
+            ApkSignatureBlock signatureBlock = baseModule.getApkSignatureBlock();
+            for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
+                if (module == baseModule) continue;
+                runCancellationCheckpoint(cancellationCheckpoint);
+                logger.logMessage("Merging " + moduleDisplayName(module));
+                if (signatureBlock == null) {
+                    signatureBlock = module.getApkSignatureBlock();
+                }
+                mergedModule.merge(module, false);
+                if (manifestMerger != null) {
+                    manifestMerger.merge(module.getAndroidManifest());
+                }
+            }
+            if (manifestMerger != null) {
+                manifestMerger.sanitize(mergedModule);
+            }
+            mergedModule.setApkSignatureBlock(signatureBlock);
+            completed = true;
+            return mergedModule;
+        } finally {
+            if (!completed) {
+                closeQuietly(mergedModule);
+            }
+        }
+    }
+
+    private static String generateMergedModuleName(ApkBundle bundle) {
+        Set<String> moduleNames = new HashSet<>(bundle.listModuleNames());
+        String baseName = "merged";
+        String candidate = baseName;
+        int index = 1;
+        while (moduleNames.contains(candidate)) {
+            candidate = baseName + "_" + index;
+            index += 1;
+        }
+        return candidate;
+    }
+
+    private static void writeAndVerifyMergedApk(
+            ApkModule mergedModule,
+            File outputApk,
+            boolean sortApkEntries,
+            String expectedPackageName,
+            int expectedVersionCode,
+            boolean expectedResourceTable,
+            APKLogger logger,
+            Runnable cancellationCheckpoint
+    ) throws IOException {
+        mergedModule.setAPKLogger(logger);
+        mergedModule.setLoadDefaultFramework(false);
+        runCancellationCheckpoint(cancellationCheckpoint);
+
+        if (sortApkEntries) {
+            if (mergedModule.hasTableBlock()) {
+                mergedModule.getTableBlock().sortPackages();
+                mergedModule.getTableBlock().refresh();
+            }
+            mergedModule.getZipEntryMap().autoSortApkFiles();
+        }
+
+        SplitManifestCleaner.clean(mergedModule);
+        applyExtractNativeLibs(mergedModule);
+        runCancellationCheckpoint(cancellationCheckpoint);
+
+        File parent = outputApk.getParentFile();
+        if (parent != null) {
+            parent.mkdirs();
+        }
+        logger.logMessage("Writing merged APK");
+        mergedModule.writeApk(outputApk);
+        runCancellationCheckpoint(cancellationCheckpoint);
+        verifyMergedApk(
+                outputApk,
+                expectedPackageName,
+                expectedVersionCode,
+                expectedResourceTable,
+                logger
+        );
+    }
+
+    private static void verifyMergedApk(
+            File outputApk,
+            String expectedPackageName,
+            int expectedVersionCode,
+            boolean expectedResourceTable,
+            APKLogger logger
+    ) throws IOException {
+        ApkModule verification = ApkModule.loadApkFile(logger, outputApk);
+        try {
+            if (!verification.hasAndroidManifest()) {
+                throw new IOException("Merged APK is missing AndroidManifest.xml");
+            }
+            if (expectedResourceTable && !verification.hasTableBlock()) {
+                throw new IOException("Merged APK is missing resources.arsc");
+            }
+
+            String actualPackageName = verification.getPackageName();
+            if (expectedPackageName != null &&
+                    !expectedPackageName.isBlank() &&
+                    !expectedPackageName.equals(actualPackageName)) {
+                throw new IOException(
+                        "Merged APK package changed from " + expectedPackageName +
+                                " to " + actualPackageName
+                );
+            }
+            if (verification.getVersionCode() != expectedVersionCode) {
+                throw new IOException(
+                        "Merged APK version code changed from " + expectedVersionCode +
+                                " to " + verification.getVersionCode()
+                );
+            }
+
+            String splitName = verification.getSplit();
+            if (splitName != null && !splitName.isBlank()) {
+                throw new IOException("Merged APK still declares split name: " + splitName);
+            }
+        } finally {
+            closeQuietly(verification);
+        }
+    }
+
+    private static Exception normalizeMergeFailure(Throwable error) {
+        Throwable cause = error.getCause();
+        if (error instanceof CoderMalfunctionError ||
+                error instanceof IllegalArgumentException &&
+                        error.getMessage() != null &&
+                        error.getMessage().contains("newPosition > limit") ||
+                cause instanceof CoderMalfunctionError ||
+                cause instanceof IllegalArgumentException &&
+                        cause.getMessage() != null &&
+                        cause.getMessage().contains("newPosition > limit")) {
+            return new IOException(
+                    "Failed to merge split APK resources. The split set may be incomplete, corrupted, or unsupported.",
+                    error
+            );
+        }
+        if (error instanceof Exception) {
+            return (Exception) error;
+        }
+        return new IOException("Failed to merge split APK resources.", error);
+    }
+
+    private static void closeQuietly(Closeable closeable) {
+        if (closeable == null) return;
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+        }
     }
 
     private static ApkModule mergeIntoBaseModule(
