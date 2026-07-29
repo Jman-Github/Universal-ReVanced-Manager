@@ -2098,11 +2098,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ?.removePrefix("Memory limit:")
                 ?.trim()
         )
-        val configuredLimit = MemoryLimitConfig.resolveMemoryLimitMb(
+        val effectiveLimit = runtimeReportedLimit ?: MemoryLimitConfig.resolveMemoryLimitMb(
             context,
             prefs.processMemoryLimit.getBlocking()
         )
-        val effectiveLimit = runtimeReportedLimit ?: configuredLimit
         val processRuntimeEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
         val runtimeMode = findLogValue("Runtime mode:")
             ?: if (processRuntimeEnabled) "process" else "in-process"
