@@ -1291,14 +1291,17 @@ internal fun SplitMergeSelectionDialog(
                                             stripUnusedNativeLibs = stripNativeLibs
                                         )
                                     } else {
+                                        val presetStripNativeLibs =
+                                            preset.key == "recommended" &&
+                                                showStripNativeLibsOption
                                         val normalizedModules = updateSelection(
                                             modules = preset.modules,
-                                            stripUnusedNativeLibs = false,
+                                            stripUnusedNativeLibs = presetStripNativeLibs,
                                             preferredPresetKey = preset.key
                                         )
                                         rememberCurrentFilterSelection(
                                             modules = normalizedModules,
-                                            stripUnusedNativeLibs = false,
+                                            stripUnusedNativeLibs = presetStripNativeLibs,
                                             presetKey = preset.key
                                         )
                                     }
@@ -1361,9 +1364,19 @@ internal fun SplitMergeSelectionDialog(
                                     } else {
                                         selectedModules + optionalAbiModules
                                     }
+                                    val preferredPresetKey =
+                                        if (
+                                            !toggledStripNativeLibs &&
+                                            selectedPresetKey == "recommended"
+                                        ) {
+                                            SPLIT_MERGE_PRESET_UNSELECTED
+                                        } else {
+                                            null
+                                        }
                                     val normalizedModules = updateSelection(
                                         modules = nextModules,
-                                        stripUnusedNativeLibs = toggledStripNativeLibs
+                                        stripUnusedNativeLibs = toggledStripNativeLibs,
+                                        preferredPresetKey = preferredPresetKey
                                     )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,

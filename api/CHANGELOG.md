@@ -401,6 +401,7 @@
 - Fixed Patch Profiles sometimes only showing storage as an APK source
 - Fixed some APKs merged with the Split APK Merger tool failing when later used for patching
 - Fixed the bundle update WebSocket service crashing after a background restart due to multiple DataStore instances accessing the same preferences file https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/647
+- Fixed the `Recommended for this device` split preset leaving native library cleanup unselected in the Split APK Merger and patcher https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/622
 
 
 # Refactors

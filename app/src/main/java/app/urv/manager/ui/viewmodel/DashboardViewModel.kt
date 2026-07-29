@@ -1050,13 +1050,21 @@ class DashboardViewModel(
         val storedExcludeExtraDensities = prefs.splitMergeExcludeExtraDensities.getBlocking()
         val excludeUnusedLanguages = storedExcludeUnusedLanguages || legacyLanguagesPreset
         val excludeExtraDensities = storedExcludeExtraDensities || legacyDensityPreset
-        val excludeExtraNativeLibs = prefs.splitMergeExcludeExtraNativeLibs.getBlocking()
-        if (storedPresetKey != presetKey || legacyLanguagesPreset || legacyDensityPreset) {
+        val storedExcludeExtraNativeLibs = prefs.splitMergeExcludeExtraNativeLibs.getBlocking()
+        val excludeExtraNativeLibs =
+            storedExcludeExtraNativeLibs || presetKey == "recommended"
+        if (
+            storedPresetKey != presetKey ||
+            legacyLanguagesPreset ||
+            legacyDensityPreset ||
+            storedExcludeExtraNativeLibs != excludeExtraNativeLibs
+        ) {
             viewModelScope.launch {
                 prefs.edit {
                     prefs.splitMergeSelectionPreset.value = presetKey
                     prefs.splitMergeExcludeUnusedLanguages.value = excludeUnusedLanguages
                     prefs.splitMergeExcludeExtraDensities.value = excludeExtraDensities
+                    prefs.splitMergeExcludeExtraNativeLibs.value = excludeExtraNativeLibs
                 }
             }
         }
