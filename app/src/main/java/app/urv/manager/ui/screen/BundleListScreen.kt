@@ -3,6 +3,7 @@ package app.urv.manager.ui.screen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -204,16 +205,15 @@ fun BundleListScreen(
                         )
                     }
 
-                    if (highlightBundleUid != null) {
-                        SettingsSearchHighlight(
-                            targetKey = source.uid,
-                            activeKey = highlightBundleUid,
-                            onHighlightComplete = onHighlightConsumed
-                        ) { modifier ->
-                            content(modifier)
-                        }
-                    } else {
-                        content(Modifier)
+                    SettingsSearchHighlight(
+                        targetKey = source.uid,
+                        activeKey = highlightBundleUid,
+                        onHighlightComplete = onHighlightConsumed,
+                        contentPadding = PaddingValues(
+                            vertical = if (highlightBundleUid != null) 2.dp else 0.dp
+                        )
+                    ) { modifier ->
+                        content(modifier)
                     }
                 }
             }

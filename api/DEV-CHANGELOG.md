@@ -20,6 +20,7 @@
 - Fixed the bundle update WebSocket service crashing after a background restart due to multiple DataStore instances accessing the same preferences file https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/647
 - Fixed the `Recommended for this device` split preset leaving native library cleanup unselected in the Split APK Merger and patcher https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/622
 - Fixed the `All` and `None` split presets remaining selected after applying cleanup filters in the Split APK Merger and patcher https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/616
+- Fixed bundle information closing when opened before a notification-triggered bundle highlight finished
 
 
 # v1.8.1-dev.21 (2026-07-25)
