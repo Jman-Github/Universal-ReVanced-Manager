@@ -11,6 +11,12 @@
 -keep class app.revanced.patcher.** { *; }
 -keep class app.revanced.library.** { *; }
 
+# External v22 patch bundles compile against Patcher's relocated mutable
+# Dexlib API. These calls are invisible to R8 because the bundles are loaded
+# at runtime, so preserve the two relocated API packages they can reference.
+-keep class app.revanced.com.android.tools.smali.dexlib2.iface.value.** { *; }
+-keep class app.revanced.com.android.tools.smali.dexlib2.mutable.** { *; }
+
 # ReVanced v22 remains the built-in default runtime and is reached through
 # Revanced22RuntimeBridge reflection, so release shrinking must keep it.
 -keep class app.urv.manager.revanced.runtime.** { *; }

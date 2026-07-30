@@ -13,6 +13,7 @@
   - Added stricter package, APK, signing, Android-user, and mount-ownership safety checks https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/646
   - Improved rooted-app progress, status messages, action layouts, and installer routing https://github.com/MorpheApp/morphe-manager/pull/779
 - Improved system installer handling across patching, saved apps, downloads, manager updates, LSPosed modules, and split APK tools so APKs install directly from app storage, with OEM callback verification and an intent fallback https://github.com/MorpheApp/morphe-manager/pull/598
+- Bumped ReVanced Patcher to `22.0.2-dev.1`
 
 
 # Bug fixes
@@ -26,6 +27,7 @@
 - Fixed the `Disable patch selection tab swipe` setting not being restored by manager settings and full backups https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/651
 - Fixed the patcher log export success message appearing late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/620
 - Fixed the merge notification remaining visible after cancellation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/623
+- Fixed ReVanced v22 patches failing with uninitialized hook and method errors
 
 
 # v1.8.1-dev.21 (2026-07-25)
