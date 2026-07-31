@@ -1818,7 +1818,6 @@ Details: %2$s</string>
     <string name="patcher_memory_usage">Memory usage</string>
     <string name="legacy_android_memory_warning">Android 10 and older cannot use the same process isolation and memory safeguards available on Android 11 and newer. The app may become unstable or close if memory runs out.</string>
     <string name="patcher_memory_usage_format">%1$d MB / %2$d MB</string>
-    <string name="patcher_memory_usage_requested_format">%1$d MB / %2$d MB requested</string>
     <string name="patcher_memory_usage_live">Live</string>
     <string name="patcher_memory_usage_final">Final</string>
     <string name="patcher_memory_usage_history">Session history</string>
@@ -1827,7 +1826,7 @@ Details: %2$s</string>
     <string name="patcher_memory_usage_trend_rising">rising</string>
     <string name="patcher_memory_usage_trend_falling">falling</string>
     <string name="patcher_memory_usage_trend_steady">steady</string>
-    <string name="patcher_memory_usage_accessibility">Memory history. Current %1$d MB of %2$d MB requested. Peak %3$d MB. Trend %4$s. %5$s.</string>
+    <string name="patcher_memory_usage_accessibility">Memory history. Current %1$d MB of %2$d MB. Peak %3$d MB. Trend %4$s. %5$s.</string>
     <string name="patcher_step_group_preparing">Preparing</string>
     <string name="patcher_step_load_patches">Load patches</string>
     <string name="patcher_step_prepare_split_apk">Merge split APK</string>

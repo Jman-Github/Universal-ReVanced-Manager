@@ -159,7 +159,7 @@ fun PatcherMemoryUsageCard(
             }
             Text(
                 text = stringResource(
-                    R.string.patcher_memory_usage_requested_format,
+                    R.string.patcher_memory_usage_format,
                     latest.usedMb,
                     requestedMaxMb
                 ),

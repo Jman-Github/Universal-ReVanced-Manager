@@ -247,6 +247,7 @@
 - Improved system installer handling across patching, saved apps, downloads, manager updates, LSPosed modules, and split APK tools so APKs install directly from app storage, with OEM callback verification and an intent fallback https://github.com/MorpheApp/morphe-manager/pull/598
 - Bumped ReVanced Patcher to `22.0.2-dev.1`
 - Made the patcher `Done` button available after patching finishes with errors https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/649
+- Removed `requested` from the patcher and Split APK Merger memory usage labels https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/604
 
 
 # Bug fixes
