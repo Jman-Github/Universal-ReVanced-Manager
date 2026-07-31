@@ -1127,7 +1127,7 @@ fun PatcherScreen(
                 }
                 IconButton(
                     onClick = ::onPageBackToDashboard,
-                    enabled = canInstall
+                    enabled = patcherSucceeded == false || canInstall
                 ) {
                     Icon(Icons.Outlined.Check, stringResource(R.string.done))
                 }
