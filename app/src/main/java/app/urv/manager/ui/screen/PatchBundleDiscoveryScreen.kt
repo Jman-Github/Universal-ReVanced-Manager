@@ -42,6 +42,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sort
 import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -158,6 +159,9 @@ fun PatchBundleDiscoveryScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var previousRelease by remember { mutableStateOf(showRelease) }
     var previousPrerelease by remember { mutableStateOf(showPrerelease) }
+    val filterChipColors = FilterChipDefaults.filterChipColors(
+        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+    )
     LaunchedEffect(showRelease, showPrerelease, latestSelected) {
         if (!latestSelected) {
             when {
@@ -751,6 +755,7 @@ fun PatchBundleDiscoveryScreen(
                                         latestSelected = false
                                     }
                                 },
+                                colors = filterChipColors,
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_release)) }
                             )
                             CheckedFilterChip(
@@ -764,6 +769,7 @@ fun PatchBundleDiscoveryScreen(
                                         latestSelected = false
                                     }
                                 },
+                                colors = filterChipColors,
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_prerelease)) }
                             )
                             CheckedFilterChip(
@@ -786,6 +792,7 @@ fun PatchBundleDiscoveryScreen(
                                         }
                                     }
                                 },
+                                colors = filterChipColors,
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_latest)) }
                             )
                         }

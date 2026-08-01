@@ -19,6 +19,7 @@
 - Updated the Android toolchain and core dependencies, including Kotlin, AGP, Ktor, Koin, Coil, AndroidX, and raised the app and bundled runtimes to target SDK 36
 - Bumped Morphe Library to `1.4.0` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/652
 - Bumped Morphe Patcher to `1.8.0-dev.3` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/652
+- Updated selected filters on the patch selection and patch bundle discovery screens to use the blue selected-state styling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/642
 
 
 # Bug fixes

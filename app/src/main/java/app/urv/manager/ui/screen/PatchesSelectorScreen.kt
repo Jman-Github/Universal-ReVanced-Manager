@@ -67,6 +67,7 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.SettingsBackupRestore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -512,6 +513,9 @@ fun PatchesSelectorScreen(
 
     if (showBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val filterChipColors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
+        )
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -541,6 +545,7 @@ fun PatchesSelectorScreen(
                     CheckedFilterChip(
                         selected = viewModel.filter and SHOW_INCOMPATIBLE == 0,
                         onClick = { viewModel.toggleFlag(SHOW_INCOMPATIBLE) },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.this_version)) }
                     )
                 }
@@ -560,17 +565,20 @@ fun PatchesSelectorScreen(
                     CheckedFilterChip(
                         selected = viewModel.showNewPatchesSection,
                         onClick = viewModel::toggleNewPatchesSection,
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_new_patches)) }
                     )
                     CheckedFilterChip(
                         selected = typeFilterActive && viewModel.filter and SHOW_NON_UNIVERSAL != 0,
                         onClick = { viewModel.toggleTypeFlag(SHOW_NON_UNIVERSAL) },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.non_universal)) }
                     )
                     if (viewModel.allowUniversalPatches) {
                         CheckedFilterChip(
                             selected = typeFilterActive && viewModel.filter and SHOW_UNIVERSAL != 0,
                             onClick = { viewModel.toggleTypeFlag(SHOW_UNIVERSAL) },
+                            colors = filterChipColors,
                             label = { Text(stringResource(R.string.universal)) },
                         )
                     }
@@ -600,6 +608,7 @@ fun PatchesSelectorScreen(
                                 sortDescending = false
                             }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_alphabetical)) }
                     )
 
@@ -614,6 +623,7 @@ fun PatchesSelectorScreen(
                                 sortDescending = true
                             }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_za)) }
                     )
 
@@ -627,6 +637,7 @@ fun PatchesSelectorScreen(
                                     PatchSortSelectionMode.EnabledFirst.name
                                 }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_enabled_first)) }
                     )
 
@@ -640,6 +651,7 @@ fun PatchesSelectorScreen(
                                     PatchSortSelectionMode.DisabledFirst.name
                                 }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_disabled_first)) }
                     )
 
@@ -652,6 +664,7 @@ fun PatchesSelectorScreen(
                                 PatchSortSettingsMode.HasSettings.name
                             }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_has_settings)) }
                     )
 
@@ -664,6 +677,7 @@ fun PatchesSelectorScreen(
                                 PatchSortSettingsMode.NoSettings.name
                             }
                         },
+                        colors = filterChipColors,
                         label = { Text(stringResource(R.string.patch_selector_sheet_filter_sort_no_settings)) }
                     )
                 }
