@@ -97,6 +97,7 @@ import app.urv.manager.ui.model.navigation.Patcher
 import app.urv.manager.service.PatchingTaskMonitorService
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.util.PM
+import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
@@ -1293,23 +1294,25 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.selectedApp.versionCode
         ).first().associateBy { it.uid }
 
-    private suspend fun collectSelectedBundleMetadata(): Pair<List<String>, List<String>> {
+    private suspend fun collectSelectedBundleMetadata(): List<PatchBundleExportData> {
         val globalBundles = patchBundleRepository.bundleInfoFlow.first()
         val scopedBundles = gatherScopedBundles()
         val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
-        val versions = mutableListOf<String>()
-        val names = mutableListOf<String>()
         val displayNames = patchBundleRepository.sources.first().associate { it.uid to it.displayTitle }
-        sanitizedSelection.keys.forEach { uid ->
+        return sanitizedSelection.keys.mapNotNull { uid ->
             val scoped = scopedBundles[uid]
             val global = globalBundles[uid]
-            val displayName = displayNames[uid]
-                ?: scoped?.name
-                ?: global?.name
-            global?.version?.takeIf { it.isNotBlank() }?.let(versions::add)
-            displayName?.takeIf { it.isNotBlank() }?.let(names::add)
+            val displayName = displayNames[uid]?.takeIf { it.isNotBlank() }
+                ?: scoped?.name?.takeIf { it.isNotBlank() }
+                ?: global?.name?.takeIf { it.isNotBlank() }
+            val version = global?.version?.takeIf { it.isNotBlank() }
+                ?: scoped?.version?.takeIf { it.isNotBlank() }
+            if (displayName == null && version == null) {
+                null
+            } else {
+                PatchBundleExportData(name = displayName, version = version)
+            }
         }
-        return versions.distinct() to names.distinct()
     }
 
     private suspend fun collectSelectedPatchDescriptions(): List<String> {
@@ -1361,15 +1364,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun buildExportMetadata(packageInfo: PackageInfo?): PatchedAppExportData? {
         val info = packageInfo ?: pm.getPackageInfo(outputFile) ?: return null
-        val (bundleVersions, bundleNames) = collectSelectedBundleMetadata()
+        val patchBundles = collectSelectedBundleMetadata()
         val label = runCatching { with(pm) { info.label() } }.getOrNull()
         val versionName = info.versionName?.takeUnless { it.isBlank() } ?: version ?: "unspecified"
         return PatchedAppExportData(
             appName = label,
             packageName = info.packageName,
             appVersion = versionName,
-            patchBundleVersions = bundleVersions,
-            patchBundleNames = bundleNames
+            patchBundles = patchBundles
         )
     }
 

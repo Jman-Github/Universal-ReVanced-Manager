@@ -59,6 +59,7 @@ import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.PatchBundleFileIntent
 import app.urv.manager.util.PatchBundleFileIntentParser
 import app.urv.manager.util.PatchBundleFileManifest
+import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.simpleMessage
 import java.io.File
@@ -2388,7 +2389,7 @@ class DashboardViewModel(
                 appName = appName,
                 packageName = packageName,
                 appVersion = packageInfo.versionName,
-                patchBundleNames = listOf("Merged")
+                patchBundles = listOf(PatchBundleExportData(name = "Merged", version = null))
             ),
             ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE
         )

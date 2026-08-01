@@ -112,6 +112,7 @@ import app.urv.manager.ui.viewmodel.MountWarningReason
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.FilenameUtils
+import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.isAllowedApkFile
@@ -1114,14 +1115,20 @@ fun InstalledAppInfoScreen(
         viewModel.appLabel
     ) {
         val label = viewModel.appLabel ?: displayPackageName
-        val bundleVersions = appliedBundles.mapNotNull { it.version?.takeIf(String::isNotBlank) }
-        val bundleNames = appliedBundles.map { it.title }.filter(String::isNotBlank)
+        val patchBundles = appliedBundles.mapNotNull { bundle ->
+            val name = bundle.title.takeIf(String::isNotBlank)
+            val version = bundle.version?.takeIf(String::isNotBlank)
+            if (name == null && version == null) {
+                null
+            } else {
+                PatchBundleExportData(name = name, version = version)
+            }
+        }
         PatchedAppExportData(
             appName = label,
             packageName = viewModel.appInfo?.packageName ?: displayPackageName,
             appVersion = installedApp.version,
-            patchBundleVersions = bundleVersions,
-            patchBundleNames = bundleNames
+            patchBundles = patchBundles
         )
     }
     val exportFileName = remember(exportMetadata, exportFormat) {

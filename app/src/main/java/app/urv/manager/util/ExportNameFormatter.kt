@@ -5,12 +5,16 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+data class PatchBundleExportData(
+    val name: String?,
+    val version: String?
+)
+
 data class PatchedAppExportData(
     val appName: String?,
     val packageName: String,
     val appVersion: String?,
-    val patchBundleVersions: List<String> = emptyList(),
-    val patchBundleNames: List<String> = emptyList(),
+    val patchBundles: List<PatchBundleExportData> = emptyList(),
     val generatedAt: Instant = Instant.now(),
     val managerVersion: String = BuildConfig.VERSION_NAME
 )
@@ -29,6 +33,8 @@ object ExportNameFormatter {
         .withZone(ZoneId.systemDefault())
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
         .withZone(ZoneId.systemDefault())
+    private val pairedPatchBundleVariables =
+        Regex("""\{patch bundle names\}([\s._+\-]*)\{patches version\}""")
 
     fun availableVariables(): List<Variable> = listOf(
         Variable("{app name}", app.universal.revanced.manager.R.string.export_name_variable_app_name, app.universal.revanced.manager.R.string.export_name_variable_app_name_description),
@@ -67,8 +73,10 @@ object ExportNameFormatter {
         appName = "ExampleApp",
         packageName = "com.example.app",
         appVersion = "1.2.3",
-        patchBundleVersions = listOf("2.201.0"),
-        patchBundleNames = listOf("ReVanced Extended"),
+        patchBundles = listOf(
+            PatchBundleExportData(name = "anddea", version = "4.2.0"),
+            PatchBundleExportData(name = "piko", version = "3.9.0-dev.1")
+        ),
         generatedAt = Instant.now()
     )
 
@@ -76,11 +84,14 @@ object ExportNameFormatter {
         appName = "ExampleApp",
         packageName = "com.example.app",
         appVersion = "1.2.3",
-        patchBundleNames = listOf("Merged"),
+        patchBundles = listOf(PatchBundleExportData(name = "Merged", version = null)),
         generatedAt = Instant.now()
     )
 
     private fun replaceVariables(template: String, data: PatchedAppExportData): String {
+        val pairedTemplate = pairedPatchBundleVariables.replace(template) { match ->
+            formatPatchBundles(data.patchBundles, match.groupValues[1])
+        }
         val replacements: Map<String, String> = buildMap {
             put("{app name}", data.appName?.takeUnless { it.isBlank() } ?: data.packageName)
             put("{package name}", data.packageName)
@@ -88,15 +99,15 @@ object ExportNameFormatter {
             put(
                 "{patches version}",
                 joinValues(
-                    data.patchBundleVersions.mapNotNull(::formatVersion),
+                    data.patchBundles.mapNotNull { formatVersion(it.version) },
                     fallback = "unknown",
-                    limit = 1
+                    limit = 0
                 )
             )
             put(
                 "{patch bundle names}",
                 joinValues(
-                    data.patchBundleNames,
+                    data.patchBundles.mapNotNull { it.name },
                     fallback = "bundles",
                     limit = 2,
                     separator = "_"
@@ -107,9 +118,27 @@ object ExportNameFormatter {
             put("{date}", dateFormatter.format(data.generatedAt))
         }
 
-        return replacements.entries.fold(template) { acc, (token, value) ->
+        return replacements.entries.fold(pairedTemplate) { acc, (token, value) ->
             acc.replace(token, value)
         }
+    }
+
+    private fun formatPatchBundles(
+        bundles: List<PatchBundleExportData>,
+        nameVersionSeparator: String
+    ): String {
+        val values = bundles.mapNotNull { bundle ->
+            val name = bundle.name?.trim()?.takeIf(String::isNotEmpty)
+            val version = formatVersion(bundle.version)
+            when {
+                name != null && version != null -> "$name$nameVersionSeparator$version"
+                name != null -> name
+                version != null -> version
+                else -> null
+            }
+        }
+        return values.takeIf { it.isNotEmpty() }?.joinToString("_")
+            ?: "bundles${nameVersionSeparator}unknown"
     }
 
     private fun formatVersion(raw: String?): String? {

@@ -416,6 +416,7 @@
 - Fixed the patcher log export success message appearing late https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/620
 - Fixed the merge notification remaining visible after cancellation https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/623
 - Fixed ReVanced v22 patches failing with uninitialized hook and method errors
+- Fixed patched APK export filenames omitting versions for additional applied patch bundles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/650
 
 
 # Refactors

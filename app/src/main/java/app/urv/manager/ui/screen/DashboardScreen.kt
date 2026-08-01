@@ -219,6 +219,7 @@ import app.urv.manager.util.PatchBundleFileIntent
 import app.urv.manager.util.EventEffect
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.FilenameUtils
+import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.isAllowedPatchBundleFile
@@ -1126,16 +1127,23 @@ fun DashboardScreen(
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
             ?: displayPackageName
-        val summaries = installedAppsViewModel.bundleSummaries[app.currentPackageName].orEmpty()
-        val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
-        val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
+        val patchBundles = installedAppsViewModel.bundleSummaries[app.currentPackageName]
+            .orEmpty()
+            .mapNotNull { summary ->
+                val name = summary.title.takeIf(String::isNotBlank)
+                val version = summary.version?.takeIf(String::isNotBlank)
+                if (name == null && version == null) {
+                    null
+                } else {
+                    PatchBundleExportData(name = name, version = version)
+                }
+            }
         val exportData = PatchedAppExportData(
             appName = label,
             packageName = installedAppsViewModel.packageInfoMap[app.currentPackageName]?.packageName
                 ?: displayPackageName,
             appVersion = app.version,
-            patchBundleVersions = bundleVersions,
-            patchBundleNames = bundleNames
+            patchBundles = patchBundles
         )
         return ExportNameFormatter.format(exportFormat, exportData)
     }

@@ -33,6 +33,7 @@ import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.mutableStateSetOf
+import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.buildSavedAppVariantIdentity
@@ -564,15 +565,22 @@ class InstalledAppsViewModel(
         val label = appLabelMap[app.currentPackageName]
             ?: pm.getArchiveLabel(source, packageInfo)
             ?: displayPackageName
-        val summaries = bundleSummaries[app.currentPackageName].orEmpty()
-        val bundleVersions = summaries.mapNotNull { it.version?.takeIf(String::isNotBlank) }
-        val bundleNames = summaries.map { it.title }.filter(String::isNotBlank)
+        val patchBundles = bundleSummaries[app.currentPackageName]
+            .orEmpty()
+            .mapNotNull { summary ->
+                val name = summary.title.takeIf(String::isNotBlank)
+                val version = summary.version?.takeIf(String::isNotBlank)
+                if (name == null && version == null) {
+                    null
+                } else {
+                    PatchBundleExportData(name = name, version = version)
+                }
+            }
         return PatchedAppExportData(
             appName = label,
             packageName = packageInfo?.packageName ?: displayPackageName,
             appVersion = app.version,
-            patchBundleVersions = bundleVersions,
-            patchBundleNames = bundleNames
+            patchBundles = patchBundles
         )
     }
 
