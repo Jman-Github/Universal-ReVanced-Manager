@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.binary.compatibility.validator)
@@ -21,7 +20,7 @@ dependencies {
 
 android {
     namespace = "app.universal.revanced.manager.plugin.downloader"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -50,6 +49,10 @@ android {
 
     buildFeatures {
         aidl = true
+    }
+
+    publishing {
+        singleVariant("release")
     }
 }
 

@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
 }
 
@@ -31,13 +30,13 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
 
 android {
     namespace = "app.universal.revanced.manager.revanced.v21.runtime"
-    compileSdk = 36
-    buildToolsVersion = "35.0.1"
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 3
         versionName = "1.3"
     }
@@ -90,11 +89,12 @@ android {
         aidl = true
         buildConfig = true
     }
+}
 
-    applicationVariants.all {
-        outputs.all {
-            this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-            outputFileName = "revanced.v21-plugin.apk"
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            output.outputFileName.set("revanced.v21-plugin.apk")
         }
     }
 }
@@ -110,7 +110,7 @@ dependencies {
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation(libs.kotlinx.coroutines.android)
     compileOnly(libs.hidden.api.stub)
 }
 

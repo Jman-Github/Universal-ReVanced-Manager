@@ -35,18 +35,16 @@ import app.urv.manager.util.applyAppLanguage
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.Dispatchers
-import coil.Coil
-import coil.ImageLoader
-import coil.decode.GifDecoder
-import coil.decode.ImageDecoderDecoder
-import coil.decode.SvgDecoder
+import coil3.SingletonImageLoader
+import coil3.ImageLoader
+import coil3.gif.AnimatedImageDecoder
+import coil3.gif.GifDecoder
+import coil3.svg.SvgDecoder
 import com.topjohnwu.superuser.Shell
 import com.topjohnwu.superuser.internal.BuilderImpl
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import me.zhanghai.android.appiconloader.coil.AppIconFetcher
-import me.zhanghai.android.appiconloader.coil.AppIconKeyer
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -105,21 +103,18 @@ class ManagerApplication : Application() {
             Log.e(tag, "Failed to load patcher runtime plugins", it)
         }
 
-        val pixels = 512
-        Coil.setImageLoader(
-            ImageLoader.Builder(this)
+        SingletonImageLoader.setSafe { context ->
+            ImageLoader.Builder(context)
                 .components {
-                    add(AppIconKeyer())
-                    add(AppIconFetcher.Factory(pixels, true, this@ManagerApplication))
                     add(SvgDecoder.Factory())
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        add(ImageDecoderDecoder.Factory())
+                        add(AnimatedImageDecoder.Factory())
                     } else {
                         add(GifDecoder.Factory())
                     }
                 }
                 .build()
-        )
+        }
 
         val shellBuilder = BuilderImpl.create().setFlags(Shell.FLAG_MOUNT_MASTER)
         Shell.setDefaultBuilder(shellBuilder)

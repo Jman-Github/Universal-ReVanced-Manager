@@ -47,7 +47,7 @@ import app.urv.manager.ui.component.LazyColumnWithScrollbar
 import app.urv.manager.ui.component.LoadingIndicator
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.viewmodel.ContributorViewModel
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import org.koin.androidx.compose.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)

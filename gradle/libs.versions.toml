@@ -1,40 +1,40 @@
 [versions]
-ktx = "1.16.0"
-material3 = "1.4.0"
-ui-tooling = "1.8.1"
-viewmodel-lifecycle = "2.9.0"
+ktx = "1.19.0"
+viewmodel-lifecycle = "2.11.0"
 splash-screen = "1.0.1"
-activity = "1.10.1"
-appcompat = "1.7.0"
-preferences-datastore = "1.1.2"
-work-runtime = "2.10.1"
-compose-bom = "2025.05.00"
-navigation = "2.8.6"
+activity = "1.13.0"
+appcompat = "1.7.1"
+documentfile-version = "1.1.0"
+preferences-datastore = "1.2.1"
+work-runtime = "2.11.2"
+compose-bom = "2026.06.00"
+navigation = "2.9.8"
 accompanist = "0.37.0"
 placeholder = "1.1.2"
 reorderable = "2.4.3"
-serialization = "1.8.0"
+serialization = "1.11.0"
+coroutines = "1.11.0"
 collection = "0.3.8"
 datetime = "0.6.1"
-room-version = "2.7.1"
+room-version = "2.8.4"
 androidx-test-runner = "1.7.0"
 androidx-test-junit = "1.3.0"
 revanced-patcher = "21.0.0"
 revanced-patcher-v22 = "22.0.2-dev.1"
 revanced-library = "3.1.0"
-morphe-patcher = "1.7.0"
-morphe-library = "1.3.0"
+morphe-patcher = "1.8.0-dev.3"
+morphe-library = "1.4.0"
 arsclib = "9696ffecda"
-koin = "3.5.3"
-ktor = "2.3.9"
+koin = "4.2.2"
+ktor = "3.5.1"
 markdown-renderer = "0.30.0"
 fading-edges = "1.0.4"
-kotlin = "2.3.10"
-android-gradle-plugin = "8.13.2"
-dev-tools-gradle-plugin = "2.3.6"
-about-libraries-gradle-plugin = "12.1.2"
-coil = "2.7.0"
-app-icon-loader-coil = "1.5.0"
+kotlin = "2.4.10"
+android-gradle-plugin = "9.2.1"
+dev-tools-gradle-plugin = "2.3.9"
+about-libraries-gradle-plugin = "14.2.1"
+coil = "3.5.0"
+app-icon-loader = "1.5.0"
 libsu = "6.0.0"
 scrollbars = "1.0.4"
 enumutil = "1.1.1"
@@ -61,22 +61,24 @@ activity-compose = { group = "androidx.activity", name = "activity-compose", ver
 work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work-runtime" }
 preferences-datastore = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "preferences-datastore" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile-version" }
 
 # Compose
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "ui-tooling" }
+compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-livedata = { group = "androidx.compose.runtime", name = "runtime-livedata" }
-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 
 # Coil
-coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-coil-gif = { group = "io.coil-kt", name = "coil-gif", version.ref = "coil" }
-coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
-coil-appiconloader = { group = "me.zhanghai.android.appiconloader", name = "appiconloader-coil", version.ref = "app-icon-loader-coil" }
+coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
+coil-gif = { group = "io.coil-kt.coil3", name = "coil-gif", version.ref = "coil" }
+coil-svg = { group = "io.coil-kt.coil3", name = "coil-svg", version.ref = "coil" }
+coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
+app-icon-loader = { group = "me.zhanghai.android.appiconloader", name = "appiconloader", version.ref = "app-icon-loader" }
 
 # Accompanist
 accompanist-drawablepainter = { group = "com.google.accompanist", name = "accompanist-drawablepainter", version.ref = "accompanist" }
@@ -86,6 +88,7 @@ placeholder-material3 = { group = "io.github.fornewid", name = "placeholder-mate
 
 # Kotlinx
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-collection-immutable = { group = "org.jetbrains.kotlinx", name = "kotlinx-collections-immutable", version.ref = "collection" }
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "datetime" }
 
@@ -171,7 +174,6 @@ bcprov = { group = "org.bouncycastle", name = "bcprov-jdk15to18", version.ref = 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "android-gradle-plugin" }
 android-library = { id = "com.android.library", version.ref = "android-gradle-plugin" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

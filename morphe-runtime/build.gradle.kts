@@ -3,19 +3,18 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
 }
 
 android {
     namespace = "app.universal.revanced.manager.morphe.runtime"
-    compileSdk = 35
-    buildToolsVersion = "35.0.1"
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager.morphe.runtime"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1"
     }
@@ -92,7 +91,7 @@ dependencies {
     implementation("com.android.tools.build:apkzlib:8.5.2")
     compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation(libs.kotlinx.coroutines.android)
     compileOnly(libs.hidden.api.stub)
 }
 

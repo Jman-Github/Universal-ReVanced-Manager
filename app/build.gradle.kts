@@ -1,5 +1,6 @@
 import com.mikepenz.aboutlibraries.plugin.DuplicateMode
 import com.mikepenz.aboutlibraries.plugin.DuplicateRule
+import com.android.build.api.variant.FilterConfiguration
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
@@ -10,7 +11,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
@@ -70,7 +70,7 @@ val apkEditorMergeJar by tasks.registering(Jar::class) {
     archiveFileName.set("apkeditor-merge.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn("compileReleaseJavaWithJavac")
-    from("$buildDir/intermediates/javac/release/classes") {
+    from(layout.buildDirectory.dir("intermediates/javac/release/classes")) {
         include("app/urv/manager/patcher/split/ApkEditorMergeProcess*.class")
     }
 }
@@ -97,7 +97,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.preview)
-    implementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.tooling)
     implementation(libs.compose.livedata)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.material3)
@@ -113,7 +113,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.coil.svg)
-    implementation(libs.coil.appiconloader)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.app.icon.loader)
 
     // KotlinX
     implementation(libs.kotlinx.serialization.json)
@@ -144,7 +145,7 @@ dependencies {
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation(libs.documentfile)
 
     // Downloader plugins
     implementation(project(":api"))
@@ -223,15 +224,15 @@ buildscript {
 
 android {
     namespace = "app.universal.revanced.manager"
-    compileSdk = 36
-    buildToolsVersion = "35.0.1"
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
     // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
     ndkVersion = "25.2.9519653"
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
@@ -315,27 +316,6 @@ android {
         }
     }
 
-    applicationVariants.all {
-        val resolvedVersionName = versionName.orEmpty().ifBlank {
-            if (version == "unspecified") "1.8.1" else version.toString()
-        }
-        outputs.all {
-            this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-
-            val abi = getFilter(com.android.build.OutputFile.ABI)
-            val abiSuffix = when (abi) {
-                "arm64-v8a" -> "arm64-v8a"
-                "armeabi-v7a" -> "armeabi-v7a"
-                "x86" -> "x86"
-                "x86_64" -> "x86_64"
-                null -> "universal"
-                else -> abi
-            }
-            outputFileName =
-                "universal-revanced-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -379,16 +359,32 @@ android {
     }
 
     sourceSets {
-        getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
-        getByName("main").assets.srcDir(revanced22RuntimeAssetsDir)
-        getByName("main").res.srcDir(legalResourcesDir)
-        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+        getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
+        getByName("main").assets.directories.add(revanced22RuntimeAssetsDir.get().asFile.path)
+        getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)
+        getByName("androidTest").assets.directories.add(file("$projectDir/schemas").path)
     }
 
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abiSuffix = output.filters
+                .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+                ?: "universal"
+            output.outputFileName.set(
+                output.versionName.orElse(resolvedProjectVersion).map { resolvedVersionName ->
+                    "universal-revanced-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
+                }
+            )
         }
     }
 }

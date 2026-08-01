@@ -139,7 +139,7 @@ class UpdateViewModel(
                             onDownload { bytesSentTotal, contentLength ->
                                 downloadedSize = resumeOffset + bytesSentTotal
                                 totalSize = when {
-                                    contentLength > 0L -> resumeOffset + contentLength
+                                    contentLength != null && contentLength > 0L -> resumeOffset + contentLength
                                     totalSize > 0L -> totalSize
                                     else -> downloadedSize
                                 }

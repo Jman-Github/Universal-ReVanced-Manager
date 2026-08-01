@@ -111,7 +111,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Locale

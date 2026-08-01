@@ -18,8 +18,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
-import io.ktor.utils.io.core.isNotEmpty
-import io.ktor.utils.io.core.readBytes
+import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -117,14 +116,14 @@ class HttpService(
                                     lastReportedAt = now
                                     onProgress(bytesRead, contentLength)
                                 }
-                                while (!channel.isClosedForRead) {
-                                    val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
-                                    while (packet.isNotEmpty) {
-                                        val bytes = packet.readBytes()
-                                        outputStream.write(bytes)
-                                        bytesRead += bytes.size.toLong()
-                                        reportProgress()
-                                    }
+                                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                while (true) {
+                                    val count = channel.readAvailable(buffer)
+                                    if (count == -1) break
+                                    if (count == 0) continue
+                                    outputStream.write(buffer, 0, count)
+                                    bytesRead += count.toLong()
+                                    reportProgress()
                                 }
                                 reportProgress(force = true)
                             }
@@ -161,12 +160,12 @@ class HttpService(
                             }
                             FileOutputStream(saveLocation, append).use { outputStream ->
                                 withContext(Dispatchers.IO) {
-                                    while (!channel.isClosedForRead) {
-                                        val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
-                                        while (packet.isNotEmpty) {
-                                            val bytes = packet.readBytes()
-                                            outputStream.write(bytes)
-                                        }
+                                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                    while (true) {
+                                        val count = channel.readAvailable(buffer)
+                                        if (count == -1) break
+                                        if (count == 0) continue
+                                        outputStream.write(buffer, 0, count)
                                     }
                                 }
                             }
@@ -352,14 +351,14 @@ class HttpService(
                                 val channel: ByteReadChannel = httpResponse.body()
                                 RandomAccessFile(saveLocation, "rw").use { raf ->
                                     raf.seek(start)
-                                    while (!channel.isClosedForRead) {
-                                        val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())
-                                        while (packet.isNotEmpty) {
-                                            val bytes = packet.readBytes()
-                                            raf.write(bytes)
-                                            totalRead.addAndGet(bytes.size.toLong())
-                                            reportProgress()
-                                        }
+                                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                                    while (true) {
+                                        val count = channel.readAvailable(buffer)
+                                        if (count == -1) break
+                                        if (count == 0) continue
+                                        raf.write(buffer, 0, count)
+                                        totalRead.addAndGet(count.toLong())
+                                        reportProgress()
                                     }
                                 }
                             }

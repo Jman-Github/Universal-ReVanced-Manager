@@ -76,7 +76,7 @@ import app.urv.manager.util.toast
 import app.urv.manager.util.APK_FILE_EXTENSIONS
 import app.urv.manager.util.PM
 import app.urv.manager.util.saver.PathSaver
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import java.nio.file.Paths

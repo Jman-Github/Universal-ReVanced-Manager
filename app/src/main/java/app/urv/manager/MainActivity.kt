@@ -108,7 +108,7 @@ import app.urv.manager.util.EventEffect
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.PatchBundleFileIntent
 import app.universal.revanced.manager.R
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

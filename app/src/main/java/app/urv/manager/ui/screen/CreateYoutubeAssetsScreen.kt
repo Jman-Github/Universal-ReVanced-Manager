@@ -112,9 +112,11 @@ import app.urv.manager.ui.component.RememberedGetContent
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.util.toast
 import app.universal.revanced.manager.R
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import coil3.asDrawable
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -1242,7 +1244,7 @@ private suspend fun decodeBitmap(context: android.content.Context, source: Strin
                 .build()
         )
     }.getOrNull() as? SuccessResult ?: return null
-    val drawable = result.drawable ?: return null
+    val drawable = result.image.asDrawable(context.resources)
     return when (drawable) {
         is BitmapDrawable -> drawable.bitmap
         else -> runCatching { drawable.toBitmap() }.getOrNull()
