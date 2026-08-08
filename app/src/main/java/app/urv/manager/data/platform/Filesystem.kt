@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.RequestManageStorageContract
+import app.urv.manager.util.SAVED_APP_ENTRY_DELIMITER
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,12 @@ import java.io.File
 import java.nio.file.Path
 import java.util.Locale
 import java.util.UUID
+
+internal data class RetainedOriginalReference(
+    val packageName: String,
+    val version: String,
+    val versionCode: Long?
+)
 
 class Filesystem(private val app: Application) {
     data class StorageRoot(val path: Path, val label: String, val isRemovable: Boolean)
@@ -57,7 +64,13 @@ class Filesystem(private val app: Application) {
      * Paths to this directory can be safely stored in parcels.
      */
     val uiTempDir: File = app.getDir("ui_ephemeral", Context.MODE_PRIVATE)
+    private val batchPatchOutputsDir: File =
+        app.getDir("batch-patch-outputs", Context.MODE_PRIVATE).apply { mkdirs() }
     private val patchedAppsDir: File = app.getDir("patched-apps", Context.MODE_PRIVATE).apply { mkdirs() }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/795
+    private val originalAppsDir: File = app.getDir("original-apps", Context.MODE_PRIVATE).apply { mkdirs() }
 
     /**
      * Durable local copies selected through Android document providers.
@@ -214,23 +227,246 @@ class Filesystem(private val app: Application) {
         return patchedAppsDir.resolve("${safePackage}_${safeVersion}.apk")
     }
 
+    fun createBatchPatchOutputFile(packageName: String): File {
+        check(batchPatchOutputsDir.mkdirs() || batchPatchOutputsDir.isDirectory) {
+            "Unable to create the batch patch staging directory"
+        }
+        val safePackage = FilenameUtils.sanitize(packageName)
+            .ifBlank { "app" }
+            .take(80)
+        return batchPatchOutputsDir.resolve("batch_${safePackage}_${UUID.randomUUID()}.apk")
+    }
+
+    fun pruneBatchPatchOutputFiles(
+        retainedPaths: Collection<String>,
+        olderThanTimestampMillis: Long? = null
+    ): Int {
+        val retainedCanonicalPaths = retainedPaths
+            .asSequence()
+            .filter(String::isNotBlank)
+            .map(::File)
+            .mapTo(mutableSetOf()) { it.safeCanonicalPath() }
+        return batchPatchOutputsDir.listFiles { file ->
+            file.isFile &&
+                file.name.startsWith("batch_") &&
+                file.name.endsWith(".apk", ignoreCase = true)
+        }.orEmpty().count { file ->
+            val oldEnough = olderThanTimestampMillis == null ||
+                file.lastModified() < olderThanTimestampMillis
+            oldEnough &&
+                file.safeCanonicalPath() !in retainedCanonicalPaths &&
+                file.delete()
+        }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/795
+    fun saveOriginalAppFile(
+        packageName: String,
+        version: String,
+        versionCode: Long?,
+        source: File
+    ): File {
+        val extension = source.extension.takeIf(String::isNotBlank) ?: "apk"
+        val packageDir = originalAppPackageDir(packageName)
+        check(packageDir.mkdirs() || packageDir.isDirectory) {
+            "Unable to create the retained original app directory"
+        }
+        val target = packageDir.resolve(
+            "${retainedOriginalFileStem(version, versionCode)}.$extension"
+        )
+        if (source.safeCanonicalPath() == target.safeCanonicalPath()) return target
+
+        val staging = packageDir.resolve(".${target.name}.${UUID.randomUUID()}.tmp")
+        val backup = packageDir.resolve(".${target.name}.${UUID.randomUUID()}.bak")
+        var replacementStarted = false
+        var keepBackup = false
+        try {
+            source.copyTo(staging, overwrite = true)
+            check(staging.isFile && staging.length() == source.length()) {
+                "Failed to verify the retained original app staging copy"
+            }
+            if (target.isFile) {
+                target.copyTo(backup, overwrite = true)
+                check(backup.isFile && backup.length() == target.length()) {
+                    "Failed to verify the retained original app backup"
+                }
+            }
+
+            replacementStarted = true
+            if (!staging.renameTo(target)) {
+                staging.copyTo(target, overwrite = true)
+            }
+            check(target.isFile && target.length() == source.length()) {
+                "Failed to verify the retained original app"
+            }
+        } catch (error: Throwable) {
+            if (replacementStarted) {
+                val restoreError = runCatching {
+                    if (backup.isFile) {
+                        backup.copyTo(target, overwrite = true)
+                        check(target.isFile && target.length() == backup.length()) {
+                            "Failed to verify the restored retained original app"
+                        }
+                    } else {
+                        check(target.delete() || !target.exists()) {
+                            "Failed to remove the incomplete retained original app"
+                        }
+                    }
+                }.exceptionOrNull()
+                if (restoreError != null) {
+                    keepBackup = backup.isFile
+                    error.addSuppressed(restoreError)
+                }
+            }
+            throw error
+        } finally {
+            staging.delete()
+            if (!keepBackup) backup.delete()
+        }
+        return target
+    }
+
+    fun findOriginalAppFile(
+        packageName: String,
+        version: String? = null,
+        versionCode: Long? = null
+    ): File? {
+        val candidates = originalAppPackageDir(packageName).listFiles { file ->
+            file.isFile &&
+                (version == null || retainedOriginalFileMatches(file.name, version, versionCode))
+        }.orEmpty()
+        if (candidates.isEmpty()) return null
+
+        val exactStem = if (version != null && versionCode != null) {
+            retainedOriginalFileStem(version, versionCode)
+        } else {
+            null
+        }
+        return candidates.maxWithOrNull(
+            compareBy<File> { candidate ->
+                if (exactStem != null && candidate.name.startsWith("$exactStem.")) 1 else 0
+            }.thenBy(File::lastModified)
+        )
+    }
+
+    fun isManagedPatchedAppFile(
+        file: File,
+        packageName: String,
+        version: String
+    ): Boolean = filesMatch(
+        file,
+        getPatchedAppFile(packageName, version)
+    )
+
+    fun isManagedPatchedAppFile(file: File): Boolean {
+        if (!file.isFile) return false
+        val rootPath = patchedAppsDir.safeCanonicalPath()
+        val filePath = file.safeCanonicalPath()
+        if (filePath.startsWith("$rootPath${File.separator}")) return true
+
+        val candidates = patchedAppsDir.listFiles { candidate ->
+            candidate.isFile && candidate.length() == file.length()
+        }.orEmpty()
+        return candidates.any { candidate -> filesMatch(file, candidate) }
+    }
+
+    private fun filesMatch(first: File, second: File): Boolean {
+        if (!first.isFile || !second.isFile) return false
+        if (first.safeCanonicalPath() == second.safeCanonicalPath()) return true
+        if (first.length() != second.length()) return false
+        return filesHaveSameContent(first, second)
+    }
+
+    private fun filesHaveSameContent(first: File, second: File): Boolean {
+        var identical = false
+        try {
+            first.inputStream().buffered().use { firstInput ->
+                second.inputStream().buffered().use { secondInput ->
+                    val firstBuffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    val secondBuffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    while (true) {
+                        val firstRead = firstInput.read(firstBuffer)
+                        val secondRead = secondInput.read(secondBuffer)
+                        if (firstRead != secondRead) break
+                        if (firstRead < 0) {
+                            identical = true
+                            break
+                        }
+                        var chunkMatches = true
+                        for (index in 0 until firstRead) {
+                            if (firstBuffer[index] != secondBuffer[index]) {
+                                chunkMatches = false
+                                break
+                            }
+                        }
+                        if (!chunkMatches) break
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            return false
+        }
+        return identical
+    }
+
+    fun deleteOriginalAppFiles(packageName: String): Int =
+        deleteDirectoryAndCountFiles(originalAppPackageDir(packageName))
+
+    internal fun pruneOriginalAppFiles(retainedReferences: Collection<RetainedOriginalReference>): Int {
+        val referencesByDirectory = retainedReferences.groupBy { reference ->
+            originalAppPackageDir(reference.packageName).name
+        }
+        return originalAppsDir.listFiles().orEmpty().sumOf { entry ->
+            when {
+                entry.isDirectory -> {
+                    val references = referencesByDirectory[entry.name].orEmpty()
+                    if (references.isEmpty()) {
+                        deleteDirectoryAndCountFiles(entry)
+                    } else {
+                        val removed = entry.listFiles().orEmpty().count { file ->
+                            file.isFile &&
+                                references.none { reference ->
+                                    retainedOriginalFileMatches(
+                                        fileName = file.name,
+                                        version = reference.version,
+                                        versionCode = reference.versionCode
+                                    )
+                                } &&
+                                file.delete()
+                        }
+                        if (entry.listFiles().isNullOrEmpty()) entry.delete()
+                        removed
+                    }
+                }
+                // The old flat layout cannot be mapped safely to a package. Keep it while any
+                // retained original is still referenced and remove it once nothing is retained.
+                entry.isFile && retainedReferences.isEmpty() && entry.delete() -> 1
+                else -> 0
+            }
+        }
+    }
+
+    private fun originalAppPackageDir(packageName: String): File =
+        originalAppsDir.resolve(FilenameUtils.sanitize(packageName).ifBlank { "package" })
+
+    private fun deleteDirectoryAndCountFiles(directory: File): Int {
+        if (!directory.exists()) return 0
+        val fileCount = directory.walkTopDown().count(File::isFile)
+        return if (directory.deleteRecursively()) fileCount else 0
+    }
+
     fun findPatchedAppFile(packageName: String): File? {
         val safePackage = FilenameUtils.sanitize(packageName)
         return patchedAppsDir
-            .listFiles { file ->
-                file.isFile &&
-                    file.name.startsWith("${safePackage}_") &&
-                    file.name.endsWith(".apk")
-            }
+            .listFiles { file -> patchedAppFileMatchesPackage(file, safePackage) }
             ?.maxByOrNull { it.lastModified() }
     }
 
     fun deletePatchedAppFiles(packageName: String): Int {
         val safePackage = FilenameUtils.sanitize(packageName)
         val matches = patchedAppsDir.listFiles { file ->
-            file.isFile &&
-                file.name.startsWith("${safePackage}_") &&
-                file.name.endsWith(".apk")
+            patchedAppFileMatchesPackage(file, safePackage)
         } ?: return 0
 
         var removed = 0
@@ -241,6 +477,9 @@ class Filesystem(private val app: Application) {
         }
         return removed
     }
+
+    private fun patchedAppFileMatchesPackage(file: File, safePackage: String): Boolean =
+        file.isFile && patchedAppFileNameMatchesPackage(file.name, safePackage)
 
     fun prunePatchedAppFiles(retainedFiles: Collection<File>): Int {
         val retainedPaths = retainedFiles.mapTo(mutableSetOf()) { it.safeCanonicalPath() }
@@ -558,6 +797,48 @@ class Filesystem(private val app: Application) {
         const val PATCH_OPTION_INPUT_STAGING_DIR_PREFIX = ".staging_"
         const val PATCH_OPTION_INPUT_RESTORED_LEASE_MAX_AGE_MILLIS = 30L * 24 * 60 * 60 * 1000
     }
+}
+
+internal fun patchedAppFileNameMatchesPackage(
+    fileName: String,
+    safePackage: String
+): Boolean {
+    if (!fileName.endsWith(".apk", ignoreCase = true)) return false
+    if (!fileName.startsWith("${safePackage}_")) return false
+    if (
+        SAVED_APP_ENTRY_DELIMITER !in safePackage &&
+        fileName.startsWith("$safePackage$SAVED_APP_ENTRY_DELIMITER")
+    ) return false
+    return true
+}
+
+internal fun retainedOriginalFileStem(version: String, versionCode: Long?): String {
+    val safeVersion = FilenameUtils.sanitize(version.ifBlank { "unspecified" })
+    return if (versionCode == null) {
+        "${safeVersion}_original"
+    } else {
+        "${safeVersion}_${versionCode}_original"
+    }
+}
+
+internal fun retainedOriginalFileMatches(
+    fileName: String,
+    version: String,
+    versionCode: Long?
+): Boolean {
+    val legacyStem = retainedOriginalFileStem(version, null)
+    if (fileName.startsWith("$legacyStem.")) return true
+    if (versionCode != null) {
+        return fileName.startsWith("${retainedOriginalFileStem(version, versionCode)}.")
+    }
+
+    val safeVersion = FilenameUtils.sanitize(version.ifBlank { "unspecified" })
+    val prefix = "${safeVersion}_"
+    val suffix = "_original."
+    if (!fileName.startsWith(prefix)) return false
+    val remainder = fileName.removePrefix(prefix)
+    val suffixIndex = remainder.indexOf(suffix)
+    return suffixIndex > 0 && remainder.substring(0, suffixIndex).toLongOrNull() != null
 }
 
 internal fun isPatchOptionInputLeaseExpired(

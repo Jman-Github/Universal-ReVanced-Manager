@@ -67,6 +67,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -82,6 +83,7 @@ import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.batch.batchOriginalPackageName
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.ui.component.AppInfo
@@ -102,6 +104,7 @@ import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptDialog
 import app.urv.manager.ui.component.patcher.SavedAppMountPromptMode
+import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsListItem
 import app.urv.manager.ui.model.InstalledAppAction
 import app.urv.manager.ui.viewmodel.InstalledAppInfoViewModel
@@ -117,6 +120,7 @@ import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.savedAppBasePackage
+import app.urv.manager.util.savedAppLauncherShortcutCapacity
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
 import kotlinx.coroutines.launch
@@ -132,6 +136,7 @@ import app.urv.manager.ui.component.CenteredDialogTitle
 fun InstalledAppInfoScreen(
     onPatchClick: (
         packageName: String,
+        sourceEntryKey: String?,
         selection: PatchSelection?,
         selectionPayload: PatchProfilePayload?,
         persistConfiguration: Boolean
@@ -150,6 +155,10 @@ fun InstalledAppInfoScreen(
     val allowUniversalPatches by prefs.disableUniversalPatchCheck.getAsState()
     val allowBundleOverride by prefs.allowPatchProfileBundleOverride.getAsState()
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
+    val autoPatchEnabled by prefs.autoPatchEnabled.getAsState()
+    val autoPatchEnabledPackages by prefs.autoPatchEnabledPackages.getAsState()
+    val savedAppLauncherShortcutPackages by
+        prefs.savedAppLauncherShortcutPackages.getAsState()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val savedAppExportDirectory by prefs.savedAppExportLastDirectory.getAsState()
@@ -390,7 +399,13 @@ fun InstalledAppInfoScreen(
                 showMixedRevancedPatcherDialog = true
                 return@launch
             }
-            onPatchClick(targetPackageName, selection, selectionPayload, persistConfiguration)
+            onPatchClick(
+                targetPackageName,
+                installedAppState?.currentPackageName,
+                selection,
+                selectionPayload,
+                persistConfiguration
+            )
         }
     }
 
@@ -1714,6 +1729,60 @@ fun InstalledAppInfoScreen(
                     headlineContent = stringResource(R.string.install_type),
                     supportingContent = stringResource(displayInstallType.stringResource)
                 )
+
+                if (viewModel.hasSavedCopy) {
+                    val shortcutPackageName = batchOriginalPackageName(installedApp)
+                    val appLauncherShortcutEnabled =
+                        shortcutPackageName in savedAppLauncherShortcutPackages
+                    val launcherShortcutCapacity = savedAppLauncherShortcutCapacity(context)
+                    val canChangeLauncherShortcut = appLauncherShortcutEnabled ||
+                        savedAppLauncherShortcutPackages.size < launcherShortcutCapacity
+                    SettingsListItem(
+                        modifier = Modifier
+                            .alpha(if (canChangeLauncherShortcut) 1f else 0.38f)
+                            .clickable(enabled = canChangeLauncherShortcut) {
+                                viewModel.setLauncherShortcutEnabledForApp(
+                                    !appLauncherShortcutEnabled
+                                )
+                            },
+                        headlineContent = stringResource(R.string.saved_app_launcher_shortcut),
+                        supportingContent = if (canChangeLauncherShortcut) {
+                            stringResource(R.string.saved_app_launcher_shortcut_description)
+                        } else {
+                            stringResource(
+                                R.string.saved_app_launcher_shortcut_limit_reached,
+                                launcherShortcutCapacity
+                            )
+                        },
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = appLauncherShortcutEnabled,
+                                enabled = canChangeLauncherShortcut,
+                                onCheckedChange = viewModel::setLauncherShortcutEnabledForApp
+                            )
+                        }
+                    )
+                }
+
+                if (autoPatchEnabled && viewModel.hasSavedCopy) {
+                    val appAutoPatchEnabled =
+                        installedApp.currentPackageName in autoPatchEnabledPackages
+                    SettingsListItem(
+                        modifier = Modifier.clickable {
+                            viewModel.setAutoPatchEnabledForApp(!appAutoPatchEnabled)
+                        },
+                        headlineContent = stringResource(R.string.auto_patch_app_enabled),
+                        supportingContent = stringResource(
+                            R.string.auto_patch_app_enabled_description
+                        ),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = appAutoPatchEnabled,
+                                onCheckedChange = viewModel::setAutoPatchEnabledForApp
+                            )
+                        }
+                    )
+                }
 
                 val bundleSummaryText = when {
                     appliedSelection == null -> stringResource(R.string.loading)

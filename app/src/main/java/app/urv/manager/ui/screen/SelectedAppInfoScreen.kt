@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowRight
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.UnfoldMore
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -117,6 +118,7 @@ fun SelectedAppInfoScreen(
     onRequiredOptions: (SelectedApp, PatchSelection?, Options) -> Unit,
     onPatchClick: () -> Unit,
     onBackClick: () -> Unit,
+    batchQueueMode: Boolean = false,
     vm: SelectedAppInfoViewModel
 ) {
     val context = LocalContext.current
@@ -401,7 +403,10 @@ fun SelectedAppInfoScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.preparing_to_patch),
+                title = stringResource(
+                    if (batchQueueMode) R.string.batch_queue_configure_app
+                    else R.string.preparing_to_patch
+                ),
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick
             )
@@ -409,12 +414,15 @@ fun SelectedAppInfoScreen(
         floatingActionButton = {
             if (error != null) return@Scaffold
 
+            val actionLabel = stringResource(
+                if (batchQueueMode) R.string.save else R.string.patch
+            )
             HapticExtendedFloatingActionButton(
-                text = { Text(stringResource(R.string.patch)) },
+                text = { Text(actionLabel) },
                 icon = {
                     Icon(
-                        Icons.Default.AutoFixHigh,
-                        stringResource(R.string.patch)
+                        if (batchQueueMode) Icons.Outlined.Save else Icons.Default.AutoFixHigh,
+                        actionLabel
                     )
                 },
                 onClick = { launchPatchFlow() }
@@ -690,7 +698,7 @@ fun SelectedAppInfoScreen(
             sectionHeaderRes = R.string.selected_patches_title,
             sectionSubtitleRes = R.string.patch_confirmation_subtitle,
             optionsByBundle = selectedPatchOptions,
-            confirmTextRes = R.string.continue_,
+            confirmTextRes = if (batchQueueMode) R.string.save else R.string.continue_,
             onConfirm = {
                 showPatchSummaryDialog = false
                 onPatchClick()
@@ -1201,7 +1209,7 @@ private fun PageItem(
 }
 
 @Composable
-private fun AppSourceSelectorDialog(
+internal fun AppSourceSelectorDialog(
     plugins: List<LoadedDownloaderPlugin>,
     installedApp: Pair<SelectedApp.Installed, InstalledApp?>?,
     searchApp: SelectedApp.Search,

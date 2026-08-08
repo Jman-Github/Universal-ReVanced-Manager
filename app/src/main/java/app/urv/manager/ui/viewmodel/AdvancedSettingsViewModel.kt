@@ -24,6 +24,8 @@ import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
+import app.urv.manager.patcher.worker.AutoPatchWorker
+import app.urv.manager.patcher.worker.reconcileAutoPatchNotificationPermission
 import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
@@ -153,6 +155,93 @@ class AdvancedSettingsViewModel(
     fun setChooseInstallerPerInstall(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
         prefs.chooseInstallerPerInstall.update(enabled)
     }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    fun setShizukuInstallAsPlayStore(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            installerManager.updateShizukuPlayStoreMode(enabled)
+        }
+
+    fun setAutoInstallWithShizuku(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.autoInstallWithShizuku.update(enabled)
+        }
+
+    fun setAutoUninstallWithShizuku(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.autoUninstallWithShizuku.update(enabled)
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/795
+    fun setAutoPatchEnabled(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        if (enabled && !reconcileAutoPatchNotificationPermission(app, prefs)) {
+            return@launch
+        }
+        prefs.updateAutoPatchEnabled(enabled)
+        if (enabled) {
+            AutoPatchWorker.schedule(
+                app,
+                prefs,
+                prefs.autoPatchInterval.get(),
+                prefs.autoPatchRequiresCharging.get()
+            )
+        } else {
+            AutoPatchWorker.cancel(app)
+        }
+    }
+
+    fun setAutoPatchInstallWithShizuku(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.edit {
+                if (!enabled || prefs.autoPatchEnabled.value) {
+                    prefs.autoPatchInstallWithShizuku.value = enabled
+                }
+            }
+        }
+
+    fun setAutoPatchUninstallOnConflictWithShizuku(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.edit {
+                if (
+                    !enabled ||
+                    (prefs.autoPatchEnabled.value &&
+                        prefs.autoPatchInstallWithShizuku.value)
+                ) {
+                    prefs.autoPatchUninstallOnConflictWithShizuku.value = enabled
+                }
+            }
+        }
+
+    fun setAutoPatchRequiresCharging(enabled: Boolean) = viewModelScope.launch(Dispatchers.Default) {
+        prefs.autoPatchRequiresCharging.update(enabled)
+        if (prefs.autoPatchEnabled.get()) {
+            AutoPatchWorker.schedule(
+                app,
+                prefs,
+                prefs.autoPatchInterval.get(),
+                enabled
+            )
+        }
+    }
+
+    fun setAutoPatchInterval(interval: SearchForUpdatesBackgroundInterval) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.autoPatchInterval.update(interval)
+            if (prefs.autoPatchEnabled.get()) {
+                AutoPatchWorker.schedule(
+                    app,
+                    prefs,
+                    interval,
+                    prefs.autoPatchRequiresCharging.get()
+                )
+            }
+        }
+
+    fun setAllowExternalBatchActions(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.allowExternalBatchActions.update(enabled)
+        }
 
     fun setPatchedAppExportFormat(value: String) = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(value)
@@ -353,5 +442,9 @@ private fun tokensEqual(a: InstallerManager.Token, b: InstallerManager.Token): B
     a === b -> true
     a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
         a.componentName == b.componentName
+    a.isShizukuVariant() && b.isShizukuVariant() -> true
     else -> false
 }
+
+private fun InstallerManager.Token.isShizukuVariant(): Boolean =
+    this == InstallerManager.Token.Shizuku || this == InstallerManager.Token.ShizukuGooglePlay

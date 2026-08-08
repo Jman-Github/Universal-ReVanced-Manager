@@ -252,6 +252,8 @@
 - Bumped Morphe Library to `1.4.0` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/652
 - Bumped Morphe Patcher to `1.8.0-dev.3` https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/652
 - Updated selected filters on the patch selection and patch bundle discovery screens to use the blue selected-state styling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/642
+- Added batch patching for multiple apps with preflight checks, reorderable and cancellable queues, per-app patch configuration and progress, retained source APKs and results, install-all support, automatic repatching, launcher shortcuts, and opt-in external automation actions, adapted from https://github.com/MorpheApp/morphe-manager/pull/795
+- Improved the Shizuku/Shevery installer flow with status and configuration controls, Play Store attribution, automatic installation of patched apps, clearer errors, and optional uninstall-and-retry handling for signature conflicts, adapted from https://github.com/MorpheApp/morphe-manager/pull/734
 
 
 # Bug fixes

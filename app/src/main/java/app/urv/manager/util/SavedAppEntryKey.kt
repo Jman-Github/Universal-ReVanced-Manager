@@ -4,7 +4,7 @@ import app.urv.manager.data.room.options.Option
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import java.security.MessageDigest
 
-private const val SAVED_APP_ENTRY_DELIMITER = "__bundle_"
+internal const val SAVED_APP_ENTRY_DELIMITER = "__bundle_"
 private const val UNSPECIFIED_SAVED_APP_VERSION = "unspecified"
 
 fun buildSavedAppVariantIdentity(

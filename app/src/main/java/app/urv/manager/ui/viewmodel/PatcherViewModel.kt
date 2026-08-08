@@ -69,6 +69,8 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
+import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
+import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
@@ -122,6 +124,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -158,6 +161,96 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+
+private class PendingPatchedAppReplacement private constructor(
+    private val target: File,
+    private val staging: File,
+    private val backup: File,
+    private val targetExisted: Boolean,
+    private val previousLastModified: Long?
+) {
+    private var finished = false
+
+    fun commit() {
+        if (finished) return
+        finished = true
+        staging.delete()
+        backup.delete()
+    }
+
+    fun rollback(cause: Throwable) {
+        if (finished) return
+        val restoreError = runCatching {
+            if (targetExisted) {
+                check(backup.isFile) { "The previous saved APK backup is unavailable" }
+                backup.copyTo(target, overwrite = true)
+                check(target.isFile && target.length() == backup.length()) {
+                    "Failed to verify the restored saved APK"
+                }
+                previousLastModified?.let(target::setLastModified)
+            } else {
+                check(target.delete() || !target.exists()) {
+                    "Failed to remove the uncommitted saved APK"
+                }
+            }
+        }.exceptionOrNull()
+        staging.delete()
+        if (restoreError == null) {
+            backup.delete()
+        } else {
+            cause.addSuppressed(restoreError)
+        }
+        finished = true
+    }
+
+    companion object {
+        fun prepare(source: File, target: File): PendingPatchedAppReplacement {
+            check(source.isFile) { "The patched APK is unavailable" }
+            val directory = requireNotNull(target.parentFile)
+            check(directory.mkdirs() || directory.isDirectory) {
+                "Unable to create the saved APK directory"
+            }
+            val staging = directory.resolve(".${target.name}.${UUID.randomUUID()}.tmp")
+            val backup = directory.resolve(".${target.name}.${UUID.randomUUID()}.bak")
+            val targetExisted = target.isFile
+            val previousLastModified = target.takeIf(File::isFile)?.lastModified()
+            val replacement = PendingPatchedAppReplacement(
+                target = target,
+                staging = staging,
+                backup = backup,
+                targetExisted = targetExisted,
+                previousLastModified = previousLastModified
+            )
+            var replacementStarted = false
+            try {
+                source.copyTo(staging, overwrite = true)
+                check(staging.isFile && staging.length() == source.length()) {
+                    "Failed to verify the saved APK staging copy"
+                }
+                if (targetExisted) {
+                    target.copyTo(backup, overwrite = true)
+                    check(backup.isFile && backup.length() == target.length()) {
+                        "Failed to verify the previous saved APK backup"
+                    }
+                }
+                replacementStarted = true
+                staging.copyTo(target, overwrite = true)
+                check(target.isFile && target.length() == source.length()) {
+                    "Failed to verify the saved patched APK"
+                }
+                return replacement
+            } catch (error: Throwable) {
+                if (replacementStarted) {
+                    replacement.rollback(error)
+                } else {
+                    staging.delete()
+                    backup.delete()
+                }
+                throw error
+            }
+        }
+    }
+}
 
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
@@ -228,6 +321,11 @@ class PatcherViewModel(
         get() = !requiresSplitPreparation
 
     private var installedApp: InstalledApp? = null
+    private suspend fun sourceInstalledApp(): InstalledApp? =
+        input.sourceEntryKey
+            ?.let { installedAppRepository.get(it) }
+            ?: installedAppRepository.get(packageName)
+
     private val selectedApp = input.selectedApp
     val packageName = selectedApp.packageName
     val version = selectedApp.version
@@ -255,7 +353,7 @@ class PatcherViewModel(
 
     var isInstalling by mutableStateOf(ongoingPmSession)
         private set
-    private var profileAutoInstallTriggered: Boolean by savedStateHandle.saveableVar { false }
+    private var autoInstallTriggered: Boolean by savedStateHandle.saveableVar { false }
     var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
         private set
     var signatureMismatchPackage by mutableStateOf<String?>(null)
@@ -387,6 +485,7 @@ fun proceedAfterMissingPatchWarning() {
         private set
 
     private var prePatchPreparationJob: Job? = null
+    private var workerLaunchJob: Job? = null
     private var preparedInput: DownloadResult? = null
     private var preparedInputIncludesDownload = false
     private var selectedSplitConfiguration: PatcherWorker.SplitSelection? = null
@@ -697,6 +796,7 @@ fun proceedAfterMissingPatchWarning() {
     val activityPromptDialog by derivedStateOf { currentActivityRequest?.dialogState }
     private val activityRequestMutex = Mutex()
     private val progressEventMutex = Mutex()
+    private val persistPatchedAppMutex = Mutex()
 
     private var launchedActivity: CompletableDeferred<ActivityResult>? = null
     private var pendingActivityResumeFallback: Job? = null
@@ -1498,6 +1598,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private fun startWorker() {
+        if (workerLaunchJob?.isActive == true || _isPatchingActive.value == true) return
+        workerLaunchJob = viewModelScope.launch {
+            try {
+                startWorkerNow()
+            } finally {
+                workerLaunchJob = null
+            }
+        }
+    }
+
+    private suspend fun startWorkerNow() {
         resetDexCompileState()
         resetFailureLogState()
         patcherMemoryUsageGeneration = -1L
@@ -1522,7 +1633,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         _isPatchingActive.value = true
         startPatchingTaskMonitor()
         logBatteryOptimizationStatus()
-        val workId = launchWorker()
+        val workId = try {
+            launchWorker()
+        } catch (_: UniqueWorkAlreadyRunningException) {
+            stopPatchingTaskMonitor()
+            _isPatchingActive.value = false
+            reconcileFailureState(app.getString(R.string.patcher_already_running))
+            _patcherSucceeded.value = false
+            return
+        } catch (error: Exception) {
+            stopPatchingTaskMonitor()
+            _isPatchingActive.value = false
+            reconcileFailureState(
+                error.simpleMessage() ?: app.getString(R.string.patcher_launch_failed)
+            )
+            _patcherSucceeded.value = false
+            return
+        }
         patcherWorkerId = ParcelUuid(workId)
         PatcherWorker.showInitialNotification(app)
         observeWorker(workId)
@@ -1613,15 +1740,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         currentPackageName: String?,
         installType: InstallType,
         forceSave: Boolean = false
-    ): Boolean {
+    ): Boolean = persistPatchedAppMutex.withLock {
         val savedAppsEnabled = prefs.enableSavedApps.get()
         val disableSavedAppOverwrite = prefs.disableSavedAppOverwrite.get()
-        val latestInstalledApp = installedAppRepository.get(packageName)
+        val latestInstalledApp = sourceInstalledApp()
         if (latestInstalledApp != installedApp) {
             installedApp = latestInstalledApp
         }
         val shouldSaveForLater = savedAppsEnabled || forceSave
-        return withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             val installedPackageInfo = currentPackageName?.let(pm::getPackageInfo)
             val patchedPackageInfo = pm.getPackageInfo(outputFile)
             val packageInfo = installedPackageInfo ?: patchedPackageInfo
@@ -1661,6 +1788,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 .filter { savedApp ->
                     isSavedAppEntryForPackage(savedApp.currentPackageName, finalPackageName)
                 }
+            val sourceSavedEntry = installedApp?.takeIf { sourceEntry ->
+                sourceEntry.installType == InstallType.SAVED &&
+                    (
+                        isSavedAppEntryForPackage(
+                            sourceEntry.currentPackageName,
+                            finalPackageName
+                        ) ||
+                            sourceEntry.originalPackageName == packageName ||
+                            sourceEntry.originalPackageName == finalPackageName
+                    )
+            }
+            val replacementSourceSavedEntry = sourceSavedEntry
+                ?.takeUnless { disableSavedAppOverwrite }
             val savedEntryIdentities = mutableMapOf<String, String>()
             savedEntriesForPackage.forEach { savedApp ->
                 savedEntryIdentities[savedApp.currentPackageName] = savedEntryIdentity(savedApp)
@@ -1668,7 +1808,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val matchingSavedEntries = savedEntriesForPackage.filter { savedApp ->
                 savedEntryIdentities[savedApp.currentPackageName] == newVariantIdentity
             }
-            val matchingSavedEntry = if (disableSavedAppOverwrite) null else matchingSavedEntries.firstOrNull()
+            val matchingSavedEntry = if (disableSavedAppOverwrite) {
+                null
+            } else {
+                replacementSourceSavedEntry ?: matchingSavedEntries.firstOrNull()
+            }
             val persistedInstallType = installType
             val shouldArchiveExistingVisibleEntry = persistedInstallType != InstallType.SAVED
             val existingFinalPackageEntry = installedAppRepository.get(finalPackageName)
@@ -1680,56 +1824,59 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             val effectiveShouldSaveForLater = shouldSaveForLater
             val existingInstalledIdentity = existingInstalledEntry?.let { savedEntryIdentity(it) }
+            val existingSavedEntryIdentity = existingSavedEntryAtBaseKey?.let { savedEntryIdentity(it) }
             val savedVariantAlreadyInstalled =
                 persistedInstallType == InstallType.SAVED &&
                     !disableSavedAppOverwrite &&
                     existingInstalledEntry != null &&
                     existingInstalledIdentity == newVariantIdentity
-            if (
+            val pendingHistoricalEntry: PendingHistoricalSavedEntry? = when {
                 disableSavedAppOverwrite &&
-                effectiveShouldSaveForLater &&
-                persistedInstallType != InstallType.SAVED &&
-                shouldArchiveExistingVisibleEntry &&
-                existingInstalledEntry != null &&
-                existingInstalledIdentity != null &&
-                existingInstalledIdentity != newVariantIdentity &&
-                existingInstalledIdentity !in savedEntryIdentities.values
-            ) {
-                preserveHistoricalInstalledEntry(
-                    sourceApp = existingInstalledEntry,
-                    targetPackageName = buildSavedAppEntryKey(finalPackageName, existingInstalledIdentity)
-                )
-            }
-            val existingSavedEntryIdentity = existingSavedEntryAtBaseKey?.let { savedEntryIdentity(it) }
-            if (
+                    effectiveShouldSaveForLater &&
+                    persistedInstallType != InstallType.SAVED &&
+                    shouldArchiveExistingVisibleEntry &&
+                    existingInstalledEntry != null &&
+                    existingInstalledIdentity != null &&
+                    existingInstalledIdentity != newVariantIdentity &&
+                    existingInstalledIdentity !in savedEntryIdentities.values ->
+                    installedAppRepository.prepareHistoricalSavedEntry(
+                        sourceApp = existingInstalledEntry,
+                        targetPackageName = buildSavedAppEntryKey(
+                            finalPackageName,
+                            existingInstalledIdentity
+                        )
+                    )
                 disableSavedAppOverwrite &&
-                effectiveShouldSaveForLater &&
-                persistedInstallType != InstallType.SAVED &&
-                shouldArchiveExistingVisibleEntry &&
-                existingSavedEntryAtBaseKey != null &&
-                existingSavedEntryIdentity != null &&
-                existingSavedEntryIdentity != newVariantIdentity &&
-                existingSavedEntryIdentity !in savedEntryIdentities
-                    .filterKeys { it != existingSavedEntryAtBaseKey.currentPackageName }
-                    .values
-            ) {
-                preserveHistoricalInstalledEntry(
-                    sourceApp = existingSavedEntryAtBaseKey,
-                    targetPackageName = buildSavedAppEntryKey(finalPackageName, existingSavedEntryIdentity)
-                )
+                    effectiveShouldSaveForLater &&
+                    persistedInstallType != InstallType.SAVED &&
+                    shouldArchiveExistingVisibleEntry &&
+                    existingSavedEntryAtBaseKey != null &&
+                    existingSavedEntryIdentity != null &&
+                    existingSavedEntryIdentity != newVariantIdentity &&
+                    existingSavedEntryIdentity !in savedEntryIdentities
+                        .filterKeys { it != existingSavedEntryAtBaseKey.currentPackageName }
+                        .values ->
+                    installedAppRepository.prepareHistoricalSavedEntry(
+                        sourceApp = existingSavedEntryAtBaseKey,
+                        targetPackageName = buildSavedAppEntryKey(
+                            finalPackageName,
+                            existingSavedEntryIdentity
+                        )
+                    )
+                else -> null
             }
             val persistedPackageName = if (persistedInstallType == InstallType.SAVED) {
                 if (savedVariantAlreadyInstalled) {
                     finalPackageName
+                } else if (matchingSavedEntry != null) {
+                    matchingSavedEntry.currentPackageName
                 } else if (disableSavedAppOverwrite) {
                     buildUniqueSavedAppEntryKey(finalPackageName, newVariantIdentity)
                 } else {
-                    matchingSavedEntry?.currentPackageName ?: run {
-                        val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
-                            (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
-                        if (canUseBaseKey) finalPackageName
-                        else buildSavedAppEntryKey(finalPackageName, newVariantIdentity)
-                    }
+                    val canUseBaseKey = savedEntriesForPackage.isEmpty() &&
+                        (existingFinalPackageEntry == null || existingFinalPackageEntry.installType == InstallType.SAVED)
+                    if (canUseBaseKey) finalPackageName
+                    else buildSavedAppEntryKey(finalPackageName, newVariantIdentity)
                 }
             } else {
                 finalPackageName
@@ -1741,86 +1888,190 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 finalPackageName
             }
             val savedCopy = fs.getPatchedAppFile(savedCopyPackageName, finalVersion)
+            var savedCopyReplacement: PendingPatchedAppReplacement? = null
             val savedCopyWritten = if (effectiveShouldSaveForLater) {
                 try {
-                    savedCopy.parentFile?.mkdirs()
-                    outputFile.copyTo(savedCopy, overwrite = true)
+                    savedCopyReplacement = PendingPatchedAppReplacement.prepare(
+                        source = outputFile,
+                        target = savedCopy
+                    )
                     true
-                } catch (error: IOException) {
-                    if (installType == InstallType.SAVED) {
-                        Log.e(TAG, "Failed to copy patched APK for later", error)
-                        return@withContext false
-                    } else {
-                        Log.w(TAG, "Failed to update saved copy for $savedCopyPackageName", error)
-                        false
-                    }
+                } catch (error: Exception) {
+                    pendingHistoricalEntry?.discard()
+                    Log.e(
+                        TAG,
+                        "Failed to prepare saved APK copy for $savedCopyPackageName",
+                        error
+                    )
+                    return@withContext false
                 }
             } else {
                 false
             }
 
-            if (persistedInstallType != InstallType.SAVED) {
-                installedAppRepository.addOrUpdate(
-                    persistedPackageName,
-                    packageName,
-                    finalVersion,
-                    persistedInstallType,
-                    sanitizedSelectionFinal,
-                    selectionPayload,
-                    resetCreatedAt = true
-                )
-                collapseMatchingSavedEntriesForInstalledVariant(
-                    packageName = finalPackageName,
-                    installedPackageName = persistedPackageName,
-                    variantIdentity = newVariantIdentity
-                )
+            val persistReplacement: suspend () -> Unit = {
+                when {
+                    persistedInstallType != InstallType.SAVED ->
+                        installedAppRepository.addOrUpdate(
+                            persistedPackageName,
+                            packageName,
+                            finalVersion,
+                            persistedInstallType,
+                            sanitizedSelectionFinal,
+                            selectionPayload,
+                            resetCreatedAt = true
+                        )
+                    effectiveShouldSaveForLater &&
+                        savedCopyWritten &&
+                        !savedVariantAlreadyInstalled ->
+                        installedAppRepository.addOrUpdate(
+                            persistedPackageName,
+                            packageName,
+                            finalVersion,
+                            InstallType.SAVED,
+                            sanitizedSelectionFinal,
+                            selectionPayload,
+                            resetCreatedAt = true
+                        )
+                }
             }
-            if (
-                effectiveShouldSaveForLater &&
-                savedCopyWritten &&
-                persistedInstallType == InstallType.SAVED
+            try {
+                if (pendingHistoricalEntry != null) {
+                    pendingHistoricalEntry.commitWith(
+                        persistedPackageName,
+                        persistReplacement
+                    )
+                } else {
+                    persistReplacement()
+                }
+            } catch (error: Throwable) {
+                savedCopyReplacement?.rollback(error)
+                throw error
+            }
+            savedCopyReplacement?.commit()
+
+            runPostCommitPersistenceStep(
+                "Failed to clean up saved app references after persistence"
             ) {
-                if (savedVariantAlreadyInstalled) {
+                if (persistedInstallType != InstallType.SAVED) {
+                    sourceSavedEntry?.takeIf {
+                        it.currentPackageName != persistedPackageName
+                    }?.let { sourceEntry ->
+                        installedAppRepository.migrateAutoPatchTarget(
+                            sourceEntry.currentPackageName,
+                            persistedPackageName
+                        )
+                    }
+                    replacementSourceSavedEntry?.let { sourceEntry ->
+                        if (sourceEntry.currentPackageName != persistedPackageName) {
+                            installedAppRepository.delete(sourceEntry)
+                        }
+                        if (
+                            sourceEntry.currentPackageName != persistedPackageName ||
+                            sourceEntry.version != finalVersion
+                        ) {
+                            fs.getPatchedAppFile(
+                                sourceEntry.currentPackageName,
+                                sourceEntry.version
+                            ).takeIf { oldFile ->
+                                oldFile.exists() &&
+                                    !oldFile.absolutePath.equals(
+                                        savedCopy.absolutePath,
+                                        ignoreCase = true
+                                    )
+                            }?.delete()
+                        }
+                    }
                     collapseMatchingSavedEntriesForInstalledVariant(
                         packageName = finalPackageName,
                         installedPackageName = persistedPackageName,
                         variantIdentity = newVariantIdentity
                     )
-                } else {
-                    installedAppRepository.addOrUpdate(
-                        persistedPackageName,
-                        packageName,
-                        finalVersion,
-                        InstallType.SAVED,
-                        sanitizedSelectionFinal,
-                        selectionPayload,
-                        resetCreatedAt = true
-                    )
+                }
+                if (
+                    effectiveShouldSaveForLater &&
+                    savedCopyWritten &&
+                    persistedInstallType == InstallType.SAVED
+                ) {
+                    sourceSavedEntry?.takeIf {
+                        it.currentPackageName != persistedPackageName
+                    }?.let { sourceEntry ->
+                        installedAppRepository.migrateAutoPatchTarget(
+                            sourceEntry.currentPackageName,
+                            persistedPackageName
+                        )
+                    }
+                    replacementSourceSavedEntry?.let { sourceEntry ->
+                        if (
+                            sourceEntry.currentPackageName == persistedPackageName &&
+                            sourceEntry.version != finalVersion
+                        ) {
+                            fs.getPatchedAppFile(
+                                sourceEntry.currentPackageName,
+                                sourceEntry.version
+                            ).takeIf { oldFile ->
+                                oldFile.exists() &&
+                                    !oldFile.absolutePath.equals(
+                                        savedCopy.absolutePath,
+                                        ignoreCase = true
+                                    )
+                            }?.delete()
+                        }
+                    }
+                    if (!disableSavedAppOverwrite) {
+                        collapseMatchingSavedEntriesForInstalledVariant(
+                            packageName = finalPackageName,
+                            installedPackageName = persistedPackageName,
+                            variantIdentity = newVariantIdentity
+                        )
+                    }
                 }
             }
 
-            if (finalPackageName != packageName) {
+            runPostCommitPersistenceStep(
+                "Failed to update patch configuration after persistence"
+            ) {
+                if (finalPackageName != packageName) {
+                    patchSelectionRepository.updateSelectionWithSeenPatches(
+                        finalPackageName,
+                        sanitizedSelectionFinal,
+                        seenPatchesByBundle
+                    )
+                    patchOptionsRepository.saveOptions(
+                        finalPackageName,
+                        sanitizedOptionsFinal
+                    )
+                }
                 patchSelectionRepository.updateSelectionWithSeenPatches(
-                    finalPackageName,
-                    sanitizedSelectionFinal,
+                    packageName,
+                    sanitizedSelectionOriginal,
                     seenPatchesByBundle
                 )
-                patchOptionsRepository.saveOptions(finalPackageName, sanitizedOptionsFinal)
+                patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
+                appliedSelection = sanitizedSelectionOriginal
+                appliedOptions = sanitizedOptionsOriginal
             }
-            patchSelectionRepository.updateSelectionWithSeenPatches(
-                packageName,
-                sanitizedSelectionOriginal,
-                seenPatchesByBundle
-            )
-            patchOptionsRepository.saveOptions(packageName, sanitizedOptionsOriginal)
-            appliedSelection = sanitizedSelectionOriginal
-            appliedOptions = sanitizedOptionsOriginal
 
-            pruneUnreferencedPatchedAppFiles()
+            runPostCommitPersistenceStep(
+                "Failed to prune saved APK files after persistence"
+            ) {
+                pruneUnreferencedPatchedAppFiles()
+            }
 
             savedPatchedApp = savedPatchedApp ||
                 (effectiveShouldSaveForLater && (savedCopyWritten || savedCopy.exists()))
             true
+        }
+    }
+
+    private suspend fun runPostCommitPersistenceStep(
+        description: String,
+        block: suspend () -> Unit
+    ) = withContext(NonCancellable) {
+        try {
+            block()
+        } catch (error: Exception) {
+            Log.w(TAG, description, error)
         }
     }
 
@@ -1875,7 +2126,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
 
         viewModelScope.launch {
-            installedApp = installedAppRepository.get(packageName)
+            installedApp = sourceInstalledApp()
         }
     }
 
@@ -2515,7 +2766,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         updateInstallingState(false)
     }
 
-    private suspend fun performShizukuInstall(installerPackageNameOverride: String? = null) {
+    private suspend fun performShizukuInstall(
+        installerPackageNameOverride: String? = null,
+        allowAutoUninstall: Boolean = false
+    ) {
         activeInstallType = InstallType.SHIZUKU
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
@@ -2568,12 +2822,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             lastSuccessAtMs = System.currentTimeMillis()
         } catch (error: ShizukuInstaller.InstallerOperationException) {
             Log.e(tag, "Failed to install via Shizuku", error)
+            val currentPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
+            if (
+                allowAutoUninstall &&
+                installerManager.isSignatureMismatch(error.message) &&
+                tryAutoUninstallSignatureConflict(currentPackage, automatic = true)
+            ) {
+                performShizukuInstall(
+                    installerPackageNameOverride = installerPackageNameOverride,
+                    allowAutoUninstall = false
+                )
+                return
+            }
             val backendReason = error.message ?: error.javaClass.simpleName
-            val message = installerManager.formatFailureHint(error.status, backendReason)
-                ?: backendReason
-                ?: app.getString(R.string.installer_hint_generic)
+            val message = installerManager.formatShizukuFailure(error.status, backendReason)
             packageInstallerStatus = null
-            showInstallFailure(app.getString(R.string.install_app_fail, message))
+            showInstallFailure(message)
         } catch (error: Exception) {
             Log.e(tag, "Failed to install via Shizuku", error)
             if (packageInstallerStatus == null) {
@@ -2593,7 +2857,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private suspend fun executeInstallPlan(plan: InstallerManager.InstallPlan) {
+    private suspend fun executeInstallPlan(
+        plan: InstallerManager.InstallPlan,
+        automatic: Boolean = false
+    ) {
         Log.d(TAG, "executeInstallPlan(plan=${plan::class.java.simpleName})")
         recordInstallPlan(plan, lastInstallExpectedPackage ?: packageName, lastInstallSourceLabel)
         when (plan) {
@@ -2618,7 +2885,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
                 externalInstallTimeoutJob = null
-                performShizukuInstall(plan.installerPackageNameOverride)
+                performShizukuInstall(
+                    installerPackageNameOverride = plan.installerPackageNameOverride,
+                    allowAutoUninstall = automatic
+                )
             }
 
             is InstallerManager.InstallPlan.External -> launchExternalInstaller(plan)
@@ -2758,7 +3028,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     override fun install() {
         if (isInstalling) return
         input.profileInstallerToken?.let { storedToken ->
-            installWithToken(installerManager.parseToken(storedToken))
+            installWithToken(
+                installerManager.withPlayStoreSource(
+                    installerManager.parseToken(storedToken),
+                    prefs.shizukuInstallAsPlayStore.getBlocking()
+                )
+            )
             return
         }
         viewModelScope.launch {
@@ -2793,13 +3068,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    fun maybeAutoInstallProfile() {
-        if (!input.autoInstall || input.profileInstallerToken == null || profileAutoInstallTriggered) return
-        profileAutoInstallTriggered = true
-        installWithToken(installerManager.parseToken(input.profileInstallerToken))
+    fun maybeAutoInstall() {
+        if (autoInstallTriggered) return
+        val token = when {
+            input.autoInstall && input.profileInstallerToken != null ->
+                installerManager.withPlayStoreSource(
+                    installerManager.parseToken(input.profileInstallerToken),
+                    prefs.shizukuInstallAsPlayStore.getBlocking()
+                )
+            prefs.autoInstallWithShizuku.getBlocking() -> {
+                val primary = installerManager.getPrimaryToken()
+                if (!installerManager.isShizukuToken(primary)) return
+                primary
+            }
+            else -> return
+        }
+        autoInstallTriggered = true
+        installWithToken(token, automatic = true)
     }
 
-    fun installWithToken(token: InstallerManager.Token) {
+    fun installWithToken(token: InstallerManager.Token, automatic: Boolean = false) {
         if (isInstalling) return
         viewModelScope.launch {
             runCatching {
@@ -2817,11 +3105,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 if (plan !is InstallerManager.InstallPlan.Mount &&
                     hasSignatureMismatch(expectedPackage, outputFile)
                 ) {
-                    showSignatureMismatchPrompt(expectedPackage, plan)
-                    return@runCatching
+                    if (!tryAutoUninstallSignatureConflict(
+                            expectedPackage,
+                            plan,
+                            automatic
+                        )
+                    ) {
+                        showSignatureMismatchPrompt(expectedPackage, plan)
+                        return@runCatching
+                    }
                 }
                 recordInstallPlan(plan, expectedPackage, null)
-                executeInstallPlan(plan)
+                executeInstallPlan(plan, automatic)
             }.onFailure { error ->
                 Log.e(TAG, "installWithToken() failed to start", error)
                 showInstallFailure(
@@ -2832,6 +3127,46 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
         }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    private suspend fun tryAutoUninstallSignatureConflict(
+        packageName: String,
+        plan: InstallerManager.InstallPlan? = null,
+        automatic: Boolean = false
+    ): Boolean {
+        if (!automatic || !prefs.autoUninstallWithShizuku.get()) return false
+        if (plan != null && plan !is InstallerManager.InstallPlan.Shizuku) return false
+        if (!installerManager.shizukuStatus(InstallerManager.InstallTarget.PATCHER).availability.available) {
+            return false
+        }
+        val downgradeWouldOccur = withContext(Dispatchers.IO) {
+            val installedPackage = pm.getPackageInfo(packageName)
+            val patchedPackage = pm.getPackageInfo(outputFile)
+            installedPackage != null &&
+                patchedPackage != null &&
+                pm.getVersionCode(patchedPackage) < pm.getVersionCode(installedPackage)
+        }
+        if (downgradeWouldOccur) return false
+
+        return runCatching {
+            installerManager.uninstallWithShizuku(packageName)
+            waitUntilPackageRemoved(packageName)
+        }.onFailure {
+            Log.w(TAG, "Shizuku auto-uninstall failed for $packageName", it)
+        }.getOrDefault(false)
+    }
+
+    private suspend fun waitUntilPackageRemoved(packageName: String): Boolean {
+        val deadline = System.currentTimeMillis() + SHIZUKU_UNINSTALL_VERIFY_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (withContext(Dispatchers.IO) { pm.getPackageInfo(packageName) == null }) {
+                return true
+            }
+            delay(SHIZUKU_UNINSTALL_VERIFY_POLL_MS)
+        }
+        return withContext(Dispatchers.IO) { pm.getPackageInfo(packageName) == null }
     }
 
     override fun reinstall() {
@@ -3023,7 +3358,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         data class Failure(val message: String) : InstallCompletionStatus()
     }
 
-    private fun launchWorker(): UUID =
+    private suspend fun launchWorker(): UUID =
         workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
             PatcherWorker.UNIQUE_WORK_NAME,
             buildWorkerArgs()
@@ -5039,43 +5374,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         )
     }
 
-    private fun savedApkFile(installedApp: InstalledApp): File? {
-        val candidates = listOf(
-            fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
-            fs.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
-        ).distinct()
-        candidates.firstOrNull { it.exists() }?.let { return it }
-        return fs.findPatchedAppFile(installedApp.currentPackageName)
-            ?: fs.findPatchedAppFile(installedApp.originalPackageName)
-    }
-
-    private suspend fun preserveHistoricalInstalledEntry(
-        sourceApp: InstalledApp,
-        targetPackageName: String
-    ) {
-        val sourceApk = savedApkFile(sourceApp) ?: return
-        val targetApk = fs.getPatchedAppFile(targetPackageName, sourceApp.version)
-        if (!sourceApk.absolutePath.equals(targetApk.absolutePath, ignoreCase = true)) {
-            try {
-                targetApk.parentFile?.mkdirs()
-                sourceApk.copyTo(targetApk, overwrite = true)
-            } catch (error: IOException) {
-                Log.w(TAG, "Failed to archive previous patched app for ${sourceApp.currentPackageName}", error)
-                return
-            }
-        }
-        val sourceSelection = installedAppRepository.getAppliedPatches(sourceApp.currentPackageName)
-        installedAppRepository.addOrUpdate(
-            currentPackageName = targetPackageName,
-            originalPackageName = sourceApp.originalPackageName,
-            version = sourceApp.version,
-            installType = InstallType.SAVED,
-            patchSelection = sourceSelection,
-            selectionPayload = sourceApp.selectionPayload,
-            createdAtOverride = sourceApp.createdAt
-        )
-    }
-
     private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
         packageName: String,
         installedPackageName: String,
@@ -5088,6 +5386,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             .forEach { savedEntry ->
                 if (savedEntryIdentity(savedEntry) != variantIdentity) return@forEach
+                installedAppRepository.migrateAutoPatchTarget(
+                    savedEntry.currentPackageName,
+                    installedPackageName
+                )
                 installedAppRepository.delete(savedEntry)
                 fs.getPatchedAppFile(
                     savedEntry.currentPackageName,
@@ -5097,16 +5399,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun pruneUnreferencedPatchedAppFiles() {
-        val retainedFiles = installedAppRepository.getAll().first().flatMap { installedApp ->
-            listOf(
-                fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version),
-                fs.getPatchedAppFile(installedApp.originalPackageName, installedApp.version)
-            )
+        val retainedFiles = installedAppRepository.getAll().first().map { installedApp ->
+            fs.getPatchedAppFile(installedApp.currentPackageName, installedApp.version)
         }
         val removed = fs.prunePatchedAppFiles(retainedFiles)
         if (removed > 0) {
             Log.d(TAG, "Removed $removed stale saved patched APK file(s)")
         }
+        installedAppRepository.pruneRetainedOriginals()
     }
 
     private fun buildUniqueSavedAppEntryKey(packageName: String, variantIdentity: String): String {
@@ -5115,7 +5415,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return "${keyBase}__${nonce}"
     }
 
-    private companion object {
+    internal companion object {
         const val TAG = "ReVanced Patcher"
         const val SKIPPED_SUBSTEP_PREFIX = "[skipped]"
         private const val WRITE_APK_DEX_GROUP_TITLE = "Compiling DEX files"
@@ -5123,6 +5423,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val DOWNLOADER_ACTIVITY_RESULT_GRACE_MS = 750L
         private const val SYSTEM_INSTALL_TIMEOUT_MS = 60_000L
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 60_000L
+        private const val SHIZUKU_UNINSTALL_VERIFY_TIMEOUT_MS = 10_000L
+        private const val SHIZUKU_UNINSTALL_VERIFY_POLL_MS = 250L
         private const val POST_TIMEOUT_GRACE_MS = 5_000L
         private const val EXTERNAL_INSTALLER_RESULT_GRACE_MS = 1500L
         private const val EXTERNAL_INSTALLER_POST_CLOSE_TIMEOUT_MS = 30_000L

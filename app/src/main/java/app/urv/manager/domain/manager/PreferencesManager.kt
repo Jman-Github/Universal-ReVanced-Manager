@@ -30,6 +30,15 @@ enum class SearchForUpdatesBackgroundInterval(val displayName: Int, val value: L
     DAY(R.string.daily, 60 * 24)
 }
 
+internal fun normalizedImportedAutoPatchInterval(
+    interval: SearchForUpdatesBackgroundInterval
+): SearchForUpdatesBackgroundInterval =
+    if (interval == SearchForUpdatesBackgroundInterval.NEVER) {
+        SearchForUpdatesBackgroundInterval.DAY
+    } else {
+        interval
+    }
+
 enum class AutoClearCacheInterval(val displayName: Int, val value: Long) {
     NEVER(R.string.never, 0),
     HOUR(R.string.hourly, 60),
@@ -146,10 +155,107 @@ class PreferencesManager(
     val installerFallback = stringPreference("installer_fallback", InstallerPreferenceTokens.NONE)
     val installerCustomComponents = stringSetPreference("installer_custom_components", emptySet())
     val installerHiddenComponents = stringSetPreference("installer_hidden_components", emptySet())
+    val shizukuInstallAsPlayStore =
+        booleanPreference("shizuku_install_as_play_store", false)
+    val autoInstallWithShizuku = booleanPreference("auto_patch_install", false)
+    val autoUninstallWithShizuku = booleanPreference("auto_uninstall_with_shizuku", false)
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/795
+    val autoPatchEnabled = booleanPreference("auto_patch_enabled", false)
+    val autoPatchInstallWithShizuku =
+        booleanPreference("auto_patch_install_with_shizuku", false)
+    val autoPatchUninstallOnConflictWithShizuku =
+        booleanPreference("auto_patch_uninstall_on_conflict_with_shizuku", false)
+    private val autoPatchShizukuSettingsRestorePending =
+        booleanPreference("auto_patch_shizuku_settings_restore_pending", false)
+    private val autoPatchInstallWithShizukuBeforeDisable =
+        booleanPreference("auto_patch_install_with_shizuku_before_disable", false)
+    private val autoPatchUninstallOnConflictWithShizukuBeforeDisable =
+        booleanPreference("auto_patch_uninstall_on_conflict_with_shizuku_before_disable", false)
+    val autoPatchRequiresCharging = booleanPreference("auto_patch_requires_charging", true)
+    val autoPatchInterval = enumPreference("auto_patch_interval", SearchForUpdatesBackgroundInterval.DAY)
+    val autoPatchEnabledPackages = stringSetPreference(
+        "auto_patch_enabled_packages",
+        emptySet()
+    )
+    val savedAppLauncherShortcutPackages = stringSetPreference(
+        "saved_app_launcher_shortcut_packages",
+        emptySet()
+    )
+    val allowExternalBatchActions = booleanPreference("allow_external_batch_actions", false)
+    val lastBatchPatchResult = stringPreference("last_batch_patch_result", "")
+    val lastAutoPatchResult = stringPreference("last_auto_patch_result", "")
 
     val keystoreAlias = stringPreference("keystore_alias", KeystoreManager.DEFAULT_ALIAS)
     val keystorePass = stringPreference("keystore_pass", KeystoreManager.DEFAULT_PASSWORD)
     val keystoreKeyPass = stringPreference("keystore_key_pass", KeystoreManager.DEFAULT_KEY_PASSWORD)
+
+    suspend fun updateAutoPatchEnabled(enabled: Boolean) {
+        edit {
+            applyAutoPatchEnabledState(enabled)
+        }
+    }
+
+    suspend fun setSavedAppLauncherShortcutEnabled(
+        packageName: String,
+        enabled: Boolean,
+        capacity: Int
+    ) {
+        edit {
+            val selectedPackages = savedAppLauncherShortcutPackages.value
+            savedAppLauncherShortcutPackages.value = when {
+                enabled && packageName in selectedPackages -> selectedPackages
+                enabled && selectedPackages.size < capacity -> selectedPackages + packageName
+                enabled -> selectedPackages
+                else -> selectedPackages - packageName
+            }
+        }
+    }
+
+    suspend fun restoreAutoPatchShizukuSettings(
+        installWithShizuku: Boolean,
+        uninstallOnConflictWithShizuku: Boolean
+    ) {
+        edit {
+            if (autoPatchEnabled.value) {
+                autoPatchInstallWithShizuku.value = installWithShizuku
+                autoPatchUninstallOnConflictWithShizuku.value =
+                    uninstallOnConflictWithShizuku
+            } else {
+                autoPatchInstallWithShizukuBeforeDisable.value = installWithShizuku
+                autoPatchUninstallOnConflictWithShizukuBeforeDisable.value =
+                    uninstallOnConflictWithShizuku
+                autoPatchShizukuSettingsRestorePending.value = true
+                autoPatchInstallWithShizuku.value = false
+                autoPatchUninstallOnConflictWithShizuku.value = false
+            }
+        }
+    }
+
+    private fun EditorContext.applyAutoPatchEnabledState(enabled: Boolean) {
+        if (enabled) {
+            autoPatchEnabled.value = true
+            if (!autoPatchShizukuSettingsRestorePending.value) return
+
+            autoPatchInstallWithShizuku.value =
+                autoPatchInstallWithShizukuBeforeDisable.value
+            autoPatchUninstallOnConflictWithShizuku.value =
+                autoPatchUninstallOnConflictWithShizukuBeforeDisable.value
+            autoPatchShizukuSettingsRestorePending.value = false
+            return
+        }
+
+        if (!autoPatchShizukuSettingsRestorePending.value) {
+            autoPatchInstallWithShizukuBeforeDisable.value =
+                autoPatchInstallWithShizuku.value
+            autoPatchUninstallOnConflictWithShizukuBeforeDisable.value =
+                autoPatchUninstallOnConflictWithShizuku.value
+            autoPatchShizukuSettingsRestorePending.value = true
+        }
+        autoPatchInstallWithShizuku.value = false
+        autoPatchUninstallOnConflictWithShizuku.value = false
+        autoPatchEnabled.value = false
+    }
 
     suspend fun migrateDashboardBundleBannerState() {
         if (dashboardBundleBannerStateMigrated.get()) return
@@ -158,6 +264,25 @@ class PreferencesManager(
             dashboardBundleImportBannerCollapsed.value = legacyState
             dashboardBundleUpdateBannerCollapsed.value = legacyState
             dashboardBundleBannerStateMigrated.value = true
+        }
+    }
+
+    suspend fun migrateLegacyShizukuPlayStoreMode() {
+        val primary = installerPrimary.get()
+        val fallback = installerFallback.get()
+        if (
+            primary != InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY &&
+            fallback != InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY
+        ) return
+
+        edit {
+            if (installerPrimary.value == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY) {
+                installerPrimary.value = InstallerPreferenceTokens.SHIZUKU
+            }
+            if (installerFallback.value == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY) {
+                installerFallback.value = InstallerPreferenceTokens.SHIZUKU
+            }
+            shizukuInstallAsPlayStore.value = true
         }
     }
 
@@ -447,6 +572,18 @@ class PreferencesManager(
         val installerFallback: String? = null,
         val installerCustomComponents: Set<String>? = null,
         val installerHiddenComponents: Set<String>? = null,
+        val shizukuInstallAsPlayStore: Boolean? = null,
+        val autoInstallWithShizuku: Boolean? = null,
+        val autoPatchInstall: Boolean? = null,
+        val autoUninstallWithShizuku: Boolean? = null,
+        val autoPatchEnabled: Boolean? = null,
+        val autoPatchInstallWithShizuku: Boolean? = null,
+        val autoPatchUninstallOnConflictWithShizuku: Boolean? = null,
+        val autoPatchRequiresCharging: Boolean? = null,
+        val autoPatchInterval: SearchForUpdatesBackgroundInterval? = null,
+        val autoPatchEnabledPackages: Set<String>? = null,
+        val savedAppLauncherShortcutPackages: Set<String>? = null,
+        val allowExternalBatchActions: Boolean? = null,
         val keystoreAlias: String? = null,
         val keystorePass: String? = null,
         val keystoreKeyPass: String? = null,
@@ -630,6 +767,20 @@ class PreferencesManager(
     }
 
     private suspend fun exportRuntimeAndInstallerSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        val autoPatchEnabledValue = autoPatchEnabled.get()
+        val restoreShizukuSettings =
+            !autoPatchEnabledValue && autoPatchShizukuSettingsRestorePending.get()
+        val exportedAutoPatchInstallWithShizuku = if (restoreShizukuSettings) {
+            autoPatchInstallWithShizukuBeforeDisable.get()
+        } else {
+            autoPatchInstallWithShizuku.get()
+        }
+        val exportedAutoPatchUninstallOnConflictWithShizuku = if (restoreShizukuSettings) {
+            autoPatchUninstallOnConflictWithShizukuBeforeDisable.get()
+        } else {
+            autoPatchUninstallOnConflictWithShizuku.get()
+        }
+
         return snapshot.copy(
             stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
             skipUnneededSplitApks = skipUnneededSplitApks.get(),
@@ -654,6 +805,18 @@ class PreferencesManager(
             installerFallback = installerFallback.get(),
             installerCustomComponents = installerCustomComponents.get(),
             installerHiddenComponents = installerHiddenComponents.get(),
+            shizukuInstallAsPlayStore = shizukuInstallAsPlayStore.get(),
+            autoInstallWithShizuku = autoInstallWithShizuku.get(),
+            autoUninstallWithShizuku = autoUninstallWithShizuku.get(),
+            autoPatchEnabled = autoPatchEnabledValue,
+            autoPatchInstallWithShizuku = exportedAutoPatchInstallWithShizuku,
+            autoPatchUninstallOnConflictWithShizuku =
+                exportedAutoPatchUninstallOnConflictWithShizuku,
+            autoPatchRequiresCharging = autoPatchRequiresCharging.get(),
+            autoPatchInterval = autoPatchInterval.get(),
+            autoPatchEnabledPackages = autoPatchEnabledPackages.get(),
+            savedAppLauncherShortcutPackages = savedAppLauncherShortcutPackages.get(),
+            allowExternalBatchActions = allowExternalBatchActions.get(),
             keystoreAlias = keystoreAlias.get(),
             keystorePass = keystorePass.get(),
             keystoreKeyPass = keystoreKeyPass.get(),
@@ -826,10 +989,56 @@ class PreferencesManager(
         snapshot.patchedAppExportFormat?.let { patchedAppExportFormat.value = it }
         snapshot.mergedApkExportFormat?.let { mergedApkExportFormat.value = it }
         snapshot.chooseInstallerPerInstall?.let { chooseInstallerPerInstall.value = it }
-        snapshot.installerPrimary?.let { installerPrimary.value = it }
-        snapshot.installerFallback?.let { installerFallback.value = it }
+        val importedPrimary = snapshot.installerPrimary
+        val importedFallback = snapshot.installerFallback
+        importedPrimary?.let {
+            installerPrimary.value = if (it == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY) {
+                InstallerPreferenceTokens.SHIZUKU
+            } else it
+        }
+        importedFallback?.let {
+            installerFallback.value = if (it == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY) {
+                InstallerPreferenceTokens.SHIZUKU
+            } else it
+        }
         snapshot.installerCustomComponents?.let { installerCustomComponents.value = it }
         snapshot.installerHiddenComponents?.let { installerHiddenComponents.value = it }
+        val importedLegacyPlayStoreMode =
+            importedPrimary == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY ||
+                importedFallback == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY
+        val importedPlayStoreMode = snapshot.shizukuInstallAsPlayStore
+            ?: if (importedLegacyPlayStoreMode) true else null
+        importedPlayStoreMode?.let {
+            shizukuInstallAsPlayStore.value = it
+        }
+        (snapshot.autoInstallWithShizuku ?: snapshot.autoPatchInstall)?.let {
+            autoInstallWithShizuku.value = it
+        }
+        snapshot.autoUninstallWithShizuku?.let { autoUninstallWithShizuku.value = it }
+        snapshot.autoPatchInstallWithShizuku?.let {
+            autoPatchInstallWithShizuku.value = it
+        }
+        snapshot.autoPatchUninstallOnConflictWithShizuku?.let {
+            autoPatchUninstallOnConflictWithShizuku.value = it
+        }
+        snapshot.autoPatchEnabled?.let { enabled ->
+            if (enabled) {
+                autoPatchEnabled.value = true
+                autoPatchShizukuSettingsRestorePending.value = false
+            } else {
+                autoPatchShizukuSettingsRestorePending.value = false
+                applyAutoPatchEnabledState(false)
+            }
+        }
+        snapshot.autoPatchRequiresCharging?.let { autoPatchRequiresCharging.value = it }
+        autoPatchInterval.value = normalizedImportedAutoPatchInterval(
+            snapshot.autoPatchInterval ?: autoPatchInterval.value
+        )
+        snapshot.autoPatchEnabledPackages?.let { autoPatchEnabledPackages.value = it }
+        snapshot.savedAppLauncherShortcutPackages?.let {
+            savedAppLauncherShortcutPackages.value = it
+        }
+        snapshot.allowExternalBatchActions?.let { allowExternalBatchActions.value = it }
         snapshot.keystoreAlias?.let { keystoreAlias.value = it }
         snapshot.keystorePass?.let { keystorePass.value = it }
         snapshot.keystoreKeyPass?.let { keystoreKeyPass.value = it }

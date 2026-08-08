@@ -929,6 +929,10 @@ class PatchBundleRepository(
         }
     }
 
+    suspend fun awaitReady() {
+        reloadInProgress.first { inProgress -> !inProgress }
+    }
+
     private suspend fun loadFromDb(): List<PatchBundleEntity> {
         val all = dao.all()
         if (all.isEmpty()) {
@@ -2732,6 +2736,7 @@ class PatchBundleRepository(
      * Updates all bundles that should be automatically updated.
      */
     suspend fun updateCheck() {
+        awaitReady()
         store.dispatch(Update { it.autoUpdate })
         checkManualUpdates()
     }

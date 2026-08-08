@@ -37,6 +37,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavOptionsBuilder
@@ -46,12 +47,16 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
+import app.urv.manager.domain.batch.ManualBatchPatchQueue
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.util.LocalPreventAccidentalTouching
 import app.urv.manager.ui.model.navigation.Announcement
 import app.urv.manager.ui.model.navigation.Announcements
 import app.urv.manager.ui.model.navigation.AppSelector
 import app.urv.manager.ui.model.navigation.ApkSigner
+import app.urv.manager.ui.model.navigation.BatchPatchDetails
+import app.urv.manager.ui.model.navigation.BatchPatcher
+import app.urv.manager.ui.model.navigation.BatchPatchesSelector
 import app.urv.manager.ui.model.navigation.ComplexParameter
 import app.urv.manager.ui.model.navigation.CreateYoutubeAssets
 import app.urv.manager.ui.model.navigation.Dashboard
@@ -71,6 +76,9 @@ import app.urv.manager.ui.screen.AnnouncementScreen
 import app.urv.manager.ui.screen.AnnouncementsScreen
 import app.urv.manager.ui.screen.AppSelectorScreen
 import app.urv.manager.ui.screen.ApkSignerScreen
+import app.urv.manager.ui.screen.BatchPatchDetailsScreen
+import app.urv.manager.ui.screen.BatchPatcherHostEffects
+import app.urv.manager.ui.screen.BatchPatcherScreen
 import app.urv.manager.ui.screen.CreateYoutubeAssetsScreen
 import app.urv.manager.ui.screen.DashboardScreen
 import app.urv.manager.ui.screen.InstalledAppInfoScreen
@@ -100,6 +108,7 @@ import app.urv.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.urv.manager.ui.screen.settings.update.UpdatesSettingsScreen
 import app.urv.manager.ui.theme.ReVancedManagerTheme
 import app.urv.manager.ui.theme.Theme
+import app.urv.manager.ui.viewmodel.BatchPatcherViewModel
 import app.urv.manager.ui.viewmodel.DashboardViewModel
 import app.urv.manager.ui.viewmodel.MainViewModel
 import app.urv.manager.ui.viewmodel.SelectedAppInfoViewModel
@@ -114,6 +123,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.androidx.compose.navigation.koinNavViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import org.koin.androidx.viewmodel.ext.android.getViewModel as getActivityViewModel
 import java.io.File
@@ -311,10 +321,20 @@ private fun ReVancedManager(
 ) {
     val navController = rememberNavController()
     val dashboardVm: DashboardViewModel = koinViewModel()
+    val batchPatcherVm: BatchPatcherViewModel = koinViewModel()
+    val manualBatchQueue: ManualBatchPatchQueue = koinInject()
     var pendingBundleDeepLink by remember { mutableStateOf<app.urv.manager.util.BundleDeepLink?>(null) }
     var pendingSplitArchiveIntent by remember { mutableStateOf<app.urv.manager.util.SplitArchiveIntent?>(null) }
     var pendingPatchBundleFileIntent by remember { mutableStateOf<PatchBundleFileIntent?>(null) }
     val context = LocalContext.current
+    val returnToManualBatchSelector = {
+        navController.navigate(AppSelector(batchQueue = true)) {
+            popUpTo<AppSelector> { inclusive = false }
+            launchSingleTop = true
+        }
+    }
+
+    BatchPatcherHostEffects(batchPatcherVm)
 
     EventEffect(vm.appSelectFlow) { params ->
         navController.navigateComplex(
@@ -372,6 +392,40 @@ private fun ReVancedManager(
         }
     }
 
+    EventEffect(vm.batchPatchRequestFlow) { request ->
+        val requestId = batchPatcherVm.requestIdForPlan(
+            packageNames = request.packageNames,
+            scheduled = request.scheduled,
+            showExistingResult = request.showExistingResult
+        )
+        if (!batchPatcherVm.canOpenPlan(
+                packageNames = request.packageNames,
+                scheduled = request.scheduled,
+                showExistingResult = request.showExistingResult,
+                requestId = requestId
+            )
+        ) return@EventEffect
+
+        navController.navigate(
+            BatchPatcher(
+                packageNames = request.packageNames,
+                startImmediately = request.startImmediately,
+                showExistingResult = request.showExistingResult,
+                scheduled = request.scheduled,
+                requestId = requestId
+            )
+        ) {
+            launchSingleTop = true
+        }
+    }
+
+    EventEffect(vm.dashboardRequestFlow) {
+        navController.navigate(Dashboard) {
+            launchSingleTop = true
+            popUpTo(Dashboard) { inclusive = false }
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Dashboard,
@@ -398,6 +452,10 @@ private fun ReVancedManager(
                 onSettingsClick = { navController.navigate(Settings) },
                 onAppSelectorClick = {
                     navController.navigate(AppSelector())
+                },
+                onBatchQueueClick = {
+                    manualBatchQueue.clear()
+                    navController.navigate(AppSelector(batchQueue = true))
                 },
                 onStorageSelect = { saved -> vm.selectApp(saved) },
                 onUpdateClick = {
@@ -439,6 +497,22 @@ private fun ReVancedManager(
                 },
                 onAppClick = { packageName, action ->
                     navController.navigate(InstalledApplicationInfo(packageName, action))
+                },
+                onBatchPatch = { packageNames ->
+                    val requestId = batchPatcherVm.requestIdForPlan(packageNames)
+                    if (
+                        batchPatcherVm.canOpenPlan(
+                            packageNames = packageNames,
+                            requestId = requestId
+                        )
+                    ) {
+                        navController.navigate(
+                            BatchPatcher(
+                                packageNames = packageNames,
+                                requestId = requestId
+                            )
+                        )
+                    }
                 },
                 onAnnouncementClick = { announcement ->
                     navController.navigateComplex(
@@ -495,12 +569,69 @@ private fun ReVancedManager(
             )
         }
 
+        composable<BatchPatcher> {
+            val data = it.toRoute<BatchPatcher>()
+            BatchPatcherScreen(
+                packageNames = data.packageNames,
+                startImmediately = data.startImmediately,
+                showExistingResult = data.showExistingResult,
+                manualQueue = data.manualQueue,
+                scheduled = data.scheduled,
+                requestId = data.requestId,
+                onBackClick = navController::navigateUp,
+                onOpenProgress = { packageName ->
+                    navController.navigate(BatchPatchDetails(packageName))
+                },
+                onEditPatches = { params ->
+                    navController.navigateComplex(BatchPatchesSelector, params)
+                },
+                viewModel = batchPatcherVm
+            )
+        }
+
+        composable<BatchPatchDetails> {
+            val data = it.toRoute<BatchPatchDetails>()
+            BatchPatchDetailsScreen(
+                packageName = data.packageName,
+                onBackClick = navController::popBackStack,
+                viewModel = batchPatcherVm
+            )
+        }
+
+        composable<BatchPatchesSelector> {
+            val data =
+                it.getComplexArg<SelectedApplicationInfo.PatchesSelector.ViewModelParams>()
+            PatchesSelectorScreen(
+                onBackClick = navController::popBackStack,
+                onSave = { patches, options, _ ->
+                    batchPatcherVm.updateConfiguration(
+                        packageName = data.app.packageName,
+                        patches = patches,
+                        options = options
+                    )
+                    navController.popBackStack()
+                },
+                viewModel = koinViewModel { parametersOf(data) }
+            )
+        }
+
         composable<InstalledApplicationInfo> {
             val data = it.toRoute<InstalledApplicationInfo>()
 
             InstalledAppInfoScreen(
-                onPatchClick = { packageName, selection, selectionPayload, persistConfiguration ->
-                    vm.selectApp(packageName, selection, selectionPayload, persistConfiguration)
+                onPatchClick = {
+                    packageName,
+                    sourceEntryKey,
+                    selection,
+                    selectionPayload,
+                    persistConfiguration ->
+                    vm.selectApp(
+                        packageName = packageName,
+                        patches = selection,
+                        selectionPayload = selectionPayload,
+                        persistConfiguration = persistConfiguration,
+                        sourceEntryKey = sourceEntryKey
+                    )
                 },
                 onBackClick = navController::popBackStack,
                 viewModel = koinViewModel { parametersOf(data.packageName) },
@@ -510,12 +641,47 @@ private fun ReVancedManager(
 
         composable<AppSelector> {
             val args = it.toRoute<AppSelector>()
+            val manualEntries by manualBatchQueue.entries.collectAsStateWithLifecycle()
             AppSelectorScreen(
-                onSelect = vm::selectApp,
-                onStorageSelect = vm::selectApp,
-                onBackClick = navController::popBackStack,
+                onSelect = { packageName ->
+                    vm.selectApp(packageName, batchQueue = args.batchQueue)
+                },
+                onStorageSelect = { app ->
+                    vm.selectApp(app, batchQueue = args.batchQueue)
+                },
+                onBackClick = {
+                    if (args.batchQueue) manualBatchQueue.clear()
+                    navController.popBackStack()
+                },
                 autoOpenStorage = args.autoStorage,
-                returnToDashboardOnStorage = args.autoStorageReturn
+                returnToDashboardOnStorage = args.autoStorageReturn,
+                batchQueueMode = args.batchQueue,
+                batchQueueSize = manualEntries.size,
+                onReviewQueue = {
+                    val packageNames = manualEntries.map { entry ->
+                        entry.input.packageName
+                    }
+                    val requestId = batchPatcherVm.requestIdForPlan(
+                        packageNames = packageNames,
+                        manualQueue = true
+                    )
+                    if (
+                        manualEntries.size >= 2 &&
+                        batchPatcherVm.canOpenPlan(
+                            packageNames = packageNames,
+                            manualQueue = true,
+                            requestId = requestId
+                        )
+                    ) {
+                        navController.navigate(
+                            BatchPatcher(
+                                packageNames = packageNames,
+                                manualQueue = true,
+                                requestId = requestId
+                            )
+                        )
+                    }
+                }
             )
         }
 
@@ -674,10 +840,17 @@ private fun ReVancedManager(
                     onBackClick = navController::popBackStack,
                     onPatchClick = {
                         it.lifecycleScope.launch {
-                            navController.navigateComplex(
-                                Patcher,
-                                viewModel.getPatcherParams()
-                            )
+                            val patcherParams = viewModel.getPatcherParams()
+                            if (data.batchQueue) {
+                                manualBatchQueue.upsert(
+                                    input = patcherParams.selectedApp,
+                                    selection = patcherParams.selectedPatches,
+                                    options = patcherParams.options
+                                )
+                                returnToManualBatchSelector()
+                            } else {
+                                navController.navigateComplex(Patcher, patcherParams)
+                            }
                         }
                     },
                     onPatchSelectorClick = { app, patches, options ->
@@ -742,6 +915,7 @@ private fun ReVancedManager(
                             )
                         )
                     },
+                    batchQueueMode = data.batchQueue,
                     vm = viewModel
                 )
             }
@@ -793,10 +967,17 @@ private fun ReVancedManager(
                             pendingInputs = pendingInputs
                         )
                         it.lifecycleScope.launch {
-                            navController.navigateComplex(
-                                Patcher,
-                                selectedAppInfoVm.getPatcherParams()
-                            )
+                            val patcherParams = selectedAppInfoVm.getPatcherParams()
+                            if (parentArgs.batchQueue) {
+                                manualBatchQueue.upsert(
+                                    input = patcherParams.selectedApp,
+                                    selection = patcherParams.selectedPatches,
+                                    options = patcherParams.options
+                                )
+                                returnToManualBatchSelector()
+                            } else {
+                                navController.navigateComplex(Patcher, patcherParams)
+                            }
                         }
                     },
                     vm = koinViewModel { parametersOf(data) }

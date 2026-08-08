@@ -3,6 +3,7 @@ package app.urv.manager.ui.screen.settings
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.text.format.Formatter
@@ -55,6 +56,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,6 +81,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.documentfile.provider.DocumentFile
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
@@ -113,6 +116,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import rikka.shizuku.Shizuku
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -124,6 +128,27 @@ fun ImportExportSettingsScreen(
 ) {
     val context = LocalContext.current
     val prefs: PreferencesManager = koinInject()
+    val installerManager: InstallerManager = koinInject()
+    val shizukuPermissionListener = remember {
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (requestCode != IMPORTED_SHIZUKU_PERMISSION_REQUEST_CODE) {
+                return@OnRequestPermissionResultListener
+            }
+            val granted = grantResult == PackageManager.PERMISSION_GRANTED
+            vm.onImportedShizukuPermissionResult(granted)
+            if (!granted) {
+                context.toast(
+                    context.getString(R.string.auto_patch_shizuku_permission_denied)
+                )
+            }
+        }
+    }
+    DisposableEffect(shizukuPermissionListener) {
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+        onDispose {
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        }
+    }
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val keystoreImportDirectory by prefs.keystoreImportLastDirectory.getAsState()
     val patchBundlesImportDirectory by prefs.patchBundlesImportLastDirectory.getAsState()
@@ -417,6 +442,38 @@ fun ImportExportSettingsScreen(
                 return@LaunchedEffect
             }
             vm.onImportedNotificationPermissionResult(granted = true)
+            return@LaunchedEffect
+        }
+
+        if (request.needsShizukuPermission) {
+            val status = installerManager.shizukuStatus(
+                InstallerManager.InstallTarget.PATCHER
+            )
+            when {
+                status.permissionGranted ->
+                    vm.onImportedShizukuPermissionResult(granted = true)
+                status.installed && status.supported && status.running -> {
+                    runCatching {
+                        Shizuku.requestPermission(
+                            IMPORTED_SHIZUKU_PERMISSION_REQUEST_CODE
+                        )
+                    }.onFailure {
+                        vm.onImportedShizukuPermissionResult(granted = false)
+                        context.toast(
+                            context.getString(
+                                R.string.auto_patch_shizuku_permission_request_failed
+                            )
+                        )
+                    }
+                }
+                else -> {
+                    vm.onImportedShizukuPermissionResult(granted = false)
+                    status.availability.reason?.let { reason ->
+                        context.toast(context.getString(reason))
+                    }
+                    installerManager.openShizukuApp()
+                }
+            }
         }
     }
 
@@ -1886,6 +1943,8 @@ private fun ExportFileNameDialog(
         }
     )
 }
+
+private const val IMPORTED_SHIZUKU_PERMISSION_REQUEST_CODE = 0x4953
 
 
 

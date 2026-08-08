@@ -108,6 +108,11 @@ fun PatchProfilePayload.remapAndExtractSelection(
 fun PatchProfile.toConfiguration(
     bundles: Map<Int, PatchBundleInfo.Scoped>,
     sources: Map<Int, PatchBundleSource>
+): PatchProfileConfiguration = payload.toConfiguration(bundles, sources)
+
+fun PatchProfilePayload.toConfiguration(
+    bundleInfo: Map<Int, PatchBundleInfo.Scoped>,
+    sources: Map<Int, PatchBundleSource>
 ): PatchProfileConfiguration {
     val selection = mutableMapOf<Int, MutableSet<String>>()
     val options = mutableMapOf<Int, MutableMap<String, MutableMap<String, Any?>>>()
@@ -117,16 +122,16 @@ fun PatchProfile.toConfiguration(
         (source as? RemotePatchBundle)?.endpoint?.let { endpoint -> endpoint to source }
     }.toMap()
 
-    payload.bundles.forEach { bundle ->
+    bundles.forEach { bundle ->
         var resolvedUid = bundle.bundleUid
-        var info = bundles[resolvedUid]
+        var info = bundleInfo[resolvedUid]
         if (info == null) {
             val endpoint = bundle.sourceEndpoint
             if (endpoint != null) {
                 val matchingSource = endpointToSource[endpoint]
                 if (matchingSource != null) {
                     resolvedUid = matchingSource.uid
-                    info = bundles[resolvedUid]
+                    info = bundleInfo[resolvedUid]
                 }
             }
         }
@@ -162,7 +167,7 @@ fun PatchProfile.toConfiguration(
                 } catch (e: Option.SerializationException) {
                     Log.w(
                         tag,
-                        "Failed to deserialize option $name:$patchName:$key for bundle ${bundle.bundleUid}",
+                        "Failed to deserialize option $patchName:$key for bundle ${bundle.bundleUid}",
                         e
                     )
                     bundleChanged = true

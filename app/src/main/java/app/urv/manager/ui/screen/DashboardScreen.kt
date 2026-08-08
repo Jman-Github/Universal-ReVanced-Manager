@@ -59,6 +59,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.BatteryAlert
@@ -157,6 +158,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.batch.selectedBatchTargetIdentifiers
 import app.urv.manager.patcher.aapt.Aapt
 import app.urv.manager.ui.model.navigation.Announcement
 import app.urv.manager.ui.component.AlertDialogExtended
@@ -265,6 +267,7 @@ fun DashboardScreen(
     vm: DashboardViewModel = koinViewModel(),
     mainVm: MainViewModel = koinViewModel(),
     onAppSelectorClick: () -> Unit,
+    onBatchQueueClick: () -> Unit,
     onStorageSelect: (SelectedApp.Local) -> Unit,
     onSettingsClick: () -> Unit,
     onUpdateClick: () -> Unit,
@@ -279,6 +282,7 @@ fun DashboardScreen(
     onOpenKeystoreCreatorClick: () -> Unit,
     onOpenKeystoreConverterClick: () -> Unit,
     onAppClick: (String, InstalledAppAction?) -> Unit,
+    onBatchPatch: (List<String>) -> Unit,
     onAnnouncementClick: (Announcement.Payload) -> Unit,
     onProfileLaunch: (PatchProfileLaunchData) -> Unit,
     bundleDeepLink: BundleDeepLink? = null,
@@ -2254,6 +2258,25 @@ fun DashboardScreen(
                             )
                         },
                         actions = {
+                            val selectedPackages = installedAppsViewModel.selectedApps
+                            val batchPackages = selectedBatchTargetIdentifiers(
+                                records = installedApps,
+                                selectedEntryKeys = selectedPackages
+                            )
+                            if (batchPackages.size > 1) {
+                                IconButton(
+                                    onClick = {
+                                        installedAppsViewModel.clearSelection()
+                                        onBatchPatch(batchPackages)
+                                    },
+                                    enabled = appInputEnabled
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                        stringResource(R.string.batch_patch_selected)
+                                    )
+                                }
+                            }
                             IconButton(
                                 onClick = { requestSavedAppsExportPicker() }
                             ) {
@@ -2615,6 +2638,20 @@ fun DashboardScreen(
                                     }
                                 ) {
                                     Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
+                                }
+                                HapticFloatingActionButton(
+                                    onClick = { attemptAppInput(onBatchQueueClick) },
+                                    enabled = appInputEnabled,
+                                    containerColor = if (appInputEnabled) {
+                                        FloatingActionButtonDefaults.containerColor
+                                    } else {
+                                        disabledAppInputFabColor
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.PlaylistPlay,
+                                        stringResource(R.string.batch_queue_create)
+                                    )
                                 }
                                 HapticFloatingActionButton(
                                     onClick = { attemptAppInput(onAppSelectorClick) },

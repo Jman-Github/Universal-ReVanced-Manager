@@ -129,6 +129,7 @@ class SelectedAppInfoViewModel(
     val desiredVersion = input.app.version
     val packageName = input.app.packageName
     private val profileId = input.profileId
+    private val sourceEntryKey = input.sourceEntryKey
     private val requiresSourceSelection = input.requiresSourceSelection
     private val inputSelectionPayload = input.selectionPayloadJson?.let { encoded ->
         runCatching { json.decodeFromString<PatchProfilePayload>(encoded) }
@@ -1443,7 +1444,8 @@ class SelectedAppInfoViewModel(
             options = getOptionsFiltered(bundles),
             profileId = profile?.uid,
             profileInstallerToken = profile?.installerToken,
-            autoInstall = profile?.autoInstall == true
+            autoInstall = profile?.autoInstall == true,
+            sourceEntryKey = sourceEntryKey
         )
     }
 

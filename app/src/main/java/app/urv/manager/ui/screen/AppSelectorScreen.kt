@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.outlined.Search
@@ -80,6 +81,7 @@ import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.ExpandableText
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.NonSuggestedVersionDialog
 import app.urv.manager.ui.component.TransparentLoadingDialog
@@ -113,6 +115,9 @@ fun AppSelectorScreen(
     onBackClick: () -> Unit,
     autoOpenStorage: Boolean = false,
     returnToDashboardOnStorage: Boolean = false,
+    batchQueueMode: Boolean = false,
+    batchQueueSize: Int = 0,
+    onReviewQueue: () -> Unit = {},
     vm: AppSelectorViewModel = koinViewModel()
 ) {
     val prefs = koinInject<PreferencesManager>()
@@ -205,10 +210,13 @@ fun AppSelectorScreen(
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
 
-    InterceptBackHandler(enabled = search || filterText.isNotBlank()) {
+    InterceptBackHandler(
+        enabled = search || filterText.isNotBlank() || batchQueueMode
+    ) {
         when {
             search -> search = false
             filterText.isNotBlank() -> filterText = ""
+            batchQueueMode -> onBackClick()
         }
     }
 
@@ -326,7 +334,9 @@ fun AppSelectorScreen(
     Scaffold(
         topBar = {
             AppTopBar(
-                title = stringResource(R.string.select_app),
+                title = stringResource(
+                    if (batchQueueMode) R.string.batch_queue_select_apps else R.string.select_app
+                ),
                 scrollBehavior = scrollBehavior,
                 onBackClick = {
                     when {
@@ -342,13 +352,40 @@ fun AppSelectorScreen(
                 }
             )
         },
+        floatingActionButton = {
+            if (batchQueueMode && batchQueueSize > 0) {
+                HapticExtendedFloatingActionButton(
+                    text = {
+                        Text(
+                            stringResource(
+                                R.string.batch_queue_review_count,
+                                batchQueueSize
+                            )
+                        )
+                    },
+                    icon = {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.PlaylistPlay,
+                            stringResource(R.string.batch_queue_review)
+                        )
+                    },
+                    onClick = onReviewQueue,
+                    enabled = batchQueueSize >= 2
+                )
+            }
+        },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         LazyColumnWithScrollbar(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 12.dp,
+                end = 16.dp,
+                bottom = if (batchQueueMode && batchQueueSize > 0) 88.dp else 12.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item(key = "app-selector-actions") {

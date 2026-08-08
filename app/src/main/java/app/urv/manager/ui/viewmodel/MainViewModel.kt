@@ -12,6 +12,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.batch.BatchPlanResolver
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
@@ -23,6 +24,7 @@ import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.ui.theme.Theme
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.AnnouncementDeepLinkIntent
+import app.urv.manager.util.BatchPatchIntents
 import app.urv.manager.util.BundleDeepLink
 import app.urv.manager.util.BundleDeepLinkIntent
 import app.urv.manager.util.ManagerUpdateDeepLinkIntent
@@ -42,11 +44,19 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+data class BatchPatchRequest(
+    val packageNames: List<String>,
+    val startImmediately: Boolean,
+    val showExistingResult: Boolean = false,
+    val scheduled: Boolean = false
+)
+
 class MainViewModel(
     private val patchBundleRepository: PatchBundleRepository,
     private val patchSelectionRepository: PatchSelectionRepository,
     private val downloadedAppRepository: DownloadedAppRepository,
     private val keystoreManager: KeystoreManager,
+    private val batchPlanResolver: BatchPlanResolver,
     private val app: Application,
     val prefs: PreferencesManager,
     private val json: Json
@@ -66,10 +76,16 @@ class MainViewModel(
     val splitArchiveIntentFlow = splitArchiveIntentChannel.receiveAsFlow()
     private val patchBundleFileIntentChannel = Channel<PatchBundleFileIntent>(Channel.BUFFERED)
     val patchBundleFileIntentFlow = patchBundleFileIntentChannel.receiveAsFlow()
+    private val batchPatchRequestChannel = Channel<BatchPatchRequest>(Channel.BUFFERED)
+    val batchPatchRequestFlow = batchPatchRequestChannel.receiveAsFlow()
+    private val dashboardRequestChannel = Channel<Unit>(Channel.BUFFERED)
+    val dashboardRequestFlow = dashboardRequestChannel.receiveAsFlow()
     private var initialIntentHandled = false
 
-    private suspend fun suggestedVersion(packageName: String) =
-        patchBundleRepository.suggestedVersions.first()[packageName]
+    private suspend fun suggestedVersion(packageName: String): String? {
+        patchBundleRepository.awaitReady()
+        return patchBundleRepository.suggestedVersions.first()[packageName]
+    }
 
     private suspend fun findDownloadedApp(app: SelectedApp): SelectedApp.Local? {
         if (app !is SelectedApp.Search) return null
@@ -100,7 +116,9 @@ class MainViewModel(
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
         persistConfiguration: Boolean = true,
-        returnToDashboard: Boolean = false
+        returnToDashboard: Boolean = false,
+        batchQueue: Boolean = false,
+        sourceEntryKey: String? = null
     ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
         val selectionPayloadJson = selectionPayload?.let { json.encodeToString(it) }
@@ -110,7 +128,9 @@ class MainViewModel(
                 patches = patches,
                 selectionPayloadJson = selectionPayloadJson,
                 persistConfiguration = persistConfiguration,
-                returnToDashboard = returnToDashboard
+                returnToDashboard = returnToDashboard,
+                batchQueue = batchQueue,
+                sourceEntryKey = sourceEntryKey
             )
         )
     }
@@ -122,14 +142,18 @@ class MainViewModel(
         patches: PatchSelection? = null,
         selectionPayload: PatchProfilePayload? = null,
         persistConfiguration: Boolean = true,
-        returnToDashboard: Boolean = false
+        returnToDashboard: Boolean = false,
+        batchQueue: Boolean = false,
+        sourceEntryKey: String? = null
     ) = viewModelScope.launch {
         selectApp(
             SelectedApp.Search(packageName, suggestedVersion(packageName)),
             patches,
             selectionPayload,
             persistConfiguration,
-            returnToDashboard
+            returnToDashboard,
+            batchQueue,
+            sourceEntryKey
         )
     }
 
@@ -142,6 +166,7 @@ class MainViewModel(
     }
 
     fun handleIntent(intent: Intent?) {
+        if (handleBatchIntent(intent)) return
         if (ManagerUpdateDeepLinkIntent.shouldOpenManagerUpdate(intent)) {
             managerUpdateDeepLinkChannel.trySend(Unit)
         }
@@ -165,6 +190,70 @@ class MainViewModel(
             BundleUpdateNotificationDismissReceiver.dismissalMarkers(intent)
         )
         bundleDeepLinkChannel.trySend(deepLink)
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/795
+    private fun handleBatchIntent(intent: Intent?): Boolean {
+        val action = intent?.action ?: return false
+        if (action !in setOf(
+                BatchPatchIntents.ACTION_PATCH_APP,
+                BatchPatchIntents.ACTION_CHECK_UPDATES,
+                BatchPatchIntents.ACTION_SHOW_RESULT
+            )
+        ) return false
+
+        val internal = BatchPatchIntents.isTrustedInternal(app, intent)
+        if (!internal && !prefs.allowExternalBatchActions.getBlocking()) {
+            app.toast(app.getString(R.string.batch_patch_external_disabled))
+            return true
+        }
+
+        when (action) {
+            BatchPatchIntents.ACTION_SHOW_RESULT -> {
+                val packages = BatchPatchIntents.packageNames(intent)
+                if (packages.isEmpty()) {
+                    dashboardRequestChannel.trySend(Unit)
+                } else {
+                    batchPatchRequestChannel.trySend(
+                        BatchPatchRequest(
+                            packageNames = packages,
+                            startImmediately = false,
+                            showExistingResult = true,
+                            scheduled = intent.getBooleanExtra(
+                                BatchPatchIntents.EXTRA_SCHEDULED,
+                                false
+                            )
+                        )
+                    )
+                }
+            }
+
+            BatchPatchIntents.ACTION_CHECK_UPDATES -> viewModelScope.launch {
+                runCatching { patchBundleRepository.updateCheck() }
+                    .onFailure { Log.w(tag, "Failed to refresh patch bundles", it) }
+                openOutdatedBatch()
+            }
+
+            BatchPatchIntents.ACTION_PATCH_APP -> {
+                val packageName = intent.getStringExtra(BatchPatchIntents.EXTRA_PACKAGE)
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                if (packageName != null) {
+                    selectApp(packageName)
+                }
+            }
+        }
+        return true
+    }
+
+    private suspend fun openOutdatedBatch() {
+        val packages = batchPlanResolver.findOutdatedPackages()
+        when {
+            packages.isEmpty() -> app.toast(app.getString(R.string.batch_patch_no_updates))
+            packages.size == 1 -> selectApp(packages.single())
+            else -> batchPatchRequestChannel.send(BatchPatchRequest(packages, false))
+        }
     }
 
     init {

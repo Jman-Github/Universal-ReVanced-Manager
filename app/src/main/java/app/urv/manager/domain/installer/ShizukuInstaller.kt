@@ -14,9 +14,12 @@ import android.os.IBinder
 import android.os.Process
 import android.os.RemoteException
 import app.universal.revanced.manager.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.ShizukuProvider
@@ -25,6 +28,8 @@ import rikka.sui.Sui
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.Constructor
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 class ShizukuInstaller(private val app: Application) {
 
@@ -35,25 +40,15 @@ class ShizukuInstaller(private val app: Application) {
         }
     }
 
-    data class InstallResult(val status: Int, val message: String?)
+    data class OperationResult(val status: Int, val message: String?)
 
-    fun availability(target: InstallerManager.InstallTarget): InstallerManager.Availability {
-        if (Shizuku.isPreV11()) {
-            return InstallerManager.Availability(false, R.string.installer_status_shizuku_unsupported)
-        }
-        val binderReady = runCatching { Shizuku.pingBinder() }.getOrElse { false }
-        if (!binderReady) {
-            return InstallerManager.Availability(false, R.string.installer_status_shizuku_not_running)
-        }
-        val permissionGranted = runCatching { Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }.getOrElse { false }
-        if (!permissionGranted) {
-            return InstallerManager.Availability(false, R.string.installer_status_shizuku_permission)
-        }
-        return InstallerManager.Availability(true)
-    }
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    fun availability(target: InstallerManager.InstallTarget): InstallerManager.Availability =
+        status(target).availability
 
     fun isInstalled(): Boolean {
-        if (Sui.isSui()) return true
+        if (isSuiMode()) return true
         return installedManagerPackageName() != null
     }
 
@@ -75,14 +70,14 @@ class ShizukuInstaller(private val app: Application) {
         sourceFile: File,
         expectedPackage: String,
         installerPackageNameOverride: String? = null
-    ): InstallResult =
+    ): OperationResult =
         installMultiple(listOf(sourceFile), expectedPackage, installerPackageNameOverride)
 
     suspend fun installMultiple(
         sourceFiles: List<File>,
         expectedPackage: String?,
         installerPackageNameOverride: String? = null
-    ): InstallResult = withContext(Dispatchers.IO) {
+    ): OperationResult = withContext(Dispatchers.IO) {
         if (sourceFiles.isEmpty()) {
             throw IllegalArgumentException("No APK files provided")
         }
@@ -93,7 +88,7 @@ class ShizukuInstaller(private val app: Application) {
             ?.takeIf { it.isNotBlank() }
             ?: defaultInstallerPackageName
         val installerAttributionTag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) app.attributionTag else null
-        val userId = if (isRoot) currentUserId() else 0
+        val userId = currentUserId()
 
         val packageInstallerWrapper = PackageInstallerCompat.createPackageInstaller(
             packageInstaller,
@@ -118,6 +113,7 @@ class ShizukuInstaller(private val app: Application) {
             ShizukuBinderWrapper(packageInstaller.openSession(sessionId).asBinder())
         )
         val session = PackageInstallerCompat.createSession(sessionBinder)
+        var committed = false
 
         try {
             sourceFiles.forEachIndexed { index, sourceFile ->
@@ -130,22 +126,118 @@ class ShizukuInstaller(private val app: Application) {
                 }
             }
 
-            val resultDeferred = CompletableDeferred<InstallResult>()
+            val resultDeferred = CompletableDeferred<OperationResult>()
             val intentSender = IntentSenderCompat.create { intent ->
                 val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
                 val message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-                resultDeferred.complete(InstallResult(status, message))
+                resultDeferred.complete(OperationResult(status, message))
             }
 
             session.commit(intentSender)
-            val result = resultDeferred.await()
+            committed = true
+            val result = try {
+                withTimeout(INSTALL_RESULT_TIMEOUT) { resultDeferred.await() }
+            } catch (_: TimeoutCancellationException) {
+                runCatching { session.abandon() }
+                throw InstallerOperationException(
+                    PackageInstaller.STATUS_FAILURE_TIMEOUT,
+                    "Timed out waiting for Shizuku install result"
+                )
+            } catch (cancelled: CancellationException) {
+                runCatching { session.abandon() }
+                throw cancelled
+            }
             if (result.status != PackageInstaller.STATUS_SUCCESS) {
                 throw InstallerOperationException(result.status, result.message)
             }
             result
         } finally {
+            if (!committed) runCatching { session.abandon() }
             runCatching { session.close() }
         }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    suspend fun uninstall(packageName: String): OperationResult = withContext(Dispatchers.IO) {
+        val packageInstaller = obtainPackageInstaller()
+        val identity = installerIdentity()
+        val wrapper = PackageInstallerCompat.createPackageInstaller(
+            packageInstaller,
+            identity.packageName,
+            identity.attributionTag,
+            identity.userId,
+            app
+        )
+        val deferred = CompletableDeferred<OperationResult>()
+        val intentSender = IntentSenderCompat.create { intent ->
+            deferred.complete(
+                OperationResult(
+                    status = intent.getIntExtra(
+                        PackageInstaller.EXTRA_STATUS,
+                        PackageInstaller.STATUS_FAILURE
+                    ),
+                    message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+                )
+            )
+        }
+
+        wrapper.uninstall(packageName, intentSender)
+        val result = try {
+            withTimeout(UNINSTALL_RESULT_TIMEOUT) { deferred.await() }
+        } catch (_: TimeoutCancellationException) {
+            throw InstallerOperationException(
+                PackageInstaller.STATUS_FAILURE_TIMEOUT,
+                "Timed out waiting for Shizuku uninstall result"
+            )
+        }
+        if (result.status != PackageInstaller.STATUS_SUCCESS) {
+            throw InstallerOperationException(result.status, result.message)
+        }
+        result
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    fun status(
+        @Suppress("UNUSED_PARAMETER") target: InstallerManager.InstallTarget
+    ): Status {
+        val sui = isSuiMode()
+        val packageName = installedManagerPackageName()
+        val installed = sui || packageName != null
+        val supported = installed && !runCatching { Shizuku.isPreV11() }.getOrDefault(true)
+        val running = supported && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+        val permissionGranted = running && runCatching {
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(false)
+        val availability = when {
+            !installed -> InstallerManager.Availability(
+                false,
+                R.string.installer_status_shizuku_not_installed
+            )
+            !supported -> InstallerManager.Availability(
+                false,
+                R.string.installer_status_shizuku_unsupported
+            )
+            !running -> InstallerManager.Availability(
+                false,
+                R.string.installer_status_shizuku_not_running
+            )
+            !permissionGranted -> InstallerManager.Availability(
+                false,
+                R.string.installer_status_shizuku_permission
+            )
+            else -> InstallerManager.Availability(true)
+        }
+        return Status(
+            installed = installed,
+            supported = supported,
+            running = running,
+            permissionGranted = permissionGranted,
+            mode = if (sui) Mode.SUI else Mode.SHIZUKU,
+            packageName = packageName,
+            availability = availability
+        )
     }
 
     private fun obtainPackageInstaller(): IPackageInstaller {
@@ -160,7 +252,24 @@ class ShizukuInstaller(private val app: Application) {
         }
     }
 
-    private fun currentUserId(): Int = Process.myUid() / 100000
+    private fun currentUserId(): Int = androidUserIdForUid(Process.myUid())
+
+    private fun isSuiMode(): Boolean = runCatching { Sui.isSui() }.getOrDefault(false)
+
+    private fun installerIdentity(
+        installerPackageNameOverride: String? = null
+    ): InstallerIdentity {
+        val root = runCatching { Shizuku.getUid() }.getOrDefault(-1) == 0
+        return InstallerIdentity(
+            packageName = installerPackageNameOverride
+                ?.takeIf { it.isNotBlank() }
+                ?: if (root) app.packageName else SHELL_PACKAGE,
+            attributionTag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                app.attributionTag
+            } else null,
+            userId = currentUserId()
+        )
+    }
 
     private fun isPackageInstalled(packageName: String): Boolean =
         runCatching {
@@ -169,15 +278,37 @@ class ShizukuInstaller(private val app: Application) {
 
     class InstallerOperationException(val status: Int, override val message: String?) : Exception(message)
 
+    data class Status(
+        val installed: Boolean,
+        val supported: Boolean,
+        val running: Boolean,
+        val permissionGranted: Boolean,
+        val mode: Mode,
+        val packageName: String?,
+        val availability: InstallerManager.Availability
+    )
+
+    enum class Mode { SHIZUKU, SUI }
+
+    private data class InstallerIdentity(
+        val packageName: String,
+        val attributionTag: String?,
+        val userId: Int
+    )
+
     companion object {
         internal const val GOOGLE_PLAY_PACKAGE = "com.android.vending"
         private const val SHELL_PACKAGE = "com.android.shell"
         private const val BASE_APK_NAME = "base.apk"
+        private val INSTALL_RESULT_TIMEOUT = 5.minutes
+        private val UNINSTALL_RESULT_TIMEOUT = 30.seconds
         internal const val PACKAGE_NAME = "moe.shizuku.privileged.api"
         internal const val SHEVERY_PACKAGE_NAME = "com.hamondev.shevery"
         private val MANAGER_PACKAGE_NAMES = listOf(PACKAGE_NAME, SHEVERY_PACKAGE_NAME)
     }
 }
+
+internal fun androidUserIdForUid(uid: Int): Int = uid / 100_000
 
 private object PackageInstallerCompat {
     private const val INSTALL_REPLACE_EXISTING = 0x00000002

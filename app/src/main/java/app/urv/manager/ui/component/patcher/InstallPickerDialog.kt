@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -17,9 +19,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Android
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,10 +44,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.toast
 import app.urv.manager.util.transparentListItemColors
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import app.urv.manager.ui.component.CenteredDialogTitle
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 
 @Composable
 fun InstallerPickerDialog(
@@ -55,28 +63,42 @@ fun InstallerPickerDialog(
     onOpenShizuku: (() -> Boolean)? = null
 ) {
     val context = LocalContext.current
-    val shizukuPromptReasons = rememberShizukuPromptReasons()
+    val installerManager: InstallerManager = koinInject()
+    val prefs: PreferencesManager = koinInject()
+    val scope = rememberCoroutineScope()
+    val installAsPlayStore by prefs.shizukuInstallAsPlayStore.getAsState()
+    val autoInstallWithShizuku by prefs.autoInstallWithShizuku.getAsState()
+    val autoUninstallWithShizuku by prefs.autoUninstallWithShizuku.getAsState()
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    val visibleOptions = remember(options) {
+        options.filterNot { it.token == InstallerManager.Token.ShizukuGooglePlay }
+    }
+    var showShizukuConfiguration by remember { mutableStateOf(false) }
     var selectedToken by remember(initialSelection) {
         mutableStateOf(
             initialSelection
-                ?: options.firstOrNull { it.availability.available }?.token
-                ?: options.firstOrNull()?.token
+                ?.let { installerManager.withPlayStoreSource(it, false) }
+                ?: visibleOptions.firstOrNull { it.availability.available }?.token
+                ?: visibleOptions.firstOrNull()?.token
                 ?: InstallerManager.Token.Internal
         )
     }
 
-    LaunchedEffect(options, initialSelection) {
-        val fallback = initialSelection
-            ?.takeIf { selection -> options.any { it.token == selection } }
-            ?: options.firstOrNull { it.availability.available }?.token
-            ?: options.firstOrNull()?.token
+    LaunchedEffect(visibleOptions, initialSelection) {
+        val normalizedInitial = initialSelection?.let { installerManager.withPlayStoreSource(it, false) }
+        val fallback = normalizedInitial
+            ?.takeIf { selection -> visibleOptions.any { it.token == selection } }
+            ?: visibleOptions.firstOrNull { it.availability.available }?.token
+            ?: visibleOptions.firstOrNull()?.token
             ?: return@LaunchedEffect
-        if (options.none { it.token == selectedToken }) {
+        if (visibleOptions.none { it.token == selectedToken }) {
             selectedToken = fallback
         }
     }
 
-    val confirmEnabled = options.find { it.token == selectedToken }?.availability?.available == true
+    val confirmEnabled =
+        visibleOptions.find { it.token == selectedToken }?.availability?.available == true
     val scrollState = rememberScrollState()
 
     AlertDialog(
@@ -89,7 +111,7 @@ fun InstallerPickerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(selectedToken)
+                    onConfirm(installerManager.withPlayStoreSource(selectedToken, installAsPlayStore))
                     onDismiss()
                 },
                 enabled = confirmEnabled
@@ -103,14 +125,11 @@ fun InstallerPickerDialog(
                 modifier = Modifier.verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                options.forEach { option ->
+                visibleOptions.forEach { option ->
                     val enabled = option.availability.available
                     val selected = option.token == selectedToken
                     val isShizukuOption = option.token == InstallerManager.Token.Shizuku ||
                         option.token == InstallerManager.Token.ShizukuGooglePlay
-                    val showShizukuAction = isShizukuOption &&
-                        option.availability.reason in shizukuPromptReasons &&
-                        onOpenShizuku != null
                     val desc = option.description?.takeIf { it.isNotBlank() }
                     val statusBadges = buildList {
                         option.availability.reason?.let { add(context.getString(it)) }
@@ -154,7 +173,7 @@ fun InstallerPickerDialog(
                             )
                         },
                         supportingContent = {
-                            if (desc != null || statusBadges.isNotEmpty() || showShizukuAction) {
+                            if (desc != null || statusBadges.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     desc?.let { line ->
                                         Text(
@@ -176,25 +195,64 @@ fun InstallerPickerDialog(
                                             )
                                         }
                                     }
-                                    if (showShizukuAction) {
-                                        TextButton(onClick = {
-                                            val launched = runCatching { onOpenShizuku?.invoke() ?: false }
-                                                .getOrDefault(false)
-                                            if (!launched) {
-                                                context.toast(context.getString(R.string.installer_shizuku_launch_failed))
-                                            }
-                                        }) {
-                                            Text(stringResource(R.string.installer_action_open_shizuku))
-                                        }
-                                    }
                                 }
                             }
                         }
                     )
+                    if (isShizukuOption) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val launched = runCatching {
+                                        onOpenShizuku?.invoke() ?: installerManager.openShizukuApp()
+                                    }.getOrDefault(false)
+                                    if (!launched) {
+                                        context.toast(
+                                            context.getString(
+                                                R.string.installer_shizuku_launch_failed
+                                            )
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.installer_action_open_shizuku))
+                            }
+                            FilledTonalButton(
+                                onClick = { showShizukuConfiguration = true },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(stringResource(R.string.configure))
+                            }
+                        }
+                    }
                 }
             }
         }
     )
+
+    if (showShizukuConfiguration) {
+        ShizukuConfigurationDialog(
+            installAsPlayStore = installAsPlayStore,
+            autoInstall = autoInstallWithShizuku,
+            autoUninstallOnConflict = autoUninstallWithShizuku,
+            onInstallAsPlayStoreChange = { enabled ->
+                scope.launch { installerManager.updateShizukuPlayStoreMode(enabled) }
+            },
+            onAutoInstallChange = { enabled ->
+                scope.launch { prefs.autoInstallWithShizuku.update(enabled) }
+            },
+            onAutoUninstallOnConflictChange = { enabled ->
+                scope.launch { prefs.autoUninstallWithShizuku.update(enabled) }
+            },
+            onDismiss = { showShizukuConfiguration = false }
+        )
+    }
 }
 
 @Composable
@@ -236,8 +294,3 @@ private fun InstallerIcon(
         }
     }
 }
-
-private fun rememberShizukuPromptReasons(): Set<Int> = setOf(
-    R.string.installer_status_shizuku_not_running,
-    R.string.installer_status_shizuku_permission
-)

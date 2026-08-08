@@ -23,9 +23,16 @@ import app.urv.manager.patcher.worker.AutoClearCacheWorker
 import app.urv.manager.patcher.worker.BundleUpdateNotificationWorker
 import app.urv.manager.patcher.worker.ManagerUpdateNotificationWorker
 import app.urv.manager.patcher.worker.PatcherWorkerProgressSnapshot
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+
+class UniqueWorkAlreadyRunningException(
+    val workName: String
+) : IllegalStateException("Another patching task is already running")
 
 class WorkerRepository(app: Application) {
     val workManager = WorkManager.getInstance(app)
@@ -59,14 +66,53 @@ class WorkerRepository(app: Application) {
         return data as A
     }
 
-    inline fun <reified W : Worker<A>, A : Any> launchExpedited(name: String, input: A): UUID {
+    suspend inline fun <reified W : Worker<A>, A : Any> launchExpedited(
+        name: String,
+        input: A
+    ): UUID {
         val request =
             OneTimeWorkRequest.Builder(W::class.java) // create Worker
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
                 .build()
-        workerInputs[request.id] = input
-        activeUniqueWorkIds.put(name, request.id)?.let(activeWorkerProgressSnapshots::remove)
-        workManager.enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, request)
+        val existingId = activeUniqueWorkIds.putIfAbsent(name, request.id)
+        if (existingId != null) {
+            throw UniqueWorkAlreadyRunningException(name)
+        }
+        var enqueueRequested = false
+        try {
+            cancelPersistedUniqueWorkIfPresent(name)
+            workerInputs[request.id] = input
+            val operation = workManager.enqueueUniqueWork(
+                name,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
+            enqueueRequested = true
+            withContext(Dispatchers.IO) {
+                operation.result.get()
+            }
+        } catch (error: Throwable) {
+            val cancellationConfirmed = if (enqueueRequested) {
+                withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching {
+                        workManager.cancelWorkById(request.id).result.get()
+                    }.onFailure { cancellationError ->
+                        Log.e(
+                            "WorkManager",
+                            "Failed to cancel partially submitted work $name (${request.id})",
+                            cancellationError
+                        )
+                    }.isSuccess
+                }
+            } else {
+                true
+            }
+            if (cancellationConfirmed) {
+                workerInputs.remove(request.id)
+                activeUniqueWorkIds.remove(name, request.id)
+            }
+            throw error
+        }
         return request.id
     }
 
@@ -74,12 +120,31 @@ class WorkerRepository(app: Application) {
 
     fun isActiveUniqueWork(name: String, id: UUID) = activeUniqueWorkIds[name] == id
 
+    suspend fun hasActiveUniqueWork(name: String): Boolean {
+        if (activeUniqueWorkIds.containsKey(name)) return true
+        cancelPersistedUniqueWorkIfPresent(name)
+        return false
+    }
+
+    @PublishedApi
+    internal suspend fun cancelPersistedUniqueWorkIfPresent(name: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val persistedWorkIsActive = workManager.getWorkInfosForUniqueWork(name)
+                .get()
+                .any { !it.state.isFinished }
+            if (!persistedWorkIsActive) return@withContext false
+            workManager.cancelUniqueWork(name).result.get()
+            true
+        }
+
     fun clearActiveUniqueWork(name: String, id: UUID) {
         activeUniqueWorkIds.remove(name, id)
         activeWorkerProgressSnapshots.remove(id)
     }
 
-    fun cancelUniqueWork(name: String) {
+    fun cancelUniqueWork(name: String, expectedId: UUID? = null) {
+        val activeId = activeUniqueWorkIds[name]
+        if (expectedId != null && activeId != expectedId) return
         activeUniqueWorkIds.remove(name)?.let { id ->
             workerInputs.remove(id)
             activeWorkerProgressSnapshots.remove(id)

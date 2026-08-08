@@ -66,6 +66,13 @@
             </intent-filter>
 
             <intent-filter>
+                <action android:name="app.urv.manager.action.PATCH_APP" />
+                <action android:name="app.urv.manager.action.CHECK_PATCH_UPDATES" />
+                <action android:name="app.urv.manager.action.SHOW_BATCH_RESULT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
@@ -111,6 +118,11 @@
                 <data android:pathPattern=".*\\.zip" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name="app.urv.manager.ui.BatchActivityProxyActivity"
+            android:excludeFromRecents="true"
+            android:exported="false" />
 
         <activity android:name="app.urv.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />

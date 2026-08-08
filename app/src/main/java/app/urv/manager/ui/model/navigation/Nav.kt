@@ -9,11 +9,29 @@ import app.urv.manager.util.PatchSelection
 import kotlinx.parcelize.Parcelize
 import kotlinx.parcelize.RawValue
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 interface ComplexParameter<T : Parcelable>
 
 @Serializable
 object Dashboard
+
+@Serializable
+data class BatchPatcher(
+    val packageNames: List<String>,
+    val startImmediately: Boolean = false,
+    val showExistingResult: Boolean = false,
+    val manualQueue: Boolean = false,
+    val scheduled: Boolean = false,
+    val requestId: String = UUID.randomUUID().toString()
+)
+
+@Serializable
+data class BatchPatchDetails(val packageName: String)
+
+@Serializable
+data object BatchPatchesSelector :
+    ComplexParameter<SelectedApplicationInfo.PatchesSelector.ViewModelParams>
 
 @Serializable
 object PatchBundleDiscovery
@@ -40,7 +58,11 @@ data object KeystoreCreator
 data object KeystoreConverter
 
 @Serializable
-data class AppSelector(val autoStorage: Boolean = false, val autoStorageReturn: Boolean = false)
+data class AppSelector(
+    val autoStorage: Boolean = false,
+    val autoStorageReturn: Boolean = false,
+    val batchQueue: Boolean = false
+)
 
 @Serializable
 data class InstalledApplicationInfo(val packageName: String, val action: InstalledAppAction? = null)
@@ -89,7 +111,9 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
         val persistConfiguration: Boolean = true,
         val profileId: Int? = null,
         val returnToDashboard: Boolean = false,
-        val requiresSourceSelection: Boolean = false
+        val requiresSourceSelection: Boolean = false,
+        val batchQueue: Boolean = false,
+        val sourceEntryKey: String? = null
     ) : Parcelable
 
     @Serializable
@@ -124,7 +148,8 @@ data object Patcher : ComplexParameter<Patcher.ViewModelParams> {
         val options: @RawValue Options,
         val profileId: Int? = null,
         val profileInstallerToken: String? = null,
-        val autoInstall: Boolean = false
+        val autoInstall: Boolean = false,
+        val sourceEntryKey: String? = null
     ) : Parcelable
 }
 

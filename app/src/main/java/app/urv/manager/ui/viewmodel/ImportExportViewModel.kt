@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
@@ -31,6 +32,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
 import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.worker.AutoPatchWorker
 import app.urv.manager.data.room.bundles.Source as SourceInfo
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
@@ -201,6 +203,31 @@ private data class DecodedPatchSelectionBundleImport(
     val isLegacySelectionOnly: Boolean
 )
 
+internal fun importedPermissionsDeferAutoPatchWork(
+    needsNotificationPermission: Boolean,
+    needsShizukuPermission: Boolean
+): Boolean = needsNotificationPermission || needsShizukuPermission
+
+internal fun importedBackgroundWorkNeedsNotifications(
+    bundleInterval: SearchForUpdatesBackgroundInterval,
+    managerInterval: SearchForUpdatesBackgroundInterval,
+    announcementInterval: SearchForUpdatesBackgroundInterval,
+    autoClearCacheInterval: AutoClearCacheInterval,
+    deliveryMode: BundleUpdateDeliveryMode,
+    autoPatchEnabled: Boolean
+): Boolean = autoPatchEnabled ||
+    bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+    managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+    announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+    autoClearCacheInterval != AutoClearCacheInterval.NEVER ||
+    (
+        deliveryMode == BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED &&
+            (
+                bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
+                    managerInterval != SearchForUpdatesBackgroundInterval.NEVER
+                )
+        )
+
 @OptIn(ExperimentalSerializationApi::class)
 class ImportExportViewModel(
     private val app: Application,
@@ -211,23 +238,34 @@ class ImportExportViewModel(
     private val patchProfileRepository: PatchProfileRepository,
     private val patcherRuntimePluginRepository: PatcherRuntimePluginRepository,
     private val preferencesManager: PreferencesManager,
-    private val workerRepository: WorkerRepository
+    private val workerRepository: WorkerRepository,
+    private val installerManager: InstallerManager
 ) : ViewModel() {
     data class ImportedNotificationRollback(
         val bundleInterval: SearchForUpdatesBackgroundInterval,
         val managerInterval: SearchForUpdatesBackgroundInterval,
         val announcementInterval: SearchForUpdatesBackgroundInterval,
         val autoClearCacheInterval: AutoClearCacheInterval,
-        val deliveryMode: BundleUpdateDeliveryMode
+        val deliveryMode: BundleUpdateDeliveryMode,
+        val autoPatchEnabled: Boolean,
+        val autoPatchInterval: SearchForUpdatesBackgroundInterval,
+        val autoPatchRequiresCharging: Boolean
     )
 
     data class ImportedPermissionRequest(
         val needsStoragePermission: Boolean = false,
         val needsNotificationPermission: Boolean = false,
-        val notificationRollback: ImportedNotificationRollback? = null
+        val needsShizukuPermission: Boolean = false,
+        val notificationRollback: ImportedNotificationRollback? = null,
+        val shizukuAutoInstallRollback: Boolean? = null,
+        val shizukuAutoUninstallRollback: Boolean? = null,
+        val shizukuAutoPatchInstallRollback: Boolean? = null,
+        val shizukuAutoPatchConflictUninstallRollback: Boolean? = null
     ) {
         val isEmpty: Boolean
-            get() = !needsStoragePermission && !needsNotificationPermission
+            get() = !needsStoragePermission &&
+                !needsNotificationPermission &&
+                !needsShizukuPermission
     }
 
     enum class SelectionAction {
@@ -293,15 +331,38 @@ class ImportExportViewModel(
             .copy(needsNotificationPermission = false)
             .takeUnless(ImportedPermissionRequest::isEmpty)
 
-        if (!granted) {
-            viewModelScope.launch {
+        viewModelScope.launch {
+            if (!granted) {
                 rollbackImportedNotificationSettings(request.notificationRollback)
-                scheduleImportedAutoClearCacheWork()
             }
-        } else {
-            viewModelScope.launch {
-                scheduleImportedAutoClearCacheWork()
+            syncImportedPeriodicWork()
+            if (!request.needsShizukuPermission) {
+                syncImportedAutoPatchWork()
             }
+        }
+    }
+
+    fun onImportedShizukuPermissionResult(granted: Boolean) {
+        val request = importedPermissionRequest ?: return
+        importedPermissionRequest = request
+            .copy(needsShizukuPermission = false)
+            .takeUnless(ImportedPermissionRequest::isEmpty)
+        viewModelScope.launch {
+            if (!granted) {
+                preferencesManager.autoInstallWithShizuku.update(
+                    request.shizukuAutoInstallRollback ?: false
+                )
+                preferencesManager.autoUninstallWithShizuku.update(
+                    request.shizukuAutoUninstallRollback ?: false
+                )
+                preferencesManager.restoreAutoPatchShizukuSettings(
+                    installWithShizuku =
+                        request.shizukuAutoPatchInstallRollback ?: false,
+                    uninstallOnConflictWithShizuku =
+                        request.shizukuAutoPatchConflictUninstallRollback ?: false
+                )
+            }
+            syncImportedAutoPatchWork()
         }
     }
 
@@ -1453,8 +1514,21 @@ class ImportExportViewModel(
             refreshImportedPatcherRuntimePlugins(exportFile.settings)
             val permissionRequest = buildImportedPermissionRequest(previousSettings)
             importedPermissionRequest = permissionRequest
-            if (permissionRequest?.needsNotificationPermission != true) {
-                scheduleImportedAutoClearCacheWork()
+            val notificationPermissionPending =
+                permissionRequest?.needsNotificationPermission == true
+            val autoPatchPermissionPending = importedPermissionsDeferAutoPatchWork(
+                needsNotificationPermission = notificationPermissionPending,
+                needsShizukuPermission = permissionRequest?.needsShizukuPermission == true
+            )
+            if (notificationPermissionPending) {
+                suspendImportedPeriodicWork()
+            } else {
+                syncImportedPeriodicWork()
+            }
+            if (autoPatchPermissionPending) {
+                AutoPatchWorker.cancel(app)
+            } else {
+                syncImportedAutoPatchWork()
             }
             onToast(app.getString(R.string.import_manager_settings_success))
         }
@@ -1535,13 +1609,57 @@ class ImportExportViewModel(
                 autoClearCacheInterval = rollback.autoClearCacheInterval,
                 searchForUpdatesBackgroundInterval = rollback.bundleInterval,
                 searchForManagerUpdatesBackgroundInterval = rollback.managerInterval,
-                bundleUpdateDeliveryMode = rollback.deliveryMode
+                bundleUpdateDeliveryMode = rollback.deliveryMode,
+                autoPatchEnabled = rollback.autoPatchEnabled,
+                autoPatchInterval = rollback.autoPatchInterval,
+                autoPatchRequiresCharging = rollback.autoPatchRequiresCharging
             )
         )
     }
 
-    private suspend fun scheduleImportedAutoClearCacheWork() {
-        workerRepository.scheduleAutoClearCacheWork(preferencesManager.autoClearCacheInterval.get())
+    private suspend fun syncImportedPeriodicWork() {
+        workerRepository.scheduleBundleUpdateNotificationWork(
+            preferencesManager.searchForUpdatesBackgroundInterval.get()
+        )
+        workerRepository.scheduleManagerUpdateNotificationWork(
+            preferencesManager.searchForManagerUpdatesBackgroundInterval.get()
+        )
+        workerRepository.scheduleAnnouncementNotificationWork(
+            if (preferencesManager.announcementSystemEnabled.get()) {
+                preferencesManager.announcementPushNotificationInterval.get()
+            } else {
+                SearchForUpdatesBackgroundInterval.NEVER
+            }
+        )
+        workerRepository.scheduleAutoClearCacheWork(
+            preferencesManager.autoClearCacheInterval.get()
+        )
+    }
+
+    private fun suspendImportedPeriodicWork() {
+        workerRepository.scheduleBundleUpdateNotificationWork(
+            SearchForUpdatesBackgroundInterval.NEVER
+        )
+        workerRepository.scheduleManagerUpdateNotificationWork(
+            SearchForUpdatesBackgroundInterval.NEVER
+        )
+        workerRepository.scheduleAnnouncementNotificationWork(
+            SearchForUpdatesBackgroundInterval.NEVER
+        )
+        workerRepository.scheduleAutoClearCacheWork(AutoClearCacheInterval.NEVER)
+    }
+
+    private suspend fun syncImportedAutoPatchWork() {
+        if (preferencesManager.autoPatchEnabled.get()) {
+            AutoPatchWorker.schedule(
+                app,
+                preferencesManager,
+                preferencesManager.autoPatchInterval.get(),
+                preferencesManager.autoPatchRequiresCharging.get()
+            )
+        } else {
+            AutoPatchWorker.cancel(app)
+        }
     }
 
     private suspend fun refreshImportedPatcherRuntimePlugins(
@@ -1570,23 +1688,30 @@ class ImportExportViewModel(
         val announcementInterval = preferencesManager.announcementPushNotificationInterval.get()
         val autoClearCacheInterval = preferencesManager.autoClearCacheInterval.get()
         val deliveryMode = preferencesManager.bundleUpdateDeliveryMode.get()
+        val autoPatchEnabled = preferencesManager.autoPatchEnabled.get()
+        val shizukuAutoInstallEnabled =
+            preferencesManager.autoInstallWithShizuku.get()
+        val shizukuAutoPatchInstallEnabled =
+            preferencesManager.autoPatchInstallWithShizuku.get()
+        val needsShizukuPermission =
+            (shizukuAutoInstallEnabled || shizukuAutoPatchInstallEnabled) &&
+            !installerManager.shizukuStatus(
+                InstallerManager.InstallTarget.PATCHER
+            ).permissionGranted
 
-        val backgroundNotificationsEnabled =
-            bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
-                managerInterval != SearchForUpdatesBackgroundInterval.NEVER ||
-                announcementInterval != SearchForUpdatesBackgroundInterval.NEVER ||
-                autoClearCacheInterval != AutoClearCacheInterval.NEVER ||
-                (
-                    deliveryMode == BundleUpdateDeliveryMode.WEBSOCKET_PREFERRED &&
-                        (
-                            bundleInterval != SearchForUpdatesBackgroundInterval.NEVER ||
-                                managerInterval != SearchForUpdatesBackgroundInterval.NEVER
-                            )
-                    )
+        val backgroundNotificationsEnabled = importedBackgroundWorkNeedsNotifications(
+            bundleInterval = bundleInterval,
+            managerInterval = managerInterval,
+            announcementInterval = announcementInterval,
+            autoClearCacheInterval = autoClearCacheInterval,
+            deliveryMode = deliveryMode,
+            autoPatchEnabled = autoPatchEnabled
+        )
 
         return ImportedPermissionRequest(
             needsStoragePermission = needsStoragePermission,
             needsNotificationPermission = backgroundNotificationsEnabled,
+            needsShizukuPermission = needsShizukuPermission,
             notificationRollback = if (backgroundNotificationsEnabled) {
                 ImportedNotificationRollback(
                     bundleInterval = previousSettings.searchForUpdatesBackgroundInterval
@@ -1598,8 +1723,33 @@ class ImportExportViewModel(
                     autoClearCacheInterval = previousSettings.autoClearCacheInterval
                         ?: AutoClearCacheInterval.NEVER,
                     deliveryMode = previousSettings.bundleUpdateDeliveryMode
-                        ?: BundleUpdateDeliveryMode.AUTO
+                        ?: BundleUpdateDeliveryMode.AUTO,
+                    autoPatchEnabled = previousSettings.autoPatchEnabled ?: false,
+                    autoPatchInterval = previousSettings.autoPatchInterval
+                        ?: SearchForUpdatesBackgroundInterval.DAY,
+                    autoPatchRequiresCharging =
+                        previousSettings.autoPatchRequiresCharging ?: true
                 )
+            } else {
+                null
+            },
+            shizukuAutoInstallRollback = if (needsShizukuPermission) {
+                previousSettings.autoInstallWithShizuku ?: false
+            } else {
+                null
+            },
+            shizukuAutoUninstallRollback = if (needsShizukuPermission) {
+                previousSettings.autoUninstallWithShizuku ?: false
+            } else {
+                null
+            },
+            shizukuAutoPatchInstallRollback = if (needsShizukuPermission) {
+                previousSettings.autoPatchInstallWithShizuku ?: false
+            } else {
+                null
+            },
+            shizukuAutoPatchConflictUninstallRollback = if (needsShizukuPermission) {
+                previousSettings.autoPatchUninstallOnConflictWithShizuku ?: false
             } else {
                 null
             }

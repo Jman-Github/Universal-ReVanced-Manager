@@ -40,12 +40,15 @@ import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.repository.InstalledAppRepository
+import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.remapAndExtractSelection
 import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.toPayload
 import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
+import app.urv.manager.domain.batch.batchOriginalPackageName
+import app.urv.manager.domain.batch.hasBatchShortcutTarget
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.buildSavedAppEntryKey
@@ -54,6 +57,7 @@ import app.urv.manager.util.isSavedAppEntryForPackage
 import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedApkAbiLabel
+import app.urv.manager.util.savedAppLauncherShortcutCapacity
 import app.urv.manager.util.supportsRootMount
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.tag
@@ -263,6 +267,22 @@ class InstalledAppInfoViewModel(
         selection
     }
 
+    fun setAutoPatchEnabledForApp(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val app = installedApp ?: return@launch
+            installedAppRepository.setAutoPatchTarget(app, enabled)
+        }
+
+    fun setLauncherShortcutEnabledForApp(enabled: Boolean) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val app = installedApp ?: return@launch
+            prefs.setSavedAppLauncherShortcutEnabled(
+                packageName = batchOriginalPackageName(app),
+                enabled = enabled,
+                capacity = savedAppLauncherShortcutCapacity(context)
+            )
+        }
+
     private suspend fun resolveDevicePackageName(
         app: InstalledApp,
         savedApk: File? = null
@@ -325,26 +345,36 @@ class InstalledAppInfoViewModel(
             patchSelection = selection
         )
 
-        if (sourceInstallType == InstallType.SAVED) {
-            preserveReplacedInstalledVariant(
+        val pendingHistoricalEntry = if (sourceInstallType == InstallType.SAVED) {
+            prepareReplacedInstalledVariant(
                 targetPackage = targetPackage,
                 newVariantIdentity = newVariantIdentity
             )
+        } else {
+            null
         }
 
-        installedAppRepository.addOrUpdate(
-            currentPackageName = targetPackage,
-            originalPackageName = app.originalPackageName,
-            version = resolvedVersion,
-            installType = installType,
-            patchSelection = selection,
-            selectionPayload = selectionPayload
-        )
+        val persistReplacement: suspend () -> Unit = {
+            installedAppRepository.addOrUpdate(
+                currentPackageName = targetPackage,
+                originalPackageName = app.originalPackageName,
+                version = resolvedVersion,
+                installType = installType,
+                patchSelection = selection,
+                selectionPayload = selectionPayload
+            )
+        }
+        if (pendingHistoricalEntry != null) {
+            pendingHistoricalEntry.commitWith(targetPackage, persistReplacement)
+        } else {
+            persistReplacement()
+        }
 
         // Installing from a saved entry can migrate from a synthetic key
         // (for example, package__saved_<bundle-hash>) to the real package name.
         // Remove the old saved row to avoid duplicate saved+installed entries.
         if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
+            installedAppRepository.migrateAutoPatchTarget(sourceEntryKey, targetPackage)
             installedAppRepository.delete(app)
         }
         if (installType != InstallType.SAVED) {
@@ -353,6 +383,11 @@ class InstalledAppInfoViewModel(
                 installedPackageName = targetPackage,
                 variantIdentity = newVariantIdentity
             )
+        }
+        try {
+            installedAppRepository.pruneRetainedOriginals()
+        } catch (error: Exception) {
+            Log.w(tag, "Failed to prune retained original APKs", error)
         }
 
         val updatedApp = installedAppRepository.get(targetPackage) ?: app.copy(
@@ -364,10 +399,10 @@ class InstalledAppInfoViewModel(
         refreshAppState(updatedApp)
     }
 
-    private suspend fun preserveReplacedInstalledVariant(
+    private suspend fun prepareReplacedInstalledVariant(
         targetPackage: String,
         newVariantIdentity: String
-    ) {
+    ): PendingHistoricalSavedEntry? {
         val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED).filter { savedApp ->
             isSavedAppEntryForPackage(savedApp.currentPackageName, targetPackage)
         }
@@ -376,7 +411,7 @@ class InstalledAppInfoViewModel(
             savedEntryIdentities[savedApp.currentPackageName] = savedVariantIdentity(savedApp)
         }
 
-        val existingTargetEntry = installedAppRepository.get(targetPackage) ?: return
+        val existingTargetEntry = installedAppRepository.get(targetPackage) ?: return null
         val existingInstalledEntry = existingTargetEntry.takeIf { it.installType != InstallType.SAVED }
         val existingInstalledIdentity = existingInstalledEntry?.let { savedVariantIdentity(it) }
         if (
@@ -385,7 +420,7 @@ class InstalledAppInfoViewModel(
             existingInstalledIdentity != newVariantIdentity &&
             existingInstalledIdentity !in savedEntryIdentities.values
         ) {
-            preserveHistoricalInstalledEntry(
+            return installedAppRepository.prepareHistoricalSavedEntry(
                 sourceApp = existingInstalledEntry,
                 targetPackageName = buildSavedAppEntryKey(targetPackage, existingInstalledIdentity)
             )
@@ -393,7 +428,7 @@ class InstalledAppInfoViewModel(
 
         val existingSavedEntryAtBaseKey = existingTargetEntry.takeIf { it.installType == InstallType.SAVED }
         val existingSavedEntryIdentity = existingSavedEntryAtBaseKey?.let { savedVariantIdentity(it) }
-        if (
+        return if (
             existingSavedEntryAtBaseKey != null &&
             existingSavedEntryIdentity != null &&
             existingSavedEntryIdentity != newVariantIdentity &&
@@ -401,10 +436,12 @@ class InstalledAppInfoViewModel(
                 .filterKeys { it != existingSavedEntryAtBaseKey.currentPackageName }
                 .values
         ) {
-            preserveHistoricalInstalledEntry(
+            installedAppRepository.prepareHistoricalSavedEntry(
                 sourceApp = existingSavedEntryAtBaseKey,
                 targetPackageName = buildSavedAppEntryKey(targetPackage, existingSavedEntryIdentity)
             )
+        } else {
+            null
         }
     }
 
@@ -414,33 +451,6 @@ class InstalledAppInfoViewModel(
             selectionPayload = app.selectionPayload,
             patchSelection = resolveAppliedSelection(app)
         )
-
-    private suspend fun preserveHistoricalInstalledEntry(
-        sourceApp: InstalledApp,
-        targetPackageName: String
-    ) {
-        val sourceApk = exactSavedApkFile(sourceApp) ?: return
-        val targetApk = filesystem.getPatchedAppFile(targetPackageName, sourceApp.version)
-        if (!sourceApk.absolutePath.equals(targetApk.absolutePath, ignoreCase = true)) {
-            try {
-                targetApk.parentFile?.mkdirs()
-                sourceApk.copyTo(targetApk, overwrite = true)
-            } catch (error: IOException) {
-                Log.w(tag, "Failed to archive previous patched app for ${sourceApp.currentPackageName}", error)
-                return
-            }
-        }
-        val sourceSelection = resolveAppliedSelection(sourceApp)
-        installedAppRepository.addOrUpdate(
-            currentPackageName = targetPackageName,
-            originalPackageName = sourceApp.originalPackageName,
-            version = sourceApp.version,
-            installType = InstallType.SAVED,
-            patchSelection = sourceSelection,
-            selectionPayload = sourceApp.selectionPayload,
-            createdAtOverride = sourceApp.createdAt
-        )
-    }
 
     private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
         packageName: String,
@@ -454,20 +464,16 @@ class InstalledAppInfoViewModel(
             }
             .forEach { savedEntry ->
                 if (savedVariantIdentity(savedEntry) != variantIdentity) return@forEach
+                installedAppRepository.migrateAutoPatchTarget(
+                    savedEntry.currentPackageName,
+                    installedPackageName
+                )
                 installedAppRepository.delete(savedEntry)
                 filesystem.getPatchedAppFile(
                     savedEntry.currentPackageName,
                     savedEntry.version
                 ).takeIf { it.exists() }?.delete()
             }
-    }
-
-    private fun exactSavedApkFile(app: InstalledApp): File? {
-        val exactCandidates = listOf(
-            filesystem.getPatchedAppFile(app.currentPackageName, app.version),
-            filesystem.getPatchedAppFile(app.originalPackageName, app.version)
-        ).distinct()
-        return exactCandidates.firstOrNull { it.exists() }
     }
 
     private fun markInstallFailure(message: String) {
@@ -1509,6 +1515,28 @@ class InstalledAppInfoViewModel(
             withContext(Dispatchers.IO) {
                 savedApkFile(app)?.delete()
             }
+            val shortcutPackageName = batchOriginalPackageName(app)
+            val shortcutPackages = prefs.savedAppLauncherShortcutPackages.get()
+            val hasRemainingShortcutTarget = withContext(Dispatchers.IO) {
+                hasBatchShortcutTarget(
+                    records = installedAppRepository.getAll().first(),
+                    originalPackageName = shortcutPackageName,
+                    hasSavedCopy = { record ->
+                        filesystem.getPatchedAppFile(
+                            record.currentPackageName,
+                            record.version
+                        ).isFile
+                    }
+                )
+            }
+            if (
+                shortcutPackageName in shortcutPackages &&
+                !hasRemainingShortcutTarget
+            ) {
+                prefs.savedAppLauncherShortcutPackages.update(
+                    shortcutPackages - shortcutPackageName
+                )
+            }
             hasSavedCopy = false
             savedApkAbiLabel = null
             true
@@ -1536,13 +1564,10 @@ class InstalledAppInfoViewModel(
 
     private fun savedApkFile(app: InstalledApp? = this.installedApp): File? {
         val target = app ?: return null
-        val candidates = listOf(
-            filesystem.getPatchedAppFile(target.currentPackageName, target.version),
-            filesystem.getPatchedAppFile(target.originalPackageName, target.version)
-        ).distinct()
-        candidates.firstOrNull { it.exists() }?.let { return it }
-        return filesystem.findPatchedAppFile(target.currentPackageName)
-            ?: filesystem.findPatchedAppFile(target.originalPackageName)
+        return filesystem.getPatchedAppFile(
+            target.currentPackageName,
+            target.version
+        ).takeIf(File::isFile)
     }
 
     private suspend fun refreshAppState(app: InstalledApp) {

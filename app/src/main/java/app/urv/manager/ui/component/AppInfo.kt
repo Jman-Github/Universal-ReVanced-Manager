@@ -97,8 +97,16 @@ fun AppInfo(
 fun appVersionLabel(
     versionName: String,
     appInfo: PackageInfo?,
-    displayVersion: String = versionName
+    displayVersion: String = versionName,
+    versionCodeOverride: Long? = null
 ): String {
+    versionCodeOverride?.let { versionCode ->
+        return stringResource(
+            R.string.app_version_with_code,
+            displayVersion,
+            versionCode
+        )
+    }
     if (appInfo == null) return displayVersion
 
     val versionCode = PackageInfoCompat.getLongVersionCode(appInfo)

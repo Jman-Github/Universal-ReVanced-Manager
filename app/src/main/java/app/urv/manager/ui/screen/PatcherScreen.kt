@@ -161,7 +161,7 @@ fun PatcherScreen(
     val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
 
     LaunchedEffect(patcherSucceeded) {
-        if (patcherSucceeded == true) viewModel.maybeAutoInstallProfile()
+        if (patcherSucceeded == true) viewModel.maybeAutoInstall()
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
@@ -1303,7 +1303,7 @@ fun PatcherScreen(
 }
 
 @Composable
-private fun SavePatchedAppDialog(
+internal fun SavePatchedAppDialog(
     onDismiss: () -> Unit,
     onLeave: () -> Unit,
     onSave: () -> Unit
@@ -1391,28 +1391,28 @@ private fun SavePatchedAppDialog(
     )
 }
 
-private data class ExportApkDialogState(
+internal data class ExportApkDialogState(
     val directory: Path,
     val fileName: String
 )
 
-private data class PendingExportConfirmation(
+internal data class PendingExportConfirmation(
     val directory: Path,
     val fileName: String
 )
 
-private data class LogExportDialogState(
+internal data class LogExportDialogState(
     val directory: Path,
     val fileName: String
 )
 
-private data class PendingLogExportConfirmation(
+internal data class PendingLogExportConfirmation(
     val directory: Path,
     val fileName: String
 )
 
 @Composable
-private fun PatchLogActionsDialog(
+internal fun PatchLogActionsDialog(
     onDismiss: () -> Unit,
     onCopy: () -> Unit,
     onExport: () -> Unit
@@ -1496,7 +1496,7 @@ private fun PatchLogActionsDialog(
 }
 
 @Composable
-private fun ExportApkFileNameDialog(
+internal fun ExportApkFileNameDialog(
     initialName: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit
@@ -1553,7 +1553,7 @@ private fun ExportApkFileNameDialog(
 }
 
 @Composable
-private fun ExportLogFileNameDialog(
+internal fun ExportLogFileNameDialog(
     initialName: String,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit

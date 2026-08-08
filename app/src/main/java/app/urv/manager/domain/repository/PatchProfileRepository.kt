@@ -3,6 +3,7 @@ package app.urv.manager.domain.repository
 import app.urv.manager.data.room.AppDatabase
 import app.urv.manager.data.room.profile.PatchProfileEntity
 import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.domain.manager.InstallerPreferenceTokens
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
@@ -121,12 +122,25 @@ class PatchProfileRepository(
         autoInstall: Boolean
     ): PatchProfile? {
         val existing = dao.get(uid) ?: return null
+        val normalizedInstallerToken = normalizePatchProfileInstallerToken(installerToken)
         val entity = existing.copy(
-            installerToken = installerToken,
-            autoInstall = autoInstall && installerToken != null
+            installerToken = normalizedInstallerToken,
+            autoInstall = autoInstall && normalizedInstallerToken != null
         )
         dao.upsert(entity)
         return entity.toDomain()
+    }
+
+    suspend fun migrateLegacyShizukuInstallerTokens() {
+        patchOptionInputManager.updateReferences {
+            dao.getAll()
+                .filter { it.installerToken == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY }
+                .forEach { entity ->
+                    dao.upsert(
+                        entity.copy(installerToken = InstallerPreferenceTokens.SHIZUKU)
+                    )
+                }
+        }
     }
 
     suspend fun getProfile(uid: Int): PatchProfile? = dao.get(uid)?.toDomain()
@@ -142,14 +156,15 @@ class PatchProfileRepository(
             var skipped = 0
             var nextSortOrder = (dao.getMaxSortOrder() ?: -1) + 1
             for (entry in entries) {
+                val normalizedInstallerToken = normalizePatchProfileInstallerToken(entry.installerToken)
                 val existing = dao.findByPackageAndName(entry.packageName, entry.name)
                 if (existing != null) {
                     val updatedEntity = existing.copy(
                         appVersion = entry.appVersion,
                         useSelectedApkVersion = entry.useSelectedApkVersion,
                         autoPatch = entry.autoPatch,
-                        installerToken = entry.installerToken,
-                        autoInstall = entry.autoInstall && entry.installerToken != null,
+                        installerToken = normalizedInstallerToken,
+                        autoInstall = entry.autoInstall && normalizedInstallerToken != null,
                         payload = entry.payload,
                         createdAt = entry.createdAt ?: existing.createdAt
                     )
@@ -170,8 +185,8 @@ class PatchProfileRepository(
                     apkVersion = null,
                     useSelectedApkVersion = entry.useSelectedApkVersion,
                     autoPatch = entry.autoPatch,
-                    installerToken = entry.installerToken,
-                    autoInstall = entry.autoInstall && entry.installerToken != null,
+                    installerToken = normalizedInstallerToken,
+                    autoInstall = entry.autoInstall && normalizedInstallerToken != null,
                     name = entry.name,
                     payload = entry.payload,
                     createdAt = entry.createdAt ?: System.currentTimeMillis(),
@@ -242,6 +257,13 @@ fun resolvePatchProfileAppVersion(
     }
 }
 
+internal fun normalizePatchProfileInstallerToken(installerToken: String?): String? =
+    if (installerToken == InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY) {
+        InstallerPreferenceTokens.SHIZUKU
+    } else {
+        installerToken
+    }
+
 private fun PatchProfileEntity.toDomain() = PatchProfile(
     uid = uid,
     packageName = packageName,
@@ -251,7 +273,7 @@ private fun PatchProfileEntity.toDomain() = PatchProfile(
     apkVersion = apkVersion,
     useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
-    installerToken = installerToken,
+    installerToken = normalizePatchProfileInstallerToken(installerToken),
     autoInstall = autoInstall,
     name = name,
     createdAt = createdAt,
@@ -271,7 +293,7 @@ private fun PatchProfileEntity.toExportEntry() = PatchProfileExportEntry(
     appVersion = appVersion,
     useSelectedApkVersion = useSelectedApkVersion,
     autoPatch = autoPatch,
-    installerToken = installerToken,
+    installerToken = normalizePatchProfileInstallerToken(installerToken),
     autoInstall = autoInstall,
     createdAt = createdAt,
     payload = payload

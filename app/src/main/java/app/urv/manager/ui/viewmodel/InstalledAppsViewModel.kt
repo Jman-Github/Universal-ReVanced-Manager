@@ -613,15 +613,11 @@ class InstalledAppsViewModel(
         }
     }
 
-    private fun savedApkFile(app: InstalledApp): File? {
-        val candidates = listOf(
-            filesystem.getPatchedAppFile(app.currentPackageName, app.version),
-            filesystem.getPatchedAppFile(app.originalPackageName, app.version)
-        ).distinct()
-        candidates.firstOrNull { it.exists() }?.let { return it }
-        return filesystem.findPatchedAppFile(app.currentPackageName)
-            ?: filesystem.findPatchedAppFile(app.originalPackageName)
-    }
+    private fun savedApkFile(app: InstalledApp): File? =
+        filesystem.getPatchedAppFile(
+            app.currentPackageName,
+            app.version
+        ).takeIf(File::isFile)
 
     private suspend fun clearSavedData(app: InstalledApp, deleteRecord: Boolean): Boolean {
         if (deleteRecord) return deleteAppEntry(app)

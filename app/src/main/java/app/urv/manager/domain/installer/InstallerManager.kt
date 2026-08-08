@@ -64,7 +64,6 @@ class InstallerManager(
         entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
         entryFor(Token.AutoSaved, target, checkRoot = true)?.let(entries::add)
         entryFor(Token.Shizuku, target, checkRoot = true)?.let(entries::add)
-        entryFor(Token.ShizukuGooglePlay, target, checkRoot = true)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities(componentMimeCandidates)
             .filter(::isInstallerCandidate)
@@ -142,18 +141,52 @@ class InstallerManager(
         is Token.Component -> token.componentName.flattenToString()
     }
 
-    fun getPrimaryToken(): Token = parseToken(prefs.installerPrimary.getBlocking())
+    fun getPrimaryToken(): Token = configuredShizukuToken(
+        parseToken(prefs.installerPrimary.getBlocking())
+    )
 
-    fun getFallbackToken(): Token = parseToken(prefs.installerFallback.getBlocking())
+    fun getFallbackToken(): Token = configuredShizukuToken(
+        parseToken(prefs.installerFallback.getBlocking())
+    )
 
     suspend fun updatePrimaryToken(token: Token) {
         Log.d(TAG, "updatePrimaryToken -> ${token.describe()}")
-        prefs.installerPrimary.update(tokenToPreference(token))
+        if (token == Token.ShizukuGooglePlay) {
+            prefs.shizukuInstallAsPlayStore.update(true)
+        }
+        prefs.installerPrimary.update(
+            tokenToPreference(withPlayStoreSource(token, false))
+        )
     }
 
     suspend fun updateFallbackToken(token: Token) {
         Log.d(TAG, "updateFallbackToken -> ${token.describe()}")
-        prefs.installerFallback.update(tokenToPreference(token))
+        if (token == Token.ShizukuGooglePlay) {
+            prefs.shizukuInstallAsPlayStore.update(true)
+        }
+        prefs.installerFallback.update(
+            tokenToPreference(withPlayStoreSource(token, false))
+        )
+    }
+
+    suspend fun updateShizukuPlayStoreMode(enabled: Boolean) {
+        val primary = withPlayStoreSource(
+            parseToken(prefs.installerPrimary.get()),
+            false
+        )
+        val fallback = withPlayStoreSource(
+            parseToken(prefs.installerFallback.get()),
+            false
+        )
+        prefs.installerPrimary.update(tokenToPreference(primary))
+        prefs.installerFallback.update(tokenToPreference(fallback))
+        prefs.shizukuInstallAsPlayStore.update(enabled)
+    }
+
+    private fun configuredShizukuToken(token: Token): Token {
+        val enabled = prefs.shizukuInstallAsPlayStore.getBlocking() ||
+            token == Token.ShizukuGooglePlay
+        return withPlayStoreSource(token, enabled)
     }
 
     fun storedCustomInstallerTokens(): List<Token.Component> = readCustomInstallerTokens()
@@ -425,36 +458,40 @@ class InstallerManager(
                 } else {
                     val shared = copyToShareDir(sourceFile)
                     val uri = InstallerFileProvider.buildUri(app, shared)
-                    val intent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(uri, sourceMimeCandidate.mimeType)
-                        addFlags(
-                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
-                                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION or
-                                Intent.FLAG_ACTIVITY_NEW_TASK
-                        )
-                        clipData = ClipData.newRawUri("APK", uri)
-                        putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                        putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, app.packageName)
-                        component = token.componentName
-                    }
-                    app.grantUriPermission(
-                        token.componentName.packageName,
-                        uri,
-                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    try {
+                        val permissionFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                             Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                             Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-                    )
-                    InstallPlan.External(
-                        target = target,
-                        intent = intent,
-                        sharedFile = shared,
-                        uri = uri,
-                        expectedPackage = expectedPackage,
-                        installerLabel = resolveLabel(token.componentName),
-                        sourceLabel = sourceLabel,
-                        token = token
-                    )
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, sourceMimeCandidate.mimeType)
+                            addFlags(permissionFlags or Intent.FLAG_ACTIVITY_NEW_TASK)
+                            clipData = ClipData.newRawUri("APK", uri)
+                            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+                            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, app.packageName)
+                            component = token.componentName
+                        }
+                        app.grantUriPermission(
+                            token.componentName.packageName,
+                            uri,
+                            permissionFlags
+                        )
+                        InstallPlan.External(
+                            target = target,
+                            intent = intent,
+                            sharedFile = shared,
+                            uri = uri,
+                            expectedPackage = expectedPackage,
+                            installerLabel = resolveLabel(token.componentName),
+                            sourceLabel = sourceLabel,
+                            token = token
+                        )
+                    } catch (error: Throwable) {
+                        runCatching {
+                            app.revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        shared.delete()
+                        throw error
+                    }
                 }
             }
         }
@@ -858,6 +895,32 @@ class InstallerManager(
 
     fun openShizukuApp(): Boolean = shizukuInstaller.launchApp()
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    fun shizukuStatus(target: InstallTarget): ShizukuInstaller.Status =
+        shizukuInstaller.status(target)
+
+    suspend fun uninstallWithShizuku(packageName: String): ShizukuInstaller.OperationResult =
+        shizukuInstaller.uninstall(packageName)
+
+    suspend fun installWithShizuku(
+        apkFile: File,
+        expectedPackage: String,
+        installerPackageNameOverride: String? = null
+    ): ShizukuInstaller.OperationResult =
+        shizukuInstaller.install(apkFile, expectedPackage, installerPackageNameOverride)
+
+    fun isShizukuToken(token: Token?): Boolean =
+        token == Token.Shizuku || token == Token.ShizukuGooglePlay
+
+    fun usesPlayStoreSource(token: Token?): Boolean = token == Token.ShizukuGooglePlay
+
+    fun withPlayStoreSource(token: Token, enabled: Boolean): Token = when (token) {
+        Token.Shizuku,
+        Token.ShizukuGooglePlay -> if (enabled) Token.ShizukuGooglePlay else Token.Shizuku
+        else -> token
+    }
+
     fun formatFailureHint(status: Int, extraMessage: String?): String? {
         val normalizedExtra = extraMessage?.takeIf { it.isNotBlank() }
         val base = when (status) {
@@ -880,6 +943,37 @@ class InstallerManager(
             base == null -> normalizedExtra
             normalizedExtra == null -> base
             else -> app.getString(R.string.installer_hint_with_reason, base, normalizedExtra)
+        }
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/734
+    fun formatShizukuFailure(status: Int, message: String?): String {
+        val raw = message?.takeIf { it.isNotBlank() }
+        val lower = raw.orEmpty().lowercase(Locale.ROOT)
+        val summary = when {
+            status == PackageInstaller.STATUS_FAILURE_BLOCKED ||
+                "permission" in lower || "denied" in lower ->
+                app.getString(R.string.installer_shizuku_error_permission)
+            status == PackageInstaller.STATUS_FAILURE_TIMEOUT ||
+                "timed out" in lower || "timeout" in lower ->
+                app.getString(R.string.installer_shizuku_error_timeout)
+            isVersionDowngrade(raw) ->
+                app.getString(R.string.installer_shizuku_error_downgrade)
+            isSignatureMismatch(raw) ->
+                app.getString(R.string.installer_shizuku_error_signature)
+            status == PackageInstaller.STATUS_FAILURE_INVALID ||
+                "invalid_apk" in lower || "parse_error" in lower ||
+                "failed to parse" in lower ->
+                app.getString(R.string.installer_shizuku_error_invalid_apk)
+            "user_restricted" in lower || "failed_user" in lower || "profile" in lower ->
+                app.getString(R.string.installer_shizuku_error_user_profile)
+            else -> raw ?: app.getString(R.string.installer_hint_generic)
+        }
+        return if (raw != null && raw != summary) {
+            app.getString(R.string.installer_shizuku_install_fail_with_details, summary, raw)
+        } else {
+            app.getString(R.string.installer_shizuku_install_fail, summary)
         }
     }
 

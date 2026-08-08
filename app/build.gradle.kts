@@ -209,7 +209,7 @@ dependencies {
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
 
-    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit"))
 }
 
 buildscript {

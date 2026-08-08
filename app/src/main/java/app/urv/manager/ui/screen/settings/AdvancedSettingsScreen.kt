@@ -1,9 +1,11 @@
 package app.urv.manager.ui.screen.settings
 
+import android.Manifest
 import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.net.Uri
@@ -195,7 +197,10 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.ProcessMemoryLimitDialog
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
+import app.urv.manager.ui.component.patcher.InstallerPickerDialog
+import app.urv.manager.ui.component.patcher.ShizukuConfigurationDialog
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
@@ -203,6 +208,7 @@ import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.applyAppLanguage
 import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.openUrl
+import app.urv.manager.util.permission.hasNotificationPermission
 import app.urv.manager.util.toast
 import app.urv.manager.util.transparentListItemColors
 import app.urv.manager.util.withHapticFeedback
@@ -224,6 +230,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import rikka.shizuku.Shizuku
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.math.ceil
@@ -242,9 +249,101 @@ fun AdvancedSettingsScreen(
     val installerManager: InstallerManager = koinInject()
     var installerDialogTarget by rememberSaveable { mutableStateOf<InstallerDialogTarget?>(null) }
     var showCustomInstallerDialog by rememberSaveable { mutableStateOf(false) }
+    var showShizukuConfigurationDialog by rememberSaveable { mutableStateOf(false) }
+    var showAutoPatchIntervalDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingAutoPatchShizukuPermission by rememberSaveable { mutableStateOf(false) }
+    val shizukuPermissionListener = remember {
+        Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
+            if (
+                requestCode != AUTO_PATCH_SHIZUKU_PERMISSION_REQUEST_CODE ||
+                !pendingAutoPatchShizukuPermission
+            ) {
+                return@OnRequestPermissionResultListener
+            }
+            pendingAutoPatchShizukuPermission = false
+            if (grantResult == PackageManager.PERMISSION_GRANTED) {
+                viewModel.setAutoPatchInstallWithShizuku(true)
+            } else {
+                context.toast(
+                    context.getString(R.string.auto_patch_shizuku_permission_denied)
+                )
+            }
+        }
+    }
+    DisposableEffect(shizukuPermissionListener) {
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+        onDispose {
+            Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        }
+    }
+    val autoPatchNotificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.setAutoPatchEnabled(true)
+        }
+    }
+    val setAutoPatchEnabled: (Boolean) -> Unit = { enabled ->
+        if (!enabled) {
+            pendingAutoPatchShizukuPermission = false
+            viewModel.setAutoPatchEnabled(false)
+        } else if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !context.hasNotificationPermission()
+        ) {
+            autoPatchNotificationPermissionLauncher.launch(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+        } else {
+            viewModel.setAutoPatchEnabled(true)
+        }
+    }
+    val setAutoPatchInstallWithShizuku: (Boolean) -> Unit = { enabled ->
+        if (!enabled) {
+            pendingAutoPatchShizukuPermission = false
+            viewModel.setAutoPatchInstallWithShizuku(false)
+        } else {
+            val status = installerManager.shizukuStatus(
+                InstallerManager.InstallTarget.PATCHER
+            )
+            when {
+                status.permissionGranted ->
+                    viewModel.setAutoPatchInstallWithShizuku(true)
+                status.installed && status.supported && status.running -> {
+                    pendingAutoPatchShizukuPermission = true
+                    runCatching {
+                        Shizuku.requestPermission(
+                            AUTO_PATCH_SHIZUKU_PERMISSION_REQUEST_CODE
+                        )
+                    }.onFailure {
+                        pendingAutoPatchShizukuPermission = false
+                        context.toast(
+                            context.getString(
+                                R.string.auto_patch_shizuku_permission_request_failed
+                            )
+                        )
+                    }
+                }
+                else -> {
+                    status.availability.reason?.let { reason ->
+                        context.toast(context.getString(reason))
+                    }
+                    installerManager.openShizukuApp()
+                }
+            }
+        }
+    }
     val hasOfficialBundle by viewModel.hasOfficialBundle.collectAsStateWithLifecycle(true)
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    var autoPatchShizukuConflictOptionsExpanded by rememberSaveable {
+        mutableStateOf(false)
+    }
+    LaunchedEffect(highlightTarget) {
+        if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
+            autoPatchShizukuConflictOptionsExpanded = true
+        }
+    }
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
@@ -315,7 +414,16 @@ fun AdvancedSettingsScreen(
     LaunchedEffect(searchTarget, mode) {
         val target = searchTarget
         if (target?.destination == mode.destination) {
-            highlightTarget = target.targetId
+            if (
+                target.targetId == R.string.installer_shizuku_configure_title ||
+                target.targetId == R.string.installer_play_store_mode ||
+                target.targetId == R.string.settings_auto_install_with_shizuku ||
+                target.targetId == R.string.settings_auto_uninstall_with_shizuku
+            ) {
+                showShizukuConfigurationDialog = true
+            } else {
+                highlightTarget = target.targetId
+            }
             SettingsSearchState.clear()
         }
     }
@@ -577,6 +685,17 @@ fun AdvancedSettingsScreen(
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
             val chooseInstallerPerInstall by viewModel.prefs.chooseInstallerPerInstall.getAsState()
+            val shizukuInstallAsPlayStore by viewModel.prefs.shizukuInstallAsPlayStore.getAsState()
+            val autoInstallWithShizuku by viewModel.prefs.autoInstallWithShizuku.getAsState()
+            val autoUninstallWithShizuku by viewModel.prefs.autoUninstallWithShizuku.getAsState()
+            val autoPatchEnabled by viewModel.prefs.autoPatchEnabled.getAsState()
+            val autoPatchInstallWithShizuku by
+                viewModel.prefs.autoPatchInstallWithShizuku.getAsState()
+            val autoPatchUninstallOnConflictWithShizuku by
+                viewModel.prefs.autoPatchUninstallOnConflictWithShizuku.getAsState()
+            val autoPatchRequiresCharging by viewModel.prefs.autoPatchRequiresCharging.getAsState()
+            val autoPatchInterval by viewModel.prefs.autoPatchInterval.getAsState()
+            val allowExternalBatchActions by viewModel.prefs.allowExternalBatchActions.getAsState()
             val primaryToken = remember(primaryPreference) { installerManager.parseToken(primaryPreference) }
             val fallbackToken = remember(fallbackPreference) { installerManager.parseToken(fallbackPreference) }
             fun ensureSelection(
@@ -788,6 +907,20 @@ fun AdvancedSettingsScreen(
                 }
             }
 
+            if (showShizukuConfigurationDialog) {
+                ShizukuConfigurationDialog(
+                    installAsPlayStore = shizukuInstallAsPlayStore,
+                    autoInstall = autoInstallWithShizuku,
+                    autoUninstallOnConflict = autoUninstallWithShizuku,
+                    onInstallAsPlayStoreChange =
+                        viewModel::setShizukuInstallAsPlayStore,
+                    onAutoInstallChange = viewModel::setAutoInstallWithShizuku,
+                    onAutoUninstallOnConflictChange =
+                        viewModel::setAutoUninstallWithShizuku,
+                    onDismiss = { showShizukuConfigurationDialog = false }
+                )
+            }
+
             if (showCustomInstallerDialog) {
                 CustomInstallerManagerDialog(
                     installerManager = installerManager,
@@ -800,20 +933,13 @@ fun AdvancedSettingsScreen(
             installerDialogTarget?.let { target ->
                 val isPrimary = target == InstallerDialogTarget.Primary
                 val options = if (isPrimary) primaryEntries else fallbackEntries
-                InstallerSelectionDialog(
+                InstallerPickerDialog(
                     title = stringResource(
                         if (isPrimary) R.string.installer_primary_title else R.string.installer_fallback_title
                     ),
                     options = options,
-                    selected = if (isPrimary) primaryToken else fallbackToken,
-                    blockedToken = if (isPrimary)
-                        fallbackToken.takeUnless { tokensEqual(it, InstallerManager.Token.None) }
-                    else
-                        primaryToken,
-                    blockedStatusLabel = stringResource(
-                        if (isPrimary) R.string.installer_status_fallback_installer
-                        else R.string.installer_status_primary_installer
-                    ),
+                    initialSelection = if (isPrimary) primaryToken else fallbackToken,
+                    confirmLabel = R.string.save,
                     onDismiss = { installerDialogTarget = null },
                     onConfirm = { selection ->
                         if (isPrimary) {
@@ -823,8 +949,243 @@ fun AdvancedSettingsScreen(
                         }
                         installerDialogTarget = null
                     },
-                    onOpenShizuku = installerManager::openShizukuApp,
-                    stripRootNote = true
+                    onOpenShizuku = installerManager::openShizukuApp
+                )
+            }
+
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/795
+            GroupHeader(
+                stringResource(R.string.auto_patch_section),
+                icon = SettingsSectionIcons.Installer
+            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.auto_patch_enabled,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.auto_patch_enabled),
+                        supportingContent = stringResource(
+                            R.string.auto_patch_enabled_description
+                        ),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = autoPatchEnabled,
+                                onCheckedChange = setAutoPatchEnabled
+                            )
+                        },
+                        onClick = { setAutoPatchEnabled(!autoPatchEnabled) }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.auto_patch_install_with_shizuku,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    val controlEnabled = !pendingAutoPatchShizukuPermission &&
+                        (autoPatchEnabled || autoPatchInstallWithShizuku)
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(
+                            R.string.auto_patch_install_with_shizuku
+                        ),
+                        supportingContent = stringResource(
+                            R.string.auto_patch_install_with_shizuku_description
+                        ),
+                        enabled = controlEnabled,
+                        trailingContent = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ExpressiveSettingsSwitch(
+                                    checked = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled,
+                                    onCheckedChange = setAutoPatchInstallWithShizuku
+                                )
+                                IconButton(
+                                    enabled = autoPatchInstallWithShizuku,
+                                    onClick = {
+                                        autoPatchShizukuConflictOptionsExpanded =
+                                            !autoPatchShizukuConflictOptionsExpanded
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (autoPatchShizukuConflictOptionsExpanded) {
+                                            Icons.Outlined.KeyboardArrowUp
+                                        } else {
+                                            Icons.Outlined.KeyboardArrowDown
+                                        },
+                                        contentDescription = null
+                                    )
+                                }
+                            }
+                        },
+                        onClick = {
+                            setAutoPatchInstallWithShizuku(
+                                !autoPatchInstallWithShizuku
+                            )
+                        }
+                    )
+                }
+                if (autoPatchShizukuConflictOptionsExpanded) {
+                    ExpressiveSettingsDivider()
+                    SettingsSearchHighlight(
+                        targetKey = R.string.auto_patch_shizuku_uninstall_on_conflict,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = { highlightTarget = null }
+                    ) { highlightModifier ->
+                        ExpressiveSettingsItem(
+                            modifier = highlightModifier
+                                .padding(start = 24.dp)
+                                .alpha(if (autoPatchInstallWithShizuku) 1f else 0.5f),
+                            headlineContent = stringResource(
+                                R.string.auto_patch_shizuku_uninstall_on_conflict
+                            ),
+                            supportingContent = stringResource(
+                                R.string.auto_patch_shizuku_uninstall_on_conflict_description
+                            ),
+                            enabled = autoPatchInstallWithShizuku,
+                            trailingContent = {
+                                ExpressiveSettingsSwitch(
+                                    checked = autoPatchUninstallOnConflictWithShizuku,
+                                    enabled = autoPatchInstallWithShizuku,
+                                    onCheckedChange =
+                                        viewModel::setAutoPatchUninstallOnConflictWithShizuku
+                                )
+                            },
+                            onClick = {
+                                if (autoPatchInstallWithShizuku) {
+                                    viewModel.setAutoPatchUninstallOnConflictWithShizuku(
+                                        !autoPatchUninstallOnConflictWithShizuku
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.auto_patch_requires_charging,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(
+                            R.string.auto_patch_requires_charging
+                        ),
+                        supportingContent = stringResource(
+                            R.string.auto_patch_requires_charging_description
+                        ),
+                        enabled = autoPatchEnabled,
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = autoPatchRequiresCharging,
+                                enabled = autoPatchEnabled,
+                                onCheckedChange = viewModel::setAutoPatchRequiresCharging
+                            )
+                        },
+                        onClick = {
+                            viewModel.setAutoPatchRequiresCharging(
+                                !autoPatchRequiresCharging
+                            )
+                        }
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.auto_patch_interval,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsConfigurableItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.auto_patch_interval),
+                        supportingContent = stringResource(autoPatchInterval.displayName),
+                        enabled = autoPatchEnabled,
+                        secondaryActionLabel = stringResource(R.string.reset),
+                        onSecondaryAction = {
+                            viewModel.setAutoPatchInterval(
+                                viewModel.prefs.autoPatchInterval.default
+                            )
+                        },
+                        secondaryActionEnabled = autoPatchEnabled &&
+                            autoPatchInterval != viewModel.prefs.autoPatchInterval.default,
+                        primaryActionLabel = stringResource(R.string.configure),
+                        onPrimaryAction = { showAutoPatchIntervalDialog = true },
+                        primaryActionEnabled = autoPatchEnabled
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.batch_patch_external_actions,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(
+                            R.string.batch_patch_external_actions
+                        ),
+                        supportingContent = stringResource(
+                            R.string.batch_patch_external_actions_description
+                        ),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = allowExternalBatchActions,
+                                onCheckedChange =
+                                    viewModel::setAllowExternalBatchActions
+                            )
+                        },
+                        onClick = {
+                            viewModel.setAllowExternalBatchActions(
+                                !allowExternalBatchActions
+                            )
+                        }
+                    )
+                }
+            }
+
+            if (showAutoPatchIntervalDialog) {
+                AlertDialog(
+                    onDismissRequest = { showAutoPatchIntervalDialog = false },
+                    title = {
+                        CenteredDialogTitle(stringResource(R.string.auto_patch_interval))
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showAutoPatchIntervalDialog = false }) {
+                            Text(stringResource(R.string.close))
+                        }
+                    },
+                    text = {
+                        Column {
+                            SearchForUpdatesBackgroundInterval.entries
+                                .filterNot { it == SearchForUpdatesBackgroundInterval.NEVER }
+                                .forEach { interval ->
+                                    ListItem(
+                                        colors = transparentListItemColors,
+                                        leadingContent = {
+                                            RadioButton(
+                                                selected = interval == autoPatchInterval,
+                                                onClick = null
+                                            )
+                                        },
+                                        headlineContent = {
+                                            Text(stringResource(interval.displayName))
+                                        },
+                                        modifier = Modifier.clickable {
+                                            viewModel.setAutoPatchInterval(interval)
+                                            showAutoPatchIntervalDialog = false
+                                        }
+                                    )
+                                }
+                        }
+                    }
                 )
             }
             }
@@ -4323,8 +4684,12 @@ private fun tokensEqual(a: InstallerManager.Token?, b: InstallerManager.Token?):
     a == null || b == null -> false
     a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
         a.componentName == b.componentName
+    a.isShizukuVariant() && b.isShizukuVariant() -> true
     else -> false
 }
+
+private fun InstallerManager.Token.isShizukuVariant(): Boolean =
+    this == InstallerManager.Token.Shizuku || this == InstallerManager.Token.ShizukuGooglePlay
 
 @Composable
 private fun PatcherLogModeDialog(
@@ -4727,3 +5092,5 @@ private fun SearchEngineHostDialog(
         }
     )
 }
+
+private const val AUTO_PATCH_SHIZUKU_PERMISSION_REQUEST_CODE = 795

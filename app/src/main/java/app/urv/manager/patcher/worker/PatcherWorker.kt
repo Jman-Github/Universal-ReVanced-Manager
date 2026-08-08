@@ -150,6 +150,12 @@ class PatcherWorker(
     private var lastPatcherMemoryUsage: PatcherMemoryUsage? = null
     @Volatile
     private var requestedPatcherMemoryLimitMb: Long? = null
+    @Volatile
+    private var batchQueueLabel: String? = null
+    @Volatile
+    private var batchAppLabel: String? = null
+    @Volatile
+    private var allowBackgroundExecution: Boolean = true
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
@@ -185,7 +191,11 @@ class PatcherWorker(
         val splitSelection: SplitSelection?,
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
-        val onEvent: (PatcherWorkerProgressUpdate) -> Unit
+        val onEvent: (PatcherWorkerProgressUpdate) -> Unit,
+        val queuePosition: Int? = null,
+        val queueSize: Int? = null,
+        val appName: String? = null,
+        val allowBackgroundExecution: Boolean = false
     ) {
         val packageName get() = input.packageName
     }
@@ -214,7 +224,10 @@ class PatcherWorker(
     ): Notification {
         val progress = normalizeNotificationProgress(notificationProgress(event, totalPatchCount))
         val contentText = notificationContentText(event, totalPatchCount)
-        return createNotificationBuilder(applicationContext)
+        return createNotificationBuilder(
+            context = applicationContext,
+            title = notificationTitle()
+        )
             .setContentText(contentText)
             .apply {
                 if (progress != null) {
@@ -241,12 +254,19 @@ class PatcherWorker(
             else -> null
         }
 
-        return when {
+        val base = when {
             stepText != null && detail != null -> "$stepText • $detail"
             stepText != null -> stepText
             else -> applicationContext.getText(R.string.patcher_notification_text)
         }
+        return batchQueueLabel?.let { queue -> "$queue • $base" } ?: base
     }
+
+    private fun notificationTitle(): CharSequence = batchAppLabel
+        ?.let { appName ->
+            applicationContext.getString(R.string.batch_patch_patching_app, appName)
+        }
+        ?: applicationContext.getText(R.string.patcher_notification_title)
 
     private fun normalizeNotificationDetail(stepId: StepId?, message: String?): String? {
         val detail = message?.takeIf { it.isNotBlank() } ?: return null
@@ -1292,9 +1312,9 @@ class PatcherWorker(
             while (!workerFinished.get()) {
                 if (isStopped) {
                     cancelActiveRuntimes()
-                } else if (AppForeground.isMainTaskClosed) {
+                } else if (!allowBackgroundExecution && AppForeground.isMainTaskClosed) {
                     cancelForAppClosed("Main activity destroyed")
-                } else if (isAppTaskPresent()) {
+                } else if (allowBackgroundExecution || isAppTaskPresent()) {
                     missingTaskSamples = 0
                 } else {
                     missingTaskSamples++
@@ -1328,6 +1348,19 @@ class PatcherWorker(
 
         return try {
             val args = workerRepository.claimInput(this)
+            allowBackgroundExecution = args.allowBackgroundExecution
+            backgroundExecutionActive = allowBackgroundExecution
+            clearBackgroundExecutionRequested()
+            batchQueueLabel = args.queuePosition?.let { position ->
+                args.queueSize?.let { size ->
+                    applicationContext.getString(
+                        R.string.batch_patch_notification_queue_progress,
+                        position,
+                        size
+                    )
+                }
+            }
+            batchAppLabel = args.appName?.trim()?.takeIf(String::isNotBlank)
             val totalPatchCount = args.selectedPatches.values.sumOf { it.size }
             primeNotificationSplitFlow(args.input)
 
@@ -1343,6 +1376,8 @@ class PatcherWorker(
             result
         } finally {
             workerFinished.set(true)
+            backgroundExecutionActive = false
+            clearBackgroundExecutionRequested()
             stopMonitor.cancel()
             withContext(NonCancellable) {
                 deactivateWorkerProgressState()
@@ -1525,6 +1560,31 @@ class PatcherWorker(
             }
             downloadCleanup = downloadResult.cleanup
             val inputFile = downloadResult.file
+
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/795
+            if (shouldRetainOriginalInput(args.input, inputFile)) {
+                runCatching {
+                    val sourceInfo = pm.getPackageInfo(inputFile)
+                    val sourceVersion = sourceInfo?.versionName
+                        ?.takeIf(String::isNotBlank)
+                        ?: args.input.version.orEmpty()
+                    val sourceVersionCode = sourceInfo?.let(pm::getVersionCode)
+                        ?: args.input.versionCode
+                    fs.saveOriginalAppFile(
+                        packageName = args.packageName,
+                        version = sourceVersion,
+                        versionCode = sourceVersionCode,
+                        source = inputFile
+                    )
+                }.onFailure { error ->
+                    Log.w(
+                        tag,
+                        "Failed to retain original patch input for ${args.packageName}",
+                        error
+                    )
+                }
+            }
 
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
                 ?: throw IllegalStateException("Cannot patch with mixed ReVanced or Morphe bundles.")
@@ -2032,6 +2092,23 @@ class PatcherWorker(
     }
 
     companion object {
+        @Volatile
+        var backgroundExecutionActive: Boolean = false
+            private set
+        @Volatile
+        private var backgroundExecutionRequested: Boolean = false
+
+        val backgroundExecutionAllowed: Boolean
+            get() = backgroundExecutionActive || backgroundExecutionRequested
+
+        fun markBackgroundExecutionRequested() {
+            backgroundExecutionRequested = true
+        }
+
+        fun clearBackgroundExecutionRequested() {
+            backgroundExecutionRequested = false
+        }
+
         private const val LOG_PREFIX = "[Worker]"
         private fun String.logFmt() = "$LOG_PREFIX $this"
         const val UNIQUE_WORK_NAME = "patching"
@@ -2078,7 +2155,10 @@ class PatcherWorker(
             return channel.id
         }
 
-        private fun createNotificationBuilder(context: Context): Notification.Builder {
+        private fun createNotificationBuilder(
+            context: Context,
+            title: CharSequence = context.getText(R.string.patcher_notification_title)
+        ): Notification.Builder {
             val notificationIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }
@@ -2089,7 +2169,7 @@ class PatcherWorker(
                 PendingIntent.FLAG_IMMUTABLE
             )
             return Notification.Builder(context, ensureNotificationChannel(context))
-                .setContentTitle(context.getText(R.string.patcher_notification_title))
+                .setContentTitle(title)
                 .setLargeIcon(Icon.createWithResource(context, R.drawable.ic_notification))
                 .setSmallIcon(Icon.createWithResource(context, R.drawable.ic_notification_status))
                 .setContentIntent(pendingIntent)
@@ -2098,11 +2178,32 @@ class PatcherWorker(
                 .setOnlyAlertOnce(true)
         }
 
-        fun showInitialNotification(context: Context) {
+        fun showInitialNotification(
+            context: Context,
+            appName: String? = null,
+            queuePosition: Int? = null,
+            queueSize: Int? = null
+        ) {
             val manager = context.getSystemService(NotificationManager::class.java) ?: return
             runCatching {
-                val notification = createNotificationBuilder(context)
-                    .setContentText(context.getText(R.string.patcher_notification_text))
+                val title = appName
+                    ?.trim()
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { context.getString(R.string.batch_patch_patching_app, it) }
+                    ?: context.getText(R.string.patcher_notification_title)
+                val queueLabel = queuePosition?.let { position ->
+                    queueSize?.let { size ->
+                        context.getString(
+                            R.string.batch_patch_notification_queue_progress,
+                            position,
+                            size
+                        )
+                    }
+                }
+                val baseText = context.getText(R.string.patcher_notification_text)
+                val contentText = queueLabel?.let { "$it • $baseText" } ?: baseText
+                val notification = createNotificationBuilder(context, title)
+                    .setContentText(contentText)
                     .applyProgressNotification(
                         max = 0,
                         current = 0,
@@ -2168,6 +2269,24 @@ class PatcherWorker(
         }
     }
 
+    private suspend fun shouldRetainOriginalInput(
+        input: SelectedApp,
+        inputFile: File
+    ): Boolean {
+        if (fs.isManagedPatchedAppFile(inputFile)) return false
+        if (input !is SelectedApp.Installed) return true
+
+        val installedInfo = pm.getPackageInfo(input.packageName) ?: return true
+        val installedApk = installedInfo.applicationInfo?.sourceDir
+            ?.let(::File)
+            ?: inputFile
+        return installedAppRepository.getCurrentInstalledRecord(
+            packageName = input.packageName,
+            installedVersion = installedInfo.versionName,
+            installedLastUpdateTime = installedInfo.lastUpdateTime,
+            installedApk = installedApk
+        ) == null
+    }
 
     private suspend fun prepareInstalledInput(packageName: String): DownloadResult = withContext(Dispatchers.IO) {
         val packageInfo = pm.getPackageInfo(packageName)
