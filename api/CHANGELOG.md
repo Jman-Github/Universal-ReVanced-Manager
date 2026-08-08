@@ -254,6 +254,7 @@
 - Updated selected filters on the patch selection and patch bundle discovery screens to use the blue selected-state styling https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/642
 - Added batch patching for multiple apps with preflight checks, reorderable and cancellable queues, per-app patch configuration and progress, retained source APKs and results, install-all support, automatic repatching, launcher shortcuts, and opt-in external automation actions, adapted from https://github.com/MorpheApp/morphe-manager/pull/795
 - Improved the Shizuku/Shevery installer flow with status and configuration controls, Play Store attribution, automatic installation of patched apps, clearer errors, and optional uninstall-and-retry handling for signature conflicts, adapted from https://github.com/MorpheApp/morphe-manager/pull/734
+- Added APK download helper app support as an APK source, including helper discovery and trust management, GitHub source importing and updates, helper installation/uninstallation, and selecting helpers as an APK source when patching, adapted from https://github.com/MorpheApp/morphe-manager/pull/797
 
 
 # Bug fixes

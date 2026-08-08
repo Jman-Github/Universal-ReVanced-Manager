@@ -73,6 +73,7 @@ import app.urv.manager.data.room.apps.downloaded.DownloadedApp
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.network.downloader.ApkDownloadHelperContract
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppInfo
@@ -235,7 +236,11 @@ fun SelectedAppInfoScreen(
         onResult = vm::handlePluginActivityResult
     )
     EventEffect(flow = vm.launchActivityFlow) { intent ->
-        launcher.launch(intent)
+        try {
+            launcher.launch(intent)
+        } catch (error: RuntimeException) {
+            vm.handlePluginActivityLaunchFailure(error)
+        }
     }
     val fs = koinInject<Filesystem>()
     val useCustomFilePicker by vm.prefs.useCustomFilePicker.getAsState()
@@ -431,6 +436,7 @@ fun SelectedAppInfoScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         val plugins by vm.plugins.collectAsStateWithLifecycle(emptyList())
+        val apkDownloadHelpers by vm.apkDownloadHelpers.collectAsStateWithLifecycle(emptyList())
 
         if (vm.showSourceSelector) {
             val requiredVersion by vm.requiredVersion.collectAsStateWithLifecycle(null)
@@ -444,6 +450,7 @@ fun SelectedAppInfoScreen(
 
             AppSourceSelectorDialog(
                 plugins = plugins,
+                apkDownloadHelpers = apkDownloadHelpers,
                 installedApp = vm.installedAppData,
                 searchApp = SelectedApp.Search(
                     vm.packageName,
@@ -456,6 +463,7 @@ fun SelectedAppInfoScreen(
                 requiredVersion = requiredVersion,
                 onDismissRequest = vm::dismissSourceSelector,
                 onSelectPlugin = vm::searchUsingPlugin,
+                onSelectApkDownloadHelper = vm::searchUsingApkDownloadHelper,
                 onSelectDownloaded = vm::selectDownloadedApp,
                 onSelectLocal = vm::requestLocalSelection,
                 onSelect = {
@@ -1211,6 +1219,7 @@ private fun PageItem(
 @Composable
 internal fun AppSourceSelectorDialog(
     plugins: List<LoadedDownloaderPlugin>,
+    apkDownloadHelpers: List<ApkDownloadHelperContract.Helper> = emptyList(),
     installedApp: Pair<SelectedApp.Installed, InstalledApp?>?,
     searchApp: SelectedApp.Search,
     activeSearchJob: String?,
@@ -1220,6 +1229,7 @@ internal fun AppSourceSelectorDialog(
     requiredVersion: String?,
     onDismissRequest: () -> Unit,
     onSelectPlugin: (LoadedDownloaderPlugin) -> Unit,
+    onSelectApkDownloadHelper: (ApkDownloadHelperContract.Helper) -> Unit = {},
     onSelectDownloaded: (DownloadedApp) -> Unit,
     onSelectLocal: (() -> Unit)?,
     onSelect: (SelectedApp) -> Unit,
@@ -1329,6 +1339,19 @@ internal fun AppSourceSelectorDialog(
                             colors = transparentListItemColors
                         )
                     }
+                }
+
+                items(apkDownloadHelpers, key = { it.id }) { helper ->
+                    ListItem(
+                        modifier = Modifier.clickable(enabled = canSelect) {
+                            onSelectApkDownloadHelper(helper)
+                        },
+                        headlineContent = { Text(helper.label) },
+                        supportingContent = { Text(stringResource(R.string.downloader_plugin_type_helper)) },
+                        trailingContent = (@Composable { LoadingIndicator() })
+                            .takeIf { activeSearchJob == helper.id },
+                        colors = transparentListItemColors
+                    )
                 }
 
                 items(plugins, key = { "plugin_${it.id}" }) { plugin ->

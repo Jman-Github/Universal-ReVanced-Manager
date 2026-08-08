@@ -737,7 +737,7 @@ Patch profiles are not affected.</string>
     <string name="downloader_auto_save_latest_only_description">When a plugin downloads another version of the same app, remove older saved downloads and keep only the latest one</string>
     <string name="downloader_url_sources">URL sources</string>
     <string name="downloader_import_url">Import downloader source</string>
-    <string name="downloader_import_url_description">Add downloader plugins from a GitHub repository or release asset URL</string>
+    <string name="downloader_import_url_description">Add downloader plugins or helper apps from a GitHub repository, release, or APK asset URL</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>
     <string name="downloader_source_auto_update">Auto update</string>
@@ -748,7 +748,7 @@ Patch profiles are not affected.</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
     <string name="downloader_source_delete_title">Delete</string>
-    <string name="downloader_source_delete_description">Are you sure you want to delete "%1$s" and its downloaded plugin file?</string>
+    <string name="downloader_source_delete_description">Are you sure you want to delete "%1$s" and its downloaded source APK?</string>
     <string name="downloader_source_revoke_trust_description">Revoke trust for "%1$s"? You can trust it again later</string>
     <string name="downloader_source_state_loaded">Loaded</string>
     <string name="downloader_source_state_missing">File missing. Update to download it again.</string>
@@ -757,6 +757,20 @@ Patch profiles are not affected.</string>
     <string name="downloader_plugin_type_label">Plugin type:</string>
     <string name="downloader_plugin_type_legacy">Local</string>
     <string name="downloader_plugin_type_modern">Remote</string>
+    <string name="downloader_plugin_type_helper">Helper app</string>
+    <string name="downloader_helper_source_required">Select a helper app or another APK source before patching</string>
+    <string name="downloader_helper_source_downloaded">Downloaded. Install this helper app to use it.</string>
+    <string name="downloader_helper_source_update_downloaded">Update downloaded. Install it to update the helper app.</string>
+    <string name="downloader_helper_installed_signer_mismatch">Installed helper signer does not match the trusted source. Uninstall it before installing this source.</string>
+    <string name="downloader_helper_source_installing">Installing helper app…</string>
+    <string name="downloader_helper_source_install">Install</string>
+    <string name="downloader_helper_source_install_success">Helper app installed</string>
+    <string name="downloader_helper_source_trust_dialog_body">Trust this helper app signer for installs and future source updates. The helper runs as a separate Android app and does not run code inside URV Manager.</string>
+    <string name="downloader_helper_installed_trust_dialog_body">Trust this helper app signer to allow URV Manager to use it as an APK source. The helper runs as a separate Android app and does not run code inside URV Manager.</string>
+    <string name="downloader_helper_uninstall_title">Uninstall helper app</string>
+    <string name="downloader_helper_uninstall_description">Uninstall %1$s and remove any helper source APK stored by URV Manager?</string>
+    <string name="downloader_helper_uninstall_success">Uninstalled helper app %1$s</string>
+    <string name="downloader_helper_uninstall_failed">Failed to uninstall helper app %1$s</string>
     <string name="downloader_plugin_state_trusted">Trusted</string>
     <string name="downloader_plugin_state_failed">Failed to load</string>
     <string name="downloader_plugin_state_untrusted">Untrusted</string>
@@ -1569,7 +1583,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="downloader_app_not_found">Downloader did not find the app</string>
     <string name="downloader_error">Downloader error: %s</string>
     <string name="downloader_no_plugins_installed">No downloader plugins added or installed</string>
-    <string name="downloader_no_plugins_available">There are downloader(s) installed but none are trusted. Check your settings.</string>
+    <string name="downloader_no_plugins_available">Downloader sources are configured, but none are currently usable. Check Download settings.</string>
     <string name="downloader_plugin_uninstall_success">Uninstalled %1$s</string>
     <string name="downloader_plugin_uninstall_failed">Failed to uninstall %1$s</string>
     <string name="downloader_update_failed">Failed to update downloader source: %1$s</string>

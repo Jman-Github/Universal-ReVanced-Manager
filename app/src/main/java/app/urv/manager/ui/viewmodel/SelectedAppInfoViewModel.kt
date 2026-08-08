@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Parcelable
 import android.util.Log
 import androidx.activity.result.ActivityResult
@@ -48,6 +49,7 @@ import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.network.downloader.ApkDownloadHelperContract
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.downloader.ParceledDownloaderData
 import app.urv.manager.patcher.patch.PatchBundleInfo.Extensions.requiredOptionsSet
@@ -126,6 +128,7 @@ class SelectedAppInfoViewModel(
     // Recommendation mode scopes the active selection to one bundle, so retain each bundle's custom choices here.
     private val rememberedBundleSelections = mutableMapOf<Int, Set<String>>()
     val plugins = pluginsRepository.loadedPluginsFlow
+    val apkDownloadHelpers = pluginsRepository.trustedApkDownloadHelpers
     val desiredVersion = input.app.version
     val packageName = input.app.packageName
     private val profileId = input.profileId
@@ -838,7 +841,8 @@ class SelectedAppInfoViewModel(
     var showSourceSelector by mutableStateOf(requiresSourceSelection)
         private set
     private var pluginAction: Pair<LoadedDownloaderPlugin, Job>? by mutableStateOf(null)
-    val activePluginAction get() = pluginAction?.first?.id
+    private var helperAction: Pair<ApkDownloadHelperContract.Helper, Job>? by mutableStateOf(null)
+    val activePluginAction get() = pluginAction?.first?.id ?: helperAction?.first?.id
     private var launchedActivity by mutableStateOf<CompletableDeferred<ActivityResult>?>(null)
     private val launchActivityChannel = Channel<Intent>()
     val launchActivityFlow = launchActivityChannel.receiveAsFlow()
@@ -846,24 +850,30 @@ class SelectedAppInfoViewModel(
     private val downloaderEmptyStateFlow = combine(
         pluginsRepository.pluginStates,
         pluginsRepository.sourceStates,
+        pluginsRepository.apkDownloadHelpers,
         pluginsRepository.hasLoadedInitialState
-    ) { pluginStates, sourceStates, hasLoadedDownloaderState ->
-        hasLoadedDownloaderState to (pluginStates.isNotEmpty() || sourceStates.isNotEmpty())
+    ) { pluginStates, sourceStates, helpers, hasLoadedDownloaderState ->
+        hasLoadedDownloaderState to
+            (pluginStates.isNotEmpty() || sourceStates.isNotEmpty() || helpers.isNotEmpty())
     }
 
     val errorFlow = combine(
         plugins,
+        apkDownloadHelpers,
         downloaderEmptyStateFlow,
         downloadedApps,
         snapshotFlow { selectedApp }
-    ) { pluginsList, downloaderEmptyState, downloadedApps, app ->
+    ) { pluginsList, helpers, downloaderEmptyState, downloadedApps, app ->
         val (hasLoadedDownloaderState, hasAnyDownloaderPluginState) = downloaderEmptyState
         when {
             app is SelectedApp.Search &&
-                pluginsList.isEmpty() &&
                 downloadedApps.isEmpty() &&
-                hasLoadedDownloaderState ->
-                if (hasAnyDownloaderPluginState) Error.NoUsablePlugins else Error.NoPluginsInstalled
+                hasLoadedDownloaderState -> when {
+                    pluginsList.isNotEmpty() -> null
+                    helpers.isNotEmpty() -> Error.SourceSelectionRequired
+                    hasAnyDownloaderPluginState -> Error.NoUsablePlugins
+                    else -> Error.NoPluginsInstalled
+                }
             else -> null
         }
     }
@@ -879,7 +889,9 @@ class SelectedAppInfoViewModel(
 
     private fun cancelPluginAction() {
         pluginAction?.second?.cancel()
+        helperAction?.second?.cancel()
         pluginAction = null
+        helperAction = null
     }
 
     fun dismissSourceSelector() {
@@ -1203,6 +1215,172 @@ class SelectedAppInfoViewModel(
         }
     }
 
+    private suspend fun awaitDownloaderActivityResult(intent: Intent): ActivityResult =
+        withContext(Dispatchers.Main) {
+            if (launchedActivity != null) error("Previous activity has not finished")
+            try {
+                val result = with(CompletableDeferred<ActivityResult>()) {
+                    launchedActivity = this
+                    launchActivityChannel.send(intent)
+                    await()
+                }
+                when (result.resultCode) {
+                    Activity.RESULT_OK -> result
+                    Activity.RESULT_CANCELED -> throw UserInteractionException.Activity.Cancelled()
+                    else -> throw UserInteractionException.Activity.NotCompleted(result.resultCode, result.data)
+                }
+            } finally {
+                launchedActivity = null
+            }
+        }
+
+    private suspend fun handleApkDownloadHelperInstalledResult(resultIntent: Intent) {
+        val resultPackageName = ApkDownloadHelperContract.resultPackageName(resultIntent)
+            ?: error("APK download helper did not report the installed package name")
+        check(resultPackageName == packageName) {
+            "APK download helper returned installed package $resultPackageName; expected $packageName"
+        }
+
+        val packageInfo = withContext(Dispatchers.IO) { pm.getPackageInfo(packageName) }
+            ?: error("APK download helper requested an installed app that is no longer installed")
+        val installedVersion = packageInfo.versionName
+            ?.takeUnless { it.isBlank() }
+            ?: error("Installed app does not report a version")
+        val resultVersion = ApkDownloadHelperContract.resultVersionName(resultIntent)
+            ?.takeUnless { it.isBlank() }
+        check(resultVersion == null || resultVersion == installedVersion) {
+            "APK download helper reported installed version $resultVersion; actual version is $installedVersion"
+        }
+
+        val installedRecord = withContext(Dispatchers.IO) {
+            installedAppRepository.get(packageName)
+        }
+        when {
+            installedRecord?.installType == InstallType.MOUNT && !hasRoot ->
+                error(app.getString(R.string.app_source_dialog_option_installed_no_root))
+            installedRecord?.installType == InstallType.DEFAULT ||
+                installedRecord?.installType == InstallType.CUSTOM ->
+                error(app.getString(R.string.already_patched))
+        }
+
+        val required = requiredVersion.first()
+        if (required != null && installedVersion != required) {
+            error(
+                app.getString(
+                    R.string.app_source_dialog_option_installed_version_not_suggested,
+                    installedVersion
+                )
+            )
+        }
+
+        selectedApp = SelectedApp.Installed(
+            packageName = packageName,
+            version = installedVersion,
+            versionCode = pm.getVersionCode(packageInfo)
+        )
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/pull/797
+    fun searchUsingApkDownloadHelper(helper: ApkDownloadHelperContract.Helper) {
+        cancelPluginAction()
+        helperAction = helper to viewModelScope.launch {
+            try {
+                val targetsAllVersions = preferredBundleAllVersionsFlow.value
+                val selectionRecommended = selectionRecommendedVersionFlow.value
+                val override = preferredBundleOverrideFlow.value?.takeUnless { it.isBlank() }
+                val targetVersion = if (targetsAllVersions) {
+                    null
+                } else {
+                    override ?: preferredBundleVersion ?: selectionRecommended ?: desiredVersion
+                }
+                val compatiblePackages = bundleInfoFlow.value
+                    .asSequence()
+                    .flatMap { it.patches.asSequence() }
+                    .flatMap { it.compatiblePackages.orEmpty().asSequence() }
+                    .filter { it.packageName == packageName }
+                    .toList()
+                val compatibleVersionNames = compatiblePackages
+                    .flatMap { it.versions.orEmpty() }
+                    .distinct()
+                val versionCodes = targetVersion
+                    ?.let { version ->
+                        compatiblePackages.flatMap { it.versionCodes?.get(version).orEmpty() }
+                    }
+                    ?.distinct()
+                    ?.toLongArray()
+                    ?: longArrayOf()
+                val appName = selectedAppInfoLabelOverride
+                    ?: selectedAppInfo?.applicationInfo?.loadLabel(app.packageManager)?.toString()
+                    ?: packageName
+                val searchEngineHost = prefs.searchEngineHost.get()
+                    .trim()
+                    .removePrefix("https://")
+                    .removePrefix("http://")
+                    .substringBefore('/')
+                    .substringBefore('?')
+                    .substringBefore('#')
+                    .trim()
+                    .trimEnd('/')
+                    .ifBlank { "google.com" }
+                val fallbackWebUrl = "https://$searchEngineHost/search?q=" +
+                    Uri.encode(listOfNotNull(packageName, targetVersion, "APK").joinToString(" "))
+                val intent = ApkDownloadHelperContract.createRequestIntent(
+                    helper = helper,
+                    callerPackage = app.packageName,
+                    packageName = packageName,
+                    appName = appName,
+                    versionName = targetVersion,
+                    versionCodes = versionCodes,
+                    compatibleVersionNames = compatibleVersionNames,
+                    supportedAbis = Build.SUPPORTED_ABIS,
+                    fileType = null,
+                    allowSplitArchive = true,
+                    stockInstallRequired = false,
+                    fallbackWebUrl = fallbackWebUrl
+                )
+                val result = awaitDownloaderActivityResult(intent)
+                val resultIntent = result.data
+                if (ApkDownloadHelperContract.usesInstalledApp(resultIntent)) {
+                    handleApkDownloadHelperInstalledResult(
+                        resultIntent
+                            ?: error("APK download helper returned an empty installed-app result")
+                    )
+                    return@launch
+                }
+
+                val uri = ApkDownloadHelperContract.resultUri(resultIntent)
+                    ?: error("APK download helper did not return a content URI")
+                check(ApkDownloadHelperContract.grantsReadAccess(resultIntent)) {
+                    "APK download helper did not grant read access to the returned file"
+                }
+                when (val loadResult = withContext(Dispatchers.IO) { loadLocalApk(uri) }) {
+                    is LocalApkLoadResult.Success -> {
+                        if (loadResult.app.packageName != packageName) {
+                            loadResult.app.file.delete()
+                            error(
+                                "APK download helper returned ${loadResult.app.packageName}; " +
+                                    "expected $packageName"
+                            )
+                        }
+                        handleSelectedStorageApk(loadResult.app)
+                    }
+                    LocalApkLoadResult.InvalidType -> error(app.getString(R.string.selected_file_not_supported_apk))
+                    LocalApkLoadResult.Failed -> error(app.getString(R.string.failed_to_load_apk))
+                }
+            } catch (_: UserInteractionException.Activity.Cancelled) {
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                app.toast(app.getString(R.string.downloader_error, e.simpleMessage()))
+                Log.e(TAG, "APK download helper failed", e)
+            } finally {
+                helperAction = null
+                dismissSourceSelector()
+            }
+        }
+    }
+
     fun searchUsingPlugin(plugin: LoadedDownloaderPlugin) {
         cancelPluginAction()
         pluginAction = plugin to viewModelScope.launch {
@@ -1279,6 +1457,10 @@ class SelectedAppInfoViewModel(
 
     fun handlePluginActivityResult(result: ActivityResult) {
         launchedActivity?.complete(result)
+    }
+
+    fun handlePluginActivityLaunchFailure(error: Throwable) {
+        launchedActivity?.completeExceptionally(error)
     }
 
     private fun invalidateSelectedAppInfo() = viewModelScope.launch {
@@ -1529,7 +1711,8 @@ class SelectedAppInfoViewModel(
 
     enum class Error(@param:StringRes val resourceId: Int) {
         NoPluginsInstalled(R.string.downloader_no_plugins_installed),
-        NoUsablePlugins(R.string.downloader_no_plugins_available)
+        NoUsablePlugins(R.string.downloader_no_plugins_available),
+        SourceSelectionRequired(R.string.downloader_helper_source_required)
     }
 
     private fun PatchBundleInfo.Scoped.collectBundleSupport(

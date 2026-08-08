@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.res.AssetManager
 import android.content.res.Resources
+import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
 import app.urv.manager.data.platform.NetworkInfo
@@ -16,6 +17,7 @@ import app.urv.manager.data.room.plugins.TrustedDownloaderPlugin
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.api.successOrThrow
+import app.urv.manager.network.downloader.ApkDownloadHelperContract
 import app.urv.manager.network.downloader.DownloaderPluginSourceEntry
 import app.urv.manager.network.downloader.DownloaderPluginSourceState
 import app.urv.manager.network.downloader.DownloaderPluginState
@@ -74,9 +76,13 @@ class DownloaderPluginRepository(
     private val managedSourceRoot = app.getDir("managed_downloader_plugins", Context.MODE_PRIVATE)
     private val _pluginStates = MutableStateFlow(emptyMap<String, DownloaderPluginState>())
     private val _sourceStates = MutableStateFlow(emptyMap<String, DownloaderPluginSourceState>())
+    private val _apkDownloadHelpers = MutableStateFlow(emptyList<ApkDownloadHelperContract.Helper>())
+    private val _trustedApkDownloadHelpers = MutableStateFlow(emptyList<ApkDownloadHelperContract.Helper>())
     private val _hasLoadedInitialState = MutableStateFlow(false)
     val pluginStates = _pluginStates.asStateFlow()
     val sourceStates = _sourceStates.asStateFlow()
+    val apkDownloadHelpers = _apkDownloadHelpers.asStateFlow()
+    val trustedApkDownloadHelpers = _trustedApkDownloadHelpers.asStateFlow()
     val hasLoadedInitialState = _hasLoadedInitialState.asStateFlow()
     val loadedPluginsFlow = combine(pluginStates, sourceStates) { installed, sources ->
         installed.values
@@ -111,17 +117,73 @@ class DownloaderPluginRepository(
                 )
                     .associate { it.packageName to loadInstalledPlugin(it.packageName) }
             }
+        val apkDownloadHelpers = withContext(Dispatchers.IO) {
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/pull/797
+            ApkDownloadHelperContract.findHelpers(app)
+        }
+        val installedHelperVersions = apkDownloadHelpers
+            .groupBy(ApkDownloadHelperContract.Helper::packageName)
+            .mapValues { (_, helpers) -> helpers.firstNotNullOfOrNull { it.version } }
+        val installedHelperSignatures = withContext(Dispatchers.IO) {
+            apkDownloadHelpers
+                .map(ApkDownloadHelperContract.Helper::packageName)
+                .distinct()
+                .mapNotNull { packageName ->
+                    runCatching { installedSignatureHex(packageName) }
+                        .getOrNull()
+                        ?.let { packageName to it }
+                }
+                .toMap()
+        }
+        val sourceEntries = withContext(Dispatchers.IO) {
+            val storedEntries = readSourceEntries()
+            val scopedEntries = storedEntries.map(::migrateHelperTrustScope)
+            if (scopedEntries != storedEntries) {
+                writeSourceEntries(scopedEntries)
+            }
+            scopedEntries
+        }
         val managedSources =
             withContext(Dispatchers.IO) {
                 buildMap {
-                    readSourceEntries().forEach { entry ->
-                        put(entry.id, loadManagedSource(entry))
+                    sourceEntries.forEach { entry ->
+                        put(
+                            entry.id,
+                            loadManagedSource(
+                                entry,
+                                installedHelperVersions,
+                                installedHelperSignatures
+                            )
+                        )
                     }
                 }
             }
+        val managedHelperPackages = managedSources.values.mapNotNullTo(mutableSetOf()) { source ->
+            when (val state = source.state) {
+                is DownloaderPluginSourceState.State.HelperApp -> state.packageName
+                is DownloaderPluginSourceState.State.Untrusted ->
+                    state.packageName.takeIf { state.helperApp }
+                else -> null
+            }
+        }
+        val trustedStandaloneHelpers = withContext(Dispatchers.IO) { readTrustedApkDownloadHelpers() }
+        val trustedHelpers = apkDownloadHelpers.filter { helper ->
+            val signature = installedHelperSignatures[helper.packageName] ?: return@filter false
+            if (helper.packageName in managedHelperPackages) {
+                managedSources.values.any { source ->
+                    val state = source.state as? DownloaderPluginSourceState.State.HelperApp
+                    state?.packageName == helper.packageName && state.installedSignerTrusted
+                }
+            } else {
+                trustedStandaloneHelpers[helper.packageName] == signature
+            }
+        }
 
         _pluginStates.value = installedPlugins
         _sourceStates.value = managedSources
+        _apkDownloadHelpers.value = apkDownloadHelpers
+        _trustedApkDownloadHelpers.value = trustedHelpers
         installedPluginPackageNames.value = installedPlugins.keys
         _hasLoadedInitialState.value = true
 
@@ -159,15 +221,60 @@ class DownloaderPluginRepository(
         reload()
     }
 
+    suspend fun getManagedSourceApk(id: String): File? = withContext(Dispatchers.IO) {
+        val entry = readSourceEntries().firstOrNull { it.id == id } ?: return@withContext null
+        sourceFile(entry).takeIf(File::isFile)
+    }
+
+    suspend fun removeSources(ids: Set<String>) = withContext(Dispatchers.IO) {
+        if (ids.isEmpty()) return@withContext
+        val entries = readSourceEntries()
+        entries
+            .filter { it.id in ids }
+            .forEach { managedSourceDirectory(it.id).deleteRecursively() }
+        writeSourceEntries(entries.filterNot { it.id in ids })
+        reload()
+    }
+
+    suspend fun trustApkDownloadHelper(
+        packageName: String,
+        expectedSignatureHex: String
+    ) = withContext(Dispatchers.IO) {
+        require(ApkDownloadHelperContract.findHelpers(app).any { it.packageName == packageName }) {
+            "APK download helper $packageName is not installed"
+        }
+        val installedSignature = installedSignatureHex(packageName)
+        require(installedSignature == expectedSignatureHex) {
+            "APK download helper $packageName signer changed before trust was confirmed"
+        }
+        writeTrustedApkDownloadHelpers(
+            readTrustedApkDownloadHelpers() + (packageName to installedSignature)
+        )
+        reload()
+    }
+
+    suspend fun revokeApkDownloadHelperTrust(packageName: String) = withContext(Dispatchers.IO) {
+        writeTrustedApkDownloadHelpers(readTrustedApkDownloadHelpers() - packageName)
+        reload()
+    }
+
+    suspend fun forgetApkDownloadHelper(packageName: String) = withContext(Dispatchers.IO) {
+        writeTrustedApkDownloadHelpers(readTrustedApkDownloadHelpers() - packageName)
+    }
+
     suspend fun trustSource(id: String) = withContext(Dispatchers.IO) {
         val entries = readSourceEntries().toMutableList()
         val index = entries.indexOfFirst { it.id == id }
         if (index == -1) return@withContext
 
         val entry = entries[index]
-        val packageInfo = readArchivePackageInfo(sourceFile(entry))
+        val file = sourceFile(entry)
+        val packageInfo = readArchivePackageInfo(file)
         val signatureHex = archiveSignatureHex(packageInfo)
-        entries[index] = entry.copy(trustedSignatureHex = signatureHex)
+        entries[index] = entry.copy(
+            trustedSignatureHex = signatureHex,
+            trustedAsHelperApp = ApkDownloadHelperContract.isHelperArchive(file, packageInfo)
+        )
         writeSourceEntries(entries)
         reload()
     }
@@ -180,7 +287,10 @@ class DownloaderPluginRepository(
         val entry = entries[index]
         if (entry.trustedSignatureHex == null) return@withContext
 
-        entries[index] = entry.copy(trustedSignatureHex = null)
+        entries[index] = entry.copy(
+            trustedSignatureHex = null,
+            trustedAsHelperApp = false
+        )
         writeSourceEntries(entries)
         reload()
     }
@@ -333,7 +443,11 @@ class DownloaderPluginRepository(
         }
     }
 
-    private suspend fun loadManagedSource(entry: DownloaderPluginSourceEntry): DownloaderPluginSourceState {
+    private suspend fun loadManagedSource(
+        entry: DownloaderPluginSourceEntry,
+        installedHelperVersions: Map<String, String?>,
+        installedHelperSignatures: Map<String, String>
+    ): DownloaderPluginSourceState {
         val file = sourceFile(entry)
         val fallbackName = entry.assetSelector.toReadableSourceName()
         if (!file.exists()) {
@@ -349,42 +463,78 @@ class DownloaderPluginRepository(
         return try {
             ensureManagedSourceIsReadOnly(file)
             val packageInfo = readArchivePackageInfo(file)
+            val helperApp = ApkDownloadHelperContract.isHelperArchive(file, packageInfo)
+            val displayName = pm.getArchiveLabel(file, packageInfo) ?: fallbackName
             when (val trust = verifyArchiveTrust(entry, packageInfo)) {
                 ArchiveTrust.Trusted -> Unit
                 is ArchiveTrust.Untrusted -> {
                     return DownloaderPluginSourceState(
                         entry = entry,
-                        name = fallbackName,
+                        name = displayName,
                         version = packageInfo.versionName,
                         repoUrl = entry.repoUrl,
                         state = DownloaderPluginSourceState.State.Untrusted(
                             packageName = packageInfo.packageName,
-                            signature = trust.signatureHex
+                            signature = trust.signatureHex,
+                            helperApp = helperApp
                         )
                     )
                 }
                 is ArchiveTrust.Mismatch -> {
                     return DownloaderPluginSourceState(
                         entry = entry,
-                        name = fallbackName,
+                        name = displayName,
                         version = packageInfo.versionName,
                         repoUrl = entry.repoUrl,
                         state = DownloaderPluginSourceState.State.Untrusted(
                             packageName = packageInfo.packageName,
-                            signature = trust.signatureHex
+                            signature = trust.signatureHex,
+                            helperApp = helperApp
                         )
                     )
                 }
                 is ArchiveTrust.Unreadable -> {
                     return DownloaderPluginSourceState(
                         entry = entry,
-                        name = fallbackName,
+                        name = displayName,
                         version = packageInfo.versionName,
                         repoUrl = entry.repoUrl,
                         state = DownloaderPluginSourceState.State.Failed(trust.throwable)
                     )
                 }
             }
+
+            if (entry.trustedAsHelperApp && !helperApp) {
+                return DownloaderPluginSourceState(
+                    entry = entry,
+                    name = displayName,
+                    version = packageInfo.versionName,
+                    repoUrl = entry.repoUrl,
+                    state = DownloaderPluginSourceState.State.Untrusted(
+                        packageName = packageInfo.packageName,
+                        signature = archiveSignatureHex(packageInfo),
+                        helperApp = false
+                    )
+                )
+            }
+
+            if (helperApp) {
+                return DownloaderPluginSourceState(
+                    entry = entry,
+                    name = displayName,
+                    version = packageInfo.versionName,
+                    repoUrl = entry.repoUrl,
+                    state = DownloaderPluginSourceState.State.HelperApp(
+                        packageName = packageInfo.packageName,
+                        installed = packageInfo.packageName in installedHelperVersions,
+                        installedVersion = installedHelperVersions[packageInfo.packageName],
+                        installedSignerTrusted = installedHelperSignatures[packageInfo.packageName]
+                            ?.let { it == entry.trustedSignatureHex }
+                            ?: false
+                    )
+                )
+            }
+
             val pluginContext = createArchiveContext(packageInfo)
             val resolved = loadResolvedPluginPackage(
                 packageInfo = packageInfo,
@@ -501,7 +651,43 @@ class DownloaderPluginRepository(
     private fun archiveSignatureHex(packageInfo: PackageInfo): String {
         val signature = pm.getSignature(packageInfo)?.toByteArray()
             ?: throw SecurityException("Failed to read signer for ${packageInfo.packageName}")
-        return signature.joinToString(separator = "") { byte -> "%02X".format(byte) }
+        return signature.toSignatureHex()
+    }
+
+    private fun installedSignatureHex(packageName: String): String =
+        pm.getSignature(packageName).toByteArray().toSignatureHex()
+
+    private fun ByteArray.toSignatureHex(): String =
+        joinToString(separator = "") { byte -> "%02X".format(byte) }
+
+    private suspend fun readTrustedApkDownloadHelpers(): Map<String, String> {
+        val raw = prefs.trustedApkDownloadHelpersJson.get()
+        if (raw.isBlank()) return emptyMap()
+        return runCatching { json.decodeFromString<Map<String, String>>(raw) }
+            .getOrElse {
+                Log.e(tag, "Failed to decode trusted APK download helpers", it)
+                emptyMap()
+            }
+    }
+
+    private suspend fun writeTrustedApkDownloadHelpers(entries: Map<String, String>) {
+        prefs.trustedApkDownloadHelpersJson.update(
+            if (entries.isEmpty()) "" else json.encodeToString<Map<String, String>>(entries.toSortedMap())
+        )
+    }
+
+    private fun migrateHelperTrustScope(
+        entry: DownloaderPluginSourceEntry
+    ): DownloaderPluginSourceEntry {
+        if (entry.trustedSignatureHex == null || entry.trustedAsHelperApp) return entry
+        val file = sourceFile(entry)
+        if (!file.isFile) return entry
+        val packageInfo = runCatching { readArchivePackageInfo(file) }.getOrNull() ?: return entry
+        return if (ApkDownloadHelperContract.isHelperArchive(file, packageInfo)) {
+            entry.copy(trustedAsHelperApp = true)
+        } else {
+            entry
+        }
     }
 
     private suspend fun readSourceEntries(): List<DownloaderPluginSourceEntry> {
@@ -538,6 +724,7 @@ class DownloaderPluginRepository(
                 }
             }
 
+            is ImportRequest.Release,
             is ImportRequest.Repository -> apkAssets
         }
         if (selectedAssets.isEmpty()) {
@@ -632,6 +819,7 @@ class DownloaderPluginRepository(
 
     private suspend fun releaseForImport(importRequest: ImportRequest): GitHubRelease = when (importRequest) {
         is ImportRequest.Repository -> latestImportReleaseFor(importRequest.repoUrl)
+        is ImportRequest.Release -> releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
         is ImportRequest.Asset -> releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
     }
 
@@ -641,11 +829,9 @@ class DownloaderPluginRepository(
             ?: throw Exception("No releases found for $repoUrl")
     }
 
-    private suspend fun releaseForTag(repoUrl: String, releaseTag: String): GitHubRelease {
-        return releaseHistoryFor(repoUrl, prerelease = null, limit = 100)
-            .firstOrNull { it.tagName == releaseTag }
-            ?: throw Exception("Release $releaseTag not found for $repoUrl")
-    }
+    private suspend fun releaseForTag(repoUrl: String, releaseTag: String): GitHubRelease =
+        api.getRepositoryReleaseByTag(repoUrl, releaseTag)
+            .successOrThrow("downloader release $releaseTag for $repoUrl")
 
     private suspend fun releaseHistoryFor(
         repoUrl: String,
@@ -715,6 +901,14 @@ class DownloaderPluginRepository(
                         )
                     }
                 }
+                if (
+                    entry.trustedAsHelperApp &&
+                    !ApkDownloadHelperContract.isHelperArchive(tempFile, packageInfo)
+                ) {
+                    throw SecurityException(
+                        "Trusted helper source ${packageInfo.packageName} no longer implements the APK download helper contract"
+                    )
+                }
             }
             if (target.exists()) target.delete()
             tempFile.copyTo(target, overwrite = true)
@@ -740,6 +934,11 @@ class DownloaderPluginRepository(
             override val repoUrl: String
         ) : ImportRequest
 
+        data class Release(
+            override val repoUrl: String,
+            val releaseTag: String
+        ) : ImportRequest
+
         data class Asset(
             override val repoUrl: String,
             val assetSelector: String,
@@ -756,7 +955,7 @@ class DownloaderPluginRepository(
 
     private fun parseImportUrl(rawUrl: String): ImportRequest {
         val normalizedUrl = extractImportUrl(rawUrl)
-        require(normalizedUrl.isNotBlank()) { "Enter a GitHub repository or release asset URL." }
+        require(normalizedUrl.isNotBlank()) { "Enter a GitHub repository, release, or release asset URL." }
 
         val uri = try {
             URI(normalizedUrl)
@@ -765,20 +964,31 @@ class DownloaderPluginRepository(
         }
         val host = uri.host?.lowercase()
             ?: throw IllegalArgumentException("Unsupported downloader source URL: $normalizedUrl")
-        val parts = uri.path.trim('/').split('/').filter(String::isNotBlank)
+        val parts = uri.rawPath
+            .trim('/')
+            .split('/')
+            .filter(String::isNotBlank)
+            .map { segment -> Uri.decode(segment) }
 
         return when (host) {
             "github.com" -> {
                 require(parts.size >= 2) { "Unsupported downloader source URL: $normalizedUrl" }
                 val repoUrl = githubRepoUrl(parts[0], parts[1])
-                if (parts.size >= 5 && parts[2] == "releases" && parts[3] == "download") {
-                    ImportRequest.Asset(
-                        repoUrl = repoUrl,
-                        assetSelector = canonicalAssetSelector(normalizeAssetSelector(parts.last())),
-                        releaseTag = parts[4]
-                    )
-                } else {
-                    ImportRequest.Repository(repoUrl)
+                when {
+                    parts.size >= 6 && parts[2] == "releases" && parts[3] == "download" -> {
+                        ImportRequest.Asset(
+                            repoUrl = repoUrl,
+                            assetSelector = canonicalAssetSelector(normalizeAssetSelector(parts.last())),
+                            releaseTag = parts[4]
+                        )
+                    }
+                    parts.size >= 5 && parts[2] == "releases" && parts[3] == "tag" -> {
+                        ImportRequest.Release(
+                            repoUrl = repoUrl,
+                            releaseTag = parts[4]
+                        )
+                    }
+                    else -> ImportRequest.Repository(repoUrl)
                 }
             }
 
@@ -787,13 +997,23 @@ class DownloaderPluginRepository(
                 require(reposIndex != -1 && parts.size >= reposIndex + 3) {
                     "Unsupported downloader source URL: $normalizedUrl"
                 }
-                ImportRequest.Repository(
-                    githubRepoUrl(parts[reposIndex + 1], parts[reposIndex + 2])
-                )
+                val repoUrl = githubRepoUrl(parts[reposIndex + 1], parts[reposIndex + 2])
+                if (
+                    parts.size >= reposIndex + 6 &&
+                    parts[reposIndex + 3] == "releases" &&
+                    parts[reposIndex + 4] == "tags"
+                ) {
+                    ImportRequest.Release(
+                        repoUrl = repoUrl,
+                        releaseTag = parts[reposIndex + 5]
+                    )
+                } else {
+                    ImportRequest.Repository(repoUrl)
+                }
             }
 
             else -> throw IllegalArgumentException(
-                "Only GitHub repository or release asset URLs are supported."
+                "Only GitHub repository, release, or release asset URLs are supported."
             )
         }
     }

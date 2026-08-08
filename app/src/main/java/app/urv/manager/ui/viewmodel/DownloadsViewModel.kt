@@ -31,6 +31,8 @@ import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.domain.repository.DownloaderPluginRepository
+import app.urv.manager.network.downloader.ApkDownloadHelperContract
+import app.urv.manager.network.downloader.DownloaderPluginSourceState
 import app.urv.manager.util.PM
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.mutableStateSetOf
@@ -73,10 +75,14 @@ class DownloadsViewModel(
     sealed interface RemoteSourceBusyState {
         data object Importing : RemoteSourceBusyState
         data class Updating(val id: String) : RemoteSourceBusyState
+        data class InstallingHelper(val id: String) : RemoteSourceBusyState
+        data class UninstallingHelper(val packageName: String) : RemoteSourceBusyState
     }
 
     val downloaderPluginStates = downloaderPluginRepository.pluginStates
     val downloaderPluginSourceStates = downloaderPluginRepository.sourceStates
+    val apkDownloadHelpers = downloaderPluginRepository.apkDownloadHelpers
+    val trustedApkDownloadHelpers = downloaderPluginRepository.trustedApkDownloadHelpers
     val downloadedApps = downloadedAppRepository.getAll().map { downloadedApps ->
         downloadedApps.sortedWith(
             compareBy<DownloadedApp> {
@@ -373,7 +379,10 @@ class DownloadsViewModel(
         appContext.toast(appContext.getString(R.string.downloaded_app_install_success))
     }
 
-    private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+    private suspend fun launchExternalInstaller(
+        plan: InstallerManager.InstallPlan.External,
+        successMessage: String = appContext.getString(R.string.downloaded_app_install_success)
+    ) {
         val baseline = pm.getPackageInfo(plan.expectedPackage)?.let { packageInfo ->
             ExternalInstallBaseline(
                 versionCode = pm.getVersionCode(packageInfo),
@@ -390,7 +399,7 @@ class DownloadsViewModel(
 
             val installed = waitForExternalInstall(plan.expectedPackage, baseline)
             if (installed) {
-                showInstallSuccess()
+                appContext.toast(successMessage)
             } else {
                 appContext.toast(
                     appContext.getString(
@@ -429,6 +438,11 @@ class DownloadsViewModel(
         reloadPlugins()
     }
 
+    fun refreshInstalledHelperState() = viewModelScope.launch {
+        if (remoteSourceBusyState != null) return@launch
+        downloaderPluginRepository.reload()
+    }
+
     fun acknowledgeNewPlugins() = viewModelScope.launch {
         downloaderPluginRepository.acknowledgeAllNewPlugins()
     }
@@ -465,6 +479,122 @@ class DownloadsViewModel(
         }
     }
 
+    fun installHelperSource(id: String) {
+        if (remoteSourceBusyState != null || installJob?.isActive == true) return
+        val source = downloaderPluginRepository.sourceStates.value[id] ?: return
+        val helperState = source.state as? DownloaderPluginSourceState.State.HelperApp ?: return
+
+        viewModelScope.launch {
+            remoteSourceBusyState = RemoteSourceBusyState.InstallingHelper(id)
+            try {
+                val apk = downloaderPluginRepository.getManagedSourceApk(id)
+                    ?: error(appContext.getString(R.string.downloader_source_state_missing))
+                val packageInfo = withContext(Dispatchers.IO) {
+                    pm.getPackageInfo(apk)
+                        ?: error(appContext.getString(R.string.failed_to_load_apk))
+                }
+                check(packageInfo.packageName == helperState.packageName) {
+                    "Helper source package changed from ${helperState.packageName} to ${packageInfo.packageName}"
+                }
+                check(ApkDownloadHelperContract.isHelperArchive(apk, packageInfo)) {
+                    "Downloaded APK no longer implements the APK download helper contract"
+                }
+                val sourceLabel = pm.getArchiveLabel(apk, packageInfo) ?: source.name
+                val plan = withContext(Dispatchers.IO) {
+                    installerManager.resolvePlan(
+                        target = InstallerManager.InstallTarget.DOWNLOADER_HELPER,
+                        sourceFile = apk,
+                        expectedPackage = packageInfo.packageName,
+                        sourceLabel = sourceLabel,
+                        allowMount = false
+                    )
+                }
+                val successMessage = appContext.getString(R.string.downloader_helper_source_install_success)
+                when (plan) {
+                    is InstallerManager.InstallPlan.Internal -> installHelperInternally(
+                        apk = apk,
+                        packageName = packageInfo.packageName,
+                        sourceLabel = sourceLabel,
+                        successMessage = successMessage
+                    )
+                    is InstallerManager.InstallPlan.Shizuku -> {
+                        shizukuInstaller.install(
+                            apk,
+                            packageInfo.packageName,
+                            plan.installerPackageNameOverride
+                        )
+                        appContext.toast(successMessage)
+                    }
+                    is InstallerManager.InstallPlan.External -> {
+                        launchExternalInstaller(plan, successMessage)
+                    }
+                    is InstallerManager.InstallPlan.Mount -> error(
+                        "Root mount is not supported for APK download helper apps"
+                    )
+                }
+                downloaderPluginRepository.reload()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to install APK download helper source", error)
+                appContext.toast(
+                    appContext.getString(
+                        R.string.install_app_fail,
+                        error.simpleMessage().orEmpty()
+                    )
+                )
+            } finally {
+                if (remoteSourceBusyState == RemoteSourceBusyState.InstallingHelper(id)) {
+                    remoteSourceBusyState = null
+                }
+            }
+        }
+    }
+
+    private suspend fun installHelperInternally(
+        apk: File,
+        packageName: String,
+        sourceLabel: String,
+        successMessage: String
+    ) {
+        if (!pm.requestInstallPackagesPermission()) {
+            appContext.toast(
+                appContext.getString(R.string.downloaded_app_install_permission_required)
+            )
+            return
+        }
+
+        val result = try {
+            sessionInstaller.install(apk, packageName)
+        } catch (_: InstallCancelledException) {
+            return
+        } catch (error: SessionDeadException) {
+            Log.w(TAG, "PackageInstaller session died while installing helper; using intent fallback", error)
+            launchExternalInstaller(
+                installerManager.createSystemFallbackPlan(
+                    target = InstallerManager.InstallTarget.DOWNLOADER_HELPER,
+                    sourceFile = apk,
+                    expectedPackage = packageName,
+                    sourceLabel = sourceLabel
+                ),
+                successMessage
+            )
+            return
+        }
+
+        when (result) {
+            InstallResult.Success -> appContext.toast(successMessage)
+            is InstallResult.Conflict -> error(
+                result.message ?: appContext.getString(R.string.installer_hint_conflict_generic)
+            )
+            is InstallResult.Failure -> error(
+                installerManager.formatFailureHint(result.status, result.message)
+                    ?: result.message
+                    ?: appContext.getString(R.string.installer_hint_generic)
+            )
+        }
+    }
+
     fun removePluginSource(id: String) = viewModelScope.launch {
         downloaderPluginRepository.removeSource(id)
     }
@@ -484,6 +614,86 @@ class DownloadsViewModel(
 
     fun revokePluginSourceTrust(id: String) = viewModelScope.launch {
         downloaderPluginRepository.revokeTrustForSource(id)
+    }
+
+    fun trustApkDownloadHelper(
+        packageName: String,
+        expectedSignatureHex: String
+    ) = viewModelScope.launch {
+        runCatching {
+            downloaderPluginRepository.trustApkDownloadHelper(packageName, expectedSignatureHex)
+        }.onFailure { error ->
+            appContext.toast(
+                appContext.getString(
+                    R.string.downloader_replace_fail,
+                    error.simpleMessage().orEmpty()
+                )
+            )
+        }
+    }
+
+    fun revokeApkDownloadHelperTrust(packageName: String) = viewModelScope.launch {
+        downloaderPluginRepository.revokeApkDownloadHelperTrust(packageName)
+    }
+
+    fun uninstallApkDownloadHelper(packageName: String) {
+        if (remoteSourceBusyState != null) return
+        viewModelScope.launch {
+            remoteSourceBusyState = RemoteSourceBusyState.UninstallingHelper(packageName)
+            try {
+                val sourceIds = downloaderPluginRepository.sourceStates.value.mapNotNullTo(mutableSetOf()) { (id, source) ->
+                    when (val state = source.state) {
+                        is DownloaderPluginSourceState.State.HelperApp ->
+                            id.takeIf { state.packageName == packageName }
+                        is DownloaderPluginSourceState.State.Untrusted ->
+                            id.takeIf { state.helperApp && state.packageName == packageName }
+                        else -> null
+                    }
+                }
+                val result = withContext(Dispatchers.IO) {
+                    pm.uninstallPackage(packageName)
+                }
+                when (result) {
+                    Session.State.Succeeded -> {
+                        downloaderPluginRepository.forgetApkDownloadHelper(packageName)
+                        if (sourceIds.isNotEmpty()) {
+                            downloaderPluginRepository.removeSources(sourceIds)
+                        } else {
+                            downloaderPluginRepository.reload()
+                        }
+                        appContext.toast(
+                            appContext.getString(
+                                R.string.downloader_helper_uninstall_success,
+                                packageName
+                            )
+                        )
+                    }
+                    is Session.State.Failed<UninstallFailure> -> {
+                        if (result.failure is UninstallFailure.Aborted) return@launch
+                        appContext.toast(
+                            result.failure.message ?: appContext.getString(
+                                R.string.downloader_helper_uninstall_failed,
+                                packageName
+                            )
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to uninstall APK download helper", error)
+                appContext.toast(
+                    appContext.getString(
+                        R.string.downloader_helper_uninstall_failed,
+                        packageName
+                    )
+                )
+            } finally {
+                if (remoteSourceBusyState == RemoteSourceBusyState.UninstallingHelper(packageName)) {
+                    remoteSourceBusyState = null
+                }
+            }
+        }
     }
 
     fun setPluginSourceAutoUpdate(id: String, enabled: Boolean) = viewModelScope.launch {

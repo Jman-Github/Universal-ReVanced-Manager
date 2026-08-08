@@ -859,7 +859,8 @@ class InstallerManager(
         PATCHER(true),
         SAVED_APP(true),
         MANAGER_UPDATE(false),
-        LSPOSED_MODULE(false)
+        LSPOSED_MODULE(false),
+        DOWNLOADER_HELPER(false)
     }
 
     private data class InstallerMimeCandidate(

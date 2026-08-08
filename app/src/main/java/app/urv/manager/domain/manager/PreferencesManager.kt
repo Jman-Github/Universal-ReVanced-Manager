@@ -487,6 +487,7 @@ class PreferencesManager(
 
     val acknowledgedDownloaderPlugins = stringSetPreference("acknowledged_downloader_plugins", emptySet())
     val downloaderPluginSourcesJson = stringPreference("downloader_plugin_sources_json", "")
+    val trustedApkDownloadHelpersJson = stringPreference("trusted_apk_download_helpers_json", "")
     val acknowledgedPatcherRuntimePlugins =
         stringSetPreference("acknowledged_patcher_runtime_plugins", emptySet())
     val trustedPatcherRuntimePluginsJson =
@@ -630,6 +631,7 @@ class PreferencesManager(
         val lsposedModuleHiddenActions: Set<String>? = null,
         val acknowledgedDownloaderPlugins: Set<String>? = null,
         val downloaderPluginSourcesJson: String? = null,
+        val trustedApkDownloadHelpersJson: String? = null,
         val acknowledgedPatcherRuntimePlugins: Set<String>? = null,
         val trustedPatcherRuntimePluginsJson: String? = null,
         val patcherRuntimePluginSourcesJson: String? = null,
@@ -865,6 +867,8 @@ class PreferencesManager(
         return snapshot.copy(
             acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
             downloaderPluginSourcesJson = downloaderPluginSourcesJson.get().takeIf { it.isNotBlank() },
+            trustedApkDownloadHelpersJson =
+                trustedApkDownloadHelpersJson.get().takeIf { it.isNotBlank() },
             acknowledgedPatcherRuntimePlugins = acknowledgedPatcherRuntimePlugins.get(),
             trustedPatcherRuntimePluginsJson =
                 trustedPatcherRuntimePluginsJson.get().takeIf { it.isNotBlank() },
@@ -1089,6 +1093,7 @@ class PreferencesManager(
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
+        snapshot.trustedApkDownloadHelpersJson?.let { trustedApkDownloadHelpersJson.value = it }
         snapshot.acknowledgedPatcherRuntimePlugins?.let {
             acknowledgedPatcherRuntimePlugins.value = it
         }

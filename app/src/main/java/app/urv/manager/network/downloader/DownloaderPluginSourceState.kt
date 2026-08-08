@@ -11,7 +11,8 @@ data class DownloaderPluginSourceEntry(
     val latest: Boolean = false,
     val prerelease: Boolean = false,
     val versionKey: String? = null,
-    val trustedSignatureHex: String? = null
+    val trustedSignatureHex: String? = null,
+    val trustedAsHelperApp: Boolean = false
 )
 
 data class DownloaderPluginSourceState(
@@ -28,7 +29,15 @@ data class DownloaderPluginSourceState(
 
         data class Untrusted(
             val packageName: String,
-            val signature: String
+            val signature: String,
+            val helperApp: Boolean = false
+        ) : State
+
+        data class HelperApp(
+            val packageName: String,
+            val installed: Boolean,
+            val installedVersion: String?,
+            val installedSignerTrusted: Boolean
         ) : State
 
         data object Missing : State

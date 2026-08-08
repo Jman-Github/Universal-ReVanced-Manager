@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Save
@@ -53,6 +54,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +77,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
@@ -134,12 +139,28 @@ fun DownloadsSettingsScreen(
     val installProgress by viewModel.installProgress.collectAsStateWithLifecycle()
     val pluginStates by viewModel.downloaderPluginStates.collectAsStateWithLifecycle(emptyMap())
     val sourceStates by viewModel.downloaderPluginSourceStates.collectAsStateWithLifecycle(emptyMap())
+    val apkDownloadHelpers by viewModel.apkDownloadHelpers.collectAsStateWithLifecycle(emptyList())
+    val trustedApkDownloadHelpers by viewModel.trustedApkDownloadHelpers.collectAsStateWithLifecycle(emptyList())
+    val trustedHelperPackages = remember(trustedApkDownloadHelpers) {
+        trustedApkDownloadHelpers.mapTo(mutableSetOf()) { it.packageName }
+    }
+    val managedHelperPackages = remember(sourceStates) {
+        sourceStates.values.mapNotNull { source ->
+            when (val state = source.state) {
+                is DownloaderPluginSourceState.State.HelperApp -> state.packageName
+                is DownloaderPluginSourceState.State.Untrusted ->
+                    state.packageName.takeIf { state.helperApp }
+                else -> null
+            }
+        }.toSet()
+    }
     val remoteSourceBusyState = viewModel.remoteSourceBusyState
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showHelpDialog by rememberSaveable { mutableStateOf(false) } // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
     val fs: Filesystem = koinInject()
     val installerManager: InstallerManager = koinInject()
@@ -160,6 +181,15 @@ fun DownloadsSettingsScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.acknowledgeNewPlugins()
+    }
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshInstalledHelperState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val permissionLauncher =
@@ -601,6 +631,18 @@ fun DownloadsSettingsScreen(
                     item(key = "source:$sourceId") {
                         var showExceptionViewer by remember { mutableStateOf(false) }
                         var showTrustDialog by remember { mutableStateOf(false) }
+                        var showHelperUninstallDialog by remember { mutableStateOf(false) }
+                        val helperSource = source.state as? DownloaderPluginSourceState.State.HelperApp
+                        val untrustedSource = source.state as? DownloaderPluginSourceState.State.Untrusted
+                        val sourceIsHelper = helperSource != null || untrustedSource?.helperApp == true
+                        val helperPackageName = helperSource?.packageName
+                            ?: untrustedSource?.packageName?.takeIf { untrustedSource.helperApp }
+                        val helperInstalled = helperPackageName != null &&
+                            apkDownloadHelpers.any { it.packageName == helperPackageName }
+                        val installingHelper =
+                            remoteSourceBusyState == DownloadsViewModel.RemoteSourceBusyState.InstallingHelper(sourceId)
+                        val uninstallingHelper = helperPackageName != null &&
+                            remoteSourceBusyState == DownloadsViewModel.RemoteSourceBusyState.UninstallingHelper(helperPackageName)
 
                         if (showExceptionViewer && source.state is DownloaderPluginSourceState.State.Failed) {
                             ExceptionViewerDialog(
@@ -614,20 +656,44 @@ fun DownloadsSettingsScreen(
                         if (showTrustDialog && source.state is DownloaderPluginSourceState.State.Untrusted) {
                             PluginActionDialog(
                                 title = R.string.downloader_plugin_trust_dialog_title,
-                                body = stringResource(R.string.downloader_plugin_trust_dialog_body),
+                                body = stringResource(
+                                    if (source.state.helperApp) {
+                                        R.string.downloader_helper_source_trust_dialog_body
+                                    } else {
+                                        R.string.downloader_plugin_trust_dialog_body
+                                    }
+                                ),
                                 pluginName = source.name.toDownloaderMainName(),
                                 signature = source.state.signature,
                                 primaryLabel = R.string.confirm,
-                                secondaryLabel = R.string.delete,
+                                secondaryLabel = if (source.state.helperApp) null else R.string.delete,
                                 onPrimary = {
                                     viewModel.trustPluginSource(sourceId)
                                     showTrustDialog = false
                                 },
-                                onSecondary = {
-                                    showTrustDialog = false
-                                    sourceIdPendingDeletion = sourceId
+                                onSecondary = if (source.state.helperApp) null else {
+                                    {
+                                        showTrustDialog = false
+                                        sourceIdPendingDeletion = sourceId
+                                    }
                                 },
                                 onDismiss = { showTrustDialog = false }
+                            )
+                        }
+
+                        if (showHelperUninstallDialog && helperPackageName != null) {
+                            ConfirmDialog(
+                                onDismiss = { showHelperUninstallDialog = false },
+                                onConfirm = {
+                                    viewModel.uninstallApkDownloadHelper(helperPackageName)
+                                    showHelperUninstallDialog = false
+                                },
+                                title = stringResource(R.string.downloader_helper_uninstall_title),
+                                description = stringResource(
+                                    R.string.downloader_helper_uninstall_description,
+                                    source.name.toDownloaderDisplayLabel()
+                                ),
+                                icon = Icons.Outlined.Delete
                             )
                         }
 
@@ -639,6 +705,18 @@ fun DownloadsSettingsScreen(
                                     is DownloaderPluginSourceState.State.Loaded ->
                                         R.string.downloader_source_state_loaded
 
+                                    is DownloaderPluginSourceState.State.HelperApp -> when {
+                                        installingHelper -> R.string.downloader_helper_source_installing
+                                        !source.state.installed -> R.string.downloader_helper_source_downloaded
+                                        !source.state.installedSignerTrusted ->
+                                            R.string.downloader_helper_installed_signer_mismatch
+                                        source.version != null &&
+                                            source.state.installedVersion != null &&
+                                            source.version != source.state.installedVersion ->
+                                            R.string.downloader_helper_source_update_downloaded
+                                        else -> R.string.installed
+                                    }
+
                                     is DownloaderPluginSourceState.State.Missing ->
                                         R.string.downloader_source_state_missing
 
@@ -649,43 +727,75 @@ fun DownloadsSettingsScreen(
                                         R.string.downloader_source_state_failed
                                 }
                             ),
-                            type = DownloaderPluginType.Remote,
+                            type = if (sourceIsHelper) DownloaderPluginType.Helper else DownloaderPluginType.Remote,
                             detail = source.repoUrl.toGitHubRepoDisplayName(),
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                            secondaryActionLabel = stringResource(R.string.delete),
-                            onSecondaryAction = { sourceIdPendingDeletion = sourceId },
-                            middleActionLabel = stringResource(R.string.settings),
-                            onMiddleAction = { sourceIdInSettings = sourceId },
-                            primaryActionLabel = stringResource(
-                                if (source.state is DownloaderPluginSourceState.State.Untrusted) {
-                                    R.string.trust
+                            secondaryActionLabel = stringResource(
+                                if (sourceIsHelper) R.string.settings else R.string.delete
+                            ),
+                            onSecondaryAction = {
+                                if (sourceIsHelper) {
+                                    sourceIdInSettings = sourceId
                                 } else {
-                                    R.string.update
+                                    sourceIdPendingDeletion = sourceId
+                                }
+                            },
+                            middleActionLabel = stringResource(
+                                if (sourceIsHelper) R.string.update else R.string.settings
+                            ),
+                            onMiddleAction = {
+                                if (sourceIsHelper) {
+                                    viewModel.updatePluginSource(sourceId)
+                                } else {
+                                    sourceIdInSettings = sourceId
+                                }
+                            },
+                            primaryActionLabel = stringResource(
+                                when {
+                                    sourceIsHelper && untrustedSource == null ->
+                                        R.string.downloader_plugin_revoke_trust
+                                    source.state is DownloaderPluginSourceState.State.Untrusted ->
+                                        R.string.trust
+                                    else -> R.string.update
                                 }
                             ),
-                            primaryActionStyle = if (source.state is DownloaderPluginSourceState.State.Untrusted) {
-                                DownloaderActionStyle.FilledTonal
-                            } else {
-                                DownloaderActionStyle.Outlined
+                            primaryActionStyle = when {
+                                sourceIsHelper -> DownloaderActionStyle.FilledTonal
+                                source.state is DownloaderPluginSourceState.State.Untrusted ->
+                                    DownloaderActionStyle.FilledTonal
+                                else -> DownloaderActionStyle.Outlined
                             },
                             onPrimaryAction = {
-                                if (source.state is DownloaderPluginSourceState.State.Untrusted) {
-                                    showTrustDialog = true
-                                } else {
-                                    viewModel.updatePluginSource(sourceId)
+                                when {
+                                    sourceIsHelper && untrustedSource == null ->
+                                        sourceIdPendingTrustRevoke = sourceId
+                                    source.state is DownloaderPluginSourceState.State.Untrusted ->
+                                        showTrustDialog = true
+                                    else -> viewModel.updatePluginSource(sourceId)
                                 }
                             },
                             primaryActionEnabled = remoteSourceBusyState == null,
                             middleActionEnabled = remoteSourceBusyState == null,
                             secondaryActionEnabled = remoteSourceBusyState == null,
-                            footerActionLabel = stringResource(R.string.downloader_plugin_revoke_trust)
-                                .takeIf {
+                            footerActionLabel = when {
+                                sourceIsHelper && helperInstalled -> stringResource(R.string.uninstall)
+                                helperSource != null -> stringResource(R.string.downloader_helper_source_install)
+                                !sourceIsHelper &&
                                     source.state !is DownloaderPluginSourceState.State.Untrusted &&
-                                        source.state !is DownloaderPluginSourceState.State.Missing
-                                },
+                                    source.state !is DownloaderPluginSourceState.State.Missing ->
+                                    stringResource(R.string.downloader_plugin_revoke_trust)
+                                else -> null
+                            },
                             footerActionStyle = DownloaderActionStyle.FilledTonal,
-                            onFooterAction = { sourceIdPendingTrustRevoke = sourceId },
-                            footerActionEnabled = remoteSourceBusyState == null,
+                            onFooterAction = {
+                                when {
+                                    sourceIsHelper && helperInstalled -> showHelperUninstallDialog = true
+                                    helperSource != null -> viewModel.installHelperSource(sourceId)
+                                    else -> sourceIdPendingTrustRevoke = sourceId
+                                }
+                            },
+                            footerActionEnabled = remoteSourceBusyState == null &&
+                                !installingHelper && !uninstallingHelper,
                             extraSupportingContent = {
                                 if (source.state is DownloaderPluginSourceState.State.Failed) {
                                     TextButton(
@@ -699,6 +809,104 @@ fun DownloadsSettingsScreen(
                         )
                     }
                 }
+                apkDownloadHelpers
+                    .filterNot { it.packageName in managedHelperPackages }
+                    .distinctBy { it.packageName }
+                    .forEach { helper ->
+                        item(key = "helper:${helper.packageName}") {
+                            var showTrustDialog by remember { mutableStateOf(false) }
+                            var showRevokeDialog by remember { mutableStateOf(false) }
+                            var showUninstallDialog by remember { mutableStateOf(false) }
+                            val trusted = helper.packageName in trustedHelperPackages
+                            val signerSnapshot = remember(showTrustDialog, helper.packageName) {
+                                if (!showTrustDialog) return@remember null
+                                runCatching {
+                                    val signerBytes = viewModel.pm.getSignature(helper.packageName).toByteArray()
+                                    val signatureHex = signerBytes.toHexString(format = HexFormat.UpperCase)
+                                    val fingerprint = MessageDigest.getInstance("SHA-256")
+                                        .digest(signerBytes)
+                                        .toHexString(format = HexFormat.UpperCase)
+                                    signatureHex to fingerprint
+                                }.getOrNull()
+                            }
+
+                            if (showTrustDialog) {
+                                PluginActionDialog(
+                                    title = R.string.downloader_plugin_trust_dialog_title,
+                                    body = stringResource(R.string.downloader_helper_installed_trust_dialog_body),
+                                    pluginName = helper.label.toDownloaderMainName(),
+                                    signature = signerSnapshot?.second.orEmpty(),
+                                    primaryLabel = R.string.confirm,
+                                    secondaryLabel = null,
+                                    onPrimary = {
+                                        signerSnapshot?.first?.let { expectedSignature ->
+                                            viewModel.trustApkDownloadHelper(
+                                                helper.packageName,
+                                                expectedSignature
+                                            )
+                                        }
+                                        showTrustDialog = false
+                                    },
+                                    onSecondary = null,
+                                    onDismiss = { showTrustDialog = false }
+                                )
+                            }
+                            if (showRevokeDialog) {
+                                ConfirmDialog(
+                                    title = stringResource(R.string.downloader_plugin_revoke_trust_dialog_title),
+                                    description = stringResource(
+                                        R.string.downloader_source_revoke_trust_description,
+                                        helper.label.toDownloaderDisplayLabel()
+                                    ),
+                                    icon = Icons.Outlined.WarningAmber,
+                                    onDismiss = { showRevokeDialog = false },
+                                    onConfirm = {
+                                        viewModel.revokeApkDownloadHelperTrust(helper.packageName)
+                                        showRevokeDialog = false
+                                    }
+                                )
+                            }
+                            if (showUninstallDialog) {
+                                ConfirmDialog(
+                                    title = stringResource(R.string.downloader_helper_uninstall_title),
+                                    description = stringResource(
+                                        R.string.downloader_helper_uninstall_description,
+                                        helper.label.toDownloaderDisplayLabel()
+                                    ),
+                                    icon = Icons.Outlined.Delete,
+                                    onDismiss = { showUninstallDialog = false },
+                                    onConfirm = {
+                                        viewModel.uninstallApkDownloadHelper(helper.packageName)
+                                        showUninstallDialog = false
+                                    }
+                                )
+                            }
+
+                            DownloaderPluginCard(
+                                title = helper.label.toDownloaderMainName(),
+                                version = helper.version,
+                                status = stringResource(
+                                    if (trusted) R.string.installed
+                                    else R.string.downloader_plugin_state_untrusted
+                                ),
+                                type = DownloaderPluginType.Helper,
+                                detail = helper.packageName,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                                primaryActionLabel = stringResource(
+                                    if (trusted) R.string.downloader_plugin_revoke_trust else R.string.trust
+                                ),
+                                primaryActionStyle = DownloaderActionStyle.FilledTonal,
+                                onPrimaryAction = {
+                                    if (trusted) showRevokeDialog = true else showTrustDialog = true
+                                },
+                                primaryActionEnabled = remoteSourceBusyState == null,
+                                footerActionLabel = stringResource(R.string.uninstall),
+                                footerActionStyle = DownloaderActionStyle.FilledTonal,
+                                onFooterAction = { showUninstallDialog = true },
+                                footerActionEnabled = remoteSourceBusyState == null
+                            )
+                        }
+                    }
                 pluginStates.forEach { (packageName, state) ->
                     item(key = packageName) {
                         var dialogType by remember { mutableStateOf<PluginDialogType?>(null) }
@@ -859,7 +1067,7 @@ fun DownloadsSettingsScreen(
                         )
                     }
                 }
-                if (pluginStates.isEmpty() && sourceStates.isEmpty()) {
+                if (pluginStates.isEmpty() && sourceStates.isEmpty() && apkDownloadHelpers.isEmpty()) {
                     item {
                         Text(
                             stringResource(R.string.downloader_no_plugins_installed),
@@ -969,7 +1177,8 @@ private data class PendingDownloadedAppsExportConfirmation(
 
 private enum class DownloaderPluginType(@StringRes val labelRes: Int) {
     Local(R.string.downloader_plugin_type_legacy),
-    Remote(R.string.downloader_plugin_type_modern)
+    Remote(R.string.downloader_plugin_type_modern),
+    Helper(R.string.downloader_plugin_type_helper)
 }
 
 private enum class DownloaderActionStyle {
@@ -999,10 +1208,10 @@ private fun DownloaderPluginCard(
     status: String,
     type: DownloaderPluginType,
     detail: String,
-    primaryActionLabel: String,
-    secondaryActionLabel: String,
-    onPrimaryAction: () -> Unit,
-    onSecondaryAction: () -> Unit,
+    primaryActionLabel: String? = null,
+    secondaryActionLabel: String? = null,
+    onPrimaryAction: (() -> Unit)? = null,
+    onSecondaryAction: (() -> Unit)? = null,
     middleActionLabel: String? = null,
     onMiddleAction: (() -> Unit)? = null,
     footerActionLabel: String? = null,
@@ -1049,49 +1258,45 @@ private fun DownloaderPluginCard(
                 }
             }
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = onSecondaryAction,
-                enabled = secondaryActionEnabled,
-                modifier = Modifier.weight(1f)
+        val hasRowAction =
+            (secondaryActionLabel != null && onSecondaryAction != null) ||
+                (middleActionLabel != null && onMiddleAction != null) ||
+                (primaryActionLabel != null && onPrimaryAction != null)
+        if (hasRowAction) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(
-                    text = secondaryActionLabel,
-                    maxLines = 1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .basicMarquee(),
-                    textAlign = TextAlign.Center
-                )
-            }
-            if (middleActionLabel != null && onMiddleAction != null) {
-                OutlinedButton(
-                    onClick = onMiddleAction,
-                    enabled = middleActionEnabled,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(
-                        text = middleActionLabel,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .basicMarquee(),
-                        textAlign = TextAlign.Center
+                if (secondaryActionLabel != null && onSecondaryAction != null) {
+                    OutlinedButton(
+                        onClick = onSecondaryAction,
+                        enabled = secondaryActionEnabled,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        DownloaderActionText(secondaryActionLabel)
+                    }
+                }
+                if (middleActionLabel != null && onMiddleAction != null) {
+                    OutlinedButton(
+                        onClick = onMiddleAction,
+                        enabled = middleActionEnabled,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        DownloaderActionText(middleActionLabel)
+                    }
+                }
+                if (primaryActionLabel != null && onPrimaryAction != null) {
+                    DownloaderActionButton(
+                        label = primaryActionLabel,
+                        onClick = onPrimaryAction,
+                        enabled = primaryActionEnabled,
+                        modifier = Modifier.weight(1f),
+                        style = primaryActionStyle
                     )
                 }
             }
-            DownloaderActionButton(
-                label = primaryActionLabel,
-                onClick = onPrimaryAction,
-                enabled = primaryActionEnabled,
-                modifier = Modifier.weight(1f),
-                style = primaryActionStyle
-            )
         }
         if (footerActionLabel != null && onFooterAction != null) {
             DownloaderActionButton(
@@ -1154,6 +1359,7 @@ private fun DownloaderPluginLeadingIcon(
     val icon = when (type) {
         DownloaderPluginType.Local -> Icons.Outlined.Folder
         DownloaderPluginType.Remote -> Icons.Outlined.Link
+        DownloaderPluginType.Helper -> Icons.Outlined.Download
     }
     Card(
         shape = RoundedCornerShape(18.dp),
@@ -1489,9 +1695,9 @@ private fun PluginActionDialog(
     pluginName: String,
     signature: String,
     @StringRes primaryLabel: Int,
-    @StringRes secondaryLabel: Int = R.string.uninstall,
+    @StringRes secondaryLabel: Int? = R.string.uninstall,
     onPrimary: () -> Unit,
-    onSecondary: () -> Unit,
+    onSecondary: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -1559,8 +1765,10 @@ private fun PluginActionDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onSecondary) {
-                Text(stringResource(secondaryLabel))
+            if (secondaryLabel != null && onSecondary != null) {
+                TextButton(onClick = onSecondary) {
+                    Text(stringResource(secondaryLabel))
+                }
             }
         },
         confirmButton = {
