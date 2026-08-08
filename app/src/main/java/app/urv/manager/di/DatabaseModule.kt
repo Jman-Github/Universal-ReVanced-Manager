@@ -1,0 +1,54 @@
+package app.urv.manager.di
+
+import android.content.Context
+import androidx.room.Room
+import app.urv.manager.data.room.AppDatabase
+import app.urv.manager.data.room.MIGRATION_1_2
+import app.urv.manager.data.room.MIGRATION_2_3
+import app.urv.manager.data.room.MIGRATION_3_4
+import app.urv.manager.data.room.MIGRATION_4_5
+import app.urv.manager.data.room.MIGRATION_5_6
+import app.urv.manager.data.room.MIGRATION_6_7
+import app.urv.manager.data.room.MIGRATION_7_8
+import app.urv.manager.data.room.MIGRATION_8_9
+import app.urv.manager.data.room.MIGRATION_9_10
+import app.urv.manager.data.room.MIGRATION_10_11
+import app.urv.manager.data.room.MIGRATION_11_12
+import app.urv.manager.data.room.MIGRATION_12_13
+import app.urv.manager.data.room.MIGRATION_13_14
+import app.urv.manager.data.room.MIGRATION_14_15
+import app.urv.manager.data.room.MIGRATION_15_16
+import app.urv.manager.data.room.MIGRATION_16_17
+import app.urv.manager.data.room.MIGRATION_17_18
+import org.koin.android.ext.koin.androidContext
+import org.koin.dsl.module
+
+val databaseModule = module {
+    fun provideAppDatabase(context: Context) =
+        Room.databaseBuilder(context, AppDatabase::class.java, "manager")
+            .addMigrations(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+                MIGRATION_9_10,
+                MIGRATION_10_11,
+                MIGRATION_11_12,
+                MIGRATION_12_13,
+                MIGRATION_13_14,
+                MIGRATION_14_15,
+                MIGRATION_15_16,
+                MIGRATION_16_17,
+                MIGRATION_17_18
+            )
+            .build()
+
+    single {
+        provideAppDatabase(androidContext())
+    }
+    single { get<AppDatabase>().lsposedModuleDao() }
+}

@@ -50,6 +50,10 @@ hs_err_pid*
 # Gradle
 .idea/**/gradle.xml
 .idea/**/libraries
+.gradle-user-home
+.gradle-tmp
+.gradle-validation-home
+.gradle-home
 
 # Gradle and Maven with auto-import
 # When using Gradle or Maven with auto-import, you should exclude module files,
@@ -129,6 +133,8 @@ node_modules/
 .kotlin/
 
 local.properties
+app/keystore.jks
+.android/
 
 .cxx
 AGENTS.md

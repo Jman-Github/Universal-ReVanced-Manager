@@ -422,7 +422,7 @@ Osperfis de patches não serão afetados.</string>
     <string name="downloader_plugin_state_failed">Falha ao carregar. Clique para mais detalhes</string>
     <string name="downloader_plugin_state_untrusted">Não confiável</string>
     <string name="downloader_plugin_trust_dialog_title">Confiar no plugin?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">Remover confiança?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">Remover confiança</string>
     <string name="downloader_plugin_trust_dialog_body">Continuar permitirá que este plugin execute no seu sistema.\n\nAtive isso apenas se você confia neste plugin. Plugins podem exucutar código arbitrariamente e comprometer seu dispositivo.</string>
     <string name="downloader_plugin_trust_dialog_signature">Assinatura:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
@@ -458,18 +458,10 @@ Osperfis de patches não serão afetados.</string>
     <string name="dark">Escuro</string>
     <string name="appearance">Aparência</string>
     <string name="downloaded_apps">Aplicativos baixados</string>
-    <string name="process_runtime">Executar patcher em outro processo (experimental)</string>
-    <string name="process_runtime_description">Isso é mais rápido e permite o patcher usar mais memória</string>
-    <string name="process_runtime_effective_limit_format">Limite efetivo: %1$d MB</string>
-    <string name="process_runtime_effective_limit_disabled">Limite efetivo: Desativado</string>
     <string name="strip_unused_libs">Remover bibliotecas nativas não utilizadas</string>
     <string name="strip_unused_libs_description">Remover todas as bibliotecas nativas, exceto uma única arquitetura de CPU suportada de aplicativos alterados</string>
     <string name="skip_unneeded_split_apks">Pular split APKs desnecessários</string>
     <string name="skip_unneeded_split_apks_description">Pular módulos split APK que não correspondem a este dispositivo (por exemplo, idioma ou densidade)</string>
-    <string name="process_runtime_memory_limit">Limite de memória do processo do patcher</string>
-    <string name="process_runtime_memory_limit_description">A quantidade máxima de memória que o processo do patcher pode usar (em megabytes)</string>
-    <string name="process_runtime_memory_aggressive">Limite de memória agressivo do patcher</string>
-    <string name="process_runtime_memory_aggressive_description">Usar o limite máximo de memória permitido pelo seu dispositivo para o patcher experimental</string>
     <string name="reset_to_recommended">Restaurar para o recomendado</string>
     <string name="patcher_auto_collapse_steps">Auto-recolher etapas completas do patcher</string>
     <string name="patcher_auto_collapse_steps_description">Recolher automaticamente cada widget de progresso do patcher depois da conclusão de todas as suas etapas</string>
@@ -707,11 +699,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="patch_profile_bundle_override_title">Permitir sobreposição de pacote incompatível</string>
     <string name="patch_profile_bundle_override_description">Exibir um botão de substituição exclusivo para desenvolvedores quando um pacote de perfil de patches for incompatível.</string>
     <string name="patcher_process_exit_message">O processo do patcher foi encerrado com o código %1$d.</string>
-    <string name="patcher_memory_adjustment_title">O patcher ficou sem memória.</string>
-    <string name="patcher_memory_adjustment_message_reduced">O processo do patcher experimental parou porque ficou sem memória. Nós reduzimos o limite de memória de %1$d MB para %2$d MB então você pode tentar novamente imediatamente.</string>
-    <string name="patcher_memory_adjustment_message_no_change">O processo do patcher experimental parou porque ficou sem memória, mas o limite de memória já está em %1$d MB. Tente reduzir ainda mais o valor nas configurações avançadas ou desative o modo experimental antes de tentar novamente.</string>
-    <string name="patcher_memory_adjustment_retry">Tentar novamente</string>
-    <string name="patcher_memory_adjustment_dismiss">Dispensar</string>
     <string name="patcher_missing_patch_title">A seleção de patches precisa de atenção</string>
     <string name="patcher_preflight_missing_patch_message">Os seguintes patches não estão disponíveis no pacote atual:
 %1$s
