@@ -1643,7 +1643,7 @@ class SelectedAppInfoViewModel(
         .first()
         .requiredOptionsSet(
             allowIncompatible = prefs.disablePatchVersionCompatCheck.get(),
-            isSelected = { bundle, patch -> patch.name in patchSelection[bundle.uid]!! },
+            isSelected = { bundle, patch -> patch.name in patchSelection[bundle.uid].orEmpty() },
             optionsForPatch = { bundle, patch -> options[bundle.uid]?.get(patch.name) },
         )
 

@@ -179,6 +179,7 @@ fun SelectedAppInfoScreen(
 
     val allowIncompatiblePatches by vm.prefs.disablePatchVersionCompatCheck.getAsState()
     val suggestedVersionSafeguard by vm.prefs.suggestedVersionSafeguard.getAsState()
+    val patchAvailabilityEnabled by vm.prefs.patchAvailabilityEnabled.getAsState()
     val customBackgroundImageUri by vm.prefs.customBackgroundImageUri.getAsState()
     val useCardStylePageItems = customBackgroundImageUri.isNotBlank()
     val bundleRecommendationsEnabled = allowIncompatiblePatches && !suggestedVersionSafeguard
@@ -526,7 +527,7 @@ fun SelectedAppInfoScreen(
                     }
                 }
             )
-            if (vm.hasRoot) {
+            if (vm.hasRoot && patchAvailabilityEnabled) {
                 PageItem(
                     R.string.patch_mode_title,
                     stringResource(
@@ -726,7 +727,7 @@ fun SelectedAppInfoScreen(
         )
     }
 
-    if (showPatchModeDialog) {
+    if (patchAvailabilityEnabled && showPatchModeDialog) {
         PatchModeDialog(
             useMount = vm.usingMountInstall,
             onSelect = vm::selectPatchMode,
