@@ -9,9 +9,13 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.imePadding
@@ -24,6 +28,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,12 +38,14 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -48,16 +55,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -69,6 +79,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -91,6 +102,8 @@ import app.urv.manager.network.downloader.DownloaderPluginSourceState
 import app.urv.manager.network.downloader.DownloaderPluginState
 import app.urv.manager.network.downloader.toDownloaderMainName
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.AppIcon
+import app.urv.manager.ui.component.AppLabel
 import app.urv.manager.ui.component.ExceptionViewerDialog
 import app.urv.manager.ui.component.GroupHeader
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
@@ -113,6 +126,7 @@ import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 import app.urv.manager.util.isAllowedApkFile
+import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.toast
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
@@ -210,7 +224,12 @@ fun DownloadsSettingsScreen(
             pickerScope.launch {
                 prefs.downloadsExportLastDirectory.update(uri.toPickerDirectoryUri().toString())
             }
-            viewModel.exportSelectedApps(context, uri, exportState.asArchive)
+            viewModel.exportApps(
+                context = context,
+                uri = uri,
+                apps = exportState.apps,
+                asArchive = exportState.asArchive
+            )
         }
     }
     fun openExportPicker(state: DownloadedAppsExportState) {
@@ -408,7 +427,12 @@ fun DownloadsSettingsScreen(
                     )
                 } else {
                     exportInProgress = true
-                    viewModel.exportSelectedAppsToPath(context, target, state.exportState.asArchive) { success ->
+                    viewModel.exportAppsToPath(
+                        context = context,
+                        target = target,
+                        apps = state.exportState.apps,
+                        asArchive = state.exportState.asArchive
+                    ) { success ->
                         exportInProgress = false
                         if (success) {
                             activeExportState = null
@@ -428,9 +452,10 @@ fun DownloadsSettingsScreen(
             onConfirm = {
                 pendingExportConfirmation = null
                 exportInProgress = true
-                viewModel.exportSelectedAppsToPath(
+                viewModel.exportAppsToPath(
                     context,
                     state.directory.resolve(state.fileName),
+                    state.exportState.apps,
                     state.exportState.asArchive
                 ) { success ->
                     exportInProgress = false
@@ -508,28 +533,7 @@ fun DownloadsSettingsScreen(
                 actions = {
                     if (viewModel.appSelection.isNotEmpty()) {
                         IconButton(onClick = {
-                            val selection = viewModel.appSelection.toList()
-                            if (selection.size == 1) {
-                                val app = selection.first()
-                                val fileName =
-                                    "${app.packageName}_${app.version}".replace('/', '_') + ".apk"
-                                openExportPicker(
-                                    DownloadedAppsExportState(
-                                        asArchive = false,
-                                        defaultFileName = fileName,
-                                        fileTypeLabel = ".apk"
-                                    )
-                                )
-                            } else {
-                                val fileName = "downloaded-apps-${System.currentTimeMillis()}.zip"
-                                openExportPicker(
-                                    DownloadedAppsExportState(
-                                        asArchive = true,
-                                        defaultFileName = fileName,
-                                        fileTypeLabel = ".zip"
-                                    )
-                                )
-                            }
+                            openExportPicker(viewModel.appSelection.toExportState())
                         }) {
                             Icon(Icons.Outlined.Save, stringResource(R.string.downloaded_apps_export))
                         }
@@ -1094,47 +1098,34 @@ fun DownloadsSettingsScreen(
                 items(downloadedApps, key = { it.packageName to it.version }) { app ->
                     val selected = app in viewModel.appSelection
                     val isInstalling = viewModel.installingApp == app
-
-                    ExpressiveSettingsCard(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                        containerColor = if (selected) {
-                            MaterialTheme.colorScheme.surfaceContainerHighest
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
-                        },
-                        shadowElevation = if (selected) 6.dp else 2.dp,
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+                    val displayInfo by produceState(
+                        initialValue = viewModel.displayInfoFor(app),
+                        key1 = app.packageName,
+                        key2 = app.version,
+                        key3 = app.directory.path
                     ) {
-                        ExpressiveSettingsItem(
-                            headlineContent = app.packageName,
-                            supportingContent = app.version,
-                            leadingContent = (@Composable {
-                                HapticCheckbox(
-                                    checked = selected,
-                                    onCheckedChange = { viewModel.toggleApp(app) }
-                                )
-                            }).takeIf { viewModel.appSelection.isNotEmpty() },
-                            trailingContent = {
-                                FilledTonalButton(
-                                    onClick = {
-                                        if (chooseInstallerPerInstall) {
-                                            appPendingInstallerChoice = app
-                                        } else {
-                                            viewModel.installApp(app)
-                                        }
-                                    },
-                                    enabled = viewModel.installingApp == null
-                                ) {
-                                    Text(
-                                        stringResource(
-                                            if (isInstalling) R.string.loading else R.string.install_app
-                                        )
-                                    )
-                                }
-                            },
-                            onClick = { viewModel.toggleApp(app) }
-                        )
+                        value = viewModel.loadDisplayInfo(app)
                     }
+
+                    DownloadedAppCard(
+                        app = app,
+                        displayInfo = displayInfo,
+                        selected = selected,
+                        selectionActive = viewModel.appSelection.isNotEmpty(),
+                        isInstalling = isInstalling,
+                        installEnabled = viewModel.installingApp == null,
+                        onSelectionChange = { viewModel.toggleApp(app) },
+                        onExport = {
+                            openExportPicker(listOf(app).toExportState())
+                        },
+                        onInstall = {
+                            if (chooseInstallerPerInstall) {
+                                appPendingInstallerChoice = app
+                            } else {
+                                viewModel.installApp(app)
+                            }
+                        }
+                    )
                 }
                 if (downloadedApps.isEmpty()) {
                     item {
@@ -1150,6 +1141,178 @@ fun DownloadsSettingsScreen(
     }
 }
 
+@Composable
+private fun DownloadedAppCard(
+    app: DownloadedApp,
+    displayInfo: DownloadsViewModel.DownloadedAppDisplayInfo?,
+    selected: Boolean,
+    selectionActive: Boolean,
+    isInstalling: Boolean,
+    installEnabled: Boolean,
+    onSelectionChange: () -> Unit,
+    onExport: () -> Unit,
+    onInstall: () -> Unit
+) {
+    val cardShape = RoundedCornerShape(18.dp)
+    val elevation = if (selected) 6.dp else 2.dp
+    val cardBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    val headerBackground = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(cardShape)
+            .clickable(onClick = onSelectionChange),
+        shape = cardShape,
+        tonalElevation = elevation,
+        color = cardBackground
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(headerBackground)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (selectionActive) {
+                    HapticCheckbox(
+                        checked = selected,
+                        onCheckedChange = { onSelectionChange() }
+                    )
+                }
+                AppIcon(
+                    packageInfo = displayInfo?.packageInfo,
+                    contentDescription = null,
+                    iconOverride = displayInfo?.icon,
+                    modifier = Modifier.size(32.dp)
+                )
+                val titleScrollState = rememberScrollState()
+                AppLabel(
+                    packageInfo = displayInfo?.packageInfo,
+                    labelOverride = displayInfo?.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    defaultText = app.packageName,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .consumeHorizontalScroll(titleScrollState)
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val packageNameScrollState = rememberScrollState()
+                Text(
+                    text = app.packageName,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .consumeHorizontalScroll(packageNameScrollState),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip
+                )
+                Text(
+                    text = app.version.toPluginVersionLabel() ?: app.version,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val actionScrollState = rememberScrollState()
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .widthIn(min = maxWidth)
+                            .consumeHorizontalScroll(actionScrollState),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            6.dp,
+                            Alignment.CenterHorizontally
+                        ),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        DownloadedAppQuickAction(
+                            text = stringResource(R.string.export),
+                            icon = Icons.Outlined.Save,
+                            onClick = onExport
+                        )
+                        DownloadedAppQuickAction(
+                            text = stringResource(
+                                if (isInstalling) R.string.loading else R.string.install_app
+                            ),
+                            icon = Icons.Outlined.InstallMobile,
+                            enabled = installEnabled,
+                            loading = isInstalling,
+                            onClick = onInstall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadedAppQuickAction(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    onClick: () -> Unit
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val background = MaterialTheme.colorScheme.surface.copy(
+        alpha = if (enabled) 0.9f else 0.5f
+    )
+    val contentColor = MaterialTheme.colorScheme.onSurface.copy(
+        alpha = if (enabled) 1f else 0.6f
+    )
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .combinedClickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled,
+                onClick = onClick
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = text,
+                    tint = contentColor,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor,
+                maxLines = 1
+            )
+        }
+    }
+}
+
 private enum class PluginDialogType {
     Trust,
     Revoke,
@@ -1158,10 +1321,32 @@ private enum class PluginDialogType {
 }
 
 private data class DownloadedAppsExportState(
+    val apps: List<DownloadedApp>,
     val asArchive: Boolean,
     val defaultFileName: String,
     val fileTypeLabel: String
 )
+
+private fun Collection<DownloadedApp>.toExportState(): DownloadedAppsExportState {
+    val apps = toList()
+    require(apps.isNotEmpty())
+    return if (apps.size == 1) {
+        val app = apps.first()
+        DownloadedAppsExportState(
+            apps = apps,
+            asArchive = false,
+            defaultFileName = "${app.packageName}_${app.version}".replace('/', '_') + ".apk",
+            fileTypeLabel = ".apk"
+        )
+    } else {
+        DownloadedAppsExportState(
+            apps = apps,
+            asArchive = true,
+            defaultFileName = "downloaded-apps-${System.currentTimeMillis()}.zip",
+            fileTypeLabel = ".zip"
+        )
+    }
+}
 
 private data class DownloadedAppsExportDialogState(
     val exportState: DownloadedAppsExportState,

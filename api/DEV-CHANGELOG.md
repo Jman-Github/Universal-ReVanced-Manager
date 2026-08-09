@@ -26,6 +26,7 @@
 - Added install-target-aware Morphe patch availability with Standard and Root Mount modes, required and unavailable patch handling, matching installer routing, and optional GmsCore removal, adapted from https://github.com/MorpheApp/morphe-manager/pull/747
 - Improved Root Mount compatibility with merged split APK inputs when a valid installed stock APK is available
 - Bumped Morphe Patcher to `1.8.0`
+- Improved saved unpatched app cards in Downloads
 
 
 # Bug fixes

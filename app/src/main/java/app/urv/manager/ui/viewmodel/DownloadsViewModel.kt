@@ -2,9 +2,12 @@ package app.urv.manager.ui.viewmodel
 
 import android.content.Context
 import android.content.pm.PackageInfo
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.util.LruCache
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,6 +31,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -91,6 +95,22 @@ class DownloadsViewModel(
         )
     }
     val appSelection = mutableStateSetOf<DownloadedApp>()
+    private val downloadedAppDisplayInfo = object :
+        LruCache<DownloadedAppDisplayKey, DownloadedAppDisplayInfo>(
+            MAX_DISPLAY_INFO_CACHE_SIZE_KIB
+        ) {
+        override fun sizeOf(
+            key: DownloadedAppDisplayKey,
+            value: DownloadedAppDisplayInfo
+        ): Int {
+            val iconSizeKib = (value.icon as? BitmapDrawable)
+                ?.bitmap
+                ?.allocationByteCount
+                ?.div(BYTES_PER_KIB)
+                ?: 0
+            return iconSizeKib.coerceAtLeast(DISPLAY_INFO_METADATA_COST_KIB)
+        }
+    }
 
     var isRefreshingPlugins by mutableStateOf(false)
         private set
@@ -102,11 +122,80 @@ class DownloadsViewModel(
     private val splitMergeRuntime = SplitMergeProcessRuntime(appContext)
     private val installWorkspaceRoot =
         appContext.cacheDir.resolve("download-install").apply { mkdirs() }
+    private val displayWorkspaceRoot =
+        appContext.cacheDir.resolve("downloaded-app-display").apply { mkdirs() }
     private val installProgressFlow = MutableStateFlow<DownloadInstallProgress?>(null)
     val installProgress = installProgressFlow.asStateFlow()
     private var activeInstallWorkspace: File? = null
     private var installJob: Job? = null
     private var installCancellationRequested = false
+
+    fun displayInfoFor(downloadedApp: DownloadedApp): DownloadedAppDisplayInfo? =
+        downloadedAppDisplayInfo.get(displayKey(downloadedApp))
+
+    suspend fun loadDisplayInfo(downloadedApp: DownloadedApp): DownloadedAppDisplayInfo {
+        val key = displayKey(downloadedApp)
+        downloadedAppDisplayInfo.get(key)?.let { return it }
+
+        val resolved = resolveDisplayInfo(downloadedApp)
+        return downloadedAppDisplayInfo.get(key) ?: resolved.also {
+            downloadedAppDisplayInfo.put(key, it)
+        }
+    }
+
+    private suspend fun resolveDisplayInfo(
+        downloadedApp: DownloadedApp
+    ): DownloadedAppDisplayInfo = withContext(Dispatchers.IO) {
+        val source = runCatching {
+            downloadedAppRepository.getApkFileForApp(downloadedApp)
+        }.getOrNull()
+
+        if (source != null && source.exists()) {
+            try {
+                if (SplitApkPreparer.isSplitArchive(source)) {
+                    SplitArchiveDisplayResolver.resolve(
+                        source = source,
+                        workspace = displayWorkspaceRoot,
+                        app = appContext,
+                        pm = pm
+                    )?.let { resolved ->
+                        return@withContext DownloadedAppDisplayInfo(
+                            packageInfo = resolved.packageInfo,
+                            label = resolved.label,
+                            icon = resolved.icon
+                        )
+                    }
+                } else {
+                    pm.getPackageInfo(source)?.let { packageInfo ->
+                        val label = pm.getArchiveLabel(source, packageInfo)
+                            ?: runCatching { with(pm) { packageInfo.label() } }.getOrNull()
+                        return@withContext DownloadedAppDisplayInfo(
+                            packageInfo = packageInfo,
+                            label = label,
+                            icon = null
+                        )
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to load display info for ${source.absolutePath}", error)
+            }
+        }
+
+        val installedInfo = pm.getPackageInfo(downloadedApp.packageName)
+        DownloadedAppDisplayInfo(
+            packageInfo = installedInfo,
+            label = installedInfo?.let { runCatching { with(pm) { it.label() } }.getOrNull() },
+            icon = null
+        )
+    }
+
+    private fun displayKey(downloadedApp: DownloadedApp) = DownloadedAppDisplayKey(
+        packageName = downloadedApp.packageName,
+        version = downloadedApp.version,
+        directory = downloadedApp.directory.path
+    )
 
     fun toggleApp(downloadedApp: DownloadedApp) {
         if (appSelection.contains(downloadedApp))
@@ -114,6 +203,18 @@ class DownloadsViewModel(
         else
             appSelection.add(downloadedApp)
     }
+
+    data class DownloadedAppDisplayInfo(
+        val packageInfo: PackageInfo?,
+        val label: String?,
+        val icon: Drawable?
+    )
+
+    private data class DownloadedAppDisplayKey(
+        val packageName: String,
+        val version: String,
+        val directory: String
+    )
 
     fun deleteApps() {
         viewModelScope.launch(NonCancellable) {
@@ -745,9 +846,14 @@ class DownloadsViewModel(
         }
     }
 
-    fun exportSelectedApps(context: Context, uri: Uri, asArchive: Boolean) =
+    fun exportApps(
+        context: Context,
+        uri: Uri,
+        apps: Collection<DownloadedApp>,
+        asArchive: Boolean
+    ) =
         viewModelScope.launch {
-            val selection = appSelection.toList()
+            val selection = apps.toList()
             if (selection.isEmpty()) return@launch
 
             val resolver = context.contentResolver
@@ -788,13 +894,14 @@ class DownloadsViewModel(
             }
         }
 
-    fun exportSelectedAppsToPath(
+    fun exportAppsToPath(
         context: Context,
         target: Path,
+        apps: Collection<DownloadedApp>,
         asArchive: Boolean,
         onResult: (Boolean) -> Unit = {}
     ) = viewModelScope.launch {
-        val selection = appSelection.toList()
+        val selection = apps.toList()
         if (selection.isEmpty()) {
             onResult(false)
             return@launch
@@ -841,6 +948,9 @@ class DownloadsViewModel(
 
     companion object {
         private val TAG = DownloadsViewModel::class.java.simpleName ?: "DownloadsViewModel"
+        private const val BYTES_PER_KIB = 1024
+        private const val DISPLAY_INFO_METADATA_COST_KIB = 64
+        private const val MAX_DISPLAY_INFO_CACHE_SIZE_KIB = 16 * 1024
         private const val EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
         private const val EXTERNAL_INSTALL_POLL_INTERVAL_MS = 1_000L
         private const val MAX_INSTALL_LOG_LINES = 800
