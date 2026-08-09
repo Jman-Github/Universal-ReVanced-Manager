@@ -19,6 +19,7 @@ import kotlin.io.path.isReadable
 
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
+import app.urv.manager.ui.model.BatchResultActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
 import app.urv.manager.ui.model.PatchProfileActionKey
 import app.urv.manager.ui.model.LsposedModuleActionKey
@@ -65,6 +66,8 @@ class PreferencesManager(
             PatchSelectionActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val PATCH_BUNDLE_ACTION_ORDER_DEFAULT =
             PatchBundleActionKey.DefaultOrder.joinToString(",") { it.storageId }
+        private val BATCH_RESULT_ACTION_ORDER_DEFAULT =
+            BatchResultActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val SAVED_APP_ACTION_ORDER_DEFAULT =
             SavedAppActionKey.DefaultOrder.joinToString(",") { it.storageId }
         private val PATCH_PROFILE_ACTION_ORDER_DEFAULT =
@@ -361,6 +364,10 @@ class PreferencesManager(
         stringPreference("patch_bundle_action_order", PATCH_BUNDLE_ACTION_ORDER_DEFAULT)
     val patchBundleHiddenActions =
         stringSetPreference("patch_bundle_hidden_actions", emptySet())
+    val batchResultActionOrder =
+        stringPreference("batch_result_action_order", BATCH_RESULT_ACTION_ORDER_DEFAULT)
+    val batchResultHiddenActions =
+        stringSetPreference("batch_result_hidden_actions", emptySet())
     val savedAppActionOrder =
         stringPreference("saved_app_action_order", SAVED_APP_ACTION_ORDER_DEFAULT)
     val savedAppHiddenActions =
@@ -628,6 +635,8 @@ class PreferencesManager(
         val patchSelectionShowOptionPreviews: Boolean? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
+        val batchResultActionOrder: String? = null,
+        val batchResultHiddenActions: Set<String>? = null,
         val savedAppActionOrder: String? = null,
         val savedAppHiddenActions: Set<String>? = null,
         val patchProfileActionOrder: String? = null,
@@ -861,6 +870,8 @@ class PreferencesManager(
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.get(),
             patchBundleActionOrder = patchBundleActionOrder.get(),
             patchBundleHiddenActions = patchBundleHiddenActions.get(),
+            batchResultActionOrder = batchResultActionOrder.get(),
+            batchResultHiddenActions = batchResultHiddenActions.get(),
             savedAppActionOrder = savedAppActionOrder.get(),
             savedAppHiddenActions = savedAppHiddenActions.get(),
             patchProfileActionOrder = patchProfileActionOrder.get(),
@@ -1091,6 +1102,8 @@ class PreferencesManager(
         }
         snapshot.patchBundleActionOrder?.let { patchBundleActionOrder.value = it }
         snapshot.patchBundleHiddenActions?.let { patchBundleHiddenActions.value = it }
+        snapshot.batchResultActionOrder?.let { batchResultActionOrder.value = it }
+        snapshot.batchResultHiddenActions?.let { batchResultHiddenActions.value = it }
         snapshot.savedAppActionOrder?.let { savedAppActionOrder.value = it }
         snapshot.savedAppHiddenActions?.let { savedAppHiddenActions.value = it }
         snapshot.patchProfileActionOrder?.let { patchProfileActionOrder.value = it }

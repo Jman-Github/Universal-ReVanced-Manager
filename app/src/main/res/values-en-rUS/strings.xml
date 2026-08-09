@@ -668,6 +668,13 @@
     <string name="patch_bundle_action_order_description">Choose the layout order for the patch bundle action buttons</string>
     <string name="patch_bundle_action_visibility_title">Hide patch bundle action buttons</string>
     <string name="patch_bundle_action_visibility_description">Choose which patch bundle action buttons are shown</string>
+    <string name="batch_result_action_order_title">Batch result action buttons order</string>
+    <string name="batch_result_action_order_description">Choose the layout order for action buttons on batch patch result cards</string>
+    <string name="batch_result_action_visibility_title">Hide batch result action buttons</string>
+    <string name="batch_result_action_visibility_description">Choose which action buttons are shown on batch patch result cards</string>
+    <string name="batch_result_action_install_or_open">Install or open app</string>
+    <string name="batch_result_action_order_reset">Reset to default order</string>
+    <string name="batch_result_action_visibility_reset">Show all action buttons</string>
     <string name="saved_app_action_order_title">Saved app action buttons order</string>
     <string name="saved_app_action_order_description">Choose the layout order for the saved app action buttons</string>
     <string name="saved_app_action_visibility_title">Hide saved app action buttons</string>

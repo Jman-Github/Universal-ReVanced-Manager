@@ -91,6 +91,7 @@ import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.UnfoldLess
 import androidx.compose.material.icons.outlined.Undo
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material.icons.outlined.Warning
@@ -215,6 +216,7 @@ import app.urv.manager.util.withHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
+import app.urv.manager.ui.model.BatchResultActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
 import app.urv.manager.ui.model.PatchProfileActionKey
 import app.urv.manager.ui.model.LsposedModuleActionKey
@@ -2285,6 +2287,8 @@ internal fun ActionButtonSettings(
     val showPatchProfilesTab by viewModel.prefs.showPatchProfilesTab.getAsState()
     val bundleActionOrderPref by viewModel.prefs.patchBundleActionOrder.getAsState()
     val bundleHiddenActionsPref by viewModel.prefs.patchBundleHiddenActions.getAsState()
+    val batchResultActionOrderPref by viewModel.prefs.batchResultActionOrder.getAsState()
+    val batchResultHiddenActionsPref by viewModel.prefs.batchResultHiddenActions.getAsState()
     val savedActionOrderPref by viewModel.prefs.savedAppActionOrder.getAsState()
     val savedHiddenActionsPref by viewModel.prefs.savedAppHiddenActions.getAsState()
     val profileActionOrderPref by viewModel.prefs.patchProfileActionOrder.getAsState()
@@ -2325,6 +2329,21 @@ internal fun ActionButtonSettings(
                 bundleWorkingOrder.addAll(bundleActionOrderList)
             }
             var bundleActionsExpanded by rememberSaveable { mutableStateOf(false) }
+
+            val batchResultActionOrderList = remember(batchResultActionOrderPref) {
+                val parsed = batchResultActionOrderPref
+                    .split(',')
+                    .mapNotNull { BatchResultActionKey.fromStorageId(it.trim()) }
+                BatchResultActionKey.ensureComplete(parsed)
+            }
+            val batchResultWorkingOrder = remember(batchResultActionOrderList) {
+                batchResultActionOrderList.toMutableStateList()
+            }
+            LaunchedEffect(batchResultActionOrderList) {
+                batchResultWorkingOrder.clear()
+                batchResultWorkingOrder.addAll(batchResultActionOrderList)
+            }
+            var batchResultActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
             val savedActionOrderList = remember(savedActionOrderPref) {
                 val parsed = savedActionOrderPref
@@ -2403,6 +2422,16 @@ internal fun ActionButtonSettings(
                     }
             }
 
+            LaunchedEffect(batchResultActionOrderList) {
+                snapshotFlow { batchResultWorkingOrder.toList() }
+                    .distinctUntilChanged()
+                    .debounce(200)
+                    .collectLatest { order ->
+                        if (order == batchResultActionOrderList) return@collectLatest
+                        viewModel.setBatchResultActionOrder(order)
+                    }
+            }
+
             LaunchedEffect(profileActionOrderList) {
                 snapshotFlow { profileWorkingOrder.toList() }
                     .distinctUntilChanged()
@@ -2418,6 +2447,7 @@ internal fun ActionButtonSettings(
         when (highlightTarget) {
             R.string.patch_selection_action_visibility_title -> actionsExpanded = true
             R.string.patch_bundle_action_visibility_title -> bundleActionsExpanded = true
+            R.string.batch_result_action_visibility_title -> batchResultActionsExpanded = true
             R.string.saved_app_action_visibility_title -> savedActionsExpanded = true
             R.string.patch_profile_action_visibility_title -> profileActionsExpanded = true
         }
@@ -2898,6 +2928,134 @@ internal fun ActionButtonSettings(
                         }
                     }
                 }
+
+            ExpressiveSettingsDivider()
+            SettingsSearchHighlight(
+                targetKey = R.string.batch_result_action_order_title,
+                activeKey = highlightTarget,
+                onHighlightComplete = onHighlightComplete
+            ) { highlightModifier ->
+                ExpressiveSettingsItem(
+                    modifier = highlightModifier,
+                    headlineContent = stringResource(R.string.batch_result_action_order_title),
+                    supportingContent = stringResource(R.string.batch_result_action_order_description),
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (batchResultActionsExpanded) {
+                                Icons.Outlined.KeyboardArrowUp
+                            } else {
+                                Icons.Outlined.KeyboardArrowDown
+                            },
+                            contentDescription = null
+                        )
+                    },
+                    onClick = { batchResultActionsExpanded = !batchResultActionsExpanded }
+                )
+            }
+
+            if (batchResultActionsExpanded) {
+                ExpressiveSettingsDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val rowState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
+                        batchResultWorkingOrder.add(
+                            to.index,
+                            batchResultWorkingOrder.removeAt(from.index)
+                        )
+                    }
+
+                    BatchResultActionPreview(
+                        order = batchResultWorkingOrder,
+                        hiddenActions = batchResultHiddenActionsPref,
+                        rowState = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    SettingsSearchHighlight(
+                        targetKey = R.string.batch_result_action_visibility_title,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = onHighlightComplete
+                    ) { highlightModifier ->
+                        Text(
+                            text = stringResource(R.string.batch_result_action_visibility_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = highlightModifier
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.batch_result_action_visibility_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        BatchResultActionKey.values().forEach { key ->
+                            val visible = key.storageId !in batchResultHiddenActionsPref
+                            val setVisible: (Boolean) -> Unit = { isVisible ->
+                                val updated = batchResultHiddenActionsPref.toMutableSet()
+                                if (isVisible) {
+                                    updated.remove(key.storageId)
+                                } else {
+                                    updated.add(key.storageId)
+                                }
+                                viewModel.setBatchResultHiddenActions(updated)
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { setVisible(!visible) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(key.labelRes),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                ExpressiveSettingsSwitch(
+                                    checked = visible,
+                                    onCheckedChange = setVisible
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.setBatchResultHiddenActions(emptySet()) }
+                        ) {
+                            Text(stringResource(R.string.batch_result_action_visibility_reset))
+                        }
+                        TextButton(
+                            onClick = {
+                                batchResultWorkingOrder.clear()
+                                batchResultWorkingOrder.addAll(BatchResultActionKey.DefaultOrder)
+                                viewModel.setBatchResultActionOrder(BatchResultActionKey.DefaultOrder)
+                            }
+                        ) {
+                            Text(stringResource(R.string.batch_result_action_order_reset))
+                        }
+                    }
+                }
+            }
 
             ExpressiveSettingsDivider()
             SettingsSearchHighlight(
@@ -3480,6 +3638,109 @@ private fun PatchBundleActionPreviewRow(
 }
 
 @Composable
+private fun BatchResultActionPreview(
+    order: List<BatchResultActionKey>,
+    hiddenActions: Set<String> = emptySet(),
+    modifier: Modifier = Modifier,
+    rowState: LazyListState = rememberLazyListState(),
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    val density = LocalDensity.current
+    val glowRadiusPx = remember(density) { with(density) { 200.dp.toPx() } }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
+            tonalElevation = 0.dp,
+            shadowElevation = 6.dp,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)
+            ),
+            modifier = Modifier.widthIn(max = 520.dp)
+        ) {
+            Box {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(26.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    Color.Transparent
+                                ),
+                                radius = glowRadiusPx
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.16f))
+                )
+
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    BatchResultActionPreviewRow(
+                        keys = order,
+                        hiddenActions = hiddenActions,
+                        state = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BatchResultActionPreviewRow(
+    keys: List<BatchResultActionKey>,
+    hiddenActions: Set<String>,
+    state: LazyListState,
+    reorderableState: sh.calvin.reorderable.ReorderableLazyListState
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp),
+        state = state,
+        contentPadding = PaddingValues(horizontal = 4.dp)
+    ) {
+        items(
+            items = keys,
+            key = { key -> key.storageId }
+        ) { key ->
+            ReorderableItem(reorderableState, key = key.storageId) { isDragging ->
+                Box(
+                    modifier = Modifier
+                        .fillParentMaxHeight()
+                        .padding(horizontal = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    SelectionActionPreviewChip(
+                        icon = previewIconForBatchResultAction(key),
+                        label = stringResource(key.labelRes),
+                        dragging = isDragging,
+                        ghost = isDragging,
+                        hidden = key.storageId in hiddenActions,
+                        modifier = Modifier.longPressDraggableHandle()
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SavedAppActionPreview(
     order: List<SavedAppActionKey>,
     hiddenActions: Set<String> = emptySet(),
@@ -3794,6 +4055,14 @@ private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
         PatchBundleActionKey.CHANGELOG_HISTORY -> Icons.Outlined.History
         PatchBundleActionKey.TOGGLE -> Icons.Outlined.Block
         PatchBundleActionKey.DELETE -> Icons.Outlined.Delete
+    }
+
+private fun previewIconForBatchResultAction(key: BatchResultActionKey): ImageVector =
+    when (key) {
+        BatchResultActionKey.VIEW_PROGRESS -> Icons.Outlined.Visibility
+        BatchResultActionKey.SAVE_LOGS -> Icons.Outlined.Description
+        BatchResultActionKey.SAVE_APK -> Icons.Outlined.Save
+        BatchResultActionKey.INSTALL_OR_OPEN -> Icons.Outlined.InstallMobile
     }
 
 private fun previewIconForSavedAppAction(key: SavedAppActionKey): ImageVector =

@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import app.urv.manager.ui.model.PatchSelectionActionKey
 import app.urv.manager.ui.model.PatchBundleActionKey
+import app.urv.manager.ui.model.BatchResultActionKey
 import app.urv.manager.ui.model.SavedAppActionKey
 import app.urv.manager.ui.model.PatchProfileActionKey
 import app.urv.manager.ui.model.LsposedModuleActionKey
@@ -307,6 +308,17 @@ class AdvancedSettingsViewModel(
     fun setPatchBundleHiddenActions(hidden: Set<String>) =
         viewModelScope.launch(Dispatchers.Default) {
             prefs.patchBundleHiddenActions.update(hidden)
+        }
+
+    fun setBatchResultActionOrder(order: List<BatchResultActionKey>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            val serialized = order.joinToString(",") { it.storageId }
+            prefs.batchResultActionOrder.update(serialized)
+        }
+
+    fun setBatchResultHiddenActions(hidden: Set<String>) =
+        viewModelScope.launch(Dispatchers.Default) {
+            prefs.batchResultHiddenActions.update(hidden)
         }
 
     fun setSavedAppActionOrder(order: List<SavedAppActionKey>) =

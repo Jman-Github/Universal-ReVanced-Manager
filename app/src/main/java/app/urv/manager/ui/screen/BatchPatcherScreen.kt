@@ -103,6 +103,7 @@ import app.urv.manager.ui.component.RememberedGetContent
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.toPickerDirectoryUri
+import app.urv.manager.ui.model.BatchResultActionKey
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.ui.viewmodel.BatchPatcherViewModel
@@ -208,6 +209,14 @@ fun BatchPatcherScreen(
     val fs: Filesystem = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val selectedAppApkInputDirectory by prefs.selectedAppApkInputLastDirectory.getAsState()
+    val batchResultActionOrderPref by prefs.batchResultActionOrder.getAsState()
+    val batchResultHiddenActions by prefs.batchResultHiddenActions.getAsState()
+    val batchResultActionOrder = remember(batchResultActionOrderPref) {
+        val parsed = batchResultActionOrderPref
+            .split(',')
+            .mapNotNull { BatchResultActionKey.fromStorageId(it.trim()) }
+        BatchResultActionKey.ensureComplete(parsed)
+    }
     val storageRoots = remember { fs.storageRoots() }
     val pickerScope = rememberCoroutineScope()
     var showStorageDialog by rememberSaveable { mutableStateOf(false) }
@@ -358,6 +367,8 @@ fun BatchPatcherScreen(
                     BatchItemCard(
                         item = item,
                         phase = current.phase,
+                        resultActionOrder = batchResultActionOrder,
+                        hiddenResultActions = batchResultHiddenActions,
                         onToggle = { viewModel.toggleExcluded(item.packageName) },
                         onAttach = {
                             viewModel.requestAttach(item.packageName)
@@ -743,6 +754,8 @@ private fun FinishedHeader(
 private fun BatchItemCard(
     item: BatchPatchItem,
     phase: BatchPhase,
+    resultActionOrder: List<BatchResultActionKey>,
+    hiddenResultActions: Set<String>,
     onToggle: () -> Unit,
     onAttach: () -> Unit,
     onForce: () -> Unit,
@@ -913,50 +926,57 @@ private fun BatchItemCard(
                 }
             }
 
-            if (phase != BatchPhase.PREFLIGHT) {
-                BatchQuickActionRow {
-                    BatchQuickActionButton(
-                        onClick = onOpenProgress,
-                        enabled = canOpenProgress,
-                        icon = Icons.Outlined.Visibility,
-                        description = stringResource(R.string.batch_patch_view_progress)
-                    )
-                    BatchQuickActionButton(
-                        onClick = onLogs,
-                        enabled = canUseLogs,
-                        icon = Icons.Outlined.PostAdd,
-                        description = stringResource(R.string.save_logs)
-                    )
-                    if (item.hasAvailablePatchedFile) {
-                        BatchQuickActionButton(
-                            onClick = onExport,
-                            enabled = !item.saving && !item.installing,
-                            icon = Icons.Outlined.Save,
-                            description = stringResource(R.string.save_apk)
-                        )
-                    }
-                    if (
+            val visibleResultActions = resultActionOrder.filter { action ->
+                action.storageId !in hiddenResultActions && when (action) {
+                    BatchResultActionKey.VIEW_PROGRESS,
+                    BatchResultActionKey.SAVE_LOGS -> true
+                    BatchResultActionKey.SAVE_APK -> item.hasAvailablePatchedFile
+                    BatchResultActionKey.INSTALL_OR_OPEN ->
                         phase == BatchPhase.FINISHED &&
-                        (item.hasAvailablePatchedFile ||
-                            item.installOutcome == BatchInstallOutcome.INSTALLED)
-                    ) {
-                        BatchQuickActionButton(
-                            onClick = onInstallOrOpen,
-                            enabled = !item.installing && !item.saving,
-                            icon = if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
-                                Icons.AutoMirrored.Outlined.OpenInNew
-                            } else {
-                                Icons.Outlined.FileDownload
-                            },
-                            description = stringResource(
-                                if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
-                                    R.string.open_app
+                            (item.hasAvailablePatchedFile ||
+                                item.installOutcome == BatchInstallOutcome.INSTALLED)
+                }
+            }
+            if (phase != BatchPhase.PREFLIGHT && visibleResultActions.isNotEmpty()) {
+                BatchQuickActionRow {
+                    visibleResultActions.forEach { action ->
+                        when (action) {
+                            BatchResultActionKey.VIEW_PROGRESS -> BatchQuickActionButton(
+                                onClick = onOpenProgress,
+                                enabled = canOpenProgress,
+                                icon = Icons.Outlined.Visibility,
+                                description = stringResource(R.string.batch_patch_view_progress)
+                            )
+                            BatchResultActionKey.SAVE_LOGS -> BatchQuickActionButton(
+                                onClick = onLogs,
+                                enabled = canUseLogs,
+                                icon = Icons.Outlined.PostAdd,
+                                description = stringResource(R.string.save_logs)
+                            )
+                            BatchResultActionKey.SAVE_APK -> BatchQuickActionButton(
+                                onClick = onExport,
+                                enabled = !item.saving && !item.installing,
+                                icon = Icons.Outlined.Save,
+                                description = stringResource(R.string.save_apk)
+                            )
+                            BatchResultActionKey.INSTALL_OR_OPEN -> BatchQuickActionButton(
+                                onClick = onInstallOrOpen,
+                                enabled = !item.installing && !item.saving,
+                                icon = if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
+                                    Icons.AutoMirrored.Outlined.OpenInNew
                                 } else {
-                                    R.string.install_app
-                                }
-                            ),
-                            loading = item.installing
-                        )
+                                    Icons.Outlined.FileDownload
+                                },
+                                description = stringResource(
+                                    if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
+                                        R.string.open_app
+                                    } else {
+                                        R.string.install_app
+                                    }
+                                ),
+                                loading = item.installing
+                            )
+                        }
                     }
                 }
             }
