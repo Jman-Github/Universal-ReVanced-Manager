@@ -5,10 +5,18 @@ import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootRecoveryState
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BatchInstallerRoutingContractTest {
+    @Test
+    fun `scheduled Shizuku patching resolves Standard availability`() {
+        assertEquals(false, batchForcedUseMount(scheduled = true, autoInstallWithShizuku = true))
+        assertEquals(null, batchForcedUseMount(scheduled = true, autoInstallWithShizuku = false))
+        assertEquals(null, batchForcedUseMount(scheduled = false, autoInstallWithShizuku = true))
+    }
+
     @Test
     fun `unsafe root mount outcomes stop installer fallback`() {
         assertFalse(rootMountAllowsBatchFallback(RootMountResult.Busy(null)))

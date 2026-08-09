@@ -26,6 +26,12 @@ import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.UUID
 
+internal fun installerTokenMatchesPatchMode(
+    token: InstallerManager.Token,
+    useMount: Boolean
+): Boolean = token != InstallerManager.Token.None &&
+    (token == InstallerManager.Token.AutoSaved) == useMount
+
 class InstallerManager(
     private val app: Application,
     private val prefs: PreferencesManager,

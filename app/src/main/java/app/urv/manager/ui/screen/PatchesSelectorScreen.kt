@@ -143,6 +143,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.patcher.patch.Option
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.patcher.patch.PatchLockState
 import app.urv.manager.domain.repository.PatchProfile
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.ui.component.AppTopBar
@@ -1106,6 +1107,7 @@ fun PatchesSelectorScreen(
                         uid,
                         patch
                     ),
+                    lockState = viewModel.lockState(patch),
                     searchEngineHost = searchEngineHost,
                     showVersionTags = showVersionTags,
                     showOptionPreviews = showOptionPreviews,
@@ -1930,6 +1932,7 @@ private fun PatchItem(
     onOptionsDialog: () -> Unit,
     onShowVersionsDialog: (PatchVersionsDialogState) -> Unit,
     selected: Boolean,
+    lockState: PatchLockState,
     onToggle: () -> Unit,
     compatible: Boolean = true,
     packageName: String,
@@ -1939,6 +1942,19 @@ private fun PatchItem(
     showVersionTags: Boolean,
     showOptionPreviews: Boolean
 ): Unit {
+    val context = LocalContext.current
+    val lockedMessage = when (lockState) {
+        PatchLockState.LOCKED_ON ->
+            stringResource(R.string.patch_required_by_install_target)
+        PatchLockState.LOCKED_OFF ->
+            stringResource(R.string.patch_unavailable_for_install_target)
+        PatchLockState.NONE -> null
+    }
+    val onItemClick = if (lockedMessage == null) {
+        onToggle
+    } else {
+        { context.toast(lockedMessage) }
+    }
     val supportedPackage = patch.compatiblePackages?.firstOrNull { it.packageName == packageName }
     val supportsAllVersions = patch.compatiblePackages == null || supportedPackage?.versions == null
     val rawVersions = supportedPackage?.versions?.toList()?.sorted().orEmpty()
@@ -2086,7 +2102,7 @@ private fun PatchItem(
             .let { if (!compatible) it.alpha(0.6f) else it },
         shape = RoundedCornerShape(20.dp),
         tonalElevation = 2.dp,
-        onClick = onToggle
+        onClick = onItemClick
     ) {
         Column(
             modifier = Modifier
@@ -2101,8 +2117,8 @@ private fun PatchItem(
             ) {
                 HapticCheckbox(
                     checked = selected,
-                    onCheckedChange = { onToggle() },
-                    enabled = compatible
+                    onCheckedChange = { onItemClick() },
+                    enabled = compatible && lockState == PatchLockState.NONE
                 )
                 Column(
                     modifier = Modifier.weight(1f),
@@ -2119,9 +2135,19 @@ private fun PatchItem(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    lockedMessage?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
                 if (patch.options?.isNotEmpty() == true) {
-                    IconButton(onClick = onOptionsDialog, enabled = compatible) {
+                    IconButton(
+                        onClick = onOptionsDialog,
+                        enabled = compatible && lockState != PatchLockState.LOCKED_OFF
+                    ) {
                         Icon(Icons.Outlined.Settings, null)
                     }
                 }

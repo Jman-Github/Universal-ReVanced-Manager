@@ -18,6 +18,7 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
@@ -113,6 +114,11 @@ internal fun shouldWaitForExternalBatchInstaller(
 
 internal fun canDeleteReplacedSavedEntry(targetMigrationSucceeded: Boolean): Boolean =
     targetMigrationSucceeded
+
+internal fun batchForcedUseMount(
+    scheduled: Boolean,
+    autoInstallWithShizuku: Boolean
+): Boolean? = false.takeIf { scheduled && autoInstallWithShizuku }
 
 internal fun batchInstallPlanToken(
     plan: InstallerManager.InstallPlan
@@ -225,7 +231,13 @@ class BatchPatchCoordinator(
             )
             var nextPhase = BatchPhase.PREFLIGHT
             val items = try {
-                resolver.resolve(packageNames)
+                resolver.resolve(
+                    packageNames,
+                    forcedUseMount = batchForcedUseMount(
+                        scheduled,
+                        prefs.autoPatchInstallWithShizuku.get()
+                    )
+                )
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -343,7 +355,13 @@ class BatchPatchCoordinator(
             )
             val replacements = try {
                 if (manualEntries == null) {
-                    resolver.resolve(retryPackages)
+                    resolver.resolve(
+                        retryPackages,
+                        forcedUseMount = batchForcedUseMount(
+                            snapshot.scheduled,
+                            prefs.autoPatchInstallWithShizuku.get()
+                        )
+                    )
                 } else {
                     val retrySet = retryPackages.toSet()
                     resolver.resolveManual(
@@ -1191,16 +1209,45 @@ class BatchPatchCoordinator(
                 )
             else -> null
         }
-        val explicitInstaller = explicitToken != null
+        val resolvedToken = explicitToken
+            ?: InstallerManager.Token.AutoSaved.takeIf { item.useMount }
+        if (item.useMount && targetPackage != item.packageName) {
+            updateItem(index) {
+                it.copy(
+                    installOutcome = BatchInstallOutcome.FAILED,
+                    installMessage = app.getString(
+                        R.string.root_mount_renamed_package_not_supported
+                    ),
+                    installedPackageName = targetPackage,
+                    installing = false
+                )
+            }
+            return
+        }
+        if (
+            resolvedToken != null &&
+            !installerTokenMatchesPatchMode(resolvedToken, item.useMount)
+        ) {
+            updateItem(index) {
+                it.copy(
+                    installOutcome = BatchInstallOutcome.FAILED,
+                    installMessage = app.getString(R.string.installer_patch_mode_mismatch),
+                    installedPackageName = targetPackage,
+                    installing = false
+                )
+            }
+            return
+        }
+        val explicitInstaller = explicitToken != null || item.useMount
         val plan = try {
-            if (explicitToken != null) {
+            if (resolvedToken != null) {
                 installerManager.resolvePlanForToken(
-                    token = explicitToken,
+                    token = resolvedToken,
                     target = InstallerManager.InstallTarget.PATCHER,
                     sourceFile = file,
                     expectedPackage = targetPackage,
                     sourceLabel = item.appName,
-                    allowMount = targetPackage == item.packageName
+                    allowMount = item.useMount && targetPackage == item.packageName
                 )
             } else {
                 installerManager.resolvePlan(
@@ -1208,7 +1255,7 @@ class BatchPatchCoordinator(
                     sourceFile = file,
                     expectedPackage = targetPackage,
                     sourceLabel = item.appName,
-                    allowMount = targetPackage == item.packageName
+                    allowMount = item.useMount && targetPackage == item.packageName
                 )
             }
         } catch (cancelled: CancellationException) {
@@ -1347,6 +1394,9 @@ class BatchPatchCoordinator(
                 attemptedToken = batchInstallPlanToken(plan),
                 primaryToken = primaryToken,
                 fallbackToken = fallbackToken
+            ) && installerTokenMatchesPatchMode(
+                fallbackToken,
+                item.useMount
             ) && !(
                 fallbackToken == InstallerManager.Token.AutoSaved &&
                     targetPackage != item.packageName
@@ -1446,11 +1496,10 @@ class BatchPatchCoordinator(
             version = versionName,
             versionCode = versionCode
         )
-        if (retainedOriginal != null && SplitApkPreparer.isSplitArchive(retainedOriginal)) {
-            return BatchInstallAttempt(app.getString(R.string.mount_split_not_supported))
-        }
-        val retainedInfo = retainedOriginal?.let(pm::getPackageInfo)
-        val stockFile = retainedOriginal?.takeIf {
+        val retainedStock = retainedOriginal
+            ?.takeUnless(SplitApkPreparer::isSplitArchive)
+        val retainedInfo = retainedStock?.let(pm::getPackageInfo)
+        val verifiedRetainedStock = retainedStock?.takeIf {
             retainedInfo?.packageName == targetPackage &&
                 retainedInfo.versionName == patchedInfo.versionName &&
                 pm.getVersionCode(retainedInfo) == versionCode
@@ -1459,7 +1508,16 @@ class BatchPatchCoordinator(
         val stockNeedsReplacement = installedInfo == null ||
             installedInfo.versionName != patchedInfo.versionName ||
             pm.getVersionCode(installedInfo) != versionCode
-        if (stockNeedsReplacement && stockFile == null) {
+        val appMounted = rootInstaller.isAppMounted(targetPackage)
+        val stockFile = when {
+            stockNeedsReplacement -> verifiedRetainedStock
+            appMounted -> null
+            else -> installedInfo?.applicationInfo?.sourceDir
+                ?.let(::File)
+                ?.takeIf(File::isFile)
+                ?: verifiedRetainedStock
+        }
+        if (stockFile == null && (stockNeedsReplacement || !appMounted)) {
             return BatchInstallAttempt(app.getString(R.string.install_app_fail_missing_stock))
         }
 
@@ -2097,6 +2155,7 @@ class BatchPatchCoordinator(
                     installedPackageName = item.installedPackageName,
                     savedForLater = item.savedForLater,
                     profileInstallerToken = item.profileInstallerToken,
+                    useMount = item.useMount,
                     logLines = item.logLines.takeLast(MAX_LOG_LINES)
                 )
             },
@@ -2176,6 +2235,7 @@ class BatchPatchCoordinator(
                     installedPackageName = item.installedPackageName,
                     savedForLater = item.savedForLater,
                     profileInstallerToken = item.profileInstallerToken,
+                    useMount = item.useMount,
                     logLines = takeLastWithinCharacterBudget(
                         item.logLines.takeLast(MAX_LOG_LINES),
                         perItemLogBudget

@@ -3,10 +3,12 @@ package app.urv.manager.morphe.runtime
 import android.os.Build
 import app.morphe.patcher.dex.BytecodeMode
 import app.morphe.patcher.patch.ColorOption
+import app.morphe.patcher.patch.ApkArchitecture
 import app.morphe.patcher.patch.FilePathOption
 import app.morphe.patcher.patch.FilesOption
 import app.morphe.patcher.patch.FolderOption
 import app.morphe.patcher.patch.ImageOption
+import app.morphe.patcher.patch.InstallerType
 import app.morphe.patcher.patch.Option
 import app.morphe.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
@@ -401,6 +403,19 @@ object MorpheRuntimeEntry {
         }
         val options = patch.options.values.map(::optionToMap)
         result["options"] = options.ifEmpty { null }
+
+        // Code adapted from Morphe, see third-party/NOTICE for more information.
+        // https://github.com/MorpheApp/morphe-manager/pull/747
+        // The runtime uses an isolated class loader, so resolve the callback here and carry only
+        // primitive enum names back to the app process.
+        result["availability"] = patch.availability?.let { resolver ->
+            InstallerType.entries.associate { installerType ->
+                installerType.name to resolver.resolve(
+                    installerType,
+                    ApkArchitecture.UNIVERSAL
+                ).name
+            }
+        }
         return result
     }
 

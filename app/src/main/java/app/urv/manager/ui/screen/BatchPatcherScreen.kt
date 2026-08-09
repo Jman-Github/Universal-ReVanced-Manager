@@ -371,7 +371,8 @@ fun BatchPatcherScreen(
                                         currentSelection = item.selection,
                                         options = item.options,
                                         preferredAppVersion = item.version,
-                                        preferredBundleUid = item.selection.keys.firstOrNull()
+                                        preferredBundleUid = item.selection.keys.firstOrNull(),
+                                        useMount = item.useMount,
                                     )
                                 )
                             }

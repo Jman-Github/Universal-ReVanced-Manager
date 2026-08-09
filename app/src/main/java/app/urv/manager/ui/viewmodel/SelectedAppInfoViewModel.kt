@@ -28,6 +28,8 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -47,6 +49,9 @@ import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleInfo.Extensions.toPatchSelection
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.patcher.patch.applyAvailability
+import app.urv.manager.patcher.patch.installerTypeFor
+import app.urv.manager.patcher.patch.removeGmsCoreSupport
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.network.downloader.ApkDownloadHelperContract
@@ -117,11 +122,15 @@ class SelectedAppInfoViewModel(
     private val patchProfileRepository: PatchProfileRepository = get()
     private val installedAppRepository: InstalledAppRepository = get()
     private val rootInstaller: RootInstaller = get()
+    private val installerManager: InstallerManager = get()
     private val json: Json = get()
     private val pm: PM = get()
     private val filesystem: Filesystem = get()
     private val savedStateHandle: SavedStateHandle = get()
     val prefs: PreferencesManager = get()
+    private val patchAvailabilityEnabled = prefs.patchAvailabilityEnabled.getBlocking()
+    private val removeGmsCoreForPrimaryMountEnabled =
+        prefs.removeGmsCoreForPrimaryMount.getBlocking()
     private var selectionLoadJob: Job? = null
     private var optionsLoadJob: Job? = null
     private var configurationUpdateJob: Job? = null
@@ -191,10 +200,17 @@ class SelectedAppInfoViewModel(
     val preferredBundleTargetsAllVersionsFlow = preferredBundleAllVersionsFlow
     private val selectedPatchNamesByBundleFlow = combine(
         bundleInfoFlow,
-        snapshotFlow { selectionState },
+        snapshotFlow { selectionState to usingMountInstall },
         prefs.disablePatchVersionCompatCheck.flow
-    ) { bundles, state, allowIncompatible ->
-        state.patches(bundles, allowIncompatible)
+    ) { bundles, selection, allowIncompatible ->
+        val (state, useMount) = selection
+        state.patches(
+            bundles,
+            allowIncompatible,
+            installerTypeFor(useMount),
+            patchAvailabilityEnabled,
+            shouldRemoveGmsCore(useMount)
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
     val selectionRecommendedVersionFlow = combine(
         bundleInfoFlow,
@@ -294,6 +310,20 @@ class SelectedAppInfoViewModel(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val hasRoot = rootInstaller.hasRootAccess()
+    var usingMountInstall by savedStateHandle.saveable {
+        val configuredMount = !prefs.chooseInstallerPerInstall.getBlocking() &&
+            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+        mutableStateOf(hasRoot && (input.useMount ?: configuredMount))
+    }
+        private set
+
+    init {
+        if (!hasRoot) usingMountInstall = false
+    }
+
+    fun selectPatchMode(useMount: Boolean) {
+        usingMountInstall = useMount && hasRoot
+    }
     var installedAppData: Pair<SelectedApp.Installed, InstalledApp?>? by mutableStateOf(null)
         private set
     val downloadedApps =
@@ -576,6 +606,14 @@ class SelectedAppInfoViewModel(
                 return@launch
             }
             autoPatchProfile = profile.autoPatch && !profile.apkPath.isNullOrBlank()
+            profile.installerToken?.let { storedToken ->
+                withContext(Dispatchers.Main) {
+                    selectPatchMode(
+                        installerManager.parseToken(storedToken) ==
+                            InstallerManager.Token.AutoSaved
+                    )
+                }
+            }
 
             val sourcesList = bundleRepository.sources.first()
             val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
@@ -774,7 +812,13 @@ class SelectedAppInfoViewModel(
         val currentSelectionState = selectionState
         if (autoRecommendationMode && currentSelectionState is SelectionState.Customized) {
             val hasAnySelectablePatch = currentSelectionState
-                .patches(bundles, allowIncompatible)
+                .patches(
+                    bundles,
+                    allowIncompatible,
+                    installerTypeFor(usingMountInstall),
+                    patchAvailabilityEnabled,
+                    shouldRemoveGmsCore(usingMountInstall)
+                )
                 .values
                 .any { it.isNotEmpty() }
             if (!hasAnySelectablePatch) {
@@ -1180,12 +1224,22 @@ class SelectedAppInfoViewModel(
             ?.takeIf { it.isNotEmpty() }
         val selectedPatches = customizedPatches
             ?: availablePatches
-                .filter { it.include }
+                .filter {
+                    it.defaultSelected(
+                        installerTypeFor(usingMountInstall),
+                        patchAvailabilityEnabled
+                    )
+                }
                 .map { it.name }
                 .toSet()
                 .ifEmpty {
                     bundle.patchSequence(false)
-                        .filter { it.include }
+                        .filter {
+                            it.defaultSelected(
+                                installerTypeFor(usingMountInstall),
+                                patchAvailabilityEnabled
+                            )
+                        }
                         .map { it.name }
                         .toSet()
                 }
@@ -1202,7 +1256,13 @@ class SelectedAppInfoViewModel(
             return@launch
         }
 
-        selectionState = SelectionState.Customized(mapOf(bundleUid to selectedPatches))
+        val filteredSelection = mapOf(bundleUid to selectedPatches)
+            .removeGmsCoreSupport(shouldRemoveGmsCore(usingMountInstall))
+        selectionState = if (filteredSelection.isEmpty()) {
+            SelectionState.Default
+        } else {
+            SelectionState.Customized(filteredSelection)
+        }
     }
 
     private fun rememberBundleSelections(selection: PatchSelection) {
@@ -1620,25 +1680,48 @@ class SelectedAppInfoViewModel(
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
         val bundles = bundleInfoFlow.first()
         val profile = profileId?.let { patchProfileRepository.getProfile(it) }
+        val profileInstallerToken = profile?.installerToken?.takeIf { storedToken ->
+            installerTokenMatchesPatchMode(
+                installerManager.parseToken(storedToken),
+                usingMountInstall
+            )
+        }
         return Patcher.ViewModelParams(
             selectedApp = selectedApp,
             selectedPatches = getPatches(bundles, allowIncompatible),
             options = getOptionsFiltered(bundles),
             profileId = profile?.uid,
-            profileInstallerToken = profile?.installerToken,
-            autoInstall = profile?.autoInstall == true,
-            sourceEntryKey = sourceEntryKey
+            profileInstallerToken = profileInstallerToken,
+            autoInstall = profile?.autoInstall == true && profileInstallerToken != null,
+            sourceEntryKey = sourceEntryKey,
+            useMount = usingMountInstall,
         )
     }
 
     fun getPatches(bundles: List<PatchBundleInfo.Scoped>, allowIncompatible: Boolean) =
-        selectionState.patches(bundles, allowIncompatible)
+        selectionState.patches(
+            bundles,
+            allowIncompatible,
+            installerTypeFor(usingMountInstall),
+            patchAvailabilityEnabled,
+            shouldRemoveGmsCore(usingMountInstall)
+        )
 
     fun getCustomPatches(
         bundles: List<PatchBundleInfo.Scoped>,
         allowIncompatible: Boolean
     ): PatchSelection? =
-        (selectionState as? SelectionState.Customized)?.patches(bundles, allowIncompatible)
+        (selectionState as? SelectionState.Customized)?.patches(
+            bundles,
+            allowIncompatible,
+            installerTypeFor(usingMountInstall),
+            patchAvailabilityEnabled,
+            shouldRemoveGmsCore(usingMountInstall)
+        )
+
+    private fun shouldRemoveGmsCore(useMount: Boolean): Boolean =
+        useMount && removeGmsCoreForPrimaryMountEnabled &&
+            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
 
 
     fun updateConfiguration(
@@ -2065,22 +2148,49 @@ class SelectedAppInfoViewModel(
 }
 
 private sealed interface SelectionState : Parcelable {
-    fun patches(bundles: List<PatchBundleInfo.Scoped>, allowIncompatible: Boolean): PatchSelection
+    fun patches(
+        bundles: List<PatchBundleInfo.Scoped>,
+        allowIncompatible: Boolean,
+        installerType: app.urv.manager.patcher.patch.PatchInstallerType,
+        availabilityEnabled: Boolean,
+        removeGmsCore: Boolean,
+    ): PatchSelection
 
     @Parcelize
     data class Customized(val patchSelection: PatchSelection) : SelectionState {
-        override fun patches(bundles: List<PatchBundleInfo.Scoped>, allowIncompatible: Boolean) =
-            bundles.toPatchSelection(
+        override fun patches(
+            bundles: List<PatchBundleInfo.Scoped>,
+            allowIncompatible: Boolean,
+            installerType: app.urv.manager.patcher.patch.PatchInstallerType,
+            availabilityEnabled: Boolean,
+            removeGmsCore: Boolean,
+        ) = bundles.toPatchSelection(
                 allowIncompatible
             ) { uid, patch ->
                 patchSelection[uid]?.contains(patch.name) ?: false
             }
+            .applyAvailability(
+                installerType,
+                bundles.associate { bundle ->
+                    bundle.uid to bundle.patchSequence(allowIncompatible)
+                        .associateBy(PatchInfo::name)
+                },
+                availabilityEnabled
+            )
+            .removeGmsCoreSupport(removeGmsCore)
     }
 
     @Parcelize
     data object Default : SelectionState {
-        override fun patches(bundles: List<PatchBundleInfo.Scoped>, allowIncompatible: Boolean) =
-            bundles.toPatchSelection(allowIncompatible) { _, patch -> patch.include }
+        override fun patches(
+            bundles: List<PatchBundleInfo.Scoped>,
+            allowIncompatible: Boolean,
+            installerType: app.urv.manager.patcher.patch.PatchInstallerType,
+            availabilityEnabled: Boolean,
+            removeGmsCore: Boolean,
+        ) = bundles.toPatchSelection(allowIncompatible) { _, patch ->
+            patch.defaultSelected(installerType, availabilityEnabled)
+        }.removeGmsCoreSupport(removeGmsCore)
     }
 }
 

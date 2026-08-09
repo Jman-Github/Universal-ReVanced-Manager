@@ -113,7 +113,8 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
         val returnToDashboard: Boolean = false,
         val requiresSourceSelection: Boolean = false,
         val batchQueue: Boolean = false,
-        val sourceEntryKey: String? = null
+        val sourceEntryKey: String? = null,
+        val useMount: Boolean? = null,
     ) : Parcelable
 
     @Serializable
@@ -131,7 +132,8 @@ data object SelectedApplicationInfo : ComplexParameter<SelectedApplicationInfo.V
             val preferredBundleVersion: String? = null,
             val preferredBundleUid: Int? = null,
             val preferredBundleOverride: String? = null,
-            val preferredBundleTargetsAllVersions: Boolean = false
+            val preferredBundleTargetsAllVersions: Boolean = false,
+            val useMount: Boolean = false,
         ) : Parcelable
     }
 
@@ -149,7 +151,8 @@ data object Patcher : ComplexParameter<Patcher.ViewModelParams> {
         val profileId: Int? = null,
         val profileInstallerToken: String? = null,
         val autoInstall: Boolean = false,
-        val sourceEntryKey: String? = null
+        val sourceEntryKey: String? = null,
+        val useMount: Boolean = false,
     ) : Parcelable
 }
 

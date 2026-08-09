@@ -139,8 +139,6 @@ fun PatcherScreen(
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
-    val primaryInstallerValue by prefs.installerPrimary.getAsState()
-    val fallbackInstallerValue by prefs.installerFallback.getAsState()
     val continueOnPatchError by prefs.continueOnPatchError.getAsState()
     val useExclusiveAutoExpand = autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val savedAppsEnabled by prefs.enableSavedApps.getAsState()
@@ -165,25 +163,10 @@ fun PatcherScreen(
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
-    val supportsRootMount = viewModel.supportsRootMount && viewModel.rootMountInputSupported
-    val primaryInstallerIsMount = remember(primaryInstallerValue) {
-        installerManager.parseToken(primaryInstallerValue) is InstallerManager.Token.AutoSaved
-    }
-    val fallbackInstallerIsMount = remember(fallbackInstallerValue) {
-        installerManager.parseToken(fallbackInstallerValue) is InstallerManager.Token.AutoSaved
-    }
+    val supportsRootMount = viewModel.usingMountInstall && viewModel.supportsRootMount
     var mountInstallerAvailable by remember { mutableStateOf(false) }
-    LaunchedEffect(
-        chooseInstallerPerInstall,
-        primaryInstallerIsMount,
-        fallbackInstallerIsMount,
-        supportsRootMount
-    ) {
-        mountInstallerAvailable = if (
-            supportsRootMount &&
-            !chooseInstallerPerInstall &&
-            (primaryInstallerIsMount || fallbackInstallerIsMount)
-        ) {
+    LaunchedEffect(supportsRootMount) {
+        mountInstallerAvailable = if (supportsRootMount) {
             withContext(Dispatchers.IO) {
                 installerManager.describeEntry(
                     InstallerManager.Token.AutoSaved,
@@ -194,13 +177,7 @@ fun PatcherScreen(
             false
         }
     }
-    val showMountFallbackMenu =
-        !chooseInstallerPerInstall &&
-            viewModel.installedPackageName == null &&
-            !viewModel.basePackageInstalled &&
-            fallbackInstallerIsMount &&
-            !primaryInstallerIsMount &&
-            mountInstallerAvailable
+    val showMountFallbackMenu = false
     var showDismissConfirmationDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallInProgressDialog by rememberSaveable { mutableStateOf(false) }
     var showSavePatchedAppDialog by rememberSaveable { mutableStateOf(false) }
@@ -1089,7 +1066,9 @@ fun PatcherScreen(
             options = installerManager.listEntries(
                 target = InstallerManager.InstallTarget.PATCHER,
                 includeNone = false
-            ).filterNot { entry ->
+            ).filter { entry ->
+                viewModel.isInstallerTokenAllowed(entry.token)
+            }.filterNot { entry ->
                 entry.token == InstallerManager.Token.AutoSaved && !supportsRootMount
             },
             onDismiss = { showInstallerPicker = false },
@@ -1146,7 +1125,7 @@ fun PatcherScreen(
                                                 stringResource(
                                                     when {
                                                         viewModel.installedPackageName != null -> R.string.open_app
-                                                        !chooseInstallerPerInstall && primaryInstallerIsMount &&
+                                                        viewModel.usingMountInstall &&
                                                             mountInstallerAvailable && !viewModel.basePackageInstalled ->
                                                             R.string.install_base_and_mount
                                                         else -> R.string.install_app
@@ -1160,7 +1139,7 @@ fun PatcherScreen(
                                                     Icons.AutoMirrored.Outlined.OpenInNew,
                                                     stringResource(R.string.open_app)
                                                 )
-                                                !chooseInstallerPerInstall && primaryInstallerIsMount &&
+                                                viewModel.usingMountInstall &&
                                                     mountInstallerAvailable && !viewModel.basePackageInstalled -> Icon(
                                                     Icons.Outlined.Layers,
                                                     stringResource(R.string.install_base_and_mount)

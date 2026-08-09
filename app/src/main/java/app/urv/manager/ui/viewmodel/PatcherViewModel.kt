@@ -49,6 +49,7 @@ import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.domain.installer.InstallCancelledException
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.SessionDeadException
@@ -104,6 +105,9 @@ import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.patcher.patch.PatchBundleInfo
+import app.urv.manager.patcher.patch.applyAvailability
+import app.urv.manager.patcher.patch.installerTypeFor
+import app.urv.manager.patcher.patch.removeGmsCoreSupport
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.buildSavedAppEntryKey
@@ -317,9 +321,6 @@ class PatcherViewModel(
         private set
     var supportsRootMount by mutableStateOf(true)
         private set
-    val rootMountInputSupported: Boolean
-        get() = !requiresSplitPreparation
-
     private var installedApp: InstalledApp? = null
     private suspend fun sourceInstalledApp(): InstalledApp? =
         input.sourceEntryKey
@@ -329,7 +330,13 @@ class PatcherViewModel(
     private val selectedApp = input.selectedApp
     val packageName = selectedApp.packageName
     val version = selectedApp.version
-    val hasProfileInstallerPreference = input.profileInstallerToken != null
+    val usingMountInstall = input.useMount
+    val hasProfileInstallerPreference = input.profileInstallerToken
+        ?.let(installerManager::parseToken)
+        ?.let { installerTokenMatchesPatchMode(it, usingMountInstall) } == true
+
+    fun isInstallerTokenAllowed(token: InstallerManager.Token): Boolean =
+        installerTokenMatchesPatchMode(token, usingMountInstall)
 
     var basePackageInstalled by mutableStateOf(pm.getPackageInfo(packageName) != null)
         private set
@@ -445,7 +452,10 @@ fun proceedAfterMissingPatchWarning() {
         val warning = missingPatchWarning ?: return
         viewModelScope.launch {
             val scopedBundles = gatherScopedBundles()
-            val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+            val sanitizedSelection = applyCurrentPatchRules(
+                sanitizeSelection(appliedSelection, scopedBundles),
+                scopedBundles
+            )
             val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
             appliedSelection = sanitizedSelection
             appliedOptions = sanitizedOptions
@@ -864,6 +874,7 @@ fun proceedAfterMissingPatchWarning() {
         if (!tokensEqual(primaryToken, lastToken)) return null
         val fallbackToken = installerManager.getFallbackToken()
         if (fallbackToken == InstallerManager.Token.None) return null
+        if (!isInstallerTokenAllowed(fallbackToken)) return null
         if (tokensEqual(primaryToken, fallbackToken)) return null
         val fallbackEntry = installerManager.describeEntry(fallbackToken, target) ?: return null
         if (!fallbackEntry.availability.available) return null
@@ -877,7 +888,7 @@ fun proceedAfterMissingPatchWarning() {
             sourceFile = outputFile,
             expectedPackage = expectedPackage,
             sourceLabel = lastInstallSourceLabel,
-            allowMount = expectedPackage == packageName && rootMountInputSupported
+            allowMount = usingMountInstall && expectedPackage == packageName
         ) ?: return null
         if (plan is InstallerManager.InstallPlan.Internal && fallbackToken is InstallerManager.Token.Component) {
             return null
@@ -1581,6 +1592,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val kept = sanitizedSelection[uid] ?: emptySet()
             patches.filterNot { it in kept }.forEach { missing += it }
         }
+        appliedSelection = applyCurrentPatchRules(sanitizedSelection, scopedBundles)
         if (missing.isNotEmpty()) {
             missingPatchWarning = MissingPatchWarningState(
                 patchNames = missing.distinct().sorted()
@@ -2620,7 +2632,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                                     outputFile,
                                     currentPackageInfo.packageName,
                                     null,
-                                    allowMount = currentPackageInfo.packageName == packageName && rootMountInputSupported
+                                    allowMount = usingMountInstall &&
+                                        currentPackageInfo.packageName == packageName
                                 )
                                 showSignatureMismatchPrompt(currentPackageInfo.packageName, plan)
                                 return
@@ -2652,7 +2665,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 app.getString(
                     R.string.install_app_fail,
                     e.simpleMessage() ?: e.javaClass.simpleName.orEmpty()
-                )
+                ),
+                allowFallback = installType != InstallType.MOUNT
             )
         }
     }
@@ -2672,20 +2686,25 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
             installedBaseInfo.versionName != packageInfo.versionName
         val originalInput = inputFile
-        if (originalInput != null && SplitApkPreparer.isSplitArchive(originalInput)) {
-            throw IllegalArgumentException(app.getString(R.string.mount_split_not_supported))
-        }
+        val originalInputIsSplit = originalInput?.let(SplitApkPreparer::isSplitArchive) == true
         val stockApks = if (stockNeedsReplacement) {
-            val stock = originalInput ?: throw IllegalStateException(
-                app.getString(R.string.install_app_fail_missing_stock)
-            )
+            val stock = originalInput
+                ?.takeUnless { originalInputIsSplit }
+                ?: throw IllegalStateException(
+                    app.getString(R.string.install_app_fail_missing_stock)
+                )
             listOf(stock)
         } else if (rootInstaller.isAppMounted(packageName)) {
             // applicationInfo.sourceDir resolves through the active bind mount. It is the
             // patched payload, not independent proof of the raw stock APK.
             emptyList()
         } else {
-            listOfNotNull(originalInput)
+            val installedStock = installedBaseInfo?.applicationInfo?.sourceDir
+                ?.let(::File)
+                ?.takeIf(File::isFile)
+            listOfNotNull(
+                if (originalInputIsSplit) installedStock else originalInput ?: installedStock
+            )
         }
         val label = with(pm) { packageInfo.label() }
         val result = try {
@@ -3029,6 +3048,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     override fun install() {
         if (isInstalling) return
+        if (usingMountInstall) {
+            installWithToken(InstallerManager.Token.AutoSaved)
+            return
+        }
         input.profileInstallerToken?.let { storedToken ->
             installWithToken(
                 installerManager.withPlayStoreSource(
@@ -3047,7 +3070,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     outputFile,
                     expectedPackage,
                     null,
-                    allowMount = expectedPackage == packageName && rootMountInputSupported
+                    allowMount = usingMountInstall && expectedPackage == packageName
                 )
                 Log.d(TAG, "install() resolved plan=${plan::class.java.simpleName}")
                 if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -3064,7 +3087,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     app.getString(
                         R.string.install_app_fail,
                         error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
-                    )
+                    ),
+                    allowFallback = !usingMountInstall
                 )
             }
         }
@@ -3078,7 +3102,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     installerManager.parseToken(input.profileInstallerToken),
                     prefs.shizukuInstallAsPlayStore.getBlocking()
                 )
-            prefs.autoInstallWithShizuku.getBlocking() -> {
+            !usingMountInstall && prefs.autoInstallWithShizuku.getBlocking() -> {
                 val primary = installerManager.getPrimaryToken()
                 if (!installerManager.isShizukuToken(primary)) return
                 primary
@@ -3091,9 +3115,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun installWithToken(token: InstallerManager.Token, automatic: Boolean = false) {
         if (isInstalling) return
+        if (!isInstallerTokenAllowed(token)) {
+            showInstallFailure(
+                app.getString(R.string.installer_patch_mode_mismatch),
+                allowFallback = false
+            )
+            return
+        }
         viewModelScope.launch {
             runCatching {
                 val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
+                check(!usingMountInstall || expectedPackage == packageName) {
+                    app.getString(R.string.root_mount_renamed_package_not_supported)
+                }
                 Log.d(TAG, "installWithToken() requested, token=$token, expected=$expectedPackage, outputExists=${outputFile.exists()}")
                 val plan = installerManager.resolvePlanForToken(
                     token = token,
@@ -3101,7 +3135,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     sourceFile = outputFile,
                     expectedPackage = expectedPackage,
                     sourceLabel = null,
-                    allowMount = expectedPackage == packageName && rootMountInputSupported
+                    allowMount = usingMountInstall && expectedPackage == packageName
                 ) ?: throw IllegalStateException("Selected installer is unavailable")
                 Log.d(TAG, "installWithToken() resolved plan=${plan::class.java.simpleName}")
                 if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -3180,7 +3214,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 outputFile,
                 expectedPackage,
                 null,
-                allowMount = expectedPackage == packageName && rootMountInputSupported
+                    allowMount = usingMountInstall && expectedPackage == packageName
             )
             recordInstallPlan(plan, expectedPackage, null)
             when (plan) {
@@ -3319,7 +3353,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             sourceFile = outputFile,
             expectedPackage = expectedPackage,
             sourceLabel = lastInstallSourceLabel,
-            allowMount = expectedPackage == packageName && rootMountInputSupported
+            allowMount = usingMountInstall && expectedPackage == packageName
         )
         fallbackInstallPrompt = null
         pendingInstallFailureMessage = null
@@ -5346,6 +5380,29 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 put(uid, patches.toSet())
             }
         }
+    }
+
+    private suspend fun applyCurrentPatchRules(
+        selection: PatchSelection,
+        bundles: Map<Int, PatchBundleInfo.Scoped>,
+    ): PatchSelection {
+        val allowIncompatible = prefs.disablePatchVersionCompatCheck.get() ||
+            bundles.any { (uid, bundle) ->
+                val selected = selection[uid].orEmpty()
+                bundle.incompatible.any { it.name in selected }
+            }
+        val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
+        val removeGmsCore = usingMountInstall &&
+            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            prefs.removeGmsCoreForPrimaryMount.get()
+
+        return selection.applyAvailability(
+            installerTypeFor(usingMountInstall),
+            bundles.mapValues { (_, bundle) ->
+                bundle.patchSequence(allowIncompatible).associateBy { it.name }
+            },
+            availabilityEnabled
+        ).removeGmsCoreSupport(removeGmsCore)
     }
 
     private fun sanitizeOptions(

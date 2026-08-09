@@ -60,6 +60,7 @@ data class BatchPatchItem(
     val savedForLater: Boolean = false,
     val sourceEntryKey: String? = null,
     val profileInstallerToken: String? = null,
+    val useMount: Boolean = false,
     val progressEvents: List<ProgressEvent> = emptyList(),
     val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList(),
     val logLines: List<String> = emptyList()
@@ -236,6 +237,7 @@ data class BatchResultItemSnapshot(
     val installedPackageName: String?,
     val savedForLater: Boolean = false,
     val profileInstallerToken: String? = null,
+    val useMount: Boolean = false,
     val logLines: List<String> = emptyList()
 )
 

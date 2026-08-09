@@ -732,7 +732,8 @@ private fun ReVancedManager(
                             preferredBundleVersion = null,
                             preferredBundleUid = selection.keys.firstOrNull(),
                             preferredBundleOverride = null,
-                            preferredBundleTargetsAllVersions = false
+                            preferredBundleTargetsAllVersions = false,
+                            useMount = params.useMount,
                         )
                     )
                 },
@@ -845,7 +846,8 @@ private fun ReVancedManager(
                                 manualBatchQueue.upsert(
                                     input = patcherParams.selectedApp,
                                     selection = patcherParams.selectedPatches,
-                                    options = patcherParams.options
+                                    options = patcherParams.options,
+                                    useMount = patcherParams.useMount,
                                 )
                                 returnToManualBatchSelector()
                             } else {
@@ -880,7 +882,8 @@ private fun ReVancedManager(
                                 preferredBundleVersion = viewModel.preferredBundleVersion,
                                 preferredBundleUid = viewModel.selectedBundleUidFlow.value,
                                 preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
-                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value,
+                                useMount = viewModel.usingMountInstall,
                             )
                         )
                     },
@@ -911,7 +914,8 @@ private fun ReVancedManager(
                                 preferredBundleVersion = viewModel.preferredBundleVersion,
                                 preferredBundleUid = viewModel.selectedBundleUidFlow.value,
                                 preferredBundleOverride = viewModel.selectedBundleVersionOverrideFlow.value,
-                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value
+                                preferredBundleTargetsAllVersions = viewModel.preferredBundleTargetsAllVersionsFlow.value,
+                                useMount = viewModel.usingMountInstall,
                             )
                         )
                     },
@@ -972,7 +976,8 @@ private fun ReVancedManager(
                                 manualBatchQueue.upsert(
                                     input = patcherParams.selectedApp,
                                     selection = patcherParams.selectedPatches,
-                                    options = patcherParams.options
+                                    options = patcherParams.options,
+                                    useMount = patcherParams.useMount,
                                 )
                                 returnToManualBatchSelector()
                             } else {

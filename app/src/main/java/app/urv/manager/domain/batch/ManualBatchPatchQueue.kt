@@ -14,7 +14,8 @@ import java.io.File
 data class ManualBatchPatchEntry(
     val input: SelectedApp,
     val selection: PatchSelection,
-    val options: Options
+    val options: Options,
+    val useMount: Boolean,
 )
 
 class ManualBatchPatchQueue(
@@ -31,7 +32,8 @@ class ManualBatchPatchQueue(
     suspend fun upsert(
         input: SelectedApp,
         selection: PatchSelection,
-        options: Options
+        options: Options,
+        useMount: Boolean,
     ) {
         val generationAtStart = synchronized(lock) { queueGeneration }
         val (preparedInput, ownedPath) = prepareInput(input)
@@ -49,7 +51,8 @@ class ManualBatchPatchQueue(
                 val replacement = ManualBatchPatchEntry(
                     input = preparedInput,
                     selection = selection.filterValues { it.isNotEmpty() },
-                    options = options
+                    options = options,
+                    useMount = useMount,
                 )
                 mutableEntries.value = if (previous == null) {
                     current + replacement

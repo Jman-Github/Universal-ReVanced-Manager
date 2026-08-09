@@ -108,6 +108,9 @@ class PreferencesManager(
     val skipApkSigning = booleanPreference("skip_apk_signing", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
+    val patchAvailabilityEnabled = booleanPreference("patch_availability_enabled", true)
+    val removeGmsCoreForPrimaryMount =
+        booleanPreference("remove_gmscore_for_primary_mount", true)
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/domain/manager/PreferencesManager.kt
@@ -543,6 +546,8 @@ class PreferencesManager(
         val skipApkSigning: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
+        val patchAvailabilityEnabled: Boolean? = null,
+        val removeGmsCoreForPrimaryMount: Boolean? = null,
         val processMemoryLimit: Int? = null,
         val patcherProcessMemoryLimit: Int? = null,
         val theme: Theme? = null,
@@ -791,6 +796,8 @@ class PreferencesManager(
             skipApkSigning = skipApkSigning.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
+            patchAvailabilityEnabled = patchAvailabilityEnabled.get(),
+            removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.get(),
             processMemoryLimit = processMemoryLimit.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
@@ -978,6 +985,8 @@ class PreferencesManager(
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
         snapshot.patcherLogMode?.let { patcherLogMode.value = it }
+        snapshot.patchAvailabilityEnabled?.let { patchAvailabilityEnabled.value = it }
+        snapshot.removeGmsCoreForPrimaryMount?.let { removeGmsCoreForPrimaryMount.value = it }
         (snapshot.processMemoryLimit ?: snapshot.patcherProcessMemoryLimit)?.let {
             processMemoryLimit.value =
                 MemoryLimitConfig.clampConfiguredMemoryLimitMb(it)

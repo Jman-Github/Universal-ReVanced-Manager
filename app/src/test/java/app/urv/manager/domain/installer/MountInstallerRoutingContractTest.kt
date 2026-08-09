@@ -2,9 +2,20 @@ package app.urv.manager.domain.installer
 
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class MountInstallerRoutingContractTest {
+    @Test
+    fun `installer tokens must match the patch mode`() {
+        assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.AutoSaved, true))
+        assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.Internal, true))
+        assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.Shizuku, true))
+        assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.AutoSaved, false))
+        assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Internal, false))
+        assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Shizuku, false))
+    }
+
     @Test
     fun `renamed packages cannot resolve to mount`() {
         val manager = source("domain/installer/InstallerManager.kt")
@@ -40,6 +51,18 @@ class MountInstallerRoutingContractTest {
         assertTrue(rootMount.contains("else if (rootInstaller.isAppMounted(packageName))"))
         assertTrue(rootMount.contains("emptyList()"))
         assertTrue(rootMount.contains("applicationInfo.sourceDir resolves through the active bind mount"))
+    }
+
+    @Test
+    fun `merged split input reaches root preflight with installed stock proof`() {
+        val patcher = source("ui/viewmodel/PatcherViewModel.kt")
+        val rootMount = patcher.substringAfter("private suspend fun performRootMount(")
+            .substringBefore("fun confirmRootDowngrade()")
+
+        assertFalse(patcher.contains("rootMountInputSupported"))
+        assertTrue(rootMount.contains("val originalInputIsSplit"))
+        assertTrue(rootMount.contains("if (originalInputIsSplit) installedStock"))
+        assertFalse(rootMount.contains("throw IllegalArgumentException(app.getString(R.string.mount_split_not_supported))"))
     }
 
     @Test

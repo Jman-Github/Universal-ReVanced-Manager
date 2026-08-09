@@ -18,8 +18,39 @@ data class PatchInfo(
     val description: String?,
     val include: Boolean,
     val compatiblePackages: ImmutableList<CompatiblePackage>?,
-    val options: ImmutableList<Option<*>>?
+    val options: ImmutableList<Option<*>>?,
+    val availability: ImmutableMap<PatchInstallerType, PatchAvailabilityState>? = null,
 ) {
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information.
+    // https://github.com/MorpheApp/morphe-manager/pull/747
+    fun defaultSelected(
+        installerType: PatchInstallerType,
+        availabilityEnabled: Boolean = true,
+    ): Boolean = if (!availabilityEnabled) include else when (
+        availability?.get(installerType)
+    ) {
+        PatchAvailabilityState.REQUIRED,
+        PatchAvailabilityState.ENABLED -> true
+
+        PatchAvailabilityState.UNAVAILABLE,
+        PatchAvailabilityState.DISABLED -> false
+
+        null -> include
+    }
+
+    fun lockState(
+        installerType: PatchInstallerType,
+        availabilityEnabled: Boolean = true,
+    ): PatchLockState = if (!availabilityEnabled) PatchLockState.NONE else when (
+        availability?.get(installerType)
+    ) {
+        PatchAvailabilityState.REQUIRED -> PatchLockState.LOCKED_ON
+        PatchAvailabilityState.UNAVAILABLE -> PatchLockState.LOCKED_OFF
+        PatchAvailabilityState.ENABLED,
+        PatchAvailabilityState.DISABLED,
+        null -> PatchLockState.NONE
+    }
 
     fun compatibleWith(packageName: String) =
         compatiblePackages?.any { it.packageName == packageName } ?: true
@@ -89,7 +120,30 @@ data class PatchInfo(
                 ?.toImmutableList()
                 ?.takeIf { it.isNotEmpty() }
 
-            return PatchInfo(name, description, include, compatiblePackages, options)
+            val availability = (metadata["availability"] as? Map<*, *>)
+                ?.mapNotNull { (rawInstallerType, rawAvailability) ->
+                    val installerType = rawInstallerType
+                        ?.toString()
+                        ?.let { runCatching { PatchInstallerType.valueOf(it) }.getOrNull() }
+                        ?: return@mapNotNull null
+                    val patchAvailability = rawAvailability
+                        ?.toString()
+                        ?.let { runCatching { PatchAvailabilityState.valueOf(it) }.getOrNull() }
+                        ?: return@mapNotNull null
+                    installerType to patchAvailability
+                }
+                ?.toMap()
+                ?.toImmutableMap()
+                ?.takeIf { it.isNotEmpty() }
+
+            return PatchInfo(
+                name,
+                description,
+                include,
+                compatiblePackages,
+                options,
+                availability
+            )
         }
 
         private fun parseVersionCodes(raw: Any?): ImmutableMap<String, ImmutableSet<Long>>? {

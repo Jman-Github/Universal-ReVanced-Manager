@@ -11,6 +11,9 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
@@ -20,6 +23,10 @@ import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.toConfiguration
 import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.patcher.patch.PatchBundleInfo
+import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.patcher.patch.applyAvailability
+import app.urv.manager.patcher.patch.installerTypeFor
+import app.urv.manager.patcher.patch.removeGmsCoreSupport
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.model.SelectedApp
@@ -43,13 +50,18 @@ class BatchPlanResolver(
     private val patchSelectionRepository: PatchSelectionRepository,
     private val patchOptionsRepository: PatchOptionsRepository,
     private val patchProfileRepository: PatchProfileRepository,
+    private val installerManager: InstallerManager,
+    private val rootInstaller: RootInstaller,
     private val prefs: PreferencesManager,
     private val fs: Filesystem,
     private val pm: PM
 ) {
-    suspend fun resolve(packageNames: List<String>): List<BatchPatchItem> = coroutineScope {
+    suspend fun resolve(
+        packageNames: List<String>,
+        forcedUseMount: Boolean? = null
+    ): List<BatchPatchItem> = coroutineScope {
         packageNames.distinct().map { packageName ->
-            async { resolve(packageName) }
+            async { resolve(packageName, forcedUseMount = forcedUseMount) }
         }.awaitAll()
     }
 
@@ -60,13 +72,16 @@ class BatchPlanResolver(
             async {
                 val resolved = resolve(
                     targetIdentifier = entry.input.packageName,
-                    attachedInput = entry.input
+                    attachedInput = entry.input,
+                    forcedUseMount = entry.useMount,
                 )
-                val (selection, options) = sanitizeBatchConfiguration(
+                val (sanitizedSelection, sanitizedOptions) = sanitizeBatchConfiguration(
                     selection = entry.selection,
                     options = entry.options,
                     bundles = resolved.bundles
                 )
+                val selection = applyBatchAvailability(sanitizedSelection, resolved)
+                val options = optionsForSelection(sanitizedOptions, selection)
                 val state = resolveManualBatchItemState(
                     resolvedState = resolved.state,
                     hasInput = resolved.input != null,
@@ -90,7 +105,8 @@ class BatchPlanResolver(
     suspend fun resolve(
         targetIdentifier: String,
         attachedFile: File? = null,
-        attachedInput: SelectedApp? = null
+        attachedInput: SelectedApp? = null,
+        forcedUseMount: Boolean? = null
     ): BatchPatchItem = withContext(Dispatchers.IO) {
         patchBundleRepository.awaitReady()
         val installedApps = installedAppRepository.getAll().first()
@@ -338,12 +354,33 @@ class BatchPlanResolver(
                 Triple(it, candidateOptions, candidateInstallerToken)
             }
         }.firstOrNull()
-        val selection = validSavedConfiguration?.first
+        val savedProfileInstallerToken = validSavedConfiguration?.third
+        val mountRequested = mountRequestedFor(
+            forcedUseMount = forcedUseMount,
+            installerToken = savedProfileInstallerToken,
+            chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.get(),
+        )
+        val useMount = mountRequested && rootInstaller.hasRootAccess()
+        val profileInstallerToken = savedProfileInstallerToken?.takeIf { token ->
+            installerTokenMatchesPatchMode(installerManager.parseToken(token), useMount)
+        }
+        val installerType = installerTypeFor(useMount)
+        val patchesByBundle = bundles.associate { bundle ->
+            bundle.uid to bundle.patchSequence(allowIncompatible || mismatch)
+                .associateBy(PatchInfo::name)
+        }
+        val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
+        val removeGmsCore = useMount &&
+            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            prefs.removeGmsCoreForPrimaryMount.get()
+        val selection = (validSavedConfiguration?.first
             ?: bundles.associate { bundle ->
                 bundle.uid to bundle.patchSequence(allowIncompatible || mismatch)
-                    .filter { it.include }
+                    .filter { it.defaultSelected(installerType, availabilityEnabled) }
                     .mapTo(mutableSetOf()) { it.name }
-            }.filterValues { it.isNotEmpty() }
+            }.filterValues { it.isNotEmpty() })
+            .applyAvailability(installerType, patchesByBundle, availabilityEnabled)
+            .removeGmsCoreSupport(removeGmsCore)
         val savedOptions = validSavedConfiguration?.second
             ?: patchOptionsRepository.getOptions(
                 resolvedPackageName,
@@ -387,7 +424,8 @@ class BatchPlanResolver(
             bundles = refs,
             state = if (mismatch) BatchItemState.VERSION_MISMATCH else BatchItemState.READY,
             sourceEntryKey = sourceEntryKey,
-            profileInstallerToken = validSavedConfiguration?.third
+            profileInstallerToken = profileInstallerToken,
+            useMount = useMount,
         )
     }
 
@@ -443,16 +481,24 @@ class BatchPlanResolver(
     suspend fun reattach(item: BatchPatchItem, file: File): BatchPatchItem =
         preserveReattachedConfiguration(
             item,
-            resolve(item.sourceEntryKey ?: item.packageName, file)
+            resolve(
+                item.sourceEntryKey ?: item.packageName,
+                attachedFile = file,
+                forcedUseMount = item.useMount
+            )
         )
 
     suspend fun reattach(item: BatchPatchItem, input: SelectedApp): BatchPatchItem =
         preserveReattachedConfiguration(
             item,
-            resolve(item.sourceEntryKey ?: item.packageName, attachedInput = input)
+            resolve(
+                item.sourceEntryKey ?: item.packageName,
+                attachedInput = input,
+                forcedUseMount = item.useMount
+            )
         )
 
-    private fun preserveReattachedConfiguration(
+    private suspend fun preserveReattachedConfiguration(
         item: BatchPatchItem,
         resolved: BatchPatchItem
     ): BatchPatchItem {
@@ -462,16 +508,17 @@ class BatchPlanResolver(
             bundles = resolved.bundles
         )
         val usePreservedConfiguration = preservedSelection.isNotEmpty()
-        val selection = if (usePreservedConfiguration) {
+        val selection = applyBatchAvailability(if (usePreservedConfiguration) {
             preservedSelection
         } else {
             resolved.selection
-        }
-        val options = if (usePreservedConfiguration) {
+        }, resolved)
+        val candidateOptions = if (usePreservedConfiguration) {
             preservedOptions
         } else {
             resolved.options
         }
+        val options = optionsForSelection(candidateOptions, selection)
         val forcedMismatch = item.forceVersionMismatch &&
             resolved.state == BatchItemState.VERSION_MISMATCH
         val state = when {
@@ -491,6 +538,56 @@ class BatchPlanResolver(
             forceVersionMismatch = forcedMismatch
         )
     }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information.
+    // https://github.com/MorpheApp/morphe-manager/pull/747
+    private fun mountRequestedFor(
+        forcedUseMount: Boolean?,
+        installerToken: String?,
+        chooseInstallerPerInstall: Boolean,
+    ): Boolean {
+        forcedUseMount?.let { return it }
+        installerToken?.let { return installerManager.parseToken(it) == InstallerManager.Token.AutoSaved }
+        if (chooseInstallerPerInstall) return false
+        return installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+    }
+
+    private suspend fun applyBatchAvailability(
+        selection: PatchSelection,
+        item: BatchPatchItem,
+    ): PatchSelection {
+        val input = item.input ?: return selection
+        val bundles = patchBundleRepository.scopedBundleInfoFlow(
+            item.packageName,
+            input.version,
+            input.versionCode
+        ).first()
+        val selectableByBundle = item.bundles.associate { it.uid to it.patchNames }
+        val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
+        val removeGmsCore = item.useMount &&
+            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            prefs.removeGmsCoreForPrimaryMount.get()
+        return selection.applyAvailability(
+            installerTypeFor(item.useMount),
+            bundles.associate { bundle ->
+                val selectable = selectableByBundle[bundle.uid].orEmpty()
+                bundle.uid to bundle.patches
+                    .filter { it.name in selectable }
+                    .associateBy(PatchInfo::name)
+            },
+            availabilityEnabled
+        ).removeGmsCoreSupport(removeGmsCore)
+    }
+
+    private fun optionsForSelection(
+        options: Options,
+        selection: PatchSelection,
+    ): Options = options.mapNotNull { (bundleUid, patchOptions) ->
+        val selected = selection[bundleUid].orEmpty()
+        patchOptions.filterKeys(selected::contains)
+            .takeIf { it.isNotEmpty() }
+            ?.let { bundleUid to it }
+    }.toMap()
 
     private fun appName(
         info: android.content.pm.PackageInfo?,

@@ -1083,7 +1083,8 @@ class BatchPatcherViewModel(
         manualQueue.upsert(
             input = queueInput,
             selection = item.selection,
-            options = item.options
+            options = item.options,
+            useMount = item.useMount,
         )
     }
 

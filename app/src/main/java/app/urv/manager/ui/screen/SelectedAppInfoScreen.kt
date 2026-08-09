@@ -140,6 +140,7 @@ fun SelectedAppInfoScreen(
     var showMixedBundleDialog by rememberSaveable { mutableStateOf(false) }
     var showMixedRevancedPatcherDialog by rememberSaveable { mutableStateOf(false) }
     var showPatchSummaryDialog by rememberSaveable { mutableStateOf(false) }
+    var showPatchModeDialog by rememberSaveable { mutableStateOf(false) }
 
     vm.removedPatchesNotice?.let { notice ->
         AlertDialog(
@@ -525,6 +526,17 @@ fun SelectedAppInfoScreen(
                     }
                 }
             )
+            if (vm.hasRoot) {
+                PageItem(
+                    R.string.patch_mode_title,
+                    stringResource(
+                        if (vm.usingMountInstall) R.string.patch_mode_mount
+                        else R.string.patch_mode_standard
+                    ),
+                    useCardStyle = useCardStylePageItems,
+                    onClick = { showPatchModeDialog = true }
+                )
+            }
             if (bundleRecommendationDetails.isNotEmpty()) {
                 val selectedDetail = bundleRecommendationDetails.firstOrNull { it.bundleUid == selectedBundleUid }
                 val overrideVersion = selectedBundleOverride
@@ -713,6 +725,59 @@ fun SelectedAppInfoScreen(
             }
         )
     }
+
+    if (showPatchModeDialog) {
+        PatchModeDialog(
+            useMount = vm.usingMountInstall,
+            onSelect = vm::selectPatchMode,
+            onDismissRequest = { showPatchModeDialog = false }
+        )
+    }
+}
+
+// UI behavior adapted from Morphe, see third-party/NOTICE for more information.
+// https://github.com/MorpheApp/morphe-manager/pull/747
+@Composable
+private fun PatchModeDialog(
+    useMount: Boolean,
+    onSelect: (Boolean) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
+    AlertDialogExtended(
+        onDismissRequest = onDismissRequest,
+        confirmButton = {
+            TextButton(onClick = onDismissRequest) {
+                Text(stringResource(R.string.close))
+            }
+        },
+        title = { CenteredDialogTitle(stringResource(R.string.patch_mode_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.patch_mode_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                listOf(
+                    false to R.string.patch_mode_standard,
+                    true to R.string.patch_mode_mount
+                ).forEach { (mount, label) ->
+                    ListItem(
+                        headlineContent = { Text(stringResource(label)) },
+                        leadingContent = {
+                            RadioButton(
+                                selected = useMount == mount,
+                                onClick = null
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            onSelect(mount)
+                            onDismissRequest()
+                        }
+                    )
+                }
+            }
+        }
+    )
 }
 
 private fun BundleRecommendationDetail.versionCodesFor(version: String): Set<Long> =

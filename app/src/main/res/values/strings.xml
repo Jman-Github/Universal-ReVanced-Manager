@@ -153,6 +153,14 @@
     <string name="bundle_version_dialog_locked_hint">Go to Settings &gt; Advanced &gt; Safeguards and set both \"Require suggested app version\" (toggle off) and \"Disable version compatibility check\" (toggle on) to choose bundle-specific versions.</string>
     <string name="patch_versions_dialog_title">Supported versions for %1$s</string>
     <string name="patch_selector_item">Select patches</string>
+    <string name="patch_mode_title">Patch mode</string>
+    <string name="patch_mode_dialog_title">Choose patch mode</string>
+    <string name="patch_mode_dialog_description">Patch availability depends on how the finished app will be installed.</string>
+    <string name="patch_mode_standard">Standard install</string>
+    <string name="patch_mode_mount">Root mount</string>
+    <string name="installer_patch_mode_mismatch">This installer does not match the patch mode used for this APK. Choose a matching installer or patch the app again for the other mode.</string>
+    <string name="patch_required_by_install_target">Required for the selected install target</string>
+    <string name="patch_unavailable_for_install_target">Not available for the selected install target</string>
     <string name="patch_selector_item_description">%d patches selected</string>
     <string name="patch_selector_bundle_selected_count">Selected in this bundle: %d</string>
     <string name="patch_selector_filter_clear_label">Filter/Clear</string>
@@ -269,6 +277,10 @@
     <string name="network_integrations_section">Network &amp; Integrations</string>
     <string name="installer_section">Installer</string>
     <string name="patching_engine_section">Patching Engine</string>
+    <string name="patch_availability_enabled">Use patch availability rules</string>
+    <string name="patch_availability_enabled_description">Automatically selects, requires, or blocks patches for Standard and Root Mount patch modes</string>
+    <string name="remove_gmscore_for_primary_mount">Remove GmsCore support for primary Root Mount</string>
+    <string name="remove_gmscore_for_primary_mount_description">Automatically removes the GmsCore support patch when Root Mount is the primary installer</string>
     <string name="patching_flow_section">Patching Flow</string>
     <string name="merge_split_flow_section">Split APK Merger Flow</string>
     <string name="saved_apps_section">Saved Apps</string>

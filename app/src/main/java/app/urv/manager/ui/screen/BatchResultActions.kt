@@ -22,6 +22,7 @@ import app.urv.manager.domain.batch.BatchInstallOutcome
 import app.urv.manager.domain.batch.BatchItemState
 import app.urv.manager.domain.batch.BatchPatchItem
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
@@ -176,7 +177,9 @@ internal fun rememberBatchResultActions(
             options = installerManager.listEntries(
                 target = InstallerManager.InstallTarget.PATCHER,
                 includeNone = false
-            ).filterNot { entry ->
+            ).filter { entry ->
+                installerTokenMatchesPatchMode(entry.token, item.useMount)
+            }.filterNot { entry ->
                 entry.token == InstallerManager.Token.AutoSaved &&
                     !viewModel.supportsRootMount(item.packageName)
             },

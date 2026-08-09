@@ -1307,6 +1307,34 @@ fun AdvancedSettingsScreen(
                         description = R.string.universal_patches_safeguard_description,
                     )
                 }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.patch_availability_enabled,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.patchAvailabilityEnabled,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patch_availability_enabled,
+                        description = R.string.patch_availability_enabled_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.remove_gmscore_for_primary_mount,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.removeGmsCoreForPrimaryMount,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.remove_gmscore_for_primary_mount,
+                        description = R.string.remove_gmscore_for_primary_mount_description,
+                    )
+                }
             }
             val restoreDescription = if (hasOfficialBundle) {
                 stringResource(R.string.restore_official_bundle_description_installed)

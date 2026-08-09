@@ -255,6 +255,9 @@
 - Added batch patching for multiple apps with preflight checks, reorderable and cancellable queues, per-app patch configuration and progress, retained source APKs and results, install-all support, automatic repatching, launcher shortcuts, and opt-in external automation actions, adapted from https://github.com/MorpheApp/morphe-manager/pull/795
 - Improved the Shizuku/Shevery installer flow with status and configuration controls, Play Store attribution, automatic installation of patched apps, clearer errors, and optional uninstall-and-retry handling for signature conflicts, adapted from https://github.com/MorpheApp/morphe-manager/pull/734
 - Added APK download helper app support as an APK source, including helper discovery and trust management, GitHub source importing and updates, helper installation/uninstallation, and selecting helpers as an APK source when patching, adapted from https://github.com/MorpheApp/morphe-manager/pull/797
+- Added install-target-aware Morphe patch availability with Standard and Root Mount modes, required and unavailable patch handling, matching installer routing, and optional GmsCore removal, adapted from https://github.com/MorpheApp/morphe-manager/pull/747
+- Improved Root Mount compatibility with merged split APK inputs when a valid installed stock APK is available
+- Bumped Morphe Patcher to `1.8.0`
 
 
 # Bug fixes
