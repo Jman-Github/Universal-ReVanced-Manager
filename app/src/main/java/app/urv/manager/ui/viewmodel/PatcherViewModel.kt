@@ -74,9 +74,11 @@ import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.ProgressEvent
+import app.urv.manager.patcher.RemoteError
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.runCancellableBlockingIo
@@ -1329,6 +1331,8 @@ fun proceedAfterMissingPatchWarning() {
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
     private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
+    private var lastPatchFailure: RemoteError? by savedStateHandle.saveableVar()
+    private var lastPatchFailureStep: String? by savedStateHandle.saveableVar()
     private val dexCompilePattern =
         Regex("(Compiling|Compiled)\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val dexWritePattern =
@@ -1384,7 +1388,9 @@ fun proceedAfterMissingPatchWarning() {
             }
 
             viewModelScope.launch {
-                appendBoundedLog(level, message)
+                if (!isVerbosePatcherExportLog(level, message)) {
+                    appendBoundedLog(level, message)
+                }
                 if (_isPatchingActive.value != true) {
                     handleDexCompileLine(message)
                 }
@@ -2378,6 +2384,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             else -> "N/A"
         }
         val aapt2Fallback = findLogValue("AAPT2 fallback:") ?: "false"
+        val appVersionCode = findLogValue("App version code:")
+            ?: input.selectedApp.versionCode?.toString()
+            ?: "unspecified"
+        val includedSplits = findLogValue("Included splits:")
+        val excludedSplits = findLogValue("Excluded splits:")
+        val patchFailure = lastPatchFailure
+        val patchFailureStep = lastPatchFailureStep
+        val failureSummaryLog = patchFailure?.let { error ->
+            "Failure in step=${patchFailureStep ?: "Unknown"}: ${error.message ?: error.type}"
+        }
+        val hasCombinedPatchFailureLog =
+            patchFailureStep == StepId.ExecutePatch::class.java.simpleName &&
+                patchFailure?.stackTrace
+                    ?.lineSequence()
+                    ?.firstOrNull(String::isNotBlank)
+                    ?.let { firstStackLine ->
+                        logSnapshot.any { (_, msg) ->
+                            msg.contains(" failed:\n") && msg.contains(firstStackLine)
+                        }
+                    } == true
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
@@ -2401,7 +2427,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val droppedLines = droppedLogLineCount
 
         val logLines = logSnapshot
-            .filterNot { (_, msg) ->
+            .filterNot { (level, msg) ->
                     msg.startsWith("Battery optimization:") ||
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
@@ -2409,7 +2435,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     msg.startsWith("Runtime mode:") ||
                     msg.startsWith("Memory override:") ||
                     msg.startsWith("AAPT2:") ||
-                    msg.startsWith("AAPT2 fallback:")
+                    msg.startsWith("AAPT2 fallback:") ||
+                    msg.startsWith("App version code:") ||
+                    msg.startsWith("Included splits:") ||
+                    msg.startsWith("Excluded splits:") ||
+                    failureSummaryLog?.let { matchesBoundedLogMessage(msg, it) } == true ||
+                    (hasCombinedPatchFailureLog &&
+                        patchFailure?.let { matchesBoundedLogMessage(msg, it.stackTrace) } == true) ||
+                    isVerbosePatcherExportLog(level, msg)
             }
             .map { (level, msg) -> "[${level.name}]: $msg" }
 
@@ -2440,8 +2473,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appendLine("Battery optimization: $batteryOptimization")
             appendLine("App package: ${input.selectedApp.packageName}")
             appendLine("App version: $appVersion")
+            appendLine("App version code: $appVersionCode")
             appendLine("App size: $sizeMb")
             splitCount?.let { appendLine("Split: $it") }
+            includedSplits?.let { appendLine("Included splits: $it") }
+            excludedSplits?.let { appendLine("Excluded splits: $it") }
+            patchFailure?.let { error ->
+                appendLine("Patch result: failed")
+                appendLine("Failure step: ${patchFailureStep ?: "Unknown"}")
+                appendLine("Failure type: ${error.type.substringAfterLast('.')}")
+                appendLine("Failure message: ${conciseFailureMessage(error)}")
+            }
             appendLine("Patches: $patchCount")
             appendLine("Selected patches:")
             if (selectedPatchLines.isEmpty()) {
@@ -3598,6 +3640,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (shouldResetProgressStateForAutomaticRetry(event)) {
             resetProgressStateForAutomaticRetry()
         }
+        val isDuplicateFailureWrapper = event is ProgressEvent.Failed &&
+            lastPatchFailure?.matchesUnderlyingFailure(event.error) == true &&
+            (
+                eventStepId == null ||
+                    (
+                        eventStepId == StepId.ExecutePatches &&
+                            lastPatchFailureStep == StepId.ExecutePatch::class.java.simpleName
+                    )
+            )
         val stepIndex = steps.indexOfFirst { step ->
             eventStepId?.let { id -> id == step.id }
                 ?: (step.state == State.RUNNING || step.state == State.WAITING)
@@ -3686,7 +3737,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 is ProgressEvent.Failed -> {
-                    if (event.stepId == null && steps.any { it.state == State.FAILED }) return
+                    if (isDuplicateFailureWrapper && steps.any { it.state == State.FAILED }) return
                     step.withState(
                         State.FAILED,
                         message = formatDisplayedFailure(event.error),
@@ -3705,8 +3756,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
 
         if (event is ProgressEvent.Failed) {
-            if (shouldLogFailure(event.error)) {
-                val stepName = event.stepId?.let { it::class.java.simpleName } ?: "Unknown"
+            val stepName = event.stepId?.let { it::class.java.simpleName } ?: "Unknown"
+            val shouldRecordFailure = !isDuplicateFailureWrapper
+            if (shouldRecordFailure) {
+                lastPatchFailure = event.error
+                lastPatchFailureStep = stepName
+            }
+            val shouldLogStandaloneFailure =
+                shouldRecordFailure && event.stepId !is StepId.ExecutePatch
+            if (shouldLogStandaloneFailure && shouldLogFailure(event.error)) {
                 val message = event.error.message ?: event.error.type
                 logger.error("Failure in step=$stepName: $message")
                 logger.error(event.error.stackTrace)
@@ -3813,6 +3871,31 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private fun resetFailureLogState() {
         lastLoggedErrorSignature = null
+        lastPatchFailure = null
+        lastPatchFailureStep = null
+    }
+
+    private fun RemoteError.matchesUnderlyingFailure(other: RemoteError): Boolean =
+        this == other || (
+            stackTrace.isNotBlank() &&
+                stackTrace == other.stackTrace
+        )
+
+    private fun conciseFailureMessage(error: RemoteError): String = (
+        error.message
+            ?.lineSequence()
+            ?.firstOrNull(String::isNotBlank)
+            ?: error.stackTrace.lineSequence().firstOrNull(String::isNotBlank)
+            ?: error.type
+        ).trim().take(FAILURE_LOG_SUMMARY_CHAR_LIMIT)
+
+    private fun matchesBoundedLogMessage(loggedMessage: String, sourceMessage: String): Boolean {
+        if (loggedMessage == sourceMessage) return true
+        if (sourceMessage.length <= PATCHER_LOG_MESSAGE_CHAR_LIMIT) return false
+        return loggedMessage.startsWith(sourceMessage.take(PATCHER_LOG_MESSAGE_CHAR_LIMIT)) &&
+            loggedMessage.endsWith(
+                "[log message truncated to $PATCHER_LOG_MESSAGE_CHAR_LIMIT characters]"
+            )
     }
 
     private fun shouldLogFailure(error: app.urv.manager.patcher.RemoteError): Boolean {
@@ -5493,6 +5576,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
         private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
         private const val PATCHER_LOG_MESSAGE_CHAR_LIMIT = 12_000
+        private const val FAILURE_LOG_SUMMARY_CHAR_LIMIT = 1_000
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)
             LogLevel.INFO -> Log.i(TAG, msg)

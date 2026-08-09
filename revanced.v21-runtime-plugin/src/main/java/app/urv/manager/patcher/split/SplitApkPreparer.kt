@@ -113,6 +113,12 @@ object SplitApkPreparer {
                         }
                     }
                 if (flattenPass == 0) {
+                    logger.info(
+                        "Included splits: ${mergeOrder.filterNot(skippedModules::contains).toLogList()}"
+                    )
+                    logger.info(
+                        "Excluded splits: ${mergeOrder.filter(skippedModules::contains).toLogList()}"
+                    )
                     onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
                 }
                 coroutineContext.ensureActive()
@@ -208,6 +214,9 @@ object SplitApkPreparer {
             workingDir.deleteRecursively()
         }
     }
+
+    private fun Collection<String>.toLogList(): String =
+        if (isEmpty()) "None" else joinToString(", ")
 
     private data class MergeOrderInspection(
         val unusedAbiModules: Set<String>,

@@ -126,8 +126,10 @@ class RevancedSession(
                         }
                         failedPatchIndexes += index
                         onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                        logger.error("${patch.name ?: patchNameAt(index)} failed:")
-                        logger.error(exception.toSafeStackTraceString())
+                        logger.error(
+                            "${patch.name ?: patchNameAt(index)} failed:\n" +
+                                exception.toSafeStackTraceString()
+                        )
                     }
 
                     if (index < nextIndex) {

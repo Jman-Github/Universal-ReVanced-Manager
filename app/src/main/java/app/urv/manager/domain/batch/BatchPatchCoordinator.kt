@@ -36,6 +36,7 @@ import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.ui.model.SelectedApp
@@ -534,6 +535,7 @@ class BatchPatchCoordinator(
             override fun log(level: LogLevel, message: String) {
                 if (level.ordinal < LogLevel.INFO.ordinal) return
                 val line = "[${level.name}]: $message"
+                val retainInLog = !isVerbosePatcherExportLog(level, message)
                 mutableState.update { state ->
                     state?.copy(
                         detail = message.takeLast(180),
@@ -542,8 +544,11 @@ class BatchPatchCoordinator(
                                 currentItem
                             } else {
                                 currentItem.copy(
-                                    logLines = (currentItem.logLines + line)
-                                        .takeLast(MAX_LOG_LINES)
+                                    logLines = if (retainInLog) {
+                                        (currentItem.logLines + line).takeLast(MAX_LOG_LINES)
+                                    } else {
+                                        currentItem.logLines
+                                    }
                                 )
                             }
                         }

@@ -38,6 +38,25 @@ enum class LogLevel {
     ERROR,
 }
 
+private val apkEditorFileWriteLogPattern = Regex("""^Write\s+\[[^]]+]\s+.+""")
+
+fun isVerbosePatcherExportLog(level: LogLevel, message: String): Boolean {
+    if (level != LogLevel.TRACE && level != LogLevel.INFO) return false
+
+    val trimmed = message.trimStart()
+    return trimmed.startsWith("Added:") ||
+        trimmed.startsWith("Added [") ||
+        trimmed.startsWith("Loading:") ||
+        trimmed.startsWith("ORDER:") ||
+        apkEditorFileWriteLogPattern.matches(trimmed)
+}
+
+fun isVerbosePatcherExportLog(line: String): Boolean {
+    val level = LogLevel.entries.firstOrNull { line.startsWith("[${it.name}]: ") }
+        ?: return false
+    return isVerbosePatcherExportLog(level, line.substringAfter("]: ", line))
+}
+
 enum class PatcherLogMode(
     @get:StringRes val displayName: Int,
     val minLogLevel: LogLevel,

@@ -153,6 +153,7 @@ object SplitApkPreparer {
                         }
                     }
                 if (flattenPass == 0) {
+                    logSplitSelection(logger, onLog, mergeOrder, skippedModules)
                     onSubSteps?.invoke(buildSplitSubSteps(mergeOrder, skippedModules, stripNativeLibs))
                 }
                 coroutineContext.ensureActive()
@@ -255,6 +256,28 @@ object SplitApkPreparer {
         val unusedLanguageModules: Set<String>,
         val unusedDensityModules: Set<String>
     )
+
+    private fun logSplitSelection(
+        logger: Logger,
+        onLog: ((String) -> Unit)?,
+        mergeOrder: List<String>,
+        skippedModules: Set<String>
+    ) {
+        val includedMessage =
+            "Included splits: ${mergeOrder.filterNot(skippedModules::contains).toLogList()}"
+        val excludedMessage =
+            "Excluded splits: ${mergeOrder.filter(skippedModules::contains).toLogList()}"
+        if (onLog != null) {
+            onLog(includedMessage)
+            onLog(excludedMessage)
+        } else {
+            logger.info(includedMessage)
+            logger.info(excludedMessage)
+        }
+    }
+
+    private fun Collection<String>.toLogList(): String =
+        if (isEmpty()) "None" else joinToString(", ")
 
     private fun inspectMergeOrder(mergeOrder: List<String>): MergeOrderInspection {
         val localeTokens = deviceLocaleTokens()
@@ -966,8 +989,7 @@ object SplitApkPreparer {
 
     }
 
-    private fun validateSplitEntry(entry: java.util.zip.ZipEntry) {
-        val name = entry.name
+    internal fun requireSafeArchiveEntryName(name: String) {
         require(name.isNotBlank() && '\u0000' !in name) {
             "Split archive contains an invalid path."
         }
@@ -980,6 +1002,10 @@ object SplitApkPreparer {
         require(name.split('/').none { it == ".." }) {
             "Split archive contains a path traversal entry."
         }
+    }
+
+    internal fun requireSupportedSplitEntry(entry: java.util.zip.ZipEntry) {
+        val name = entry.name
         require(entry.size >= 0L && entry.compressedSize >= 0L) {
             "Split archive contains unknown entry sizes."
         }
@@ -991,6 +1017,11 @@ object SplitApkPreparer {
                 "Split archive contains a suspiciously compressed entry: $name"
             }
         }
+    }
+
+    private fun validateSplitEntry(entry: java.util.zip.ZipEntry) {
+        requireSafeArchiveEntryName(entry.name)
+        requireSupportedSplitEntry(entry)
     }
 
     private fun java.io.InputStream.copyToBounded(

@@ -44,6 +44,7 @@ import app.urv.manager.patcher.toSafeRemoteError
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.allows
+import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
@@ -78,7 +79,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -853,6 +856,13 @@ class PatcherWorker(
         }
     }
 
+    private fun isRepeatableSplitPreparationLog(message: String): Boolean =
+        message.startsWith("Preparing split APK bundle from ") ||
+            (message.startsWith("Found ") && " split modules:" in message) ||
+            message.startsWith("Module sizes:") ||
+            message.startsWith("Included splits:") ||
+            message.startsWith("Excluded splits:")
+
     private fun handleWorkerLogProgress(
         message: String,
         totalPatchCount: Int,
@@ -1402,9 +1412,14 @@ class PatcherWorker(
             .sorted()
             .toList()
         val patcherLogMode = prefs.patcherLogMode.get()
+        val reportedSplitPreparationLogs = ConcurrentHashMap.newKeySet<String>()
         val workerLogger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
                 if (!patcherLogMode.allows(level)) return
+                if (isRepeatableSplitPreparationLog(message)) {
+                    val key = "${level.name}\u0000$message"
+                    reportedSplitPreparationLogs.add(key)
+                }
                 args.logger.log(level, message)
                 handleWorkerLogProgress(message, totalPatchCount, args.onEvent)
             }
@@ -1560,12 +1575,36 @@ class PatcherWorker(
             }
             downloadCleanup = downloadResult.cleanup
             val inputFile = downloadResult.file
+            val patchingContext = currentCoroutineContext()
+            val checkCancelled: () -> Unit = { patchingContext.ensureActive() }
+            val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(
+                file = inputFile,
+                checkCancelled = checkCancelled
+            )
+            val sourceInfo = try {
+                SplitArchiveDisplayResolver.resolvePackageInfo(
+                    source = inputFile,
+                    workspace = fs.tempDir.resolve("patch-input-metadata"),
+                    pm = pm,
+                    checkCancelled = checkCancelled
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Throwable) {
+                Log.w(
+                    tag,
+                    "Failed to resolve patch input metadata for ${args.packageName}",
+                    error
+                )
+                null
+            }
+            val inputVersionCode = sourceInfo?.let(pm::getVersionCode) ?: args.input.versionCode
+            workerLogger.info("App version code: ${inputVersionCode ?: "unspecified"}")
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/795
             if (shouldRetainOriginalInput(args.input, inputFile)) {
                 runCatching {
-                    val sourceInfo = pm.getPackageInfo(inputFile)
                     val sourceVersion = sourceInfo?.versionName
                         ?.takeIf(String::isNotBlank)
                         ?: args.input.version.orEmpty()
@@ -1609,7 +1648,6 @@ class PatcherWorker(
             }
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
-            val inputIsSplitArchive = SplitApkPreparer.isSplitArchive(inputFile)
             val configuredProcessMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
                 applicationContext,
                 prefs.processMemoryLimit.get()
@@ -1708,7 +1746,8 @@ class PatcherWorker(
             workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
             suspend fun executeSelectedRuntime(
                 processMode: Boolean,
-                memoryLimitMb: Int
+                memoryLimitMb: Int,
+                attemptLogger: Logger
             ) {
                 when (bundleType) {
                 PatchBundleType.MORPHE -> {
@@ -1727,7 +1766,7 @@ class PatcherWorker(
                         args.packageName,
                         args.selectedPatches,
                         args.options,
-                        workerLogger,
+                        attemptLogger,
                         eventDispatcher,
                         runtimeMemoryUsageDispatcher,
                         effectiveStripNativeLibs,
@@ -1768,7 +1807,7 @@ class PatcherWorker(
                         args.packageName,
                         args.selectedPatches,
                         args.options,
-                        workerLogger,
+                        attemptLogger,
                         eventDispatcher,
                         runtimeMemoryUsageDispatcher,
                         effectiveStripNativeLibs,
@@ -1782,9 +1821,27 @@ class PatcherWorker(
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
             var attemptMemoryLimit = effectiveLimit
+            var retryingProcessRuntime = false
             while (true) {
+                val attemptLogger = if (retryingProcessRuntime) {
+                    object : Logger() {
+                        override fun log(level: LogLevel, message: String) {
+                            if (isRepeatableSplitPreparationLog(message)) {
+                                val key = "${level.name}\u0000$message"
+                                if (!reportedSplitPreparationLogs.add(key)) return
+                            }
+                            workerLogger.log(level, message)
+                        }
+                    }
+                } else {
+                    workerLogger
+                }
                 try {
-                    executeSelectedRuntime(useProcessRuntime, attemptMemoryLimit)
+                    executeSelectedRuntime(
+                        useProcessRuntime,
+                        attemptMemoryLimit,
+                        attemptLogger
+                    )
                     break
                 } catch (error: Exception) {
                     if (!useProcessRuntime || !isProcessMemoryFailure(error)) {
@@ -1798,6 +1855,7 @@ class PatcherWorker(
                     attemptMemoryLimit = (
                         attemptMemoryLimit - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP
                     ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM)
+                    retryingProcessRuntime = true
                 }
             }
 

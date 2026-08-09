@@ -259,6 +259,7 @@
 - Improved Root Mount compatibility with merged split APK inputs when a valid installed stock APK is available
 - Bumped Morphe Patcher to `1.8.0`
 - Improved saved unpatched app cards in Downloads
+- Improved single and batch patcher logs with input APK version codes, included/excluded split lists, cleaner exports, and detailed patch failure errors
 
 
 # Bug fixes

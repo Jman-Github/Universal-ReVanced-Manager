@@ -139,8 +139,9 @@ class Session private constructor(
             if (exception != null) {
                 if (index < nextIndex) {
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                    logger.error("${patch.name} failed:")
-                    logger.error(exception.toSafeStackTraceString())
+                    logger.error(
+                        "${patch.name} failed:\n" + exception.toSafeStackTraceString()
+                    )
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -151,8 +152,9 @@ class Session private constructor(
                 }
                 startPatch(index)
                 onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                logger.error("${patch.name} failed:")
-                logger.error(exception.toSafeStackTraceString())
+                logger.error(
+                    "${patch.name} failed:\n" + exception.toSafeStackTraceString()
+                )
                 throw exception
             }
 

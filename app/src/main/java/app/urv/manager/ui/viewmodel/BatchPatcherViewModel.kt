@@ -44,6 +44,7 @@ import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.downloader.ParceledDownloaderData
+import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.plugin.downloader.DownloadUrl
@@ -890,6 +891,23 @@ class BatchPatcherViewModel(
         val item = state.value?.items?.firstOrNull { it.packageName == packageName }
             ?: return context.getString(R.string.batch_patch_details_unavailable)
         val selectedPatches = item.selection.values.flatten().sorted()
+        val logMessages = item.logLines.map { line -> line.substringAfter("]: ", line) }
+        fun findLogValue(prefix: String): String? =
+            logMessages.lastOrNull { it.startsWith(prefix) }
+                ?.removePrefix(prefix)
+                ?.trim()
+        val appVersionCode = findLogValue("App version code:")
+            ?: item.input?.versionCode?.toString()
+            ?: "unspecified"
+        val includedSplits = findLogValue("Included splits:")
+        val excludedSplits = findLogValue("Excluded splits:")
+        val patcherLogLines = item.logLines.filterNot { line ->
+            val message = line.substringAfter("]: ", line)
+            message.startsWith("App version code:") ||
+                message.startsWith("Included splits:") ||
+                message.startsWith("Excluded splits:") ||
+                isVerbosePatcherExportLog(line)
+        }
         return buildString {
             appendLine("------------")
             appendLine("Information:")
@@ -901,6 +919,9 @@ class BatchPatcherViewModel(
             appendLine("Batch patch: yes")
             appendLine("App package: ${item.packageName}")
             appendLine("App version: ${item.version ?: "unspecified"}")
+            appendLine("App version code: $appVersionCode")
+            includedSplits?.let { appendLine("Included splits: $it") }
+            excludedSplits?.let { appendLine("Excluded splits: $it") }
             appendLine("Patches: ${selectedPatches.size}")
             appendLine("Selected patches:")
             if (selectedPatches.isEmpty()) appendLine("None")
@@ -909,8 +930,8 @@ class BatchPatcherViewModel(
             appendLine("------------")
             appendLine("Patcher Log:")
             appendLine("------------")
-            if (item.logLines.isEmpty()) appendLine("No log messages recorded.")
-            else item.logLines.forEach { appendLine(it) }
+            if (patcherLogLines.isEmpty()) appendLine("No log messages recorded.")
+            else patcherLogLines.forEach { appendLine(it) }
         }
     }
 

@@ -19,6 +19,37 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 object SplitArchiveDisplayResolver {
+    suspend fun resolvePackageInfo(
+        source: File,
+        workspace: File,
+        pm: PM,
+        checkCancelled: () -> Unit
+    ): PackageInfo? = withContext(Dispatchers.IO) {
+        checkCancelled()
+        if (!SplitApkPreparer.isSplitArchive(source, checkCancelled = checkCancelled)) {
+            return@withContext pm.getPackageInfo(source)
+        }
+        workspace.mkdirs()
+        val extracted = SplitApkInspector.extractRepresentativeApk(
+            source = source,
+            workspace = workspace,
+            maxExtractedBytes = SplitApkPreparer.MAX_EXTRACTED_ENTRY_BYTES,
+            maxArchiveEntries = SplitApkPreparer.MAX_ARCHIVE_ENTRIES,
+            validateEntryName = SplitApkPreparer::requireSafeArchiveEntryName,
+            checkCancelled = checkCancelled,
+            validateEntry = { entry ->
+                if (!entry.isDirectory && entry.name.endsWith(".apk", ignoreCase = true)) {
+                    SplitApkPreparer.requireSupportedSplitEntry(entry)
+                }
+            }
+        ) ?: return@withContext null
+        try {
+            pm.getPackageInfo(extracted.file)
+        } finally {
+            extracted.cleanup()
+        }
+    }
+
     suspend fun resolve(
         source: File,
         workspace: File,

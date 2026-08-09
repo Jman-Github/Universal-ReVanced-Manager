@@ -101,8 +101,9 @@ class MorpheSession(
                     }
                     failedPatchIndexes += index
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                    logger.error("${patch.name} failed:")
-                    logger.error(exception.toSafeStackTraceString())
+                    logger.error(
+                        "${patch.name} failed:\n" + exception.toSafeStackTraceString()
+                    )
                 }
 
                 if (index < nextIndex) {
