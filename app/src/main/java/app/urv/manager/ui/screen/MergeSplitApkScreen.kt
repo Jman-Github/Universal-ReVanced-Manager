@@ -1153,6 +1153,20 @@ internal fun SplitMergeSelectionDialog(
         densityCleanupAvailable && ((modules + requiredModules) intersect optionalDensityModules) ==
             trimmedOptionalDensityModules
 
+    val nativeCleanupHasDistinctModuleSelection =
+        optionalAbiModules.isNotEmpty() && trimmedOptionalAbiModules != optionalAbiModules
+
+    fun nativeCleanupMatchesModules(modules: Set<String>): Boolean =
+        optionalAbiModules.isNotEmpty() &&
+            ((modules + requiredModules) intersect optionalAbiModules) == trimmedOptionalAbiModules
+
+    fun reconcileNativeCleanupSelection(modules: Set<String>): Boolean = when {
+        !showStripNativeLibsOption || optionalAbiModules.isEmpty() -> stripNativeLibs
+        !nativeCleanupMatchesModules(modules) -> false
+        nativeCleanupHasDistinctModuleSelection -> true
+        else -> stripNativeLibs
+    }
+
     val languageCleanupSelected by remember(
         selectedModules,
         requiredModules,
@@ -1412,27 +1426,24 @@ internal fun SplitMergeSelectionDialog(
                     }
                     sortedModules.forEach { module ->
                         val required = requiredModules.contains(module.name)
-                        val forcedOffByNativeStrip =
-                            stripNativeLibs &&
-                                module.kind == SplitApkPreparer.SplitArchiveModuleKind.ABI &&
-                                module.name in optionalAbiModules &&
-                                module.name !in trimmedOptionalAbiModules
                         SplitMergeModuleRow(
                             module = module,
                             checked = required || selectedModules.contains(module.name),
-                            enabled = !required && !forcedOffByNativeStrip,
+                            enabled = !required,
                             onCheckedChange = { checked ->
                                 val updatedModules = selectedModules.toMutableSet().apply {
                                     if (checked) add(module.name) else remove(module.name)
                                 }
+                                val reconciledStripNativeLibs =
+                                    reconcileNativeCleanupSelection(updatedModules)
                                 val normalizedModules = updateSelection(
                                     modules = updatedModules,
-                                    stripUnusedNativeLibs = stripNativeLibs,
+                                    stripUnusedNativeLibs = reconciledStripNativeLibs,
                                     inferPresetFromModules = true
                                 )
                                 rememberCurrentFilterSelection(
                                     modules = normalizedModules,
-                                    stripUnusedNativeLibs = stripNativeLibs
+                                    stripUnusedNativeLibs = reconciledStripNativeLibs
                                 )
                             }
                         )
