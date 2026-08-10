@@ -148,6 +148,7 @@ class PreferencesManager(
         booleanPreference("dashboard_bundle_update_banner_collapsed", false)
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
+    val patcherInformationExpanded = booleanPreference("patcher_information_expanded", true)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val autoExpandRunningStepsExclusive = booleanPreference("auto_expand_running_steps_exclusive", false)
     val enableSavedApps = booleanPreference("enable_saved_apps", true)
@@ -564,6 +565,7 @@ class PreferencesManager(
         val includeGitHubPatInExports: Boolean? = null,
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
+        val patcherInformationExpanded: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
         val autoExpandRunningStepsExclusive: Boolean? = null,
         val enableSavedApps: Boolean? = null,
@@ -810,6 +812,7 @@ class PreferencesManager(
             processMemoryLimit = processMemoryLimit.get(),
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
+            patcherInformationExpanded = patcherInformationExpanded.get(),
             autoExpandRunningSteps = autoExpandRunningSteps.get(),
             autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.get(),
             enableSavedApps = enableSavedApps.get(),
@@ -1004,6 +1007,7 @@ class PreferencesManager(
         }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
+        snapshot.patcherInformationExpanded?.let { patcherInformationExpanded.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.autoExpandRunningStepsExclusive?.let { autoExpandRunningStepsExclusive.value = it }
         snapshot.enableSavedApps?.let { enableSavedApps.value = it }

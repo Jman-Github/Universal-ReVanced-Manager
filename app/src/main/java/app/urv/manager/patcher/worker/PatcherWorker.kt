@@ -1657,6 +1657,27 @@ class PatcherWorker(
             } else {
                 null
             }
+            val selectedCount = totalPatchCount
+            val useProcessRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            val effectiveLimit = configuredProcessMemoryLimit
+            val nativeLibsStripped = if (inputIsSplitArchive) {
+                args.splitSelection?.stripNativeLibs ?: stripNativeLibs
+            } else {
+                stripNativeLibs
+            }
+            workerLogger.info(
+                "Patching started at ${System.currentTimeMillis()} " +
+                    "pkg=${args.packageName} version=${args.input.version} " +
+                    "input=${inputFile.absolutePath} size=${inputFile.length()} " +
+                    "split=$inputIsSplitArchive patches=$selectedCount " +
+                    "nativeLibsStripped=$nativeLibsStripped"
+            )
+            workerLogger.info(
+                "Patcher runtime: bundle=$bundleType memoryLimit=${effectiveLimit}MB"
+            )
+            workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
+            workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
+
             var runtimeInputFile = inputFile
             var manualSplitSelectionApplied = false
             if (inputIsSplitArchive && args.splitSelection != null) {
@@ -1715,24 +1736,11 @@ class PatcherWorker(
                 if (manualSplitSelectionApplied) false else stripNativeLibs
             val effectiveSkipUnneededSplits =
                 if (manualSplitSelectionApplied) false else skipUnneededSplits
-            val selectedCount = totalPatchCount
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/worker/PatcherWorker.kt
-            val useProcessRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val useRevancedPatcher22 =
                 bundleType == PatchBundleType.REVANCED &&
                     patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
-            val effectiveLimit = configuredProcessMemoryLimit
-
-            workerLogger.info(
-                "Patching started at ${System.currentTimeMillis()} " +
-                        "pkg=${args.packageName} version=${args.input.version} " +
-                        "input=${inputFile.absolutePath} size=${inputFile.length()} " +
-                        "split=$inputIsSplitArchive patches=$selectedCount"
-            )
-            workerLogger.info(
-                "Patcher runtime: bundle=$bundleType memoryLimit=${effectiveLimit}MB"
-            )
             val runtimeMemoryUsageDispatcher: (Long, Long) -> Unit = { usedMb, maxMb ->
                 publishPatcherMemoryUsage(
                     PatcherMemoryUsage(
@@ -1742,8 +1750,6 @@ class PatcherWorker(
                     args.onEvent
                 )
             }
-            workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
-            workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
             suspend fun executeSelectedRuntime(
                 processMode: Boolean,
                 memoryLimitMb: Int,
@@ -1855,6 +1861,9 @@ class PatcherWorker(
                     attemptMemoryLimit = (
                         attemptMemoryLimit - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP
                     ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM)
+                    workerLogger.info(
+                        "Patcher runtime: bundle=$bundleType memoryLimit=${attemptMemoryLimit}MB"
+                    )
                     retryingProcessRuntime = true
                 }
             }

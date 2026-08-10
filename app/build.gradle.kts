@@ -4,6 +4,7 @@ import com.android.build.api.variant.FilterConfiguration
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Sync
 import org.gradle.jvm.tasks.Jar
@@ -34,6 +35,9 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?: "dev"
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
 val devVersionNameSuffix = "-$devVersionSuffix"
+val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")
+fun libraryVersion(alias: String): String =
+    libraryVersions.findVersion(alias).get().requiredVersion
 
 val apkEditorLib by configurations.creating
 
@@ -245,6 +249,21 @@ android {
         }
         vectorDrawables.useSupportLibrary = true
         buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
+        buildConfigField(
+            "String",
+            "MORPHE_PATCHER_VERSION",
+            "\"${libraryVersion("morphe-patcher")}\""
+        )
+        buildConfigField(
+            "String",
+            "REVANCED_PATCHER_V21_VERSION",
+            "\"${libraryVersion("revanced-patcher")}\""
+        )
+        buildConfigField(
+            "String",
+            "REVANCED_PATCHER_V22_VERSION",
+            "\"${libraryVersion("revanced-patcher-v22")}\""
+        )
         ndk {
             // Include x86 now that the NDK is pinned to a version that still supports it.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")

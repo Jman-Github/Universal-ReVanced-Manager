@@ -28,6 +28,7 @@
 - Bumped Morphe Patcher to `1.8.0`
 - Improved saved unpatched app cards in Downloads
 - Improved single and batch patcher logs with input APK version codes, included/excluded split lists, cleaner exports, and detailed patch failure errors
+- Added an expandable Patcher information panel to single and batch patching with app version/version code, APK size, selected patches and bundles, manager and patcher versions, runtime and memory details, split/native library status, Android/device information, and available RAM/storage, inspired by Morphe's patch information panel
 
 
 # Bug fixes

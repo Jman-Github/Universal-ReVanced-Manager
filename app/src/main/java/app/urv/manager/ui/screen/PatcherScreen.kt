@@ -92,6 +92,8 @@ import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
+import app.urv.manager.ui.component.patcher.PatcherInformation
+import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
@@ -136,6 +138,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
@@ -1242,6 +1245,26 @@ fun PatcherScreen(
                             isActive = isPatchingActive
                         )
                     }
+                }
+                item(key = "patcher-information") {
+                    PatcherInformationCard(
+                        information = PatcherInformation(
+                            appVersion = viewModel.version,
+                            appVersionCode = viewModel.versionCode,
+                            patchCount = viewModel.selectedPatchCount,
+                            patchBundles = viewModel.selectedPatchBundleLabels,
+                            fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,
+                            fallbackSplitApk = viewModel.fallbackInputIsSplitApk,
+                            fallbackPatcherEngine = viewModel.fallbackPatcherEngine,
+                            session = viewModel.patcherSessionInfo
+                        ),
+                        expanded = patcherInformationExpanded,
+                        onExpandedChange = { expanded ->
+                            pickerScope.launch {
+                                prefs.patcherInformationExpanded.update(expanded)
+                            }
+                        }
+                    )
                 }
                 items(
                     items = steps.toList(),

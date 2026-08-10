@@ -23,10 +23,12 @@ import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.toConfiguration
 import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.patcher.patch.PatchBundleInfo
+import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.applyAvailability
 import app.urv.manager.patcher.patch.installerTypeFor
 import app.urv.manager.patcher.patch.removeGmsCoreSupport
+import app.urv.manager.patcher.patch.patcherEngineDisplayName
 import app.urv.manager.patcher.split.SplitApkInspector
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.model.SelectedApp
@@ -82,6 +84,7 @@ class BatchPlanResolver(
                 )
                 val selection = applyBatchAvailability(sanitizedSelection, resolved)
                 val options = optionsForSelection(sanitizedOptions, selection)
+                val patcherEngine = resolvePatcherEngine(selection)
                 val state = resolveManualBatchItemState(
                     resolvedState = resolved.state,
                     hasInput = resolved.input != null,
@@ -95,6 +98,7 @@ class BatchPlanResolver(
                     selection = selection,
                     options = options,
                     selectionPayload = null,
+                    patcherEngine = patcherEngine,
                     state = state,
                     message = null
                 )
@@ -402,6 +406,7 @@ class BatchPlanResolver(
                 patchNames = selectableByBundle[bundle.uid].orEmpty()
             )
         }
+        val patcherEngine = resolvePatcherEngine(selection)
         if (!mismatch && selection.values.sumOf { it.size } == 0) {
             return@withContext blocked(
                 packageName = resolvedPackageName,
@@ -422,11 +427,23 @@ class BatchPlanResolver(
             selection = selection,
             options = options,
             bundles = refs,
+            patcherEngine = patcherEngine,
             state = if (mismatch) BatchItemState.VERSION_MISMATCH else BatchItemState.READY,
             sourceEntryKey = sourceEntryKey,
             profileInstallerToken = profileInstallerToken,
             useMount = useMount,
         )
+    }
+
+    internal suspend fun resolvePatcherEngine(selection: PatchSelection): String? {
+        val selectedBundleType = patchBundleRepository.selectionBundleType(selection)
+        if (
+            selectedBundleType == PatchBundleType.REVANCED &&
+            patchBundleRepository.selectionHasMixedRevancedPatcherVersions(selection)
+        ) return null
+        val usesRevancedPatcher22 = selectedBundleType == PatchBundleType.REVANCED &&
+            patchBundleRepository.selectionUsesRevancedPatcher22(selection)
+        return patcherEngineDisplayName(selectedBundleType, usesRevancedPatcher22)
     }
 
     suspend fun findOutdatedPackages(
@@ -519,6 +536,7 @@ class BatchPlanResolver(
             resolved.options
         }
         val options = optionsForSelection(candidateOptions, selection)
+        val patcherEngine = resolvePatcherEngine(selection)
         val forcedMismatch = item.forceVersionMismatch &&
             resolved.state == BatchItemState.VERSION_MISMATCH
         val state = when {
@@ -533,6 +551,7 @@ class BatchPlanResolver(
             selection = selection,
             options = options,
             selectionPayload = null,
+            patcherEngine = patcherEngine,
             state = state,
             message = null,
             forceVersionMismatch = forcedMismatch

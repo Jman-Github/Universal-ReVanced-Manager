@@ -34,6 +34,7 @@ import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.updatedFromLog
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
@@ -544,6 +545,8 @@ class BatchPatchCoordinator(
                                 currentItem
                             } else {
                                 currentItem.copy(
+                                    patcherSessionInfo =
+                                        currentItem.patcherSessionInfo.updatedFromLog(message),
                                     logLines = if (retainInLog) {
                                         (currentItem.logLines + line).takeLast(MAX_LOG_LINES)
                                     } else {
@@ -1004,24 +1007,43 @@ class BatchPatchCoordinator(
         selection: app.urv.manager.util.PatchSelection,
         options: app.urv.manager.util.Options
     ) {
+        val normalizedSelection = selection.filterValues { it.isNotEmpty() }
         mutableState.update { state ->
             state?.copy(items = state.items.map { item ->
                 if (item.packageName != packageName) item
                 else item.copy(
-                    selection = selection.filterValues { it.isNotEmpty() },
+                    selection = normalizedSelection,
                     options = options,
+                    patcherEngine = null,
                     state = if (
                         item.state == BatchItemState.VERSION_MISMATCH &&
                         !item.forceVersionMismatch
                     ) {
                         BatchItemState.VERSION_MISMATCH
-                    } else if (selection.values.none { it.isNotEmpty() }) {
+                    } else if (normalizedSelection.isEmpty()) {
                         BatchItemState.NO_PATCHES
                     } else {
                         BatchItemState.READY
                     }
                 )
             })
+        }
+        scope.launch {
+            val patcherEngine = runCatching {
+                resolver.resolvePatcherEngine(normalizedSelection)
+            }.getOrNull()
+            mutableState.update { state ->
+                state?.copy(items = state.items.map { item ->
+                    if (
+                        item.packageName == packageName &&
+                        item.selection == normalizedSelection
+                    ) {
+                        item.copy(patcherEngine = patcherEngine)
+                    } else {
+                        item
+                    }
+                })
+            }
         }
     }
 
@@ -2143,12 +2165,16 @@ class BatchPatchCoordinator(
                     selection = restoredSelection,
                     options = emptyMap(),
                     selectionPayload = item.selectionPayload,
-                    bundles = emptyList(),
+                    bundles = item.bundles.ifEmpty {
+                        restoreBatchBundleRefs(item.selectionPayload)
+                    },
                     state = if (patchedFileMissing || metadataMissing) {
                         BatchItemState.FAILED
                     } else {
                         restoredState
                     },
+                    patcherEngine = item.patcherEngine,
+                    patcherSessionInfo = item.patcherSessionInfo,
                     message = if (patchedFileMissing || metadataMissing) {
                         app.getString(R.string.batch_patch_result_unavailable)
                     } else {
@@ -2232,6 +2258,9 @@ class BatchPatchCoordinator(
                                 )
                             }.getOrNull()
                         },
+                    bundles = item.bundles.map { bundle ->
+                        bundle.copy(patchNames = emptySet())
+                    },
                     state = item.state.name,
                     message = item.message?.take(MAX_RESULT_MESSAGE_LENGTH),
                     patchedFilePath = item.patchedFile?.absolutePath,
@@ -2241,6 +2270,8 @@ class BatchPatchCoordinator(
                     savedForLater = item.savedForLater,
                     profileInstallerToken = item.profileInstallerToken,
                     useMount = item.useMount,
+                    patcherEngine = item.patcherEngine,
+                    patcherSessionInfo = item.patcherSessionInfo,
                     logLines = takeLastWithinCharacterBudget(
                         item.logLines.takeLast(MAX_LOG_LINES),
                         perItemLogBudget

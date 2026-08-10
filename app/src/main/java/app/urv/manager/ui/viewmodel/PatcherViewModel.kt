@@ -92,12 +92,15 @@ import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
 import app.urv.manager.ui.model.InstallerModel
+import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
 import app.urv.manager.ui.model.withState
+import app.urv.manager.patcher.parsePatcherSessionInfo
+import app.urv.manager.patcher.updatedFromLog
 import app.urv.manager.ui.model.navigation.Patcher
 import app.urv.manager.service.PatchingTaskMonitorService
 import app.universal.revanced.manager.BuildConfig
@@ -111,6 +114,7 @@ import app.urv.manager.patcher.patch.applyAvailability
 import app.urv.manager.patcher.patch.installerTypeFor
 import app.urv.manager.patcher.patch.removeGmsCoreSupport
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.patcher.patch.patcherEngineDisplayName
 import app.urv.manager.util.AppForeground
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
@@ -332,6 +336,7 @@ class PatcherViewModel(
     private val selectedApp = input.selectedApp
     val packageName = selectedApp.packageName
     val version = selectedApp.version
+    val versionCode = selectedApp.versionCode
     val usingMountInstall = input.useMount
     val hasProfileInstallerPreference = input.profileInstallerToken
         ?.let(installerManager::parseToken)
@@ -438,6 +443,22 @@ class PatcherViewModel(
             bundleOptions.mapValues { (_, patchOptions) -> patchOptions.toMap() }.toMap()
         }.toMap()
 
+    val selectedPatchCount: Int
+        get() = appliedSelection.values.sumOf { patches -> patches.size }
+
+    val fallbackInputSizeBytes: Long?
+        get() = (inputFile ?: (selectedApp as? SelectedApp.Local)?.file)
+            ?.takeIf(File::isFile)
+            ?.length()
+
+    val fallbackInputIsSplitApk: Boolean?
+        get() = when {
+            requiresSplitPreparation -> true
+            selectedApp is SelectedApp.Local -> false
+            inputFile != null -> false
+            else -> null
+        }
+
 fun dismissMissingPatchWarning() {
     missingPatchWarning = null
 }
@@ -461,6 +482,7 @@ fun proceedAfterMissingPatchWarning() {
             val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
             appliedSelection = sanitizedSelection
             appliedOptions = sanitizedOptions
+            refreshPatcherInformationMetadata(scopedBundles)
             missingPatchWarning = null
             beginPrePatchFlow()
         }
@@ -1329,6 +1351,14 @@ fun proceedAfterMissingPatchWarning() {
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
+    var patcherSessionInfo by mutableStateOf(
+        parsePatcherSessionInfo(logs.map { (_, message) -> message })
+    )
+        private set
+    var selectedPatchBundleLabels by mutableStateOf<List<String>>(emptyList())
+        private set
+    var fallbackPatcherEngine by mutableStateOf<String?>(null)
+        private set
     private var droppedLogLineCount by savedStateHandle.saveableVar { 0 }
     private var runtimeReportedMemoryLimitMb: Int? by savedStateHandle.saveableVar()
     private var lastPatchFailure: RemoteError? by savedStateHandle.saveableVar()
@@ -1388,6 +1418,7 @@ fun proceedAfterMissingPatchWarning() {
             }
 
             viewModelScope.launch {
+                patcherSessionInfo = patcherSessionInfo.updatedFromLog(message)
                 if (!isVerbosePatcherExportLog(level, message)) {
                     appendBoundedLog(level, message)
                 }
@@ -1410,6 +1441,34 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.selectedApp.version,
             input.selectedApp.versionCode
         ).first().associateBy { it.uid }
+
+    private suspend fun refreshPatcherInformationMetadata(
+        scopedBundles: Map<Int, PatchBundleInfo.Scoped>
+    ) {
+        val activeSelection = appliedSelection.filterValues { patches -> patches.isNotEmpty() }
+        selectedPatchBundleLabels = activeSelection.keys.mapNotNull { uid ->
+            scopedBundles[uid]?.let { bundle ->
+                bundle.version
+                    ?.takeIf(String::isNotBlank)
+                    ?.let { version -> "${bundle.name} $version" }
+                    ?: bundle.name.takeIf(String::isNotBlank)
+            }
+        }
+        val bundleType = patchBundleRepository.selectionBundleType(activeSelection)
+        if (
+            bundleType == PatchBundleType.REVANCED &&
+            patchBundleRepository.selectionHasMixedRevancedPatcherVersions(activeSelection)
+        ) {
+            fallbackPatcherEngine = null
+            return
+        }
+        val usesRevancedPatcher22 = bundleType == PatchBundleType.REVANCED &&
+            patchBundleRepository.selectionUsesRevancedPatcher22(activeSelection)
+        fallbackPatcherEngine = patcherEngineDisplayName(
+            bundleType,
+            usesRevancedPatcher22
+        )
+    }
 
     private suspend fun collectSelectedBundleMetadata(): List<PatchBundleExportData> {
         val globalBundles = patchBundleRepository.bundleInfoFlow.first()
@@ -1580,6 +1639,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
         val existingId = patcherWorkerId?.uuid
         if (existingId != null) {
+            viewModelScope.launch {
+                refreshPatcherInformationMetadata(gatherScopedBundles())
+            }
             replayWorkerProgressSnapshots = true
             startPatchingTaskMonitor()
             observeWorker(existingId)
@@ -1599,6 +1661,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             patches.filterNot { it in kept }.forEach { missing += it }
         }
         appliedSelection = applyCurrentPatchRules(sanitizedSelection, scopedBundles)
+        refreshPatcherInformationMetadata(scopedBundles)
         if (missing.isNotEmpty()) {
             missingPatchWarning = MissingPatchWarningState(
                 patchNames = missing.distinct().sorted()
@@ -1633,6 +1696,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         patcherMemoryUsageSequence = Long.MIN_VALUE
         patcherMemoryUsageSampleTimeMs = Long.MIN_VALUE
         patcherMemoryUsageSamples.clear()
+        val configuredProcessMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
+            app,
+            prefs.processMemoryLimit.get()
+        )
+        patcherSessionInfo = PatcherSessionInfo(
+            runtimeProcess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+            memoryLimitMb = configuredProcessMemoryLimit,
+            nativeLibsStripped = selectedSplitConfiguration?.stripNativeLibs
+                ?: prefs.stripUnusedNativeLibs.get()
+        )
         runtimeReportedMemoryLimitMb = null
         replayWorkerProgressSnapshots = false
         lastAppliedWorkerProgressGeneration = Long.MIN_VALUE

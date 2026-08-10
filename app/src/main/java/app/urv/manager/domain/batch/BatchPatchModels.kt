@@ -6,6 +6,7 @@
 package app.urv.manager.domain.batch
 
 import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.ui.model.SelectedApp
@@ -30,6 +31,7 @@ enum class BatchItemState {
 
 enum class BatchInstallOutcome { INSTALLED, FAILED }
 
+@Serializable
 data class BatchBundleRef(
     val uid: Int,
     val name: String,
@@ -48,6 +50,8 @@ data class BatchPatchItem(
     val selectionPayload: PatchProfilePayload? = null,
     val bundles: List<BatchBundleRef>,
     val state: BatchItemState,
+    val patcherEngine: String? = null,
+    val patcherSessionInfo: PatcherSessionInfo = PatcherSessionInfo(),
     val message: String? = null,
     val forceVersionMismatch: Boolean = false,
     val restoreState: BatchItemState? = null,
@@ -73,7 +77,14 @@ data class BatchPatchItem(
             installOutcome != BatchInstallOutcome.INSTALLED &&
             !savedForLater
     val hasProgressDetails get() =
-        state == BatchItemState.RUNNING || progressEvents.isNotEmpty()
+        state == BatchItemState.RUNNING ||
+            progressEvents.isNotEmpty() ||
+            (state.isTerminal && (
+                selectionPayload != null ||
+                    logLines.isNotEmpty() ||
+                    patcherEngine != null ||
+                    patcherSessionInfo != PatcherSessionInfo()
+                ))
 }
 
 enum class BatchInstallPolicy { SAVE_ONLY, INSTALL_AFTER }
@@ -229,6 +240,7 @@ data class BatchResultItemSnapshot(
     val version: String?,
     val versionCode: Long?,
     val selectionPayload: PatchProfilePayload? = null,
+    val bundles: List<BatchBundleRef> = emptyList(),
     val state: String,
     val message: String?,
     val patchedFilePath: String?,
@@ -238,6 +250,8 @@ data class BatchResultItemSnapshot(
     val savedForLater: Boolean = false,
     val profileInstallerToken: String? = null,
     val useMount: Boolean = false,
+    val patcherEngine: String? = null,
+    val patcherSessionInfo: PatcherSessionInfo = PatcherSessionInfo(),
     val logLines: List<String> = emptyList()
 )
 
@@ -246,6 +260,22 @@ internal fun restoreBatchSelection(
 ): PatchSelection = payload?.bundles
     ?.associate { bundle -> bundle.bundleUid to bundle.patches.toSet() }
     ?.filterValues { it.isNotEmpty() }
+    .orEmpty()
+
+internal fun restoreBatchBundleRefs(
+    payload: PatchProfilePayload?
+): List<BatchBundleRef> = payload?.bundles
+    ?.map { bundle ->
+        BatchBundleRef(
+            uid = bundle.bundleUid,
+            name = bundle.displayName
+                ?.takeIf(String::isNotBlank)
+                ?: bundle.sourceName?.takeIf(String::isNotBlank)
+                ?: "Bundle ${bundle.bundleUid}",
+            version = bundle.version?.takeIf(String::isNotBlank),
+            patchNames = bundle.patches.toSet()
+        )
+    }
     .orEmpty()
 
 internal fun takeLastWithinCharacterBudget(

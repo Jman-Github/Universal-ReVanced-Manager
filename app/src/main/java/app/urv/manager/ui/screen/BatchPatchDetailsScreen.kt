@@ -34,7 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -52,9 +54,13 @@ import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
+import app.urv.manager.ui.component.patcher.PatcherInformation
+import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.patcher.parsePatcherSessionInfo
+import app.urv.manager.patcher.withFallback
 import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
@@ -65,6 +71,10 @@ import app.urv.manager.ui.viewmodel.PatcherViewModel
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.mutableStateSetOf
 import app.urv.manager.util.saver.snapshotStateSetSaver
+import app.urv.manager.patcher.split.SplitApkPreparer
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
@@ -81,10 +91,12 @@ fun BatchPatchDetailsScreen(
     val prefs: PreferencesManager = koinInject()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
     val continueOnPatchError by prefs.continueOnPatchError.getAsState()
     val skipApkSigning by prefs.skipApkSigning.getAsState()
+    val coroutineScope = rememberCoroutineScope()
     val useExclusiveAutoExpand =
         autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val item = state?.items?.firstOrNull { it.packageName == packageName }
@@ -206,41 +218,34 @@ fun BatchPatchDetailsScreen(
         }
 
         val input = item.input
-        if (
-            input == null ||
-            (item.progressEvents.isEmpty() && item.memoryUsageSamples.isEmpty())
-        ) {
-            BatchDetailsMessage(
-                text = item.message
-                    ?: stringResource(R.string.batch_patch_details_unavailable),
-                modifier = Modifier.padding(padding)
-            )
-            return@AppScaffold
-        }
-
         val context = LocalContext.current
         val progressUi = remember(
             input,
             item.selection,
             item.progressEvents,
+            item.memoryUsageSamples,
             item.state,
             skipApkSigning
         ) {
-            buildBatchProgressUiState(
-                context = context,
-                selectedApp = input,
-                selectedPatches = item.selection,
-                splitStepActive = item.progressEvents.any {
-                    it.stepId == StepId.PrepareSplitApk
-                },
-                skipApkSigning = skipApkSigning,
-                events = item.progressEvents,
-                cancelled = item.state == BatchItemState.CANCELLED,
-                cancelledMessage = context.getString(R.string.batch_patch_state_cancelled)
-            )
+            input?.takeIf {
+                item.progressEvents.isNotEmpty() || item.memoryUsageSamples.isNotEmpty()
+            }?.let { selectedApp ->
+                buildBatchProgressUiState(
+                    context = context,
+                    selectedApp = selectedApp,
+                    selectedPatches = item.selection,
+                    splitStepActive = item.progressEvents.any {
+                        it.stepId == StepId.PrepareSplitApk
+                    },
+                    skipApkSigning = skipApkSigning,
+                    events = item.progressEvents,
+                    cancelled = item.state == BatchItemState.CANCELLED,
+                    cancelledMessage = context.getString(R.string.batch_patch_state_cancelled)
+                )
+            }
         }
-        val groupedSteps = remember(progressUi.steps) {
-            progressUi.steps.groupBy { it.category }
+        val groupedSteps = remember(progressUi?.steps) {
+            progressUi?.steps?.groupBy { it.category }.orEmpty()
         }
         val expandedCategories = rememberSaveable(
             saver = snapshotStateSetSaver()
@@ -254,7 +259,9 @@ fun BatchPatchDetailsScreen(
                 .padding(padding)
         ) {
             LinearProgressIndicator(
-                progress = { progressUi.progress },
+                progress = {
+                    progressUi?.progress ?: if (item.state.isTerminal) 1f else 0f
+                },
                 modifier = Modifier.fillMaxWidth(),
                 drawStopIndicator = {}
             )
@@ -298,6 +305,59 @@ fun BatchPatchDetailsScreen(
                     }
                 }
 
+                item(key = "patcher-information") {
+                    val parsedSessionInfo = remember(item.logLines) {
+                        parsePatcherSessionInfo(
+                            item.logLines.map { line -> line.substringAfter("]: ", line) }
+                        )
+                    }
+                    val sessionInfo = item.patcherSessionInfo.withFallback(parsedSessionInfo)
+                    val activeBundleIds = remember(item.selection) {
+                        item.selection.filterValues { patches -> patches.isNotEmpty() }.keys
+                    }
+                    val patchBundleLabels = remember(item.bundles, activeBundleIds) {
+                        item.bundles
+                            .filter { bundle -> bundle.uid in activeBundleIds }
+                            .map { bundle ->
+                                bundle.version
+                                    ?.takeIf(String::isNotBlank)
+                                    ?.let { version -> "${bundle.name} $version" }
+                                    ?: bundle.name
+                            }
+                    }
+                    val localInput = item.input as? SelectedApp.Local
+                    val fallbackSplitApk by produceState<Boolean?>(
+                        initialValue = null,
+                        key1 = localInput?.file
+                    ) {
+                        value = localInput?.file?.let { file ->
+                            withContext(Dispatchers.IO) {
+                                SplitApkPreparer.isSplitArchive(file)
+                            }
+                        }
+                    }
+                    PatcherInformationCard(
+                        information = PatcherInformation(
+                            appVersion = item.version,
+                            appVersionCode = item.versionCode,
+                            patchCount = item.patchCount,
+                            patchBundles = patchBundleLabels,
+                            fallbackApkSizeBytes = localInput?.file
+                                ?.takeIf { it.isFile }
+                                ?.length(),
+                            fallbackSplitApk = fallbackSplitApk,
+                            fallbackPatcherEngine = item.patcherEngine,
+                            session = sessionInfo
+                        ),
+                        expanded = patcherInformationExpanded,
+                        onExpandedChange = { expanded ->
+                            coroutineScope.launch {
+                                prefs.patcherInformationExpanded.update(expanded)
+                            }
+                        }
+                    )
+                }
+
                 items(
                     items = groupedSteps.toList(),
                     key = { (category, _) -> category }
@@ -305,7 +365,7 @@ fun BatchPatchDetailsScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        subStepsById = progressUi.subStepsById,
+                        subStepsById = progressUi?.subStepsById.orEmpty(),
                         isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         autoExpandRunningMainOnly = useExclusiveAutoExpand,
