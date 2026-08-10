@@ -1,13 +1,10 @@
 package app.urv.manager.patcher.split;
 
 import com.reandroid.apk.APKLogger;
-import com.reandroid.apk.AndroidManifestBlockMerger;
 import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.header.TableHeader;
-import com.reandroid.archive.ZipEntryMap;
-import com.reandroid.archive.block.ApkSignatureBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -118,68 +115,12 @@ public final class ApkEditorMergeProcess {
             String expectedPackageName = baseModule.getPackageName();
             int expectedVersionCode = baseModule.getVersionCode();
             boolean expectedResourceTable = baseModule.hasTableBlock();
-            Throwable compatibilityFailure;
-
+            ApkModule mergedModule = null;
             try {
-                // Match the patcher runtimes by merging into a fresh APK module.
-                ApkModule mergedModule = mergeIntoFreshModule(
-                        bundle,
-                        baseModule,
-                        logger,
-                        cancellationCheckpoint
-                );
-                try {
-                    writeAndVerifyMergedApk(
-                            mergedModule,
-                            outputApk,
-                            sortApkEntries,
-                            expectedPackageName,
-                            expectedVersionCode,
-                            expectedResourceTable,
-                            logger,
-                            cancellationCheckpoint
-                    );
-                    return;
-                } finally {
-                    closeQuietly(mergedModule);
-                }
-            } catch (Exception | CoderMalfunctionError error) {
-                compatibilityFailure = error;
-            }
-
-            runCancellationCheckpoint(cancellationCheckpoint);
-            logger.logMessage(
-                    "Patch-compatible split merge did not complete validation; " +
-                            "retrying with the base-preserving fallback"
-            );
-
-            closeables.remove(bundle);
-            closeQuietly(bundle);
-
-            try {
-                bundle = new ApkBundle();
-                closeables.add(bundle);
-                bundle.setAPKLogger(logger);
-                bundle.loadApkDirectory(apkDir);
-
-                modules = bundle.getApkModuleList();
-                if (modules.isEmpty()) {
-                    throw new FileNotFoundException("Nothing to merge, empty modules");
-                }
-                baseModule = resolveBaseModule(bundle, modules);
-                removeSkippedModules(
-                        bundle,
-                        baseModule,
-                        skipModules,
-                        cancellationCheckpoint
-                );
-
-                ApkModule mergedModule = mergeIntoBaseModule(
-                        bundle,
-                        baseModule,
-                        logger,
-                        cancellationCheckpoint
-                );
+                runCancellationCheckpoint(cancellationCheckpoint);
+                // Keep manual split selection and the merger tool on the same bundle-level
+                // merge path used by automatic split pruning in the patcher runtimes.
+                mergedModule = bundle.mergeModules(false);
                 writeAndVerifyMergedApk(
                         mergedModule,
                         outputApk,
@@ -191,8 +132,9 @@ public final class ApkEditorMergeProcess {
                         cancellationCheckpoint
                 );
             } catch (Exception | CoderMalfunctionError error) {
-                error.addSuppressed(compatibilityFailure);
                 throw normalizeMergeFailure(error);
+            } finally {
+                closeQuietly(mergedModule);
             }
         } finally {
             for (Closeable closeable : closeables) {
@@ -270,69 +212,6 @@ public final class ApkEditorMergeProcess {
                 bundle.removeApkModule(module.getModuleName());
             }
         }
-    }
-
-    private static ApkModule mergeIntoFreshModule(
-            ApkBundle bundle,
-            ApkModule baseModule,
-            APKLogger logger,
-            Runnable cancellationCheckpoint
-    ) throws IOException {
-        ApkModule mergedModule = new ApkModule(
-                generateMergedModuleName(bundle),
-                new ZipEntryMap()
-        );
-        boolean completed = false;
-        try {
-            mergedModule.setAPKLogger(logger);
-            mergedModule.setLoadDefaultFramework(false);
-
-            runCancellationCheckpoint(cancellationCheckpoint);
-            logger.logMessage("Merging " + moduleDisplayName(baseModule));
-            mergedModule.merge(baseModule, false);
-
-            AndroidManifestBlockMerger manifestMerger = bundle.getManifestMerger();
-            if (manifestMerger != null) {
-                manifestMerger.reset();
-                manifestMerger.initializeBase(mergedModule.getAndroidManifest());
-            }
-
-            ApkSignatureBlock signatureBlock = baseModule.getApkSignatureBlock();
-            for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
-                if (module == baseModule) continue;
-                runCancellationCheckpoint(cancellationCheckpoint);
-                logger.logMessage("Merging " + moduleDisplayName(module));
-                if (signatureBlock == null) {
-                    signatureBlock = module.getApkSignatureBlock();
-                }
-                mergedModule.merge(module, false);
-                if (manifestMerger != null) {
-                    manifestMerger.merge(module.getAndroidManifest());
-                }
-            }
-            if (manifestMerger != null) {
-                manifestMerger.sanitize(mergedModule);
-            }
-            mergedModule.setApkSignatureBlock(signatureBlock);
-            completed = true;
-            return mergedModule;
-        } finally {
-            if (!completed) {
-                closeQuietly(mergedModule);
-            }
-        }
-    }
-
-    private static String generateMergedModuleName(ApkBundle bundle) {
-        Set<String> moduleNames = new HashSet<>(bundle.listModuleNames());
-        String baseName = "merged";
-        String candidate = baseName;
-        int index = 1;
-        while (moduleNames.contains(candidate)) {
-            candidate = baseName + "_" + index;
-            index += 1;
-        }
-        return candidate;
     }
 
     private static void writeAndVerifyMergedApk(
@@ -445,34 +324,6 @@ public final class ApkEditorMergeProcess {
             closeable.close();
         } catch (Exception ignored) {
         }
-    }
-
-    private static ApkModule mergeIntoBaseModule(
-            ApkBundle bundle,
-            ApkModule baseModule,
-            APKLogger logger,
-            Runnable cancellationCheckpoint
-    ) throws IOException {
-        AndroidManifestBlockMerger manifestMerger = bundle.getManifestMerger();
-        if (manifestMerger != null) {
-            manifestMerger.reset();
-            manifestMerger.initializeBase(baseModule.getAndroidManifest());
-        }
-
-        runCancellationCheckpoint(cancellationCheckpoint);
-        logger.logMessage("Merging " + moduleDisplayName(baseModule));
-        for (ApkModule module : new ArrayList<>(bundle.getApkModuleList())) {
-            if (module == baseModule) continue;
-            runCancellationCheckpoint(cancellationCheckpoint);
-            baseModule.merge(module, false);
-            if (manifestMerger != null) {
-                manifestMerger.merge(module.getAndroidManifest());
-            }
-        }
-        if (manifestMerger != null) {
-            manifestMerger.sanitize(baseModule);
-        }
-        return baseModule;
     }
 
     private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) {
