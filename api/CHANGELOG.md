@@ -264,6 +264,7 @@
 - Allowed manually changing split selections while filters are active in the Split APK Merger and patcher, with matching filters automatically selected or cleared as the selected splits change https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/615
 - Updated dependent setting toggles to visually disable with their parent while preserving and restoring their previous state when the parent is re-enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/630
 - Made split sorting choices independent between the patcher and Split APK Merger https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/611
+- Preselected the `Exclude unused languages` and `Exclude extra densities` filters on the patcher split selection screen when `Skip unneeded split APKs` is enabled, while preserving the existing native-library cleanup selection behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/612
 
 
 # Bug fixes

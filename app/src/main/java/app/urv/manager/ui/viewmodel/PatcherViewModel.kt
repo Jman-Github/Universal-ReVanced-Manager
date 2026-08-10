@@ -612,14 +612,15 @@ fun proceedAfterMissingPatchWarning() {
                     SplitApkPreparer.inspect(resolvedInput.file)
                 }
                 val initialStripNativeLibs = prefs.stripUnusedNativeLibs.get()
+                val skipUnneededSplitApks = prefs.skipUnneededSplitApks.get()
                 val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
-                val initialModules = if (initialStripNativeLibs) {
-                    val abiModules = inspection.modules
-                        .filter { it.kind == SplitApkPreparer.SplitArchiveModuleKind.ABI }
-                        .mapTo(linkedSetOf()) { it.name }
-                    (allModules - abiModules) + inspection.abiTrimmedModules
-                } else {
-                    allModules
+                var initialModules: Set<String> = allModules
+                if (skipUnneededSplitApks) {
+                    initialModules = initialModules intersect inspection.languageTrimmedModules
+                    initialModules = initialModules intersect inspection.densityTrimmedModules
+                }
+                if (initialStripNativeLibs) {
+                    initialModules = initialModules intersect inspection.abiTrimmedModules
                 }
 
                 pendingSplitSelectionDialog = SplitSelectionDialogState(
