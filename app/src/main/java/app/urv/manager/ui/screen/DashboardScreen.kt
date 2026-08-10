@@ -3134,13 +3134,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Image,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)
@@ -3181,13 +3181,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.AccountTree,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)
@@ -3228,13 +3228,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Download,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)
@@ -3275,13 +3275,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.VerifiedUser,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)
@@ -3322,13 +3322,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Key,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)
@@ -3369,13 +3369,13 @@ private fun ToolsTabScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(52.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.SwapVert,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier
                             .padding(11.dp)
                             .size(30.dp)

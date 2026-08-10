@@ -33,6 +33,7 @@
 - Updated dependent setting toggles to visually disable with their parent while preserving and restoring their previous state when the parent is re-enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/630
 - Made split sorting choices independent between the patcher and Split APK Merger https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/611
 - Preselected the `Exclude unused languages` and `Exclude extra densities` filters on the patcher split selection screen when `Skip unneeded split APKs` is enabled, while preserving the existing native-library cleanup selection behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/612
+- Improved the Monochrome theme with solid black/white accents, normal untinted light/dark surfaces, optional pure-black dark mode, and higher-contrast informational surfaces and Tools icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/607
 
 
 # Bug fixes

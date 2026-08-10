@@ -167,21 +167,34 @@ class MainActivity : AppCompatActivity() {
             val pureBlackPresetSelected = themePresetSelectionEnabled &&
                 selectedThemePresetName == ThemePreset.PURE_BLACK.name &&
                 pureBlackTheme
+            val monochromePresetSelected = themePresetSelectionEnabled &&
+                selectedThemePresetName == ThemePreset.MONOCHROME.name
             val darkThemeEnabled = materialYouPureBlackSelected ||
                 theme == Theme.SYSTEM && systemDark ||
                 theme == Theme.DARK
-            val followSystemPresetSelected = themePresetSelectionEnabled &&
+            val systemDarkPureBlackPresetSelected = themePresetSelectionEnabled &&
                 (
                     selectedThemePresetName == ThemePreset.DEFAULT.name ||
+                        selectedThemePresetName == ThemePreset.MONOCHROME.name ||
                         !supportsDynamicColor &&
                         selectedThemePresetName == ThemePreset.DYNAMIC.name
                 )
             val pureBlackEnabled = materialYouPureBlackSelected ||
                 pureBlackPresetSelected ||
                 pureBlackOnSystemDark &&
-                followSystemPresetSelected &&
+                systemDarkPureBlackPresetSelected &&
                 theme == Theme.SYSTEM &&
                 systemDark
+            val resolvedAccentColor = if (monochromePresetSelected) {
+                if (darkThemeEnabled) "#FFFFFF" else "#000000"
+            } else {
+                customAccentColor.takeUnless { it.isBlank() }
+            }
+            val resolvedThemeColor = if (monochromePresetSelected) {
+                null
+            } else {
+                customThemeColor.takeUnless { it.isBlank() }
+            }
 
             EventEffect(vm.legacyImportActivityFlow) {
                 try {
@@ -197,8 +210,8 @@ class MainActivity : AppCompatActivity() {
                     darkTheme = darkThemeEnabled,
                     dynamicColor = dynamicColor,
                     pureBlackTheme = pureBlackEnabled,
-                    accentColorHex = customAccentColor.takeUnless { it.isBlank() },
-                    themeColorHex = customThemeColor.takeUnless { it.isBlank() },
+                    accentColorHex = resolvedAccentColor,
+                    themeColorHex = resolvedThemeColor,
                     hasCustomBackground = !customBackgroundImageUri.isNullOrBlank()
                 ) {
                     ReVancedManagerBackground(

@@ -75,9 +75,7 @@ class GeneralSettingsViewModel(
             dynamicColor = true
         ),
         ThemePreset.MONOCHROME to ThemePresetConfig(
-            theme = Theme.SYSTEM,
-            customAccentHex = "#808080",
-            customThemeHex = "#808080"
+            theme = Theme.SYSTEM
         ),
         ThemePreset.PURE_BLACK to ThemePresetConfig(
             theme = Theme.DARK,

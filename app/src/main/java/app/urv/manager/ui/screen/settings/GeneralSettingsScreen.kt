@@ -160,7 +160,8 @@ fun GeneralSettingsScreen(
             if (!supportsDynamicColor && preset == ThemePreset.DYNAMIC) ThemePreset.DEFAULT else preset
         }
     }
-    val followSystemPresetSelected = selectedThemePreset == ThemePreset.DEFAULT
+    val pureBlackOnSystemDarkAvailable = selectedThemePreset == ThemePreset.DEFAULT ||
+        selectedThemePreset == ThemePreset.MONOCHROME
     val materialYouPresetSelected = selectedThemePreset == ThemePreset.DYNAMIC
     val canAdjustThemeColor = selectedThemePreset == null
     val canAdjustAccentColor = selectedThemePreset !in setOf(
@@ -453,7 +454,7 @@ fun GeneralSettingsScreen(
                     add(ThemePresetSwatch(ThemePreset.DEFAULT, R.string.theme_preset_default, listOf(Color(0xFF4CD964), Color(0xFF4A90E2))))
                     add(ThemePresetSwatch(ThemePreset.LIGHT, R.string.light, listOf(Color(0xFFEEF2FF), Color(0xFFE2E6FB))))
                     add(ThemePresetSwatch(ThemePreset.DARK, R.string.dark, listOf(Color(0xFF1C1B1F), Color(0xFF2A2830))))
-                    add(ThemePresetSwatch(ThemePreset.MONOCHROME, R.string.theme_preset_monochrome, listOf(Color(0xFFF2F2F2), Color(0xFF202020))))
+                    add(ThemePresetSwatch(ThemePreset.MONOCHROME, R.string.theme_preset_monochrome, listOf(Color.White, Color.Black)))
                     if (supportsDynamicColor) {
                         add(ThemePresetSwatch(ThemePreset.DYNAMIC, R.string.theme_preset_dynamic, listOf(Color(0xFF6750A4), Color(0xFF4285F4))))
                     }
@@ -591,7 +592,7 @@ fun GeneralSettingsScreen(
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
                         modifier = highlightModifier.alpha(
-                            if (followSystemPresetSelected) 1f else 0.5f
+                            if (pureBlackOnSystemDarkAvailable) 1f else 0.5f
                         ),
                         headlineContent = stringResource(R.string.pure_black_follow_system),
                         supportingContent = stringResource(R.string.pure_black_follow_system_description),
@@ -599,10 +600,10 @@ fun GeneralSettingsScreen(
                             ExpressiveSettingsSwitch(
                                 checked = pureBlackOnSystemDark,
                                 onCheckedChange = viewModel::setPureBlackOnSystemDark,
-                                enabled = followSystemPresetSelected
+                                enabled = pureBlackOnSystemDarkAvailable
                             )
                         },
-                        enabled = followSystemPresetSelected,
+                        enabled = pureBlackOnSystemDarkAvailable,
                         onClick = { viewModel.setPureBlackOnSystemDark(!pureBlackOnSystemDark) }
                     )
                 }
