@@ -274,6 +274,14 @@ class PreferencesManager(
         }
     }
 
+    suspend fun migrateSplitModuleSortModeSeparation() {
+        if (splitModuleSortModeSeparationMigrated.get()) return
+        edit {
+            patcherSplitModuleSortMode.value = splitMergeModuleSortMode.value
+            splitModuleSortModeSeparationMigrated.value = true
+        }
+    }
+
     suspend fun migrateLegacyShizukuPlayStoreMode() {
         val primary = installerPrimary.get()
         val fallback = installerFallback.get()
@@ -478,7 +486,10 @@ class PreferencesManager(
     val splitMergeExcludeUnusedLanguages = booleanPreference("split_merge_exclude_unused_languages", false)
     val splitMergeExcludeExtraDensities = booleanPreference("split_merge_exclude_extra_densities", false)
     val splitMergeExcludeExtraNativeLibs = booleanPreference("split_merge_exclude_extra_native_libs", false)
+    val patcherSplitModuleSortMode = stringPreference("patcher_split_module_sort_mode", "DEFAULT")
     val splitMergeModuleSortMode = stringPreference("split_merge_module_sort_mode", "DEFAULT")
+    private val splitModuleSortModeSeparationMigrated =
+        booleanPreference("split_module_sort_mode_separation_migrated", false)
     val splitMergeInstalledFilterUserApps = booleanPreference("split_merge_installed_filter_user_apps", false)
     val splitMergeInstalledFilterSystemApps = booleanPreference("split_merge_installed_filter_system_apps", false)
     val splitMergeInstalledFilterSplitApks = booleanPreference("split_merge_installed_filter_split_apks", false)
@@ -661,6 +672,7 @@ class PreferencesManager(
         val splitMergeExcludeUnusedLanguages: Boolean? = null,
         val splitMergeExcludeExtraDensities: Boolean? = null,
         val splitMergeExcludeExtraNativeLibs: Boolean? = null,
+        val patcherSplitModuleSortMode: String? = null,
         val splitMergeModuleSortMode: String? = null,
         val splitMergeInstalledFilterUserApps: Boolean? = null,
         val splitMergeInstalledFilterSystemApps: Boolean? = null,
@@ -905,6 +917,7 @@ class PreferencesManager(
             splitMergeExcludeUnusedLanguages = splitMergeExcludeUnusedLanguages.get(),
             splitMergeExcludeExtraDensities = splitMergeExcludeExtraDensities.get(),
             splitMergeExcludeExtraNativeLibs = splitMergeExcludeExtraNativeLibs.get(),
+            patcherSplitModuleSortMode = patcherSplitModuleSortMode.get().takeIf { it.isNotBlank() },
             splitMergeModuleSortMode = splitMergeModuleSortMode.get().takeIf { it.isNotBlank() },
             splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.get(),
             splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
@@ -1157,8 +1170,20 @@ class PreferencesManager(
         snapshot.splitMergeExcludeUnusedLanguages?.let { splitMergeExcludeUnusedLanguages.value = it }
         snapshot.splitMergeExcludeExtraDensities?.let { splitMergeExcludeExtraDensities.value = it }
         snapshot.splitMergeExcludeExtraNativeLibs?.let { splitMergeExcludeExtraNativeLibs.value = it }
-        snapshot.splitMergeModuleSortMode?.takeIf { it.isNotBlank() }?.let {
+        val importedSplitMergeSortMode =
+            snapshot.splitMergeModuleSortMode?.takeIf { it.isNotBlank() }
+        (snapshot.patcherSplitModuleSortMode?.takeIf { it.isNotBlank() }
+            ?: importedSplitMergeSortMode)?.let {
+            patcherSplitModuleSortMode.value = it
+        }
+        importedSplitMergeSortMode?.let {
             splitMergeModuleSortMode.value = it
+        }
+        if (
+            snapshot.patcherSplitModuleSortMode?.isNotBlank() == true ||
+            importedSplitMergeSortMode != null
+        ) {
+            splitModuleSortModeSeparationMigrated.value = true
         }
         snapshot.splitMergeInstalledFilterUserApps?.let { splitMergeInstalledFilterUserApps.value = it }
         snapshot.splitMergeInstalledFilterSystemApps?.let { splitMergeInstalledFilterSystemApps.value = it }

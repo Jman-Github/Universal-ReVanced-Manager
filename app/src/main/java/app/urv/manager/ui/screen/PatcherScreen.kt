@@ -134,7 +134,7 @@ fun PatcherScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val patchedApkExportDirectory by prefs.patchedApkExportLastDirectory.getAsState()
     val patcherLogExportDirectory by prefs.patcherLogExportLastDirectory.getAsState()
-    val splitMergeSortMode by prefs.splitMergeModuleSortMode.getAsState()
+    val patcherSplitSortMode by prefs.patcherSplitModuleSortMode.getAsState()
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
@@ -827,7 +827,7 @@ fun PatcherScreen(
             initialModules = state.initialModules,
             initialStripNativeLibs = state.initialStripNativeLibs,
             initialPresetKey = "all",
-            initialSortMode = SplitMergeModuleSortMode.fromStorage(splitMergeSortMode),
+            initialSortMode = SplitMergeModuleSortMode.fromStorage(patcherSplitSortMode),
             confirmTextRes = R.string.continue_,
             onDismissRequest = {
                 viewModel.cancelSplitSelectionPreparation()
@@ -836,7 +836,7 @@ fun PatcherScreen(
             onFilterSelectionChanged = { _, _, _, _ -> },
             onSortModeChanged = { mode ->
                 pickerScope.launch {
-                    prefs.splitMergeModuleSortMode.update(mode.storageValue)
+                    prefs.patcherSplitModuleSortMode.update(mode.storageValue)
                 }
             },
             onConfirm = viewModel::confirmSplitSelection

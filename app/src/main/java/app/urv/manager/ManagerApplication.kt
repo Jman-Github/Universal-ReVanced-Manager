@@ -167,6 +167,7 @@ class ManagerApplication : Application() {
             prefs.enableManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
             prefs.migrateAnnouncementPushNotificationInterval()
             prefs.migrateDashboardBundleBannerState()
+            prefs.migrateSplitModuleSortModeSeparation()
             prefs.migrateLegacyShizukuPlayStoreMode()
             runCatching {
                 patchProfileRepository.migrateLegacyShizukuInstallerTokens()
