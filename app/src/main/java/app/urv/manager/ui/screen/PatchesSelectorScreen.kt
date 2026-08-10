@@ -133,7 +133,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.net.Uri
 import android.os.Build
@@ -1279,22 +1278,6 @@ fun PatchesSelectorScreen(
     val currentBundle = bundles.getOrNull(settledPageIndex)
     val currentBundleDisplayName = currentBundle?.let { bundleDisplayNames[it.uid] ?: it.name }
     val warningEnabled = viewModel.selectionWarningEnabled
-    val currentBundleUid by remember {
-        derivedStateOf { bundles.getOrNull(settledPageIndex)?.uid }
-    }
-    val currentBundleSelectionCount by remember {
-        derivedStateOf {
-            currentBundleUid?.let { viewModel.bundleSelectionCount(it) } ?: 0
-        }
-    }
-    val showBundleCounter by remember {
-        derivedStateOf { bundles.size > 1 && currentBundleUid != null }
-    }
-    var tabRowHeightPx by remember { mutableStateOf(0) }
-    var bundleCounterHeightPx by remember(density) {
-        mutableStateOf(with(density) { 24.dp.roundToPx() })
-    }
-    val bundleCounterOffsetPx = remember(density) { with(density) { 6.dp.roundToPx() } }
 
     val actionSpecs = visibleActionKeys.mapNotNull { key ->
         when (key) {
@@ -1763,8 +1746,7 @@ fun PatchesSelectorScreen(
                         if (bundles.size == 1) {
                             TabRow(
                                 selectedTabIndex = swipeSyncedTabIndex,
-                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
@@ -1775,22 +1757,11 @@ fun PatchesSelectorScreen(
                                             }
                                         },
                                         text = {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                                Text(
-                                                    text = bundle.version.orEmpty(),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
+                                            BundleTabContent(
+                                                displayName = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                version = bundle.version.orEmpty(),
+                                                sourceType = bundleTypes[bundle.uid]
+                                            )
                                         },
                                         selectedContentColor = MaterialTheme.colorScheme.primary,
                                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1800,8 +1771,7 @@ fun PatchesSelectorScreen(
                         } else {
                             ScrollableTabRow(
                                 selectedTabIndex = swipeSyncedTabIndex,
-                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp),
-                                modifier = Modifier.onSizeChanged { tabRowHeightPx = it.height }
+                                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.0.dp)
                             ) {
                                 bundles.forEachIndexed { index, bundle ->
                                     HapticTab(
@@ -1812,22 +1782,12 @@ fun PatchesSelectorScreen(
                                             }
                                         },
                                         text = {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text(
-                                                    text = bundleDisplayNames[bundle.uid] ?: bundle.name,
-                                                    style = MaterialTheme.typography.bodyMedium
-                                                )
-                                                Text(
-                                                    text = bundle.version.orEmpty(),
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Text(
-                                                    text = stringResource(bundleTypeLabelRes(bundleTypes[bundle.uid])),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline
-                                                )
-                                            }
+                                            BundleTabContent(
+                                                displayName = bundleDisplayNames[bundle.uid] ?: bundle.name,
+                                                version = bundle.version.orEmpty(),
+                                                sourceType = bundleTypes[bundle.uid],
+                                                selectedCount = viewModel.bundleSelectionCount(bundle.uid)
+                                            )
                                         },
                                         selectedContentColor = MaterialTheme.colorScheme.primary,
                                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1867,11 +1827,7 @@ fun PatchesSelectorScreen(
                                 contentPadding = PaddingValues(
                                     start = 16.dp,
                                     end = 16.dp,
-                                    top = if (showBundleCounter) {
-                                        12.dp + with(density) { bundleCounterHeightPx.toDp() } + 6.dp
-                                    } else {
-                                        12.dp
-                                    },
+                                    top = 12.dp,
                                     bottom = 12.dp
                                 ),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -1886,29 +1842,6 @@ fun PatchesSelectorScreen(
                             }
                         }
                     )
-                }
-                if (showBundleCounter) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-                        tonalElevation = 1.dp,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(end = 16.dp)
-                            .offset { IntOffset(0, tabRowHeightPx + bundleCounterOffsetPx) }
-                            .onSizeChanged { bundleCounterHeightPx = it.height }
-                            .zIndex(1f)
-                    ) {
-                        Text(
-                            text = stringResource(
-                                R.string.patch_selector_bundle_selected_count,
-                                currentBundleSelectionCount
-                            ),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                        )
-                    }
                 }
             }
         }
@@ -2623,6 +2556,45 @@ private fun bundleTypeLabelRes(type: BundleSourceType?): Int = when (type) {
     BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
     BundleSourceType.Remote -> R.string.bundle_type_remote
     else -> R.string.bundle_type_local
+}
+
+@Composable
+private fun BundleTabContent(
+    displayName: String,
+    version: String,
+    sourceType: BundleSourceType?,
+    selectedCount: Int? = null
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            text = version,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = stringResource(bundleTypeLabelRes(sourceType)),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.outline
+        )
+        selectedCount?.let { count ->
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.patch_selector_item_description, count),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable

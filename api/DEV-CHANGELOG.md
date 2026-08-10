@@ -35,6 +35,7 @@
 - Preselected the `Exclude unused languages` and `Exclude extra densities` filters on the patcher split selection screen when `Skip unneeded split APKs` is enabled, while preserving the existing native-library cleanup selection behavior https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/612
 - Improved the Monochrome theme with solid black/white accents, normal untinted light/dark surfaces, optional pure-black dark mode, and higher-contrast informational surfaces and Tools icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/607
 - Restored natural single-sentence wrapping for unsupported keystore errors in the Keystore Converter so the text only wraps when it reaches the available width https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/624
+- Integrated each patch bundle's selected patch count directly into the bundle switcher and removed the separate "Selected in this bundle" indicator
 
 
 # Bug fixes

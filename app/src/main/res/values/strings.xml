@@ -162,7 +162,6 @@
     <string name="patch_required_by_install_target">Required for the selected install target</string>
     <string name="patch_unavailable_for_install_target">Not available for the selected install target</string>
     <string name="patch_selector_item_description">%d patches selected</string>
-    <string name="patch_selector_bundle_selected_count">Selected in this bundle: %d</string>
     <string name="patch_selector_filter_clear_label">Filter/Clear</string>
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">No patches selected</string>
