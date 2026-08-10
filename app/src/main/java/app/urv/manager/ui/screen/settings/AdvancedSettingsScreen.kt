@@ -1532,18 +1532,8 @@ fun AdvancedSettingsScreen(
             }
 
             val autoExpandRunningStepsEnabled by viewModel.prefs.autoExpandRunningSteps.getAsState()
-            val autoExpandRunningStepsExclusiveEnabled by viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
-            val autoExpandExclusiveEnabled = autoExpandRunningStepsEnabled
-            val autoExpandExclusiveAlpha = if (autoExpandExclusiveEnabled) 1f else 0.5f
-
-            LaunchedEffect(
-                autoExpandRunningStepsEnabled,
-                autoExpandRunningStepsExclusiveEnabled
-            ) {
-                if (!autoExpandRunningStepsEnabled && autoExpandRunningStepsExclusiveEnabled) {
-                    viewModel.prefs.autoExpandRunningStepsExclusive.update(false)
-                }
-            }
+            val autoExpandRunningStepsExclusive by
+                viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
 
             GroupHeader(
                 stringResource(R.string.patching_flow_section),
@@ -1602,12 +1592,16 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     BooleanItem(
-                        modifier = highlightModifier.alpha(autoExpandExclusiveAlpha),
-                        preference = viewModel.prefs.autoExpandRunningStepsExclusive,
-                        coroutineScope = viewModel.viewModelScope,
+                        modifier = highlightModifier,
+                        value = autoExpandRunningStepsEnabled && autoExpandRunningStepsExclusive,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.autoExpandRunningStepsExclusive.update(value)
+                            }
+                        },
                         headline = R.string.patcher_auto_expand_running_steps_exclusive,
                         description = R.string.patcher_auto_expand_running_steps_exclusive_description,
-                        enabled = autoExpandExclusiveEnabled
+                        enabled = autoExpandRunningStepsEnabled
                     )
                 }
                 ExpressiveSettingsDivider()
@@ -1642,23 +1636,8 @@ fun AdvancedSettingsScreen(
 
             val splitMergeAutoExpandRunningStepsEnabled by
                 viewModel.prefs.splitMergeAutoExpandRunningSteps.getAsState()
-            val splitMergeAutoExpandRunningStepsExclusiveEnabled by
+            val splitMergeAutoExpandRunningStepsExclusive by
                 viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
-            val splitMergeAutoExpandExclusiveEnabled = splitMergeAutoExpandRunningStepsEnabled
-            val splitMergeAutoExpandExclusiveAlpha =
-                if (splitMergeAutoExpandExclusiveEnabled) 1f else 0.5f
-
-            LaunchedEffect(
-                splitMergeAutoExpandRunningStepsEnabled,
-                splitMergeAutoExpandRunningStepsExclusiveEnabled
-            ) {
-                if (
-                    !splitMergeAutoExpandRunningStepsEnabled &&
-                    splitMergeAutoExpandRunningStepsExclusiveEnabled
-                ) {
-                    viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.update(false)
-                }
-            }
 
             GroupHeader(
                 stringResource(R.string.merge_split_flow_section),
@@ -1717,12 +1696,17 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     BooleanItem(
-                        modifier = highlightModifier.alpha(splitMergeAutoExpandExclusiveAlpha),
-                        preference = viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive,
-                        coroutineScope = viewModel.viewModelScope,
+                        modifier = highlightModifier,
+                        value = splitMergeAutoExpandRunningStepsEnabled &&
+                            splitMergeAutoExpandRunningStepsExclusive,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.update(value)
+                            }
+                        },
                         headline = R.string.merge_split_auto_expand_running_steps_exclusive,
                         description = R.string.merge_split_auto_expand_running_steps_exclusive_description,
-                        enabled = splitMergeAutoExpandExclusiveEnabled
+                        enabled = splitMergeAutoExpandRunningStepsEnabled
                     )
                 }
             }
@@ -1732,6 +1716,7 @@ fun AdvancedSettingsScreen(
                 icon = SettingsSectionIcons.SavedApps
             )
             val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
+            val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1757,8 +1742,12 @@ fun AdvancedSettingsScreen(
                 ) { highlightModifier ->
                     BooleanItem(
                         modifier = highlightModifier,
-                        preference = viewModel.prefs.disableSavedAppOverwrite,
-                        coroutineScope = viewModel.viewModelScope,
+                        value = savedAppsEnabled && disableSavedAppOverwrite,
+                        onValueChange = { value ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.disableSavedAppOverwrite.update(value)
+                            }
+                        },
                         headline = R.string.saved_apps_disable_overwrite_title,
                         description = R.string.saved_apps_disable_overwrite_description,
                         enabled = savedAppsEnabled

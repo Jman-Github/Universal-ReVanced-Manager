@@ -1833,7 +1833,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         forceSave: Boolean = false
     ): Boolean = persistPatchedAppMutex.withLock {
         val savedAppsEnabled = prefs.enableSavedApps.get()
-        val disableSavedAppOverwrite = prefs.disableSavedAppOverwrite.get()
+        val disableSavedAppOverwrite =
+            savedAppsEnabled && prefs.disableSavedAppOverwrite.get()
         val latestInstalledApp = sourceInstalledApp()
         if (latestInstalledApp != installedApp) {
             installedApp = latestInstalledApp

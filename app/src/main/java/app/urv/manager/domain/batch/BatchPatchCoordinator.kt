@@ -725,7 +725,8 @@ class BatchPatchCoordinator(
                 item.options
             )
         val identity = buildSavedAppVariantIdentity(version, selectionPayload, item.selection)
-        val overwriteDisabled = prefs.disableSavedAppOverwrite.get()
+        val overwriteDisabled =
+            prefs.enableSavedApps.get() && prefs.disableSavedAppOverwrite.get()
         val sourceSavedEntry = item.sourceEntryKey
             ?.let { installedAppRepository.get(it) }
             ?.takeIf { sourceEntry ->

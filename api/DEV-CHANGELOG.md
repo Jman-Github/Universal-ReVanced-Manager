@@ -30,6 +30,7 @@
 - Improved single and batch patcher logs with input APK version codes, included/excluded split lists, cleaner exports, and detailed patch failure errors
 - Added an expandable Patcher information panel to single and batch patching with app version/version code, APK size, selected patches and bundles, manager and patcher versions, runtime and memory details, split/native library status, Android/device information, and available RAM/storage, inspired by Morphe's patch information panel
 - Allowed manually changing split selections while filters are active in the Split APK Merger and patcher, with matching filters automatically selected or cleared as the selected splits change https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/615
+- Updated dependent setting toggles to visually disable with their parent while preserving and restoring their previous state when the parent is re-enabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/630
 
 
 # Bug fixes

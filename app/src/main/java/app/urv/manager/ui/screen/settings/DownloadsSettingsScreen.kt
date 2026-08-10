@@ -148,6 +148,7 @@ fun DownloadsSettingsScreen(
     val downloadsExportDirectory by prefs.downloadsExportLastDirectory.getAsState()
     val pickerScope = rememberCoroutineScope()
     val autoSaveDownloaderApks by prefs.autoSaveDownloaderApks.getAsState()
+    val autoSaveDownloaderLatestOnly by prefs.autoSaveDownloaderLatestOnly.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val downloadedApps by viewModel.downloadedApps.collectAsStateWithLifecycle(emptyList())
     val installProgress by viewModel.installProgress.collectAsStateWithLifecycle()
@@ -586,7 +587,12 @@ fun DownloadsSettingsScreen(
                         ) { highlightModifier ->
                             BooleanItem(
                                 modifier = highlightModifier,
-                                preference = prefs.autoSaveDownloaderLatestOnly,
+                                value = autoSaveDownloaderApks && autoSaveDownloaderLatestOnly,
+                                onValueChange = { value ->
+                                    pickerScope.launch {
+                                        prefs.autoSaveDownloaderLatestOnly.update(value)
+                                    }
+                                },
                                 headline = R.string.downloader_auto_save_latest_only_title,
                                 description = R.string.downloader_auto_save_latest_only_description,
                                 enabled = autoSaveDownloaderApks
