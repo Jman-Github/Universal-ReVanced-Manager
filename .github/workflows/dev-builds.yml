@@ -93,7 +93,7 @@ jobs:
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             -PsignAsDebug \
-            :app:testReleaseUnitTest
+            :app:testDebugUnitTest
 
       - name: Build dev
         env:
