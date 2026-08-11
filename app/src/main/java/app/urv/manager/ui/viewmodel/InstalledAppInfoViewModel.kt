@@ -140,6 +140,8 @@ class InstalledAppInfoViewModel(
         private set
     var appLabel: String? by mutableStateOf(null)
         private set
+    var customInstallerLabel: String? by mutableStateOf(null)
+        private set
     var appliedPatches: PatchSelection? by mutableStateOf(null)
     var isMounted by mutableStateOf(false)
         private set
@@ -1588,6 +1590,15 @@ class InstalledAppInfoViewModel(
         }
         val installedInfo = withContext(Dispatchers.IO) {
             pm.getPackageInfo(devicePackageName)
+        }
+        customInstallerLabel = if (
+            app.installType == InstallType.CUSTOM && installedInfo != null
+        ) {
+            withContext(Dispatchers.IO) {
+                pm.getInstallerLabel(devicePackageName)
+            }
+        } else {
+            null
         }
         val mountedNow = if (app.installType == InstallType.MOUNT) {
             runCatching { rootInstaller.isAppMounted(devicePackageName) }.getOrDefault(isMounted)

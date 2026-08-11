@@ -1727,7 +1727,12 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.install_type),
-                    supportingContent = stringResource(displayInstallType.stringResource)
+                    supportingContent = if (displayInstallType == InstallType.CUSTOM) {
+                        viewModel.customInstallerLabel
+                            ?: stringResource(displayInstallType.stringResource)
+                    } else {
+                        stringResource(displayInstallType.stringResource)
+                    }
                 )
 
                 if (viewModel.hasSavedCopy) {

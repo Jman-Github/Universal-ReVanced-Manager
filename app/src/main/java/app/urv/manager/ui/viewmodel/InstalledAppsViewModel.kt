@@ -80,6 +80,7 @@ class InstalledAppsViewModel(
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
     val savedApkAbiLabelMap = mutableStateMapOf<String, String>()
     val appLabelMap = mutableStateMapOf<String, String>()
+    val customInstallerLabelMap = mutableStateMapOf<String, String>()
     private val devicePackageLookupMap = mutableStateMapOf<String, String>()
     private var normalizingSavedEntries = false
     val selectedApps = mutableStateSetOf<String>()
@@ -116,6 +117,7 @@ class InstalledAppsViewModel(
                     savedCopyMap.remove(packageName)
                     savedApkAbiLabelMap.remove(packageName)
                     appLabelMap.remove(packageName)
+                    customInstallerLabelMap.remove(packageName)
                     devicePackageLookupMap.remove(packageName)
                     missingPackages.remove(packageName)
                     selectedApps.remove(packageName)
@@ -207,13 +209,31 @@ class InstalledAppsViewModel(
             if (targetEntries.isEmpty()) return
 
             viewModelScope.launch {
-                val installedInfo = withContext(Dispatchers.IO) {
-                    pm.getPackageInfo(packageName)
+                val installedAppsByPackage = apps.first().associateBy(InstalledApp::currentPackageName)
+                val installedInfoAndInstallerLabel = withContext(Dispatchers.IO) {
+                    val installedInfo = pm.getPackageInfo(packageName)
+                    val needsInstallerLabel = targetEntries.any { key ->
+                        installedAppsByPackage[key]?.installType == InstallType.CUSTOM
+                    }
+                    installedInfo to if (installedInfo != null && needsInstallerLabel) {
+                        pm.getInstallerLabel(packageName)
+                    } else {
+                        null
+                    }
                 }
+                val (installedInfo, installerLabel) = installedInfoAndInstallerLabel
                 targetEntries.forEach { key ->
                     installedOnDeviceMap[key] = installedInfo != null
                     if (installedInfo != null) {
                         packageInfoMap[key] = installedInfo
+                    }
+                    if (
+                        installedAppsByPackage[key]?.installType == InstallType.CUSTOM &&
+                        !installerLabel.isNullOrBlank()
+                    ) {
+                        customInstallerLabelMap[key] = installerLabel
+                    } else {
+                        customInstallerLabelMap.remove(key)
                     }
                 }
             }
@@ -523,6 +543,19 @@ class InstalledAppsViewModel(
                 ?.trim()
                 ?.takeIf { it.isNotEmpty() }
                 ?: fallbackLabel
+            val customInstallerLabel = if (
+                installedApp.installType == InstallType.CUSTOM &&
+                installedOnDeviceMap[packageName] == true
+            ) {
+                pm.getInstallerLabel(resolvedPackageInfo?.packageName ?: packageName)
+            } else {
+                null
+            }
+            if (customInstallerLabel.isNullOrBlank()) {
+                customInstallerLabelMap.remove(packageName)
+            } else {
+                customInstallerLabelMap[packageName] = customInstallerLabel
+            }
             resolvedPackageInfo
         }
 

@@ -148,6 +148,26 @@ class PM(
             null
         }
 
+    @Suppress("DEPRECATION")
+    fun getInstallerLabel(packageName: String): String? {
+        val installerPackageName = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val sourceInfo = app.packageManager.getInstallSourceInfo(packageName)
+                sourceInfo.installingPackageName ?: sourceInfo.initiatingPackageName
+            } else {
+                app.packageManager.getInstallerPackageName(packageName)
+            }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
+
+        return getApplicationInfo(installerPackageName)
+            ?.let { info ->
+                runCatching { info.loadLabel(app.packageManager).toString() }.getOrNull()
+            }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: installerPackageName
+    }
+
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/pull/598
     @Suppress("DEPRECATION")

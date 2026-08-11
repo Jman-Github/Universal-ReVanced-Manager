@@ -58,6 +58,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.data.room.apps.installed.InstallType
@@ -226,6 +227,7 @@ fun InstalledAppsScreen(
                                 installedApp = installedApp,
                                 packageInfo = packageInfo,
                                 appLabel = viewModel.appLabelMap[packageName],
+                                customInstallerLabel = viewModel.customInstallerLabelMap[packageName],
                                 isSelected = isSelected,
                                 selectionActive = selectionActive,
                                 isSelectable = isSelectable,
@@ -279,6 +281,7 @@ private fun InstalledAppCard(
     installedApp: InstalledApp,
     packageInfo: PackageInfo?,
     appLabel: String?,
+    customInstallerLabel: String?,
     isSelected: Boolean,
     selectionActive: Boolean,
     isSelectable: Boolean,
@@ -345,49 +348,51 @@ private fun InstalledAppCard(
         color = cardBackground
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            Box(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(headerBackground)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectionActive) {
-                        HapticCheckbox(
-                            checked = isSelected,
-                            onCheckedChange = if (isSelectable) onSelectionChange else null,
-                            enabled = isSelectable
-                        )
-                    }
-                    AppIcon(
-                        packageInfo = packageInfo,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp)
-                    )
-                    val titleScrollState = rememberScrollState()
-                    AppLabel(
-                        packageInfo = packageInfo,
-                        labelOverride = appLabel,
-                        style = MaterialTheme.typography.titleMedium,
-                        defaultText = displayPackageName,
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .consumeHorizontalScroll(titleScrollState)
+                if (selectionActive) {
+                    HapticCheckbox(
+                        checked = isSelected,
+                        onCheckedChange = if (isSelectable) onSelectionChange else null,
+                        enabled = isSelectable
                     )
                 }
-                Column(
-                    modifier = Modifier.align(Alignment.TopEnd),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    AppMetaPill(
-                        text = stringResource(displayInstallType.stringResource)
-                    )
-                }
+                AppIcon(
+                    packageInfo = packageInfo,
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp)
+                )
+                val titleScrollState = rememberScrollState()
+                AppLabel(
+                    packageInfo = packageInfo,
+                    labelOverride = appLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    defaultText = displayPackageName,
+                    modifier = Modifier
+                        .weight(1f)
+                        .consumeHorizontalScroll(titleScrollState)
+                )
+                val scrollInstallerLabel = displayInstallType == InstallType.CUSTOM
+                AppMetaPill(
+                    text = if (displayInstallType == InstallType.CUSTOM) {
+                        customInstallerLabel
+                            ?: stringResource(displayInstallType.stringResource)
+                    } else {
+                        stringResource(displayInstallType.stringResource)
+                    },
+                    modifier = if (scrollInstallerLabel) {
+                        Modifier.widthIn(max = if (selectionActive) 112.dp else 160.dp)
+                    } else {
+                        Modifier
+                    },
+                    horizontallyScrollable = scrollInstallerLabel
+                )
             }
 
             Column(
@@ -642,9 +647,11 @@ private fun StatusChip(
 private fun AppMetaPill(
     text: String,
     modifier: Modifier = Modifier,
+    horizontallyScrollable: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
     contentColor: Color = MaterialTheme.colorScheme.onSurfaceVariant
 ) {
+    val scrollState = rememberScrollState()
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(999.dp),
@@ -655,7 +662,18 @@ private fun AppMetaPill(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             color = contentColor,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+                .then(
+                    if (horizontallyScrollable) {
+                        Modifier.consumeHorizontalScroll(scrollState)
+                    } else {
+                        Modifier
+                    }
+                ),
+            maxLines = if (horizontallyScrollable) 1 else Int.MAX_VALUE,
+            softWrap = !horizontallyScrollable,
+            overflow = if (horizontallyScrollable) TextOverflow.Clip else TextOverflow.Visible
         )
     }
 }
