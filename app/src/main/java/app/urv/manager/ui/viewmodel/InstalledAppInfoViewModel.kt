@@ -330,7 +330,8 @@ class InstalledAppInfoViewModel(
     private suspend fun persistInstallMetadata(
         installType: InstallType,
         versionName: String? = null,
-        packageNameOverride: String? = null
+        packageNameOverride: String? = null,
+        customInstallerPackageName: String? = null
     ) {
         val app = installedApp ?: return
         val sourceEntryKey = app.currentPackageName
@@ -363,7 +364,8 @@ class InstalledAppInfoViewModel(
                 version = resolvedVersion,
                 installType = installType,
                 patchSelection = selection,
-                selectionPayload = selectionPayload
+                selectionPayload = selectionPayload,
+                customInstallerPackageName = customInstallerPackageName
             )
         }
         if (pendingHistoricalEntry != null) {
@@ -985,8 +987,15 @@ class InstalledAppInfoViewModel(
             InstallerManager.InstallTarget.SAVED_APP -> {
                 val app = installedApp ?: return
                 val installType = if (plan.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
+                val customInstallerPackageName =
+                    (plan.token as? InstallerManager.Token.Component)
+                        ?.componentName
+                        ?.packageName
                 viewModelScope.launch {
-                    persistInstallMetadata(installType)
+                    persistInstallMetadata(
+                        installType,
+                        customInstallerPackageName = customInstallerPackageName
+                    )
                     markInstallSuccess(context.getString(R.string.installer_external_success, plan.installerLabel))
                 }
             }
@@ -1595,7 +1604,10 @@ class InstalledAppInfoViewModel(
             app.installType == InstallType.CUSTOM && installedInfo != null
         ) {
             withContext(Dispatchers.IO) {
-                pm.getInstallerLabel(devicePackageName)
+                pm.getInstallerLabel(
+                    devicePackageName,
+                    app.customInstallerPackageName
+                )
             }
         } else {
             null

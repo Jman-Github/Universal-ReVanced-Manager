@@ -210,19 +210,23 @@ class InstalledAppsViewModel(
 
             viewModelScope.launch {
                 val installedAppsByPackage = apps.first().associateBy(InstalledApp::currentPackageName)
-                val installedInfoAndInstallerLabel = withContext(Dispatchers.IO) {
+                val installedInfoAndInstallerLabels = withContext(Dispatchers.IO) {
                     val installedInfo = pm.getPackageInfo(packageName)
-                    val needsInstallerLabel = targetEntries.any { key ->
-                        installedAppsByPackage[key]?.installType == InstallType.CUSTOM
+                    val installerLabels = targetEntries.associateWith { key ->
+                        installedAppsByPackage[key]
+                            ?.takeIf { it.installType == InstallType.CUSTOM && installedInfo != null }
+                            ?.let { installedApp ->
+                                pm.getInstallerLabel(
+                                    packageName,
+                                    installedApp.customInstallerPackageName
+                                )
+                            }
                     }
-                    installedInfo to if (installedInfo != null && needsInstallerLabel) {
-                        pm.getInstallerLabel(packageName)
-                    } else {
-                        null
-                    }
+                    installedInfo to installerLabels
                 }
-                val (installedInfo, installerLabel) = installedInfoAndInstallerLabel
+                val (installedInfo, installerLabels) = installedInfoAndInstallerLabels
                 targetEntries.forEach { key ->
+                    val installerLabel = installerLabels[key]
                     installedOnDeviceMap[key] = installedInfo != null
                     if (installedInfo != null) {
                         packageInfoMap[key] = installedInfo
@@ -547,7 +551,10 @@ class InstalledAppsViewModel(
                 installedApp.installType == InstallType.CUSTOM &&
                 installedOnDeviceMap[packageName] == true
             ) {
-                pm.getInstallerLabel(resolvedPackageInfo?.packageName ?: packageName)
+                pm.getInstallerLabel(
+                    resolvedPackageInfo?.packageName ?: packageName,
+                    installedApp.customInstallerPackageName
+                )
             } else {
                 null
             }

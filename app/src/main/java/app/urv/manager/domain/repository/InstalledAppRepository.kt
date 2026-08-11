@@ -233,7 +233,8 @@ class InstalledAppRepository(
         selectionPayload: PatchProfilePayload? = null,
         resetCreatedAt: Boolean = false,
         createdAtOverride: Long? = null,
-        sortOrderOverride: Int? = null
+        sortOrderOverride: Int? = null,
+        customInstallerPackageName: String? = null
     ) {
         patchOptionInputManager.updateReferences {
             val existingApp = dao.get(currentPackageName)
@@ -246,6 +247,11 @@ class InstalledAppRepository(
                 resetCreatedAt -> System.currentTimeMillis()
                 else -> existingApp.createdAt
             }
+            val persistedCustomInstallerPackageName = if (installType == InstallType.CUSTOM) {
+                customInstallerPackageName ?: existingApp?.customInstallerPackageName
+            } else {
+                null
+            }
             dao.upsertApp(
                 InstalledApp(
                     currentPackageName = currentPackageName,
@@ -254,7 +260,8 @@ class InstalledAppRepository(
                     installType = installType,
                     sortOrder = sortOrder,
                     selectionPayload = selectionPayload,
-                    createdAt = createdAt
+                    createdAt = createdAt,
+                    customInstallerPackageName = persistedCustomInstallerPackageName
                 ),
                 patchSelection.flatMap { (uid, patches) ->
                     patches.map { patch ->
@@ -294,7 +301,8 @@ class InstalledAppRepository(
             patchSelection = previousSelection,
             selectionPayload = previousApp.selectionPayload,
             createdAtOverride = previousApp.createdAt,
-            sortOrderOverride = previousApp.sortOrder
+            sortOrderOverride = previousApp.sortOrder,
+            customInstallerPackageName = previousApp.customInstallerPackageName
         )
     }
 

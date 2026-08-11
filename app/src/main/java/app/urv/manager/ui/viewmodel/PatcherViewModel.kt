@@ -1022,6 +1022,12 @@ fun proceedAfterMissingPatchWarning() {
                     }
                     ?: activeInstallType
                     ?: InstallType.DEFAULT
+                val customInstallerPackageNameSnapshot = pendingExternalInstall
+                    ?.takeIf { it.expectedPackage == packageName }
+                    ?.token
+                    ?.let { it as? InstallerManager.Token.Component }
+                    ?.componentName
+                    ?.packageName
 
                 packageInstallerStatus = null
                 if (!tryMarkInstallIfPresent(packageName)) {
@@ -1034,7 +1040,8 @@ fun proceedAfterMissingPatchWarning() {
                         startTimeMs = startTimeSnapshot,
                         expectedSignature = expectedSignatureSnapshot,
                         baselineSignature = baselineSignatureSnapshot,
-                        packageWasPresentAtStart = packageWasPresentAtStartSnapshot
+                        packageWasPresentAtStart = packageWasPresentAtStartSnapshot,
+                        customInstallerPackageName = customInstallerPackageNameSnapshot
                     )
                 }
             }
@@ -1048,7 +1055,8 @@ fun proceedAfterMissingPatchWarning() {
         startTimeMs: Long?,
         expectedSignature: ByteArray?,
         baselineSignature: ByteArray?,
-        packageWasPresentAtStart: Boolean
+        packageWasPresentAtStart: Boolean,
+        customInstallerPackageName: String?
     ) {
         postTimeoutGraceJob?.cancel()
         postTimeoutGraceJob = viewModelScope.launch {
@@ -1068,7 +1076,11 @@ fun proceedAfterMissingPatchWarning() {
                     }
 
                     if (updated || signatureChangedToExpected) {
-                        forceMarkInstallSuccess(packageName, installType)
+                        forceMarkInstallSuccess(
+                            packageName,
+                            installType,
+                            customInstallerPackageName
+                        )
                         return@launch
                     }
                 }
@@ -1121,7 +1133,16 @@ fun proceedAfterMissingPatchWarning() {
         return baseline == null || versionChanged || timestampChanged || updatedSinceStart
     }
 
-    private fun forceMarkInstallSuccess(packageName: String, installType: InstallType = InstallType.DEFAULT) {
+    private fun forceMarkInstallSuccess(
+        packageName: String,
+        installType: InstallType = InstallType.DEFAULT,
+        customInstallerPackageName: String? = pendingExternalInstall
+            ?.takeIf { it.expectedPackage == packageName }
+            ?.token
+            ?.let { it as? InstallerManager.Token.Component }
+            ?.componentName
+            ?.packageName
+    ) {
         if (installStatus is InstallCompletionStatus.Success) return
         suppressFailureAfterSuccess = true
         postTimeoutGraceJob?.cancel()
@@ -1145,7 +1166,11 @@ fun proceedAfterMissingPatchWarning() {
         lastSuccessInstallType = installType
         lastSuccessAtMs = System.currentTimeMillis()
         viewModelScope.launch {
-            val persisted = persistPatchedApp(packageName, installType)
+            val persisted = persistPatchedApp(
+                packageName,
+                installType,
+                customInstallerPackageName = customInstallerPackageName
+            )
             if (!persisted) {
                 Log.w(TAG, "Failed to persist installed patched app metadata (detected)")
             }
@@ -1833,7 +1858,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun persistPatchedApp(
         currentPackageName: String?,
         installType: InstallType,
-        forceSave: Boolean = false
+        forceSave: Boolean = false,
+        customInstallerPackageName: String? = null
     ): Boolean = persistPatchedAppMutex.withLock {
         val savedAppsEnabled = prefs.enableSavedApps.get()
         val disableSavedAppOverwrite =
@@ -2014,7 +2040,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             persistedInstallType,
                             sanitizedSelectionFinal,
                             selectionPayload,
-                            resetCreatedAt = true
+                            resetCreatedAt = true,
+                            customInstallerPackageName = customInstallerPackageName
                         )
                     effectiveShouldSaveForLater &&
                         savedCopyWritten &&
@@ -3157,6 +3184,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         updateInstallingState(false)
         stopInstallProgressToasts()
         val installType = if (plan?.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
+        val customInstallerPackageName =
+            (plan.token as? InstallerManager.Token.Component)
+                ?.componentName
+                ?.packageName
         markInstallSuccess(packageName)
         suppressFailureAfterSuccess = true
 
@@ -3164,7 +3195,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             InstallerManager.InstallTarget.PATCHER -> {
                 installedPackageName = packageName
                 viewModelScope.launch {
-                    val persisted = persistPatchedApp(packageName, installType)
+                    val persisted = persistPatchedApp(
+                        packageName,
+                        installType,
+                        customInstallerPackageName = customInstallerPackageName
+                    )
                     if (!persisted) {
                         Log.w(TAG, "Failed to persist installed patched app metadata (external installer)")
                     }

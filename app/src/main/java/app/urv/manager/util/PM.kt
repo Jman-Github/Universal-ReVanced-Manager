@@ -44,6 +44,31 @@ data class AppInfo(
     val packageInfo: PackageInfo?
 ) : Parcelable
 
+private const val ANDROID_SHELL_PACKAGE_NAME = "com.android.shell"
+
+internal fun displayInstallerPackageName(
+    installingPackageName: String?,
+    initiatingPackageName: String?,
+    recordedCustomInstallerPackageName: String? = null
+): String? {
+    val installingPackage = installingPackageName?.takeIf { it.isNotBlank() }
+    val initiatingPackage = initiatingPackageName?.takeIf { it.isNotBlank() }
+    val recordedCustomInstallerPackage =
+        recordedCustomInstallerPackageName?.takeIf { it.isNotBlank() }
+
+    // Shizuku performs the installation as Shell. Prefer the installer URV launched when it is
+    // available; the initiating package remains the fallback for records created before it was
+    // persisted.
+    if (installingPackage == ANDROID_SHELL_PACKAGE_NAME) {
+        return recordedCustomInstallerPackage
+            ?: initiatingPackage?.takeUnless { it == ANDROID_SHELL_PACKAGE_NAME }
+    }
+
+    return installingPackage
+        ?: initiatingPackage?.takeUnless { it == ANDROID_SHELL_PACKAGE_NAME }
+        ?: recordedCustomInstallerPackage
+}
+
 @SuppressLint("QueryPermissionsNeeded")
 class PM(
     private val app: Application,
@@ -149,13 +174,24 @@ class PM(
         }
 
     @Suppress("DEPRECATION")
-    fun getInstallerLabel(packageName: String): String? {
+    fun getInstallerLabel(
+        packageName: String,
+        recordedCustomInstallerPackageName: String? = null
+    ): String? {
         val installerPackageName = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 val sourceInfo = app.packageManager.getInstallSourceInfo(packageName)
-                sourceInfo.installingPackageName ?: sourceInfo.initiatingPackageName
+                displayInstallerPackageName(
+                    sourceInfo.installingPackageName,
+                    sourceInfo.initiatingPackageName,
+                    recordedCustomInstallerPackageName
+                )
             } else {
-                app.packageManager.getInstallerPackageName(packageName)
+                displayInstallerPackageName(
+                    app.packageManager.getInstallerPackageName(packageName),
+                    null,
+                    recordedCustomInstallerPackageName
+                )
             }
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: return null
 

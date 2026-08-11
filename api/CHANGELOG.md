@@ -438,6 +438,7 @@
 - Fixed ReVanced v22 patches failing with uninitialized hook and method errors
 - Fixed patched APK export filenames omitting versions for additional applied patch bundles https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/650
 - Fixed split APKs with manually excluded language, ABI, or density modules failing during patching, including APKs produced by the Split APK merger tool https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/658
+- Fixed saved patched apps installed through Shizuku-based custom installers showing Shell instead of the selected installer
 
 
 # Refactors

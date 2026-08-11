@@ -295,3 +295,11 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
         db.execSQL("ALTER TABLE lsposed_modules_new RENAME TO lsposed_modules")
     }
 }
+
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "ALTER TABLE installed_app ADD COLUMN custom_installer_package_name TEXT"
+        )
+    }
+}

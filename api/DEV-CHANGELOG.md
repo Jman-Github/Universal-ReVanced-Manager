@@ -1,3 +1,13 @@
+# v1.8.1-dev.23 (TBD)
+
+# Features
+
+
+# Bug fixes
+
+- Fixed saved patched apps installed through Shizuku-based custom installers showing Shell instead of the selected installer
+
+
 # v1.8.1-dev.22 (2026-08-11)
 
 

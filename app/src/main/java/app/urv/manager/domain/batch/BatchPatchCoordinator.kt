@@ -1234,6 +1234,7 @@ class BatchPatchCoordinator(
         val patchedPackageInfo = pm.getPackageInfo(file)
         val targetPackage = patchedPackageInfo?.packageName ?: item.packageName
         var successfulInstallType = InstallType.DEFAULT
+        var successfulCustomInstallerPackageName: String? = null
 
         suspend fun attemptShizukuInstall(
             installerPackageNameOverride: String?
@@ -1436,6 +1437,10 @@ class BatchPatchCoordinator(
                         ).also { externalAttempt ->
                             if (externalAttempt.succeeded) {
                                 successfulInstallType = InstallType.CUSTOM
+                                successfulCustomInstallerPackageName =
+                                    (plan.token as? InstallerManager.Token.Component)
+                                        ?.componentName
+                                        ?.packageName
                             }
                         }
             }
@@ -1501,7 +1506,8 @@ class BatchPatchCoordinator(
                         item = item,
                         sourceFile = file,
                         targetPackage = targetPackage,
-                        installType = successfulInstallType
+                        installType = successfulInstallType,
+                        customInstallerPackageName = successfulCustomInstallerPackageName
                     )
                 } catch (error: Exception) {
                     Log.e(
@@ -1807,7 +1813,8 @@ class BatchPatchCoordinator(
         item: BatchPatchItem,
         sourceFile: File,
         targetPackage: String,
-        installType: InstallType
+        installType: InstallType,
+        customInstallerPackageName: String?
     ): File {
         val version = pm.getPackageInfo(sourceFile)?.versionName?.takeIf(String::isNotBlank)
             ?: item.version
@@ -1904,7 +1911,8 @@ class BatchPatchCoordinator(
                     patchSelection = item.selection,
                     selectionPayload = selectionPayload,
                     createdAtOverride = replacementTimestamp,
-                    sortOrderOverride = replacementSortOrder
+                    sortOrderOverride = replacementSortOrder,
+                    customInstallerPackageName = customInstallerPackageName
                 )
             }
             if (pendingHistoricalEntry != null) {
