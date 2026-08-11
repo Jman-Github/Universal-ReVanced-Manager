@@ -4,7 +4,10 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.network.api.ExternalBundlesApi
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ExternalBundleSnapshot
+import app.urv.manager.network.dto.GitHubAsset
 import app.urv.manager.network.dto.GitHubRelease
+import app.urv.manager.network.dto.GitLabRelease
+import app.urv.manager.network.dto.GitLabReleaseLink
 import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.network.utils.getOrNull
@@ -33,6 +36,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.jar.JarFile
@@ -327,6 +332,7 @@ class JsonPatchBundle(
     searchUpdate: Boolean,
     lastNotifiedVersion: String?,
     enabled: Boolean,
+    val usePrereleases: Boolean = false,
 ) : RemotePatchBundle(
     name,
     uid,
@@ -343,17 +349,40 @@ class JsonPatchBundle(
     enabled
 ) {
     override val supportsHistoricalChangelog: Boolean = true
+    private val releaseApi: ReVancedAPI by inject()
+    val supportsPrereleases: Boolean = repositoryReleaseSource() != null
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
-        http.request<ReVancedAsset> {
-            url(endpoint)
-        }.getOrThrow()
+        val releaseSource = repositoryReleaseSource()
+        if (!usePrereleases || releaseSource == null) {
+            return@withContext requestManifest(endpoint)
+        }
+
+        val stable = runCatching { requestManifest(endpoint) }.getOrNull()
+        val latest = runCatching {
+            requestLatestRepositoryRelease(
+                source = releaseSource,
+                preferredExtension = stable?.downloadUrl?.patchBundleExtension()
+            )
+        }.getOrNull()
+        latest ?: stable ?: requestManifest(endpoint)
     }
 
     override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
         val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
-        fetchGitHubChangelogHistory(limit, null, latest?.pageUrl, latest?.downloadUrl, endpoint)
+        fetchGitHubChangelogHistory(
+            limit,
+            if (usePrereleases) null else false,
+            latest?.pageUrl,
+            latest?.downloadUrl,
+            endpoint
+        )
     }
+
+    override suspend fun latestInfoCacheIdentity(): String = "$endpoint|prereleases=$usePrereleases"
+
+    override suspend fun historicalInfoCacheIdentity(): String =
+        "$endpoint|history|prereleases=$usePrereleases"
 
     override fun copy(
         error: Throwable?,
@@ -378,8 +407,177 @@ class JsonPatchBundle(
         autoUpdate,
         searchUpdate,
         lastNotifiedVersion,
-        enabled
+        enabled,
+        usePrereleases
     )
+
+    fun withUsePrereleases(value: Boolean) = JsonPatchBundle(
+        name,
+        uid,
+        displayName,
+        createdAt,
+        updatedAt,
+        installedVersionSignature,
+        error,
+        directory,
+        endpoint,
+        autoUpdate,
+        searchUpdate,
+        lastNotifiedVersion,
+        enabled,
+        value
+    )
+
+    private suspend fun requestManifest(manifestUrl: String) = http.request<ReVancedAsset> {
+        url(manifestUrl)
+    }.getOrThrow()
+
+    private fun repositoryReleaseSource(): RepositoryReleaseSource? {
+        val parsed = runCatching { Url(endpoint) }.getOrNull() ?: return null
+        val segments = parsed.encodedPath.trim('/').split('/').filter(String::isNotBlank)
+        return when {
+            parsed.host.equals("raw.githubusercontent.com", ignoreCase = true) &&
+                segments.size == 4 &&
+                segments[3].equals("patches-bundle.json", ignoreCase = true) -> {
+                RepositoryReleaseSource.GitHub(
+                    repositoryUrl = "https://github.com/${segments[0]}/${segments[1]}"
+                )
+            }
+
+            parsed.host.equals("gitlab.com", ignoreCase = true) -> {
+                val rawIndex = segments.indexOf("-")
+                if (rawIndex < 2 || segments.getOrNull(rawIndex + 1) != "raw" ||
+                    !segments.getOrNull(rawIndex + 3).equals("patches-bundle.json", ignoreCase = true) ||
+                    segments.size != rawIndex + 4
+                ) return null
+                RepositoryReleaseSource.GitLab(
+                    repositoryPath = segments.take(rawIndex).joinToString("/")
+                )
+            }
+
+            else -> null
+        }
+    }
+
+    private suspend fun requestLatestRepositoryRelease(
+        source: RepositoryReleaseSource,
+        preferredExtension: String?
+    ): ReVancedAsset? = when (source) {
+        is RepositoryReleaseSource.GitHub -> releaseApi
+            .getRepositoryReleaseHistory(source.repositoryUrl, prerelease = null, limit = 50)
+            .getOrNull()
+            ?.asSequence()
+            ?.mapNotNull { release ->
+                release.toPatchBundleAsset(source.repositoryUrl, preferredExtension)
+            }
+            ?.maxByOrNull { it.createdAt }
+
+        is RepositoryReleaseSource.GitLab -> {
+            val encodedProject = URLEncoder.encode(
+                source.repositoryPath,
+                StandardCharsets.UTF_8.name()
+            ).replace("+", "%20")
+            http.request<List<GitLabRelease>> {
+                url("https://gitlab.com/api/v4/projects/$encodedProject/releases?per_page=50")
+            }.getOrNull()
+                ?.asSequence()
+                ?.filterNot { it.upcomingRelease }
+                ?.mapNotNull { release ->
+                    release.toPatchBundleAsset(source.repositoryPath, preferredExtension)
+                }
+                ?.maxByOrNull { it.createdAt }
+        }
+    }
+
+    private fun GitHubRelease.toPatchBundleAsset(
+        repositoryUrl: String,
+        preferredExtension: String?
+    ): ReVancedAsset? {
+        val asset = assets.selectGitHubPatchBundleAsset(preferredExtension) ?: return null
+        val created = (publishedAt ?: createdAt)?.toUtcLocalDateTime() ?: return null
+        return ReVancedAsset(
+            downloadUrl = asset.downloadUrl,
+            createdAt = created,
+            signatureDownloadUrl = assets.findGitHubSignatureUrl(asset.name),
+            pageUrl = "${repositoryUrl.removeSuffix("/")}/releases/tag/$tagName",
+            description = body?.ifBlank { name.orEmpty() } ?: name.orEmpty(),
+            version = tagName
+        )
+    }
+
+    private fun GitLabRelease.toPatchBundleAsset(
+        repositoryPath: String,
+        preferredExtension: String?
+    ): ReVancedAsset? {
+        val asset = assets.links.selectGitLabPatchBundleAsset(preferredExtension) ?: return null
+        val created = (releasedAt ?: createdAt)?.toUtcLocalDateTime() ?: return null
+        return ReVancedAsset(
+            downloadUrl = asset.resolvedGitLabUrl(),
+            createdAt = created,
+            signatureDownloadUrl = assets.links.findGitLabSignatureUrl(asset.name),
+            pageUrl = "https://gitlab.com/$repositoryPath/-/releases/$tagName",
+            description = description?.ifBlank { name.orEmpty() } ?: name.orEmpty(),
+            version = tagName
+        )
+    }
+
+    private fun List<GitHubAsset>.selectGitHubPatchBundleAsset(
+        preferredExtension: String?
+    ): GitHubAsset? {
+        val candidates = filter { it.name.patchBundleExtension() != null }
+        return candidates.firstOrNull { it.name.patchBundleExtension() == preferredExtension }
+            ?: candidates.firstOrNull()
+    }
+
+    private fun List<GitLabReleaseLink>.selectGitLabPatchBundleAsset(
+        preferredExtension: String?
+    ): GitLabReleaseLink? {
+        val candidates = filter { link ->
+            link.name.patchBundleExtension() != null ||
+                link.resolvedGitLabUrl().patchBundleExtension() != null
+        }
+        return candidates.firstOrNull { link ->
+            val extension = link.name.patchBundleExtension()
+                ?: link.resolvedGitLabUrl().patchBundleExtension()
+            extension == preferredExtension
+        } ?: candidates.firstOrNull()
+    }
+
+    private fun List<GitHubAsset>.findGitHubSignatureUrl(assetName: String): String? {
+        val candidates = signatureNames(assetName)
+        return firstOrNull { it.name in candidates }?.downloadUrl
+    }
+
+    private fun List<GitLabReleaseLink>.findGitLabSignatureUrl(assetName: String): String? {
+        val candidates = signatureNames(assetName)
+        return firstOrNull { it.name in candidates }?.resolvedGitLabUrl()
+    }
+
+    private fun signatureNames(assetName: String): Set<String> {
+        val base = assetName.substringBeforeLast('.', assetName)
+        return setOf("$assetName.sig", "$assetName.asc", "$base.sig", "$base.asc")
+    }
+
+    private fun GitLabReleaseLink.resolvedGitLabUrl(): String {
+        val raw = directAssetUrl?.takeUnless { it.isBlank() } ?: url
+        return if (raw.startsWith('/')) "https://gitlab.com$raw" else raw
+    }
+
+    private fun String.patchBundleExtension(): String? {
+        val path = substringBefore('?').substringBefore('#')
+        return path.substringAfterLast('.', "")
+            .lowercase()
+            .takeIf { it == "rvp" || it == "mpp" }
+    }
+
+    private fun String.toUtcLocalDateTime(): LocalDateTime? = runCatching {
+        Instant.parse(this).toLocalDateTime(TimeZone.UTC)
+    }.getOrNull()
+
+    private sealed interface RepositoryReleaseSource {
+        data class GitHub(val repositoryUrl: String) : RepositoryReleaseSource
+        data class GitLab(val repositoryPath: String) : RepositoryReleaseSource
+    }
 }
 
 class APIPatchBundle(

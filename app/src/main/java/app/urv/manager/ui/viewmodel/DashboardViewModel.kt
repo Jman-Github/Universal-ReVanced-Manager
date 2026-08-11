@@ -475,7 +475,12 @@ class DashboardViewModel(
 
     fun createRemoteSource(apiUrl: String, autoUpdate: Boolean, searchUpdate: Boolean) = viewModelScope.launch {
         withContext(NonCancellable) {
-            patchBundleRepository.createRemote(apiUrl, searchUpdate, autoUpdate)
+            patchBundleRepository.createRemote(
+                apiUrl,
+                searchUpdate,
+                autoUpdate,
+                showInAppProgress = true,
+            )
         }
     }
 

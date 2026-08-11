@@ -27,6 +27,7 @@ import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.SerializedOptions
 import app.urv.manager.domain.repository.SerializedSelection
 import app.urv.manager.domain.bundles.PatchBundleSource
+import app.urv.manager.domain.bundles.JsonPatchBundle
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
@@ -127,6 +128,7 @@ data class PatchBundleSnapshot(
     val displayName: String? = null,
     val autoUpdate: Boolean = false,
     val searchUpdate: Boolean = true,
+    val usePrereleases: Boolean? = null,
     val enabled: Boolean = true,
     val officialState: OfficialBundleState? = null,
     val position: Int? = null,
@@ -973,6 +975,7 @@ class ImportExportViewModel(
                                 val current = endpointToSource[endpoint]
                                 if (current != null) {
                                     var changed = false
+                                    var effectiveCurrent = current
                                     val normalizedDisplayName =
                                         current.displayName?.takeUnless { it.isBlank() }
                                     if (normalizedDisplayName != targetDisplayName) {
@@ -985,6 +988,18 @@ class ImportExportViewModel(
                                     if (current.autoUpdate != snapshot.autoUpdate) {
                                         with(patchBundleRepository) {
                                             current.setAutoUpdate(snapshot.autoUpdate)
+                                        }
+                                        changed = true
+                                    }
+                                    val repositoryBundle = current as? JsonPatchBundle
+                                    val snapshotUsePrereleases = snapshot.usePrereleases
+                                    if (repositoryBundle != null &&
+                                        snapshotUsePrereleases != null &&
+                                        repositoryBundle.supportsPrereleases &&
+                                        repositoryBundle.usePrereleases != snapshotUsePrereleases
+                                    ) {
+                                        effectiveCurrent = with(patchBundleRepository) {
+                                            repositoryBundle.setUsePrereleases(snapshotUsePrereleases)
                                         }
                                         changed = true
                                     }
@@ -1004,10 +1019,10 @@ class ImportExportViewModel(
                                     }
                                     if (snapshot.changelogHistory.isNotEmpty()) {
                                         val existingHistory =
-                                            patchBundleRepository.getChangelogHistory(current)
+                                            patchBundleRepository.getChangelogHistory(effectiveCurrent)
                                         if (existingHistory != snapshot.changelogHistory) {
                                             patchBundleRepository.setChangelogHistory(
-                                                current,
+                                                effectiveCurrent,
                                                 snapshot.changelogHistory
                                             )
                                             changed = true
@@ -1028,6 +1043,7 @@ class ImportExportViewModel(
                                         endpoint,
                                         snapshot.searchUpdate,
                                         snapshot.autoUpdate,
+                                        usePrereleases = snapshot.usePrereleases ?: false,
                                         createdAt = snapshot.createdAt,
                                         updatedAt = snapshot.updatedAt,
                                         onProgress = { bytesRead, bytesTotal ->
@@ -1325,6 +1341,7 @@ class ImportExportViewModel(
                     displayName = it.displayName,
                     autoUpdate = it.autoUpdate,
                     searchUpdate = it.searchUpdate,
+                    usePrereleases = (it as? JsonPatchBundle)?.usePrereleases ?: false,
                     enabled = it.enabled,
                     position = positionLookup[it.uid],
                     createdAt = it.createdAt,

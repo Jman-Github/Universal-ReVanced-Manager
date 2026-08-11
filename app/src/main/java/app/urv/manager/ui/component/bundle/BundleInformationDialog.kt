@@ -67,6 +67,7 @@ import app.universal.revanced.manager.R.string.view_patches
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.bundles.LocalPatchBundle
+import app.urv.manager.domain.bundles.JsonPatchBundle
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
@@ -174,6 +175,13 @@ fun BundleInformationDialog(
         with(bundleRepo) {
             src.asRemoteOrNull?.setSearchUpdate(new)
         }
+    }
+
+    fun onRepositoryPrereleasesChange(new: Boolean) = composableScope.launch {
+        val updatedSource = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.setUsePrereleases(new)
+        } ?: return@launch
+        bundleRepo.update(updatedSource, showToast = true)
     }
 
     fun openReleasePage() = composableScope.launch {
@@ -519,6 +527,22 @@ fun BundleInformationDialog(
                                 prefs.usePatchesPrereleases.update(!useBundlePrerelease)
                                 onUpdate()
                             }
+                        }
+                    )
+                }
+
+                (src as? JsonPatchBundle)?.takeIf { it.supportsPrereleases }?.let { repositoryBundle ->
+                    BundleListItem(
+                        headlineText = stringResource(R.string.repository_bundle_prereleases),
+                        supportingText = stringResource(R.string.repository_bundle_prereleases_description),
+                        trailingContent = {
+                            HapticSwitch(
+                                checked = repositoryBundle.usePrereleases,
+                                onCheckedChange = ::onRepositoryPrereleasesChange
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
                         }
                     )
                 }

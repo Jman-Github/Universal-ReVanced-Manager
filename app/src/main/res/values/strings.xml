@@ -110,6 +110,8 @@
     <string name="bundle_updates_notification_available">%1$d updates available.</string>
     <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>
+    <string name="repository_bundle_prereleases">Use pre-releases</string>
+    <string name="repository_bundle_prereleases_description">Include pre-release versions when checking this repository for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background.</string>
     <string name="bundle_reorder">Organize bundles</string>
     <string name="bundle_reorder_title">Organize patch bundles</string>

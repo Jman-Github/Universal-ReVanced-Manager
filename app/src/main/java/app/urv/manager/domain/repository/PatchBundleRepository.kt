@@ -32,6 +32,8 @@ import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.urv.manager.domain.bundles.RepositoryBundleSettings
+import app.urv.manager.domain.bundles.RepositoryBundleSettingsStore
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
@@ -1544,6 +1546,7 @@ class PatchBundleRepository(
                 searchUpdate,
                 lastNotifiedVersion,
                 enabled,
+                RepositoryBundleSettingsStore.read(dir).usePrereleases,
             ).let { jsonBundle ->
                 val external = ExternalBundleMetadataStore.read(dir)
                 if (external == null) {
@@ -1952,6 +1955,7 @@ class PatchBundleRepository(
                 writeChangelogHistoryIdentityInternal(src.uid, null)
             }
             ExternalBundleMetadataStore.clear(directoryOf(src.uid))
+            RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
             updateDb(src.uid) {
                 it.copy(
                     source = SourceInfo.from(normalizedUrl),
@@ -2240,8 +2244,10 @@ class PatchBundleRepository(
         url: String,
         searchUpdate: Boolean,
         autoUpdate: Boolean,
+        usePrereleases: Boolean = false,
         createdAt: Long? = null,
         updatedAt: Long? = null,
+        showInAppProgress: Boolean = false,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         val normalizedUrl = try {
@@ -2253,14 +2259,21 @@ class PatchBundleRepository(
             return
         }
 
-        val src = createEntity(
+        val entity = createEntity(
             "",
             SourceInfo.from(normalizedUrl),
             autoUpdate,
             searchUpdate = searchUpdate,
             createdAt = createdAt,
             updatedAt = updatedAt
-        ).load() as RemotePatchBundle
+        )
+        if (usePrereleases) {
+            RepositoryBundleSettingsStore.write(
+                directoryOf(entity.uid),
+                RepositoryBundleSettings(usePrereleases = true)
+            )
+        }
+        val src = entity.load() as RemotePatchBundle
         dispatchAction("Add bundle ($url)") { state ->
             state.copy(sources = state.sources.put(src.uid, src))
         }
@@ -2275,7 +2288,7 @@ class PatchBundleRepository(
         val updated = try {
             updateNow(
                 allowUnsafeNetwork = allowUnsafeDownload,
-                showProgress = false,
+                showProgress = showInAppProgress,
                 onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
                     if (bundle.uid == src.uid) {
                         progressNotification.update(bytesRead, bytesTotal)
@@ -2651,6 +2664,21 @@ class PatchBundleRepository(
 
             state.copy(sources = state.sources.put(uid, newSrc))
         }
+    }
+
+    suspend fun JsonPatchBundle.setUsePrereleases(value: Boolean): JsonPatchBundle {
+        if (!supportsPrereleases || usePrereleases == value) return this
+        RepositoryBundleSettingsStore.write(
+            directoryOf(uid),
+            RepositoryBundleSettings(usePrereleases = value)
+        )
+        var updatedSource = this
+        dispatchAction("Set repository bundle prereleases ($name, $value)") { state ->
+            val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+            updatedSource = source.withUsePrereleases(value)
+            state.copy(sources = state.sources.put(uid, updatedSource))
+        }
+        return updatedSource
     }
 
     private suspend fun updateLastNotifiedVersion(uid: Int, version: String?) {

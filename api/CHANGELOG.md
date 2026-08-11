@@ -270,6 +270,7 @@
 - Integrated each patch bundle's selected patch count directly into the bundle switcher and removed the separate "Selected in this bundle" indicator
 - Replaced active Install actions with Cancel controls across single and batch patching, allowing in-progress internal, Shizuku, root/mount, external, Install All, and automatic post-patch installations to be cancelled without discarding completed patch results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/661
 - Added custom installer names to installed app details and label instead of showing the generic `Custom installer` label https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/655
+- Added per-bundle pre-release update checks for patch bundles imported from GitHub and GitLab repository links https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/629
 
 
 # Bug fixes
