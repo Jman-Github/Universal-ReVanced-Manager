@@ -10,6 +10,7 @@ import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.result.ActivityResult
 import androidx.work.WorkInfo
 import app.universal.revanced.manager.R
@@ -45,6 +46,7 @@ import app.urv.manager.util.PM
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
+import app.urv.manager.util.toastHandle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -196,6 +198,8 @@ class BatchPatchCoordinator(
     internal val fallbackInstallRequests = fallbackInstallRequestChannel.receiveAsFlow()
     private var job: Job? = null
     private var installJob: Job? = null
+    private var installProgressToastJob: Job? = null
+    private var installProgressToast: Toast? = null
     @Volatile
     private var activeWorkerId: UUID? = null
     private val pendingExternalInstaller =
@@ -504,19 +508,23 @@ class BatchPatchCoordinator(
                 )
             }
         } catch (cancelled: CancellationException) {
-            mutableState.update { current ->
-                current?.copy(
-                    items = current.items.map {
-                        if (it.state == BatchItemState.RUNNING || it.state == BatchItemState.READY) {
-                            it.copy(state = BatchItemState.CANCELLED)
-                        } else {
-                            it.copy(installing = false)
-                        }
-                    },
-                    phase = BatchPhase.FINISHED,
-                    activeIndex = null,
-                    detail = null
-                )
+            if (mutableState.value?.phase == BatchPhase.INSTALLING) {
+                finishInterruptedInstall(cancelled)
+            } else {
+                mutableState.update { current ->
+                    current?.copy(
+                        items = current.items.map {
+                            if (it.state == BatchItemState.RUNNING || it.state == BatchItemState.READY) {
+                                it.copy(state = BatchItemState.CANCELLED)
+                            } else {
+                                it.copy(installing = false)
+                            }
+                        },
+                        phase = BatchPhase.FINISHED,
+                        activeIndex = null,
+                        detail = null
+                    )
+                }
             }
             throw cancelled
         }
@@ -1161,6 +1169,25 @@ class BatchPatchCoordinator(
         }
     }
 
+    private fun startInstallProgressToasts(mounting: Boolean) {
+        if (installProgressToastJob?.isActive == true) return
+        installProgressToastJob = scope.launch(Dispatchers.Main.immediate) {
+            val messageRes = if (mounting) R.string.mounting_ellipsis else R.string.installing_ellipsis
+            while (true) {
+                installProgressToast?.cancel()
+                installProgressToast = app.toastHandle(app.getString(messageRes))
+                delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun stopInstallProgressToasts() {
+        installProgressToastJob?.cancel()
+        installProgressToastJob = null
+        installProgressToast?.cancel()
+        installProgressToast = null
+    }
+
     private suspend fun finishInterruptedInstall(error: Throwable) {
         withContext(NonCancellable) {
             val current = mutableState.value ?: return@withContext
@@ -1314,10 +1341,18 @@ class BatchPatchCoordinator(
         var installed = false
         var result: String? = null
 
+        if (plan !is InstallerManager.InstallPlan.Internal) {
+            startInstallProgressToasts(plan is InstallerManager.InstallPlan.Mount)
+        }
         val attempt = try {
             when (plan) {
                     is InstallerManager.InstallPlan.Internal -> {
-                        when (val install = sessionInstaller.install(file, targetPackage)) {
+                        when (
+                            val install = sessionInstaller.install(
+                                file,
+                                targetPackage
+                            ) { startInstallProgressToasts(mounting = false) }
+                        ) {
                             InstallResult.Success -> {
                                 successfulInstallType = InstallType.DEFAULT
                                 BatchInstallAttempt()
@@ -1408,6 +1443,8 @@ class BatchPatchCoordinator(
             throw cancelled
         } catch (error: Exception) {
             BatchInstallAttempt(error.message ?: "Install failed")
+        } finally {
+            stopInstallProgressToasts()
         }
 
         installed = attempt.succeeded
@@ -2054,6 +2091,17 @@ class BatchPatchCoordinator(
         }
     }
 
+    suspend fun cancelInstall() {
+        val standaloneInstallJob = installJob?.takeIf { it.isActive }
+        if (standaloneInstallJob != null) {
+            standaloneInstallJob.cancelAndJoin()
+            return
+        }
+        if (mutableState.value?.phase == BatchPhase.INSTALLING) {
+            job?.takeIf { it.isActive }?.cancelAndJoin()
+        }
+    }
+
     suspend fun cancel() {
         try {
             mutableState.update { current ->
@@ -2400,6 +2448,7 @@ class BatchPatchCoordinator(
             EXTERNAL_INSTALL_PENDING_GRACE_MS + 5_000L
         const val EXTERNAL_INSTALL_VERIFY_TIMEOUT_MS = 15_000L
         const val EXTERNAL_INSTALL_VERIFY_POLL_MS = 250L
+        const val INSTALL_PROGRESS_TOAST_INTERVAL_MS = 2_500L
         const val SHIZUKU_UNINSTALL_VERIFY_TIMEOUT_MS = 15_000L
         const val SHIZUKU_UNINSTALL_VERIFY_POLL_MS = 250L
     }

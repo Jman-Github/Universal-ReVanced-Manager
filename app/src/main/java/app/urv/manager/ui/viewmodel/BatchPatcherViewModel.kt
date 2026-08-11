@@ -1014,6 +1014,10 @@ class BatchPatcherViewModel(
         )
     }
 
+    fun cancelInstall() = viewModelScope.launch {
+        coordinator.cancelInstall()
+    }
+
     fun cancel() = viewModelScope.launch {
         coordinator.cancel()
     }

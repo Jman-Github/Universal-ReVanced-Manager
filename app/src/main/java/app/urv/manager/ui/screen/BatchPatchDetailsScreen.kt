@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.PostAdd
@@ -116,10 +117,15 @@ fun BatchPatchDetailsScreen(
     val canUseLogs = item?.let {
         it.state == BatchItemState.SUCCEEDED || it.state == BatchItemState.FAILED
     } == true
+    val activeInstallPackage = state?.activeIndex
+        ?.let { index -> state?.items?.getOrNull(index)?.packageName }
+    val isActiveInstall = item?.installing == true && item.packageName == activeInstallPackage
     val canInstallOrOpen = item?.let {
-        !it.saving &&
-            !it.installing &&
-            (it.installOutcome == BatchInstallOutcome.INSTALLED || it.hasAvailablePatchedFile)
+        !it.saving && (
+            isActiveInstall ||
+                (!it.installing &&
+                    (it.installOutcome == BatchInstallOutcome.INSTALLED || it.hasAvailablePatchedFile))
+            )
     } == true
     AppScaffold(
         topBar = { scrollBehavior ->
@@ -165,35 +171,29 @@ fun BatchPatchDetailsScreen(
                                 text = {
                                     Text(
                                         stringResource(
-                                            if (
-                                                item.installOutcome ==
-                                                BatchInstallOutcome.INSTALLED
-                                            ) {
-                                                R.string.open_app
-                                            } else {
-                                                R.string.install_app
+                                            when {
+                                                isActiveInstall -> R.string.cancel
+                                                item.installOutcome == BatchInstallOutcome.INSTALLED ->
+                                                    R.string.open_app
+                                                else -> R.string.install_app
                                             }
                                         )
                                     )
                                 },
                                 icon = {
                                     Icon(
-                                        imageVector = if (
-                                            item.installOutcome ==
-                                            BatchInstallOutcome.INSTALLED
-                                        ) {
-                                            Icons.AutoMirrored.Outlined.OpenInNew
-                                        } else {
-                                            Icons.Outlined.FileDownload
+                                        imageVector = when {
+                                            isActiveInstall -> Icons.Outlined.Cancel
+                                            item.installOutcome == BatchInstallOutcome.INSTALLED ->
+                                                Icons.AutoMirrored.Outlined.OpenInNew
+                                            else -> Icons.Outlined.FileDownload
                                         },
                                         contentDescription = stringResource(
-                                            if (
-                                                item.installOutcome ==
-                                                BatchInstallOutcome.INSTALLED
-                                            ) {
-                                                R.string.open_app
-                                            } else {
-                                                R.string.install_app
+                                            when {
+                                                isActiveInstall -> R.string.cancel
+                                                item.installOutcome == BatchInstallOutcome.INSTALLED ->
+                                                    R.string.open_app
+                                                else -> R.string.install_app
                                             }
                                         )
                                     )

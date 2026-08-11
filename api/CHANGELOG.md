@@ -268,6 +268,7 @@
 - Improved the Monochrome theme with solid black/white accents, normal untinted light/dark surfaces, optional pure-black dark mode, and higher-contrast informational surfaces and Tools icons https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/607
 - Restored natural single-sentence wrapping for unsupported keystore errors in the Keystore Converter so the text only wraps when it reaches the available width https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/624
 - Integrated each patch bundle's selected patch count directly into the bundle switcher and removed the separate "Selected in this bundle" indicator
+- Replaced active Install actions with Cancel controls across single and batch patching, allowing in-progress internal, Shizuku, root/mount, external, Install All, and automatic post-patch installations to be cancelled without discarding completed patch results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/661
 
 
 # Bug fixes

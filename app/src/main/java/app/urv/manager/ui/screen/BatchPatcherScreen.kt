@@ -359,14 +359,18 @@ fun BatchPatcherScreen(
                         onPolicyChange = viewModel::setPolicy,
                         onStart = viewModel::start,
                         onCancel = { showCancelConfirmation = true },
+                        onCancelInstall = viewModel::cancelInstall,
                         onInstallAll = viewModel::installAll,
                         onRetry = viewModel::retryFailed
                     )
                 }
                 items(current.items, key = { it.packageName }) { item ->
+                    val isActiveInstall = item.installing &&
+                        current.activeItem?.packageName == item.packageName
                     BatchItemCard(
                         item = item,
                         phase = current.phase,
+                        isActiveInstall = isActiveInstall,
                         resultActionOrder = batchResultActionOrder,
                         hiddenResultActions = batchResultHiddenActions,
                         onToggle = { viewModel.toggleExcluded(item.packageName) },
@@ -398,8 +402,12 @@ fun BatchPatcherScreen(
                             pendingResultAction = RESULT_ACTION_LOGS
                         },
                         onInstallOrOpen = {
-                            resultActionPackage = item.packageName
-                            pendingResultAction = RESULT_ACTION_INSTALL
+                            if (isActiveInstall) {
+                                viewModel.cancelInstall()
+                            } else {
+                                resultActionPackage = item.packageName
+                                pendingResultAction = RESULT_ACTION_INSTALL
+                            }
                         }
                     )
                 }
@@ -604,6 +612,7 @@ private fun BatchHeader(
     onPolicyChange: (BatchInstallPolicy) -> Unit,
     onStart: () -> Unit,
     onCancel: () -> Unit,
+    onCancelInstall: () -> Unit,
     onInstallAll: () -> Unit,
     onRetry: () -> Unit
 ) {
@@ -641,7 +650,7 @@ private fun BatchHeader(
                 }
 
                 BatchPhase.INSTALLING -> {
-                    val activeName = state.items.firstOrNull { it.installing }?.appName
+                    val activeName = state.activeItem?.appName
                     Text(
                         activeName?.let {
                             stringResource(R.string.batch_patch_installing_app, it)
@@ -649,7 +658,7 @@ private fun BatchHeader(
                         style = MaterialTheme.typography.titleMedium
                     )
                     OutlinedButton(
-                        onClick = onCancel,
+                        onClick = onCancelInstall,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(stringResource(R.string.cancel))
@@ -754,6 +763,7 @@ private fun FinishedHeader(
 private fun BatchItemCard(
     item: BatchPatchItem,
     phase: BatchPhase,
+    isActiveInstall: Boolean,
     resultActionOrder: List<BatchResultActionKey>,
     hiddenResultActions: Set<String>,
     onToggle: () -> Unit,
@@ -932,9 +942,10 @@ private fun BatchItemCard(
                     BatchResultActionKey.SAVE_LOGS -> true
                     BatchResultActionKey.SAVE_APK -> item.hasAvailablePatchedFile
                     BatchResultActionKey.INSTALL_OR_OPEN ->
-                        phase == BatchPhase.FINISHED &&
-                            (item.hasAvailablePatchedFile ||
-                                item.installOutcome == BatchInstallOutcome.INSTALLED)
+                        isActiveInstall ||
+                            (phase == BatchPhase.FINISHED &&
+                                (item.hasAvailablePatchedFile ||
+                                    item.installOutcome == BatchInstallOutcome.INSTALLED))
                 }
             }
             if (phase != BatchPhase.PREFLIGHT && visibleResultActions.isNotEmpty()) {
@@ -961,20 +972,22 @@ private fun BatchItemCard(
                             )
                             BatchResultActionKey.INSTALL_OR_OPEN -> BatchQuickActionButton(
                                 onClick = onInstallOrOpen,
-                                enabled = !item.installing && !item.saving,
-                                icon = if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
-                                    Icons.AutoMirrored.Outlined.OpenInNew
-                                } else {
-                                    Icons.Outlined.FileDownload
+                                enabled = isActiveInstall || (!item.installing && !item.saving),
+                                icon = when {
+                                    isActiveInstall -> Icons.Outlined.Cancel
+                                    item.installOutcome == BatchInstallOutcome.INSTALLED ->
+                                        Icons.AutoMirrored.Outlined.OpenInNew
+                                    else -> Icons.Outlined.FileDownload
                                 },
                                 description = stringResource(
-                                    if (item.installOutcome == BatchInstallOutcome.INSTALLED) {
-                                        R.string.open_app
-                                    } else {
-                                        R.string.install_app
+                                    when {
+                                        isActiveInstall -> R.string.cancel
+                                        item.installOutcome == BatchInstallOutcome.INSTALLED ->
+                                            R.string.open_app
+                                        else -> R.string.install_app
                                     }
                                 ),
-                                loading = item.installing
+                                loading = false
                             )
                         }
                     }

@@ -1115,7 +1115,7 @@ fun PatcherScreen(
                 }
                 },
                 floatingActionButton = {
-                    AnimatedVisibility(visible = canInstall) {
+                    AnimatedVisibility(visible = patcherSucceeded == true) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -1127,6 +1127,7 @@ fun PatcherScreen(
                                             Text(
                                                 stringResource(
                                                     when {
+                                                        viewModel.isInstalling -> R.string.cancel
                                                         viewModel.installedPackageName != null -> R.string.open_app
                                                         viewModel.usingMountInstall &&
                                                             mountInstallerAvailable && !viewModel.basePackageInstalled ->
@@ -1138,6 +1139,10 @@ fun PatcherScreen(
                                         },
                                         icon = {
                                             when {
+                                                viewModel.isInstalling -> Icon(
+                                                    Icons.Outlined.Cancel,
+                                                    stringResource(R.string.cancel)
+                                                )
                                                 viewModel.installedPackageName != null -> Icon(
                                                     Icons.AutoMirrored.Outlined.OpenInNew,
                                                     stringResource(R.string.open_app)
@@ -1155,13 +1160,14 @@ fun PatcherScreen(
                                         },
                                         onClick = {
                                             when {
+                                                viewModel.isInstalling -> viewModel.cancelInstall()
                                                 viewModel.installedPackageName != null -> viewModel.open()
                                                 viewModel.hasProfileInstallerPreference -> viewModel.install()
                                                 chooseInstallerPerInstall -> showInstallerPicker = true
                                                 else -> viewModel.install()
                                             }
                                         },
-                                        shape = if (showMountFallbackMenu) {
+                                        shape = if (showMountFallbackMenu && !viewModel.isInstalling) {
                                             RoundedCornerShape(
                                                 topStart = 16.dp,
                                                 bottomStart = 16.dp,
@@ -1172,7 +1178,7 @@ fun PatcherScreen(
                                             RoundedCornerShape(16.dp)
                                         }
                                     )
-                                    if (showMountFallbackMenu) {
+                                    if (showMountFallbackMenu && !viewModel.isInstalling) {
                                         HapticFloatingActionButton(
                                             onClick = { showInstallDropdown = true },
                                             modifier = Modifier.size(56.dp),
@@ -1192,7 +1198,7 @@ fun PatcherScreen(
                                     }
                                 }
                                 DropdownMenu(
-                                    expanded = showInstallDropdown && showMountFallbackMenu,
+                                    expanded = showInstallDropdown && showMountFallbackMenu && !viewModel.isInstalling,
                                     onDismissRequest = { showInstallDropdown = false }
                                 ) {
                                     DropdownMenuItem(

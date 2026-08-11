@@ -134,6 +134,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
@@ -306,6 +307,7 @@ class PatcherViewModel(
     private var baselineInstallSignature: ByteArray? = null
     private var internalInstallBaseline: Pair<Long?, Long?>? = null
     private var postTimeoutGraceJob: Job? = null
+    private var activeInstallJob: Job? = null
     private var installProgressToastJob: Job? = null
     private var installProgressToast: Toast? = null
     private var deferInstallProgressToasts = false
@@ -2662,6 +2664,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         installType: InstallType,
         downgradeFallbackConfirmed: Boolean = false
     ) {
+        val operationJob = currentCoroutineContext()[Job]
+        activeInstallJob = operationJob
         try {
             rootMountRecoveryMessage = null
             activeInstallType = installType
@@ -2775,6 +2779,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                 InstallType.MOUNT -> performRootMount(currentPackageInfo, downgradeFallbackConfirmed)
             }
+        } catch (cancelled: CancellationException) {
+            packageInstallerStatus = null
+            installStatus = null
+            installFailureMessage = null
+            updateInstallingState(false)
+            throw cancelled
         } catch (e: Exception) {
             Log.e(tag, "Failed to install", e)
             packageInstallerStatus = null
@@ -2785,6 +2795,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ),
                 allowFallback = installType != InstallType.MOUNT
             )
+        } finally {
+            if (activeInstallJob === operationJob) activeInstallJob = null
         }
     }
 
@@ -2906,6 +2918,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         installerPackageNameOverride: String? = null,
         allowAutoUninstall: Boolean = false
     ) {
+        val operationJob = currentCoroutineContext()[Job]
+        activeInstallJob = operationJob
         activeInstallType = InstallType.SHIZUKU
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
@@ -2956,6 +2970,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             suppressFailureAfterSuccess = true
             lastSuccessInstallType = InstallType.SHIZUKU
             lastSuccessAtMs = System.currentTimeMillis()
+        } catch (cancelled: CancellationException) {
+            packageInstallerStatus = null
+            installStatus = null
+            installFailureMessage = null
+            throw cancelled
         } catch (error: ShizukuInstaller.InstallerOperationException) {
             Log.e(tag, "Failed to install via Shizuku", error)
             val currentPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
@@ -2990,6 +3009,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 markInstallSuccess(installedPackageName ?: packageName)
             }
             updateInstallingState(false)
+            if (activeInstallJob === operationJob) activeInstallJob = null
         }
     }
 
@@ -3163,6 +3183,35 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return true
     }
 
+    fun cancelInstall() {
+        if (!isInstalling) return
+
+        val cancellation = CancellationException("Installation cancelled")
+        val hadActiveJob = activeInstallJob != null
+
+        pendingExternalInstall?.let(installerManager::cleanup)
+        pendingExternalInstall = null
+        externalInstallTimeoutJob?.cancel()
+        externalInstallTimeoutJob = null
+        externalInstallPresenceJob?.cancel()
+        externalInstallPresenceJob = null
+        postTimeoutGraceJob?.cancel()
+        postTimeoutGraceJob = null
+        pendingActivityResumeFallback?.cancel()
+        pendingActivityResumeFallback = null
+        externalInstallStartTime = null
+        externalPackageWasPresentAtStart = false
+        launchedActivity?.cancel(cancellation)
+        launchedActivity = null
+
+        activeInstallJob?.cancel(cancellation)
+        if (!hadActiveJob) {
+            installStatus = null
+            installFailureMessage = null
+            updateInstallingState(false)
+        }
+    }
+
     override fun install() {
         if (isInstalling) return
         if (usingMountInstall) {
@@ -3199,6 +3248,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 recordInstallPlan(plan, expectedPackage, null)
                 executeInstallPlan(plan)
             }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
                 Log.e(TAG, "install() failed to start", error)
                 showInstallFailure(
                     app.getString(
@@ -3271,6 +3321,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 recordInstallPlan(plan, expectedPackage, null)
                 executeInstallPlan(plan, automatic)
             }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
                 Log.e(TAG, "installWithToken() failed to start", error)
                 showInstallFailure(
                     app.getString(

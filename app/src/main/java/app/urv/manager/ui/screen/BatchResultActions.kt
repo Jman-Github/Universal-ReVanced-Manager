@@ -373,7 +373,8 @@ internal fun rememberBatchResultActions(
         },
         installOrOpen = {
             when {
-                item == null || item.saving || item.installing -> Unit
+                item == null || item.saving -> Unit
+                item.installing -> viewModel.cancelInstall()
                 item.installOutcome == BatchInstallOutcome.INSTALLED ->
                     viewModel.open(item.packageName)
                 item.hasAvailablePatchedFile && chooseInstallerPerInstall ->
