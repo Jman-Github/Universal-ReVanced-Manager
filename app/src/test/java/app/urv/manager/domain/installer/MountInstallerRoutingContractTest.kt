@@ -83,12 +83,15 @@ class MountInstallerRoutingContractTest {
     }
 
     @Test
-    fun `patcher and saved installs pass package compatibility`() {
+    fun `patcher and saved installs pass mount eligibility`() {
         val patcher = source("ui/viewmodel/PatcherViewModel.kt")
         val saved = source("ui/viewmodel/InstalledAppInfoViewModel.kt")
 
         assertTrue(
-            Regex("allowMount = (expectedPackage|currentPackageInfo\\.packageName) == packageName")
+            Regex(
+                """allowMount\s*=\s*usingMountInstall\s*&&\s*""" +
+                    """(expectedPackage|currentPackageInfo\.packageName)\s*==\s*packageName"""
+            )
                 .findAll(patcher)
                 .count() >= 5
         )
