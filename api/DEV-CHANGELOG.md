@@ -8,6 +8,11 @@
 - Fixed saved patched apps installed through Shizuku-based custom installers showing Shell instead of the selected installer
 
 
+# CI
+
+- Added a manual debug build workflow that uploads dev APK artifacts with a `-debug` version suffix without publishing a release
+
+
 # v1.8.1-dev.22 (2026-08-11)
 
 
