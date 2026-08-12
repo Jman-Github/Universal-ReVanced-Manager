@@ -444,8 +444,10 @@ class DownloadsViewModel(
     ) {
         val installed = pm.getPackageInfo(packageInfo.packageName)
             ?: error(appContext.getString(R.string.root_mount_requires_installed_stock))
-        check(pm.getVersionCode(installed) == pm.getVersionCode(packageInfo) &&
-            installed.versionName == packageInfo.versionName
+        val installedVersionCode = pm.getVersionCode(installed)
+        check(
+            installed.versionName == packageInfo.versionName &&
+                installedVersionCode == pm.getVersionCode(packageInfo)
         ) {
             appContext.getString(R.string.root_mount_download_version_mismatch)
         }
@@ -470,6 +472,7 @@ class DownloadsViewModel(
                 stockApks = stockApks,
                 expectedVersionName = packageInfo.versionName,
                 expectedVersionCode = pm.getVersionCode(packageInfo),
+                expectedStockVersionCode = installedVersionCode,
                 label = label
             )
         ).requireSuccess()

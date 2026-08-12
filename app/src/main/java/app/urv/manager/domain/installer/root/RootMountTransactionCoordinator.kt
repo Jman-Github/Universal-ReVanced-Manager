@@ -10,6 +10,23 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+private data class CorruptCommittedRecoveryDecision(
+    val resultToReturn: RootMountResult? = null,
+    val verifiedOutcome: String? = null
+)
+
+private data class RootMountPreparation(
+    val initialMountedState: RootPackageState,
+    val patchedArtifact: RootArtifactState?,
+    val stockArtifacts: List<RootArtifactState>,
+    val preflightMounts: List<MountInfoEntry>,
+    val legacyPayload: RootBackupArtifact?,
+    val journalPatchedArtifact: RootArtifactState?,
+    val reusableModuleState: RootCommittedState?
+) {
+    val legacyMigration: Boolean get() = legacyPayload != null
+}
+
 class RootMountTransactionCoordinator(
     private val shell: RootShellGateway,
     private val packageStateReader: PackageStateReader,
@@ -25,8 +42,218 @@ class RootMountTransactionCoordinator(
         onPhase: (RootMountPhase) -> Unit = {}
     ): RootMountResult = withContext(Dispatchers.IO) {
         mutexFor(request.packageName).withLock {
-            executeLocked(request, onPhase)
+            val first = executeLocked(request, onPhase)
+            when (first) {
+                is RootMountResult.RecoveredToPreviousMount ->
+                    if (request.operation in RESUMABLE_AFTER_RECOVERY_OPERATIONS) {
+                        executeAfterRecovery(
+                            request,
+                            onPhase,
+                            RootRecoveryState.PREVIOUS_MOUNT
+                        )
+                    } else {
+                        first
+                    }
+
+                is RootMountResult.RecoveredToStock -> when {
+                    request.operation == RootMountOperation.UNMOUNT &&
+                        !request.removeModuleAfterUnmount -> RootMountResult.Success(first.transactionId)
+
+                    request.operation in MOUNTING_OPERATIONS -> {
+                        val committedStatus = runCatchingPreservingCancellation {
+                            transactionStore.readCommitted(request.packageName)?.status
+                        }
+                        when {
+                            committedStatus.isFailure -> first
+                            committedStatus.getOrNull() == "REPATCH_REQUIRED" &&
+                                !runCatchingPreservingCancellation {
+                                    requestMatchesRecoveredStock(request)
+                                }.getOrDefault(false) ->
+                                changedStockRequiresRepatch(first.diagnosticId)
+                            else -> executeAfterRecovery(
+                                request,
+                                onPhase,
+                                RootRecoveryState.STOCK
+                            )
+                        }
+                    }
+
+                    request.operation in RESUMABLE_AFTER_RECOVERY_OPERATIONS ->
+                        executeAfterRecovery(request, onPhase, RootRecoveryState.STOCK)
+
+                    else -> first
+                }
+
+                else -> first
+            }
         }
+    }
+
+    private suspend fun requestMatchesRecoveredStock(request: RootMountRequest): Boolean {
+        if (request.operation != RootMountOperation.SWITCH_PATCHED_BUILD &&
+            request.operation != RootMountOperation.REPLACE_STOCK_AND_MOUNT
+        ) {
+            return false
+        }
+        val expectedVersionName = request.expectedVersionName?.takeIf(String::isNotBlank)
+            ?: return false
+        val expectedVersionCode = request.expectedStockVersionCode ?: return false
+        val current = packageStateReader.read(request.packageName, request.userId)
+        return isStructurallyVerifiedStock(current) &&
+            current.packageName == request.packageName &&
+            current.userId == request.userId &&
+            current.versionName == expectedVersionName &&
+            current.versionCode == expectedVersionCode
+    }
+
+    private suspend fun executeAfterRecovery(
+        request: RootMountRequest,
+        onPhase: (RootMountPhase) -> Unit,
+        recoveredState: RootRecoveryState
+    ): RootMountResult {
+        val resumed = executeLocked(request, onPhase)
+        return if (
+            resumed is RootMountResult.Failure &&
+            resumed.phase == RootMountPhase.PREPARING &&
+            resumed.recoveryState == RootRecoveryState.NONE
+        ) {
+            resumed.copy(recoveryState = recoveredState)
+        } else {
+            resumed
+        }
+    }
+
+    private fun RootMountResult.preparingRecoveryOutcome(): String? = when (this) {
+        is RootMountResult.RecoveredToStock -> RootRecoveryState.STOCK.describeRecovery()
+        is RootMountResult.Success ->
+            "Automatic recovery removed stale root mount state and left the app uninstalled."
+        else -> null
+    }
+
+    private suspend fun handleCorruptCommittedState(
+        request: RootMountRequest,
+        transactionId: String,
+        stateUnreadable: Boolean
+    ): CorruptCommittedRecoveryDecision {
+        val recovery = recoverCorruptCommittedState(
+            request.packageName,
+            request.userId,
+            transactionId,
+            if (stateUnreadable) {
+                "Committed root mount state is unreadable"
+            } else {
+                "Committed root mount identity is invalid"
+            }
+        )
+        val canRebuildSavedPayload =
+            request.operation == RootMountOperation.MOUNT_ONLY &&
+                request.patchedApk != null &&
+                request.stockApks.size == 1
+        return if (!canRebuildSavedPayload ||
+            recovery !is RootMountResult.RecoveredToStock &&
+            recovery !is RootMountResult.Success
+        ) {
+            CorruptCommittedRecoveryDecision(resultToReturn = recovery)
+        } else {
+            CorruptCommittedRecoveryDecision(
+                verifiedOutcome = recovery.preparingRecoveryOutcome()
+            )
+        }
+    }
+
+    private fun mountOnlyCommittedStateBlock(
+        request: RootMountRequest,
+        previousCommitted: RootCommittedState?
+    ): RootMountResult? {
+        if (request.operation != RootMountOperation.MOUNT_ONLY) return null
+        return when (previousCommitted?.status) {
+            "REPATCH_REQUIRED" -> changedStockRequiresRepatch()
+            "REPAIR_REQUIRED" -> error("Root mount repair is required before mounting")
+            else -> null
+        }
+    }
+
+    private suspend fun prepareMountExecution(
+        request: RootMountRequest,
+        previousCommitted: RootCommittedState?,
+        recoveredModuleState: RootCommittedState?
+    ): RootMountPreparation {
+        val initialMountedState = packageStateReader.read(request.packageName, request.userId)
+        if (request.operation in MOUNTING_OPERATIONS) {
+            requireExclusivePackageUser(request.packageName, request.userId)
+        }
+        val patchedArtifact = request.patchedApk?.let(packageStateReader::inspect)
+        val stockArtifacts = request.stockApks.map(packageStateReader::inspect)
+        val preflightMounts = mountVerifier.findUrvMounts(
+            request.packageName,
+            setOfNotNull(initialMountedState.basePath, previousCommitted?.stockPath)
+        )
+        val shouldInspectLegacyPayload = previousCommitted == null && when (request.operation) {
+            RootMountOperation.UNMOUNT -> preflightMounts.isNotEmpty()
+            RootMountOperation.SWITCH_PATCHED_BUILD ->
+                stockArtifacts.isEmpty() && patchedArtifact != null
+            else -> false
+        }
+        val legacyPayload = if (shouldInspectLegacyPayload) {
+            moduleStore.readLegacyPayload(request.packageName)
+                ?.takeIf { it.sha256 == initialMountedState.baseSha256 }
+        } else {
+            null
+        }
+        val journalPatchedArtifact = patchedArtifact ?: legacyPayload?.let { legacy ->
+            RootArtifactState(
+                path = legacy.path,
+                packageName = request.packageName,
+                versionName = initialMountedState.versionName,
+                versionCode = requireNotNull(initialMountedState.versionCode) {
+                    "Legacy mounted payload version code is unavailable"
+                },
+                signerSha256 = initialMountedState.signerSha256,
+                sha256 = legacy.sha256,
+                topology = initialMountedState.topology
+            )
+        }
+        val reusableModuleState = if (
+            request.operation == RootMountOperation.MOUNT_ONLY &&
+            previousCommitted != null &&
+            !previousCommitted.active
+        ) {
+            (recoveredModuleState ?: moduleStore.readCommittedState(request.packageName))
+                ?.takeIf { moduleState ->
+                    isValidCommittedState(request.packageName, moduleState) &&
+                        matchesReusableModule(previousCommitted, moduleState)
+                }
+        } else {
+            null
+        }
+        val preparation = RootMountPreparation(
+            initialMountedState = initialMountedState,
+            patchedArtifact = patchedArtifact,
+            stockArtifacts = stockArtifacts,
+            preflightMounts = preflightMounts,
+            legacyPayload = legacyPayload,
+            journalPatchedArtifact = journalPatchedArtifact,
+            reusableModuleState = reusableModuleState
+        )
+        preflight(
+            request,
+            initialMountedState,
+            patchedArtifact,
+            stockArtifacts,
+            previousCommitted,
+            preparation.legacyMigration
+        )
+        if (request.operation in MOUNTING_OPERATIONS && reusableModuleState == null) {
+            val rollbackPaths = if (initialMountedState.installed) {
+                listOfNotNull(initialMountedState.basePath) + initialMountedState.splitPaths
+            } else {
+                emptyList()
+            }
+            val incomingBytes = request.stockApks.sumOf { it.length() } +
+                (request.patchedApk?.length() ?: 0L)
+            moduleStore.ensureRollbackSpace(request.packageName, rollbackPaths, incomingBytes)
+        }
+        return preparation
     }
 
     suspend fun recoverIncompleteTransactions(userId: Int): Map<String, RootMountResult> {
@@ -265,6 +492,7 @@ class RootMountTransactionCoordinator(
         var stockChanged = false
         var moduleChanged = false
         var stockBackup: RootBackupArtifact? = null
+        var preparingRecoveryOutcome: String? = null
         fun progress(phase: RootMountPhase) {
             currentPhase = phase
             reportProgress(onPhase, phase)
@@ -360,27 +588,19 @@ class RootMountTransactionCoordinator(
                 )
             }
             if (corruptCommitted) {
-                val recovery = recoverCorruptCommittedState(
-                    request.packageName,
-                    request.userId,
+                val recoveryDecision = handleCorruptCommittedState(
+                    request,
                     transactionId,
-                    if (storedCommitted == null) {
-                        "Committed root mount state is unreadable"
-                    } else {
-                        "Committed root mount identity is invalid"
-                    }
+                    storedCommitted == null
                 )
-                val canRebuildSavedPayload =
-                    request.operation == RootMountOperation.MOUNT_ONLY &&
-                        request.patchedApk != null &&
-                        request.stockApks.size == 1
-                if (!canRebuildSavedPayload ||
-                    recovery !is RootMountResult.RecoveredToStock &&
-                    recovery !is RootMountResult.Success
-                ) {
-                    return recovery
+                val resultToReturn = recoveryDecision.resultToReturn
+                if (resultToReturn != null) {
+                    return resultToReturn
                 }
+                preparingRecoveryOutcome = recoveryDecision.verifiedOutcome
             }
+            val mountOnlyBlock = mountOnlyCommittedStateBlock(request, previousCommitted)
+            if (mountOnlyBlock != null) return mountOnlyBlock
             if (request.operation == RootMountOperation.RECOVER) {
                 if (previousCommitted?.active != true) {
                     stopReconciliation(request.packageName, request.userId, transactionId)
@@ -392,76 +612,32 @@ class RootMountTransactionCoordinator(
                 return RootMountResult.Success(transactionId)
             }
 
-            val initialMountedState = packageStateReader.read(request.packageName, request.userId)
-            if (request.operation in MOUNTING_OPERATIONS) {
-                requireExclusivePackageUser(request.packageName, request.userId)
-            }
-            val patchedArtifact = request.patchedApk?.let(packageStateReader::inspect)
-            val stockArtifacts = request.stockApks.map(packageStateReader::inspect)
-            val preflightMounts = mountVerifier.findUrvMounts(
-                request.packageName,
-                setOfNotNull(initialMountedState.basePath, previousCommitted?.stockPath)
-            )
-            val shouldInspectLegacyPayload = previousCommitted == null && when (request.operation) {
-                RootMountOperation.UNMOUNT -> preflightMounts.isNotEmpty()
-                RootMountOperation.SWITCH_PATCHED_BUILD ->
-                    stockArtifacts.isEmpty() && patchedArtifact != null
-                else -> false
-            }
-            val legacyPayload = if (shouldInspectLegacyPayload) {
-                moduleStore.readLegacyPayload(request.packageName)
-                    ?.takeIf { it.sha256 == initialMountedState.baseSha256 }
-            } else {
-                null
-            }
-            val legacyMigration = legacyPayload != null
-            val journalPatchedArtifact = patchedArtifact ?: legacyPayload?.let { legacy ->
-                RootArtifactState(
-                    path = legacy.path,
-                    packageName = request.packageName,
-                    versionName = initialMountedState.versionName,
-                    versionCode = requireNotNull(initialMountedState.versionCode) {
-                        "Legacy mounted payload version code is unavailable"
-                    },
-                    signerSha256 = initialMountedState.signerSha256,
-                    sha256 = legacy.sha256,
-                    topology = initialMountedState.topology
-                )
-            }
-            preflight(
+            val preparation = prepareMountExecution(
                 request,
-                initialMountedState,
-                patchedArtifact,
-                stockArtifacts,
                 previousCommitted,
-                legacyMigration
+                recoveredModuleState
             )
-            if (request.operation in MOUNTING_OPERATIONS) {
-                val rollbackPaths = if (initialMountedState.installed) {
-                    listOfNotNull(initialMountedState.basePath) + initialMountedState.splitPaths
-                } else {
-                    emptyList()
-                }
-                val incomingBytes = request.stockApks.sumOf { it.length() } +
-                    (request.patchedApk?.length() ?: 0L)
-                moduleStore.ensureRollbackSpace(request.packageName, rollbackPaths, incomingBytes)
-            }
-
+            val initialMountedState = preparation.initialMountedState
+            val patchedArtifact = preparation.patchedArtifact
+            val stockArtifacts = preparation.stockArtifacts
+            val preflightMounts = preparation.preflightMounts
+            val legacyPayload = preparation.legacyPayload
+            val legacyMigration = preparation.legacyMigration
+            val journalPatchedArtifact = preparation.journalPatchedArtifact
+            val reusableModuleState = preparation.reusableModuleState
             reconciliationScheduler.ensureScheduled(request.userId, request.packageName)
 
-            journal = RootMountJournal(
-                transactionId = transactionId,
-                packageName = request.packageName,
-                userId = request.userId,
-                operation = request.operation,
-                phase = currentPhase,
-                startedAtEpochMs = System.currentTimeMillis(),
-                initialPackageState = initialMountedState,
-                patchedArtifact = journalPatchedArtifact,
-                stockArtifact = stockArtifacts.singleOrNull(),
-                previousCommitted = previousCommitted,
-                candidateMountTargets = preflightMounts.map { it.mountPoint }.distinct(),
-                status = if (legacyMigration) "LEGACY_MIGRATION" else null
+            journal = createJournal(
+                transactionId,
+                request,
+                currentPhase,
+                initialMountedState,
+                journalPatchedArtifact,
+                stockArtifacts.singleOrNull(),
+                previousCommitted,
+                preflightMounts.map { it.mountPoint }.distinct(),
+                legacyMigration,
+                reusableModuleState != null
             )
             persist()
 
@@ -473,9 +649,7 @@ class RootMountTransactionCoordinator(
             persist()
             val knownTargets = setOfNotNull(
                 initialMountedState.basePath,
-                previousCommitted?.stockPath,
-                interrupted?.initialPackageState?.basePath,
-                interrupted?.expectedPackageState?.basePath
+                previousCommitted?.stockPath
             ) + requireNotNull(journal).candidateMountTargets
             val lazyUnmounts = mountVerifier.removeAllUrvMounts(
                 request.packageName,
@@ -493,9 +667,18 @@ class RootMountTransactionCoordinator(
 
             if (request.operation == RootMountOperation.UNMOUNT) {
                 val rawStock = packageStateReader.read(request.packageName, request.userId)
+                val externalStockUpdate = previousCommitted?.let {
+                    isVerifiedExternalStockUpdate(it, rawStock)
+                } == true
                 if (rawStock.installed) {
                     previousCommitted?.let {
-                        checkCommittedIdentity(it, rawStock)
+                        if (externalStockUpdate) {
+                            check(isStructurallyVerifiedExternalStock(rawStock)) {
+                                "Updated stock package state could not be verified after unmount"
+                            }
+                        } else {
+                            checkCommittedIdentity(it, rawStock)
+                        }
                         check(rawStock.basePath?.isSafeAbsoluteApkPath() == true) {
                             "Unmounted stock base path is unsafe"
                         }
@@ -602,7 +785,7 @@ class RootMountTransactionCoordinator(
                 } else {
                     migratedLegacyState ?: previousCommitted?.copy(
                         active = false,
-                        status = "STOCK",
+                        status = if (externalStockUpdate) "REPATCH_REQUIRED" else "STOCK",
                         committedAtEpochMs = System.currentTimeMillis()
                     )
                 }
@@ -636,7 +819,8 @@ class RootMountTransactionCoordinator(
 
             progress(RootMountPhase.SNAPSHOTTING)
             persist { it.copy(initialPackageState = initial) }
-            val moduleBackupHash = moduleStore.snapshot(request.packageName, legacyPayload)
+            val moduleBackupHash = reusableModuleState?.patchedSha256
+                ?: moduleStore.snapshot(request.packageName, legacyPayload)
             val rebuildMountOnlyModule =
                 request.operation == RootMountOperation.MOUNT_ONLY &&
                     patchedArtifact != null &&
@@ -662,14 +846,6 @@ class RootMountTransactionCoordinator(
                     "Legacy root module could not be snapshotted and verified"
                 }
             }
-            if (initial.installed) {
-                val rawPaths = listOfNotNull(initial.basePath) + initial.splitPaths
-                stockBackup = moduleStore.snapshotStock(request.packageName, rawPaths).singleOrNull()
-                check(stockBackup?.sha256 == initial.baseSha256) {
-                    "Raw stock rollback snapshot hash mismatch"
-                }
-            }
-
             val useRequestedPayload =
                 request.operation != RootMountOperation.MOUNT_ONLY || rebuildMountOnlyModule
             val stock = stockArtifacts.singleOrNull().takeIf { useRequestedPayload }
@@ -695,6 +871,13 @@ class RootMountTransactionCoordinator(
                 }
             }
             val stockNeedsChange = stockTransition != RootMountPolicy.StockTransition.NONE
+
+            // A raw stock backup is only needed when PackageInstaller will mutate the
+            // installed package. Copying and syncing it for an ordinary remount or bundle
+            // switch can add hundreds of megabytes of unnecessary root I/O.
+            if (stockNeedsChange && initial.installed) {
+                stockBackup = snapshotStockForRollback(request.packageName, initial)
+            }
 
             var stableStock = initial
             if (stockNeedsChange) {
@@ -797,19 +980,7 @@ class RootMountTransactionCoordinator(
                 }
             }
 
-            check(stableStock.installed) { "Stock package is not installed for Android user ${request.userId}" }
-            check(stableStock.topology == "SINGLE") { "Safe root mount requires a complete single APK" }
-            check(stableStock.sharedUserId == null) { "Shared-UID process ownership cannot be isolated safely" }
-            check(!stableStock.signerSha256.isNullOrBlank()) { "Installed stock signer is unavailable" }
-            check(!stableStock.basePath.isNullOrBlank()) { "Installed stock base path is unavailable" }
-            check(!stableStock.baseSha256.isNullOrBlank()) { "Installed stock hash is unavailable" }
-            effectivePatchedArtifact?.let { artifact ->
-                check(stableStock.versionName == artifact.versionName) { "Patched and stock version names differ" }
-                check(stableStock.versionCode == artifact.versionCode) { "Patched and stock version codes differ" }
-                check(stableStock.baseSha256 != artifact.sha256) {
-                    "Patched payload is byte-identical to raw stock"
-                }
-            }
+            verifyStableStock(request, stableStock, effectivePatchedArtifact)
             val compatible = stableStock.copy(baseSha256 = stableStock.baseSha256)
             val mountOnlyCommitted = if (
                 request.operation == RootMountOperation.MOUNT_ONLY &&
@@ -859,27 +1030,13 @@ class RootMountTransactionCoordinator(
 
             val patchedHash = effectivePatchedArtifact?.sha256
                 ?: requireNotNull(previousCommitted).patchedSha256
-            val committed = mountOnlyCommitted ?: run {
-                RootCommittedState(
-                    transactionId = transactionId,
-                    packageName = request.packageName,
-                    userId = request.userId,
-                    versionName = requireNotNull(compatible.versionName),
-                    versionCode = requireNotNull(compatible.versionCode),
-                    signerSha256 = compatible.signerSha256,
-                    stockPath = requireNotNull(compatible.basePath),
-                    stockSha256 = requireNotNull(compatible.baseSha256),
-                    patchedPath = activePatchedPath,
-                    patchedSha256 = patchedHash,
-                    stockShadowPath = RootPaths.moduleStockApk(request.packageName),
-                    stockShadowSha256 = requireNotNull(compatible.baseSha256),
-                    preserveStockAcrossBoot = true,
-                    topology = compatible.topology,
-                    enabled = compatible.enabled,
-                    launcherResolvable = compatible.launcherResolvable,
-                    committedAtEpochMs = System.currentTimeMillis()
-                )
-            }
+            val committed = mountOnlyCommitted ?: createCommittedState(
+                transactionId,
+                request,
+                compatible,
+                activePatchedPath,
+                patchedHash
+            )
 
             progress(RootMountPhase.MOUNTING)
             persist { it.copy(expectedPackageState = compatible) }
@@ -934,7 +1091,8 @@ class RootMountTransactionCoordinator(
                     failedPhase,
                     RootRecoveryState.NONE,
                     diagnosticId,
-                    failureMessage
+                    failureMessage,
+                    preparingRecoveryOutcome
                 )
             }
             currentPhase = RootMountPhase.ROLLING_BACK
@@ -977,6 +1135,94 @@ class RootMountTransactionCoordinator(
         }
     }
 
+    private suspend fun snapshotStockForRollback(
+        packageName: String,
+        initial: RootPackageState
+    ): RootBackupArtifact? {
+        val rawPaths = listOfNotNull(initial.basePath) + initial.splitPaths
+        val backup = moduleStore.snapshotStock(packageName, rawPaths).singleOrNull()
+        check(backup?.sha256 == initial.baseSha256) {
+            "Raw stock rollback snapshot hash mismatch"
+        }
+        return backup
+    }
+
+    private fun createJournal(
+        transactionId: String,
+        request: RootMountRequest,
+        phase: RootMountPhase,
+        initialPackageState: RootPackageState,
+        patchedArtifact: RootArtifactState?,
+        stockArtifact: RootArtifactState?,
+        previousCommitted: RootCommittedState?,
+        candidateMountTargets: List<String>,
+        legacyMigration: Boolean,
+        reusableCommittedModule: Boolean
+    ) = RootMountJournal(
+        transactionId = transactionId,
+        packageName = request.packageName,
+        userId = request.userId,
+        operation = request.operation,
+        phase = phase,
+        startedAtEpochMs = System.currentTimeMillis(),
+        initialPackageState = initialPackageState,
+        patchedArtifact = patchedArtifact,
+        stockArtifact = stockArtifact,
+        previousCommitted = previousCommitted,
+        candidateMountTargets = candidateMountTargets,
+        reusableCommittedModule = reusableCommittedModule,
+        status = if (legacyMigration) "LEGACY_MIGRATION" else null
+    )
+
+    private fun createCommittedState(
+        transactionId: String,
+        request: RootMountRequest,
+        compatible: RootPackageState,
+        patchedPath: String,
+        patchedSha256: String
+    ) = RootCommittedState(
+        transactionId = transactionId,
+        packageName = request.packageName,
+        userId = request.userId,
+        versionName = requireNotNull(compatible.versionName),
+        versionCode = requireNotNull(compatible.versionCode),
+        signerSha256 = compatible.signerSha256,
+        stockPath = requireNotNull(compatible.basePath),
+        stockSha256 = requireNotNull(compatible.baseSha256),
+        patchedPath = patchedPath,
+        patchedSha256 = patchedSha256,
+        stockShadowPath = RootPaths.moduleStockApk(request.packageName),
+        stockShadowSha256 = requireNotNull(compatible.baseSha256),
+        preserveStockAcrossBoot = true,
+        topology = compatible.topology,
+        enabled = compatible.enabled,
+        launcherResolvable = compatible.launcherResolvable,
+        committedAtEpochMs = System.currentTimeMillis()
+    )
+
+    private fun verifyStableStock(
+        request: RootMountRequest,
+        stableStock: RootPackageState,
+        patchedArtifact: RootArtifactState?
+    ) {
+        check(stableStock.installed) { "Stock package is not installed for Android user ${request.userId}" }
+        check(stableStock.topology == "SINGLE") { "Safe root mount requires a complete single APK" }
+        check(stableStock.sharedUserId == null) { "Shared-UID process ownership cannot be isolated safely" }
+        check(!stableStock.signerSha256.isNullOrBlank()) { "Installed stock signer is unavailable" }
+        check(!stableStock.basePath.isNullOrBlank()) { "Installed stock base path is unavailable" }
+        check(!stableStock.baseSha256.isNullOrBlank()) { "Installed stock hash is unavailable" }
+        patchedArtifact?.let { artifact ->
+            check(stableStock.versionName == artifact.versionName) { "Patched and stock version names differ" }
+            val expectedStockVersionCode = request.expectedStockVersionCode ?: artifact.versionCode
+            check(stableStock.versionCode == expectedStockVersionCode) {
+                "Installed stock version code does not match the patched APK source"
+            }
+            check(stableStock.baseSha256 != artifact.sha256) {
+                "Patched payload is byte-identical to raw stock"
+            }
+        }
+    }
+
     private fun preflight(
         request: RootMountRequest,
         initial: RootPackageState,
@@ -1001,9 +1247,11 @@ class RootMountTransactionCoordinator(
                 val switchPayload = requireNotNull(requestedPatched) {
                     "Patched APK is required for bundle switching"
                 }
+                val expectedStockVersionCode = request.expectedStockVersionCode
+                    ?: switchPayload.versionCode
                 require(
                     initial.versionName == switchPayload.versionName &&
-                        initial.versionCode == switchPayload.versionCode,
+                        initial.versionCode == expectedStockVersionCode,
                 ) {
                     "Bundle switching cannot change the installed stock version"
                 }
@@ -1034,10 +1282,15 @@ class RootMountTransactionCoordinator(
                 request.packageName,
                 initial,
                 requestedPatched,
-                requestedStock
+                requestedStock,
+                request.expectedStockVersionCode ?: requestedPatched?.versionCode
             )
             requestedStock.singleOrNull()?.let { artifact ->
-                request.expectedVersionCode?.let { require(artifact.versionCode == it) }
+                (request.expectedStockVersionCode ?: request.expectedVersionCode)?.let {
+                    require(artifact.versionCode == it) {
+                        "Stock APK version code does not match the patched APK source"
+                    }
+                }
                 request.expectedVersionName?.let { require(artifact.versionName == it) }
             }
         }
@@ -1254,23 +1507,34 @@ class RootMountTransactionCoordinator(
             mountVerifier.verifyTargetsClear(targets)
 
             val initial = journal.initialPackageState
+            var retainedExternalUpdate = false
             if (stockChanged && initial?.installed == true) {
                 val beforeRestore = packageStateReader.read(packageName, journal.userId)
-                if (initial.systemApp && !beforeRestore.installed) {
-                    check(packageInstaller.restoreSystemRegistration(packageName, journal.userId)) {
-                        "Failed to restore system package registration"
+                retainedExternalUpdate = isVerifiedExternalStockUpdate(journal, beforeRestore)
+                if (!retainedExternalUpdate) {
+                    if (initial.systemApp && !beforeRestore.installed) {
+                        check(packageInstaller.restoreSystemRegistration(packageName, journal.userId)) {
+                            "Failed to restore system package registration"
+                        }
                     }
+                    val backup = stockBackup ?: RootBackupArtifact(
+                        "${RootPaths.backup(packageName)}/package/0.apk",
+                        requireNotNull(initial.baseSha256) { "Previous stock hash is unavailable" }
+                    )
+                    packageInstaller.replaceRootBackup(
+                        backup.path,
+                        backup.sha256,
+                        journal.userId
+                    ).getOrThrow()
+                    packageStateReader.waitForStable(initial.copy(installed = true))
+                } else {
+                    transactionStore.appendDiagnostic(
+                        packageName,
+                        diagnosticId,
+                        "A newer same-signer stock update was detected during recovery; " +
+                            "the update was retained and the saved patch was marked for repatching"
+                    )
                 }
-                val backup = stockBackup ?: RootBackupArtifact(
-                    "${RootPaths.backup(packageName)}/package/0.apk",
-                    requireNotNull(initial.baseSha256) { "Previous stock hash is unavailable" }
-                )
-                packageInstaller.replaceRootBackup(
-                    backup.path,
-                    backup.sha256,
-                    journal.userId
-                ).getOrThrow()
-                packageStateReader.waitForStable(initial.copy(installed = true))
             }
 
             val restoredState = packageStateReader.read(packageName, journal.userId)
@@ -1296,8 +1560,14 @@ class RootMountTransactionCoordinator(
                 RootMountResult.RecoveredToPreviousMount(journal.transactionId, diagnosticId, reason)
             } else {
                 moduleStore.disable(packageName)
-                if (isVerifiedStockRecovery(journal, restoredState)) {
-                    val stockState = inactiveCommittedForVerifiedStock(previous, restoredState)
+                val externalStockUpdate = retainedExternalUpdate ||
+                    isVerifiedExternalStockUpdate(journal, restoredState)
+                if (isVerifiedStockRecovery(journal, restoredState) || externalStockUpdate) {
+                    val stockState = inactiveCommittedForVerifiedStock(
+                        previous,
+                        restoredState,
+                        repatchRequired = externalStockUpdate
+                    )
                     if (stockState == null) transactionStore.clearCommitted(packageName)
                     transactionStore.complete(journal, stockState)
                     stopReconciliation(packageName, journal.userId, diagnosticId)
@@ -1353,10 +1623,15 @@ class RootMountTransactionCoordinator(
                 mountVerifier.verifyTargetsClear(targets)
                 moduleStore.disable(packageName)
                 val stock = packageStateReader.read(packageName, journal.userId)
-                check(isVerifiedStockRecovery(journal, stock)) {
+                val externalStockUpdate = isVerifiedExternalStockUpdate(journal, stock)
+                check(isVerifiedStockRecovery(journal, stock) || externalStockUpdate) {
                     "Stock fallback state could not be verified"
                 }
-                val inactive = inactiveCommittedForVerifiedStock(journal.previousCommitted, stock)
+                val inactive = inactiveCommittedForVerifiedStock(
+                    journal.previousCommitted,
+                    stock,
+                    repatchRequired = externalStockUpdate
+                )
                 if (inactive == null) transactionStore.clearCommitted(packageName)
                 transactionStore.complete(journal, inactive)
                 stopReconciliation(packageName, journal.userId, diagnosticId)
@@ -1414,8 +1689,11 @@ class RootMountTransactionCoordinator(
         val moduleDisabled = runCatching { moduleStore.disable(request.packageName) }.isSuccess
 
         var restored = packageStateReader.read(request.packageName, request.userId)
+        var externalStockUpdate = previousCommitted?.let {
+            isVerifiedExternalStockUpdate(it, restored)
+        } == true
         if (stopped && mountsRemoved && previousCommitted != null &&
-            !matchesCommittedStock(previousCommitted, restored)
+            !matchesCommittedStock(previousCommitted, restored) && !externalStockUpdate
         ) {
             val restoredBackup = packageInstaller.replaceRootBackup(
                 "${RootPaths.backup(request.packageName)}/package/0.apk",
@@ -1436,12 +1714,21 @@ class RootMountTransactionCoordinator(
                 )
             }
         }
-        val stockProven = previousCommitted?.let { matchesCommittedStock(it, restored) }
+        externalStockUpdate = previousCommitted?.let {
+            isVerifiedExternalStockUpdate(it, restored)
+        } == true
+        val stockProven = previousCommitted?.let {
+            matchesCommittedStock(it, restored) || externalStockUpdate
+        }
             ?: isStructurallyVerifiedStock(restored)
         val recoveryProven = stopped && mountsRemoved && moduleDisabled && stockProven
         val inactive = previousCommitted?.copy(
             active = false,
-            status = if (recoveryProven) "STOCK" else "REPAIR_REQUIRED"
+            status = when {
+                !recoveryProven -> "REPAIR_REQUIRED"
+                externalStockUpdate -> "REPATCH_REQUIRED"
+                else -> "STOCK"
+            }
         )
         if (inactive != null) transactionStore.writeCommitted(inactive)
         else transactionStore.clearCommitted(request.packageName)
@@ -1609,12 +1896,81 @@ class RootMountTransactionCoordinator(
             state.enabled == committed.enabled &&
             state.launcherResolvable == committed.launcherResolvable
 
+    private fun matchesReusableModule(
+        committed: RootCommittedState,
+        module: RootCommittedState
+    ): Boolean =
+        module.packageName == committed.packageName &&
+            module.userId == committed.userId &&
+            module.versionName == committed.versionName &&
+            module.versionCode == committed.versionCode &&
+            module.signerSha256 == committed.signerSha256 &&
+            module.stockPath == committed.stockPath &&
+            module.stockSha256 == committed.stockSha256 &&
+            module.active == committed.active &&
+            module.patchedPath == committed.patchedPath &&
+            module.patchedSha256 == committed.patchedSha256 &&
+            module.stockShadowPath == committed.stockShadowPath &&
+            module.stockShadowSha256 == committed.stockShadowSha256 &&
+            module.preserveStockAcrossBoot == committed.preserveStockAcrossBoot &&
+            module.topology == committed.topology &&
+            module.enabled == committed.enabled &&
+            module.launcherResolvable == committed.launcherResolvable
+
+    private fun isVerifiedExternalStockUpdate(
+        journal: RootMountJournal,
+        state: RootPackageState
+    ): Boolean {
+        val requested = journal.stockArtifact
+        if (requested != null && matchesRequestedStock(state, requested)) return false
+        val currentVersionCode = state.versionCode
+        if (journal.stockMutationStarted && requested != null &&
+            (currentVersionCode == null || currentVersionCode == requested.versionCode)
+        ) {
+            // If this transaction already started replacing stock, a different APK at
+            // the same requested version is ambiguous rather than an external update.
+            return false
+        }
+        if (journal.stockMutationStarted && requested == null) return false
+        val initial = journal.initialPackageState?.takeIf { it.installed }
+        if (initial != null && isVerifiedExternalStockUpdate(initial, state)) return true
+        return journal.previousCommitted?.let { isVerifiedExternalStockUpdate(it, state) } == true
+    }
+
+    private fun isVerifiedExternalStockUpdate(
+        baseline: RootPackageState,
+        state: RootPackageState
+    ): Boolean =
+        isStructurallyVerifiedExternalStock(state) &&
+            state.packageName == baseline.packageName &&
+            state.userId == baseline.userId &&
+            state.signerSha256 == baseline.signerSha256 &&
+            baseline.versionCode != null &&
+            requireNotNull(state.versionCode) > baseline.versionCode
+
+    private fun isVerifiedExternalStockUpdate(
+        baseline: RootCommittedState,
+        state: RootPackageState
+    ): Boolean =
+        isStructurallyVerifiedExternalStock(state) &&
+            state.packageName == baseline.packageName &&
+            state.userId == baseline.userId &&
+            state.signerSha256 == baseline.signerSha256 &&
+            requireNotNull(state.versionCode) > baseline.versionCode
+
     private suspend fun inactiveCommittedForVerifiedStock(
         previous: RootCommittedState?,
-        restored: RootPackageState
+        restored: RootPackageState,
+        repatchRequired: Boolean = false
     ): RootCommittedState? {
         previous ?: return null
-        val inactive = if (matchesCommittedStock(previous, restored)) {
+        val inactive = if (repatchRequired) {
+            previous.copy(
+                active = false,
+                status = "REPATCH_REQUIRED",
+                committedAtEpochMs = System.currentTimeMillis()
+            )
+        } else if (matchesCommittedStock(previous, restored)) {
             previous.copy(
                 stockPath = requireNotNull(restored.basePath) {
                     "Verified recovered stock base path is unavailable"
@@ -1630,7 +1986,7 @@ class RootMountTransactionCoordinator(
                 committedAtEpochMs = System.currentTimeMillis()
             )
         }
-        if (inactive.stockPath != previous.stockPath) {
+        if (!repatchRequired && inactive.stockPath != previous.stockPath) {
             moduleStore.updateState(inactive)
         }
         return inactive
@@ -1639,11 +1995,30 @@ class RootMountTransactionCoordinator(
     private fun isStructurallyVerifiedStock(state: RootPackageState): Boolean =
         state.installed &&
             state.topology == "SINGLE" &&
+            state.sharedUserId == null &&
             !state.versionName.isNullOrBlank() &&
             state.versionCode != null &&
             !state.signerSha256.isNullOrBlank() &&
-            !state.basePath.isNullOrBlank() &&
+            state.basePath?.isSafeAbsoluteApkPath() == true &&
             !state.baseSha256.isNullOrBlank()
+
+    private fun isStructurallyVerifiedExternalStock(state: RootPackageState): Boolean =
+        state.installed &&
+            state.sharedUserId == null &&
+            !state.versionName.isNullOrBlank() &&
+            state.versionCode != null &&
+            !state.signerSha256.isNullOrBlank() &&
+            state.basePath?.isSafeAbsoluteApkPath() == true &&
+            state.splitPaths.all { it.isSafeAbsoluteApkPath() } &&
+            !state.baseSha256.isNullOrBlank()
+
+    private fun changedStockRequiresRepatch(diagnosticId: String? = null) =
+        RootMountResult.RequiresRepatch(
+            reason = "The stock app changed after this root mount was created. " +
+                "Root mounting requires a complete standalone APK. If the update installed split APKs, " +
+                "install matching standalone stock before patching and mounting again.",
+            diagnosticId = diagnosticId
+        )
 
     private fun isValidCommittedState(packageName: String, state: RootCommittedState): Boolean {
         val safeStockPath = state.stockPath.isSafeAbsoluteApkPath()
@@ -1729,6 +2104,7 @@ class RootMountTransactionCoordinator(
             RootMountOperation.UNMOUNT,
             RootMountOperation.RECOVER
         )
+        val RESUMABLE_AFTER_RECOVERY_OPERATIONS = MOUNTING_OPERATIONS + RootMountOperation.UNMOUNT
         const val FORCE_STOP_TIMEOUT_SECONDS = 15L
         const val PACKAGE_MANAGER_IDLE_TIMEOUT_SECONDS = 70L
         val SHA256 = Regex("[0-9a-f]{64}")

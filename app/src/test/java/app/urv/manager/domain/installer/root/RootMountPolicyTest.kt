@@ -108,6 +108,28 @@ class RootMountPolicyTest {
     }
 
     @Test
+    fun `explicit stock identity permits a patched version code override`() {
+        val patched = artifact(version = Int.MAX_VALUE.toLong(), hash = "patched")
+            .copy(versionName = installed.versionName)
+        assertFailsWith<IllegalArgumentException> {
+            RootMountPolicy.validateSafeMount(
+                installed.packageName,
+                installed,
+                patched,
+                listOf(artifact())
+            )
+        }
+
+        RootMountPolicy.validateSafeMount(
+            installed.packageName,
+            installed,
+            patched,
+            listOf(artifact()),
+            expectedStockVersionCode = installed.versionCode
+        )
+    }
+
+    @Test
     fun `external exact match remounts while mismatch and removal stay stock`() {
         val committed = RootCommittedState(
             transactionId = "tx",

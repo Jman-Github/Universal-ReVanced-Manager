@@ -206,54 +206,50 @@ class RootInstaller(
         require(apkFile.isFile) { "Stock APK file is missing" }
         require(userId >= 0) { "Invalid Android user" }
 
-        val installShell = Shell.Builder.create().setFlags(Shell.FLAG_MOUNT_MASTER).build()
-        try {
-            val rootProbe = executeWithTimeout(
-                installShell,
-                "id",
-                ROOT_PROBE_TIMEOUT_SECONDS,
-                "root shell probe"
-            )
-            onLog("Root shell probe: ${rootProbe.render()}")
-            if (!rootProbe.hasRootUid()) throw RootServiceException()
+        // Reuse the coordinator's mount-master shell. Opening a second libsu shell for
+        // PackageInstaller makes some root managers show another grant toast and adds
+        // avoidable startup latency to every stock transition.
+        val rootProbe = executeBounded(
+            "id",
+            ROOT_PROBE_TIMEOUT_SECONDS,
+            "root shell probe"
+        )
+        onLog("Root shell probe: ${rootProbe.render()}")
+        if (!rootProbe.hasRootUid()) throw RootServiceException()
 
-            val downgradeFlag = if (allowDowngrade) " -d" else ""
-            val installerPackage = shellQuote(app.packageName)
-            val apkPath = shellQuote(apkFile.absolutePath)
-            val commandPrefixes = listOf(
-                "pm install -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
-                "pm install -r$downgradeFlag --user $userId -i $installerPackage",
-                "cmd package install -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
-                "cmd package install -r$downgradeFlag --user $userId -i $installerPackage",
-                "pm install -r$downgradeFlag --user $userId",
-                "cmd package install -r$downgradeFlag --user $userId"
+        val downgradeFlag = if (allowDowngrade) " -d" else ""
+        val installerPackage = shellQuote(app.packageName)
+        val apkPath = shellQuote(apkFile.absolutePath)
+        val commandPrefixes = listOf(
+            "pm install -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
+            "pm install -r$downgradeFlag --user $userId -i $installerPackage",
+            "cmd package install -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
+            "cmd package install -r$downgradeFlag --user $userId -i $installerPackage",
+            "pm install -r$downgradeFlag --user $userId",
+            "cmd package install -r$downgradeFlag --user $userId"
+        )
+        // The stock APK is about to be replaced by a bind-mounted patched payload.
+        // Avoid producing install-time dexopt artifacts for bytes that will not be launched.
+        // Older Android releases can reject this option, so retain the existing commands as fallback.
+        val commands = commandPrefixes.map {
+            "$it --dexopt-compiler-filter skip $apkPath"
+        } + commandPrefixes.map { "$it $apkPath" }
+        var failure = "Failed to install stock app"
+        commands.forEachIndexed { index, command ->
+            kotlin.coroutines.coroutineContext.ensureActive()
+            val result = executeBounded(
+                command,
+                installTimeoutSeconds(apkFile.length()),
+                "stock APK install"
             )
-            // The stock APK is about to be replaced by a bind-mounted patched payload.
-            // Avoid producing install-time dexopt artifacts for bytes that will not be launched.
-            // Older Android releases can reject this option, so retain the existing commands as fallback.
-            val commands = commandPrefixes.map {
-                "$it --dexopt-compiler-filter skip $apkPath"
-            } + commandPrefixes.map { "$it $apkPath" }
-            var failure = "Failed to install stock app"
-            commands.forEachIndexed { index, command ->
-                kotlin.coroutines.coroutineContext.ensureActive()
-                val result = executeWithTimeout(
-                    installShell,
-                    command,
-                    installTimeoutSeconds(apkFile.length()),
-                    "stock APK install"
-                )
-                val output = result.combinedOutput()
-                onLog("Root direct install attempt ${index + 1}: ${result.render()}")
-                if (result.isSuccess && !output.contains("Failure", ignoreCase = true)) {
-                    return@withContext
-                }
-                if (output.isNotBlank()) failure = output
+            val output = result.combinedOutput()
+            onLog("Root direct install attempt ${index + 1}: ${result.render()}")
+            if (result.isSuccess && !output.contains("Failure", ignoreCase = true)) {
+                return@withContext
             }
-            throw Exception(failure)
-        } finally {
-            runCatching { installShell.close() }
+            if (output.isNotBlank()) failure = output
         }
+        throw Exception(failure)
     }
 
     suspend fun installPackageFiles(

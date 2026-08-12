@@ -28,7 +28,7 @@ import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.RootRecoveryState
-import app.urv.manager.domain.installer.root.describeRecovery
+import app.urv.manager.domain.installer.root.describeOutcome
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
@@ -99,6 +99,12 @@ private data class BatchInstallAttempt(
 ) {
     val succeeded: Boolean get() = failure == null
 }
+
+private data class BatchPatchWorkerResult(
+    val succeeded: Boolean,
+    val inputVersionName: String? = null,
+    val inputVersionCode: Long? = null
+)
 
 private class PendingExternalInstallerLease(
     val requestId: String,
@@ -447,18 +453,22 @@ class BatchPatchCoordinator(
                     val output = fs.createBatchPatchOutputFile(item.packageName)
                     var keepOutput = false
                     try {
-                        val succeeded = runPatcher(
+                        val patchResult = runPatcher(
                             item,
                             output,
                             itemIndex,
                             queueIndex,
                             indexes.size
                         )
-                        if (succeeded) {
+                        if (patchResult.succeeded) {
+                            val resolvedItem = item.copy(
+                                version = patchResult.inputVersionName ?: item.version,
+                                versionCode = patchResult.inputVersionCode ?: item.versionCode
+                            )
                             val finalOutput = if (
                                 shouldPersistBatchOutputImmediately(initial.scheduled)
                             ) {
-                                persistPatchedItem(item, output)
+                                persistPatchedItem(resolvedItem, output)
                             } else {
                                 keepOutput = true
                                 output
@@ -466,6 +476,8 @@ class BatchPatchCoordinator(
                             updateItem(itemIndex) {
                                 it.copy(
                                     state = BatchItemState.SUCCEEDED,
+                                    version = resolvedItem.version,
+                                    versionCode = resolvedItem.versionCode,
                                     patchedFile = finalOutput,
                                     savedForLater = initial.scheduled,
                                     message = null
@@ -536,8 +548,8 @@ class BatchPatchCoordinator(
         itemIndex: Int,
         queueIndex: Int,
         queueSize: Int
-    ): Boolean {
-        val input = item.input ?: return false
+    ): BatchPatchWorkerResult {
+        val input = item.input ?: return BatchPatchWorkerResult(succeeded = false)
         val backgroundExecution = mutableState.value?.scheduled == true
         output.parentFile?.mkdirs()
         val logger = object : Logger() {
@@ -674,7 +686,21 @@ class BatchPatchCoordinator(
                 }
                 if (info?.state?.isFinished != true) delay(250)
             }
-            info.state == WorkInfo.State.SUCCEEDED && output.isFile && output.length() > 0L
+            val succeeded =
+                info.state == WorkInfo.State.SUCCEEDED && output.isFile && output.length() > 0L
+            BatchPatchWorkerResult(
+                succeeded = succeeded,
+                inputVersionName = info.outputData
+                    .getString(PatcherWorker.INPUT_VERSION_NAME_KEY)
+                    ?.takeIf(String::isNotBlank),
+                inputVersionCode = if (
+                    info.outputData.keyValueMap.containsKey(PatcherWorker.INPUT_VERSION_CODE_KEY)
+                ) {
+                    info.outputData.getLong(PatcherWorker.INPUT_VERSION_CODE_KEY, 0L)
+                } else {
+                    null
+                }
+            )
         } finally {
             if (activeWorkerId == id) activeWorkerId = null
             if (backgroundExecution) {
@@ -1560,25 +1586,28 @@ class BatchPatchCoordinator(
 
         val patchedInfo = pm.getPackageInfo(patchedFile)
             ?: return BatchInstallAttempt(app.getString(R.string.installer_hint_invalid))
-        val versionName = patchedInfo.versionName.orEmpty()
-        val versionCode = pm.getVersionCode(patchedInfo)
+        val patchedVersionCode = pm.getVersionCode(patchedInfo)
+        val stockVersionName = item.version?.takeIf(String::isNotBlank)
+            ?: return BatchInstallAttempt("Patched APK source version name is unavailable")
+        val stockVersionCode = item.versionCode
+            ?: return BatchInstallAttempt("Patched APK source version code is unavailable")
         val retainedOriginal = fs.findOriginalAppFile(
             packageName = targetPackage,
-            version = versionName,
-            versionCode = versionCode
+            version = stockVersionName,
+            versionCode = stockVersionCode
         )
         val retainedStock = retainedOriginal
             ?.takeUnless(SplitApkPreparer::isSplitArchive)
         val retainedInfo = retainedStock?.let(pm::getPackageInfo)
         val verifiedRetainedStock = retainedStock?.takeIf {
             retainedInfo?.packageName == targetPackage &&
-                retainedInfo.versionName == patchedInfo.versionName &&
-                pm.getVersionCode(retainedInfo) == versionCode
+                retainedInfo.versionName == stockVersionName &&
+                pm.getVersionCode(retainedInfo) == stockVersionCode
         }
         val installedInfo = pm.getPackageInfo(targetPackage)
         val stockNeedsReplacement = installedInfo == null ||
-            installedInfo.versionName != patchedInfo.versionName ||
-            pm.getVersionCode(installedInfo) != versionCode
+            installedInfo.versionName != stockVersionName ||
+            pm.getVersionCode(installedInfo) != stockVersionCode
         val appMounted = rootInstaller.isAppMounted(targetPackage)
         val stockFile = when {
             stockNeedsReplacement -> verifiedRetainedStock
@@ -1603,7 +1632,8 @@ class BatchPatchCoordinator(
             patchedApk = patchedFile,
             stockApks = listOfNotNull(stockFile),
             expectedVersionName = patchedInfo.versionName,
-            expectedVersionCode = versionCode,
+            expectedVersionCode = patchedVersionCode,
+            expectedStockVersionCode = stockVersionCode,
             label = item.appName
         )
 
@@ -1672,7 +1702,7 @@ class BatchPatchCoordinator(
             append("The stock app was restored. Diagnostic ${result.diagnosticId}.")
         }
         is RootMountResult.Failure ->
-            "${result.message} ${result.recoveryState.describeRecovery()} " +
+            "${result.message} ${result.describeOutcome()} " +
                 "Diagnostic ${result.diagnosticId}."
     }
 

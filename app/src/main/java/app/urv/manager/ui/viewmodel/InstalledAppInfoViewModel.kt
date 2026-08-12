@@ -1118,13 +1118,16 @@ class InstalledAppInfoViewModel(
                 context.getString(R.string.root_mount_renamed_package_not_supported)
             }
             val installedPackage = pm.getPackageInfo(packageName)
+            val installedVersionName = installedPackage?.versionName?.takeIf(String::isNotBlank)
+            val installedVersionCode = installedPackage?.let(pm::getVersionCode)
             val fallbackPayload = savedApkFile(app)?.let { apk ->
                 pm.getPackageInfo(apk)
                     ?.takeIf { savedPackage ->
                         installedPackage != null &&
+                            installedVersionName != null &&
                             savedPackage.packageName == packageName &&
-                            savedPackage.versionName == installedPackage.versionName &&
-                            pm.getVersionCode(savedPackage) == pm.getVersionCode(installedPackage)
+                            savedPackage.versionName == installedVersionName &&
+                            pm.getVersionCode(savedPackage) == installedVersionCode
                     }
                     ?.let { apk to it }
             }

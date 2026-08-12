@@ -704,6 +704,8 @@ class SignatureMetadataInjectorViewModel(
                             }
                         }
                         is InstallerManager.InstallPlan.Mount -> {
+                            val stockInfo = pm.getPackageInfo(stockApk)
+                                ?: error(app.getString(R.string.install_app_fail_missing_stock))
                             val mountResult = rootMountCoordinator.execute(
                                 RootMountRequest(
                                     packageName = packageName,
@@ -713,6 +715,7 @@ class SignatureMetadataInjectorViewModel(
                                     stockApks = listOf(stockApk),
                                     expectedVersionName = packageInfo.versionName,
                                     expectedVersionCode = pm.getVersionCode(packageInfo),
+                                    expectedStockVersionCode = pm.getVersionCode(stockInfo),
                                     label = label,
                                     downgradeFallbackConfirmed = downgradeFallbackConfirmed
                                 )

@@ -16,6 +16,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.activity.result.ActivityResult
+import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -1598,18 +1599,19 @@ class PatcherWorker(
                 )
                 null
             }
-            val inputVersionCode = sourceInfo?.let(pm::getVersionCode) ?: args.input.versionCode
+            val resolvedInputVersionName = sourceInfo?.versionName
+                ?.takeIf(String::isNotBlank)
+            val resolvedInputVersionCode = sourceInfo?.let(pm::getVersionCode)
+            val inputVersionCode = resolvedInputVersionCode ?: args.input.versionCode
             workerLogger.info("App version code: ${inputVersionCode ?: "unspecified"}")
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/795
             if (shouldRetainOriginalInput(args.input, inputFile)) {
                 runCatching {
-                    val sourceVersion = sourceInfo?.versionName
-                        ?.takeIf(String::isNotBlank)
+                    val sourceVersion = resolvedInputVersionName
                         ?: args.input.version.orEmpty()
-                    val sourceVersionCode = sourceInfo?.let(pm::getVersionCode)
-                        ?: args.input.versionCode
+                    val sourceVersionCode = resolvedInputVersionCode ?: args.input.versionCode
                     fs.saveOriginalAppFile(
                         packageName = args.packageName,
                         version = sourceVersion,
@@ -1888,7 +1890,18 @@ class PatcherWorker(
             )
 
             Log.i(tag, "Patching succeeded".logFmt())
-            Result.success(workDataOf(FAILED_PATCH_INDEXES_KEY to currentFailedPatchIndexArray()))
+            val resultData = Data.Builder()
+                .putIntArray(FAILED_PATCH_INDEXES_KEY, currentFailedPatchIndexArray())
+                .apply {
+                    resolvedInputVersionName?.let {
+                        putString(INPUT_VERSION_NAME_KEY, it)
+                    }
+                    resolvedInputVersionCode?.let {
+                        putLong(INPUT_VERSION_CODE_KEY, it)
+                    }
+                }
+                .build()
+            Result.success(resultData)
         } catch (e: CancellationException) {
             Log.i(tag, "Patching cancelled".logFmt())
             throw e
@@ -2187,6 +2200,8 @@ class PatcherWorker(
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
         const val PATCHING_ACTIVE_KEY = "patching_active"
         const val FAILED_PATCH_INDEXES_KEY = "failed_patch_indexes"
+        const val INPUT_VERSION_NAME_KEY = "input_version_name"
+        const val INPUT_VERSION_CODE_KEY = "input_version_code"
         private const val WORK_DATA_MAX_BYTES = 9000
         private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L

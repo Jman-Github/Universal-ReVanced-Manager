@@ -21,7 +21,8 @@ object RootMountPolicy {
         packageName: String,
         installed: RootPackageState,
         patched: RootArtifactState?,
-        stock: List<RootArtifactState>
+        stock: List<RootArtifactState>,
+        expectedStockVersionCode: Long? = patched?.versionCode
     ) {
         require(stock.size <= 1) { "Safe root mount rejects split or mixed APK sets" }
         require(!installed.installed || installed.topology == "SINGLE") {
@@ -63,8 +64,8 @@ object RootMountPolicy {
                 "Stock APK version name contains control text"
             }
             require(!artifact.signerSha256.isNullOrBlank()) { "Stock APK signing certificate is unavailable" }
-            require(patched == null || artifact.versionCode == patched.versionCode) {
-                "Stock and patched version codes differ"
+            require(expectedStockVersionCode == null || artifact.versionCode == expectedStockVersionCode) {
+                "Stock APK version code does not match the patched APK source"
             }
             require(patched == null || artifact.versionName == patched.versionName) {
                 "Stock and patched version names differ"
@@ -111,7 +112,8 @@ object RootMountPolicy {
             journal.status == "MODULE_REMOVAL_PENDING" || journal.status == "MODULE_REMOVED"
 
         RootMountOperation.MOUNT_ONLY ->
-            journal.phase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
+            !journal.reusableCommittedModule &&
+                journal.phase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
 
         RootMountOperation.RECOVER,
         RootMountOperation.RECONCILE -> false

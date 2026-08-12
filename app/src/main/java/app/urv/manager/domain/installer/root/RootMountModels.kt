@@ -11,6 +11,7 @@ data class RootMountRequest(
     val stockApks: List<File> = emptyList(),
     val expectedVersionName: String? = null,
     val expectedVersionCode: Long? = null,
+    val expectedStockVersionCode: Long? = null,
     val label: String = packageName,
     val downgradeFallbackConfirmed: Boolean = false,
     val removeModuleAfterUnmount: Boolean = false
@@ -64,6 +65,15 @@ fun RootRecoveryState.describeRecovery(): String = when (this) {
     RootRecoveryState.NONE -> "Automatic recovery did not restore a verified state."
 }
 
+fun RootMountResult.Failure.describeOutcome(): String =
+    verifiedRecoveryOutcome ?: if (
+        phase == RootMountPhase.PREPARING && recoveryState == RootRecoveryState.NONE
+    ) {
+        "No package or mount changes were made."
+    } else {
+        recoveryState.describeRecovery()
+    }
+
 sealed interface RootMountResult {
     data class Success(val transactionId: String) : RootMountResult
     data class RecoveredToPreviousMount(
@@ -86,7 +96,8 @@ sealed interface RootMountResult {
         val phase: RootMountPhase,
         val recoveryState: RootRecoveryState,
         val diagnosticId: String,
-        val message: String
+        val message: String,
+        val verifiedRecoveryOutcome: String? = null
     ) : RootMountResult
 }
 
@@ -134,6 +145,7 @@ data class RootMountJournal(
     val stockArtifact: RootArtifactState? = null,
     val previousCommitted: RootCommittedState? = null,
     val candidateMountTargets: List<String> = emptyList(),
+    val reusableCommittedModule: Boolean = false,
     val stockMutationStarted: Boolean = false,
     val registrationGap: Boolean = false,
     val diagnosticId: String? = null,
@@ -200,7 +212,7 @@ fun RootMountResult.requireSuccess(): String = when (this) {
         reason ?: "Root mount transaction is busy (${phase ?: "preparing"})"
     )
     is RootMountResult.Failure -> throw IllegalStateException(
-        "$message ${recoveryState.describeRecovery()} Diagnostic $diagnosticId."
+        "$message ${describeOutcome()} Diagnostic $diagnosticId."
     )
 }
 

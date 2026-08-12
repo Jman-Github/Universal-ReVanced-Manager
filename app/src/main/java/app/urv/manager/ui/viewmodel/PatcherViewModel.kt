@@ -60,7 +60,7 @@ import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
-import app.urv.manager.domain.installer.root.describeRecovery
+import app.urv.manager.domain.installer.root.describeOutcome
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadResult
@@ -1647,6 +1647,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private var forceKeepLocalInput = false
     private var lastLoggedErrorSignature: String? = null
 
+    private var patchedSourceVersionName: String?
+        get() = savedStateHandle.get("patched_source_version_name")
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>("patched_source_version_name")
+            } else {
+                savedStateHandle["patched_source_version_name"] = value
+            }
+        }
+
+    private var patchedSourceVersionCode: Long?
+        get() = savedStateHandle.get("patched_source_version_code")
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<Long>("patched_source_version_code")
+            } else {
+                savedStateHandle["patched_source_version_code"] = value
+            }
+        }
+
     private var patcherWorkerId: ParcelUuid?
         get() = savedStateHandle.get("patcher_worker_id")
         set(value) {
@@ -1720,6 +1740,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun startWorkerNow() {
         resetDexCompileState()
         resetFailureLogState()
+        patchedSourceVersionName = null
+        patchedSourceVersionCode = null
         patcherMemoryUsageGeneration = -1L
         patcherMemoryUsageSequence = Long.MIN_VALUE
         patcherMemoryUsageSampleTimeMs = Long.MIN_VALUE
@@ -2837,15 +2859,33 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (!withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() }) throw RootServiceException()
         val installedBaseInfo = pm.getPackageInfo(packageName)
         basePackageInstalled = installedBaseInfo != null
-        val targetVersionCode = pm.getVersionCode(packageInfo)
-        val stockNeedsReplacement = installedBaseInfo == null ||
-            pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
-            installedBaseInfo.versionName != packageInfo.versionName
         val originalInput = inputFile
         val originalInputIsSplit = originalInput?.let(SplitApkPreparer::isSplitArchive) == true
+        val sourcePackageInfo = originalInput
+            ?.takeUnless { originalInputIsSplit }
+            ?.let(pm::getPackageInfo)
+        val sourceVersionName = patchedSourceVersionName
+            ?: sourcePackageInfo?.versionName?.takeIf(String::isNotBlank)
+            ?: input.selectedApp.version?.takeIf(String::isNotBlank)
+            ?: throw IllegalStateException("Patched APK source version name is unavailable")
+        val targetVersionCode = patchedSourceVersionCode
+            ?: sourcePackageInfo?.let(pm::getVersionCode)
+            ?: input.selectedApp.versionCode
+            ?: throw IllegalStateException("Patched APK source version code is unavailable")
+        val sourcePackageName = sourcePackageInfo?.packageName ?: input.selectedApp.packageName
+        check(
+            sourcePackageName == packageInfo.packageName &&
+                sourceVersionName == packageInfo.versionName
+        ) {
+            "Patched APK does not match its stock source"
+        }
+        val stockNeedsReplacement = installedBaseInfo == null ||
+            pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
+            installedBaseInfo.versionName != sourceVersionName
         val stockApks = if (stockNeedsReplacement) {
             val stock = originalInput
                 ?.takeUnless { originalInputIsSplit }
+                ?.takeIf(File::isFile)
                 ?: throw IllegalStateException(
                     app.getString(R.string.install_app_fail_missing_stock)
                 )
@@ -2855,12 +2895,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             // patched payload, not independent proof of the raw stock APK.
             emptyList()
         } else {
-            val installedStock = installedBaseInfo?.applicationInfo?.sourceDir
+            // The installed package already has the stock version we need. Use its actual
+            // registered base APK as the stock identity instead of the patch input, which can
+            // legitimately have the same package/version but a different signing certificate.
+            val installedStock = installedBaseInfo.applicationInfo?.sourceDir
                 ?.let(::File)
                 ?.takeIf(File::isFile)
-            listOfNotNull(
-                if (originalInputIsSplit) installedStock else originalInput ?: installedStock
-            )
+                ?: throw IllegalStateException(
+                    app.getString(R.string.install_app_fail_missing_stock)
+                )
+            listOf(installedStock)
         }
         val label = with(pm) { packageInfo.label() }
         val result = try {
@@ -2876,7 +2920,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     patchedApk = outputFile,
                     stockApks = stockApks,
                     expectedVersionName = packageInfo.versionName,
-                    expectedVersionCode = targetVersionCode,
+                    expectedVersionCode = pm.getVersionCode(packageInfo),
+                    expectedStockVersionCode = targetVersionCode,
                     label = label,
                     downgradeFallbackConfirmed = downgradeFallbackConfirmed
                 )
@@ -2923,7 +2968,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
             is RootMountResult.Failure -> throw IllegalStateException(
-                "${result.message} ${result.recoveryState.describeRecovery()} " +
+                "${result.message} ${result.describeOutcome()} " +
                     "Diagnostic ${result.diagnosticId}."
             )
         }
@@ -5221,6 +5266,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
                     forceKeepLocalInput = false
+                    patchedSourceVersionName = workInfo.outputData
+                        .getString(PatcherWorker.INPUT_VERSION_NAME_KEY)
+                        ?.takeIf(String::isNotBlank)
+                    patchedSourceVersionCode = if (
+                        workInfo.outputData.keyValueMap.containsKey(PatcherWorker.INPUT_VERSION_CODE_KEY)
+                    ) {
+                        workInfo.outputData.getLong(PatcherWorker.INPUT_VERSION_CODE_KEY, 0L)
+                    } else {
+                        null
+                    }
                     if (requiresSplitPreparation) {
                         updateSplitStepRequirement(
                             file = null,

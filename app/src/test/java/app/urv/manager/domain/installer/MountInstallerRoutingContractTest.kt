@@ -54,19 +54,42 @@ class MountInstallerRoutingContractTest {
     }
 
     @Test
-    fun `merged split input reaches root preflight with installed stock proof`() {
+    fun `split input uses worker resolved stock identity before mount`() {
         val patcher = source("ui/viewmodel/PatcherViewModel.kt")
+        val worker = source("patcher/worker/PatcherWorker.kt")
         val rootMount = patcher.substringAfter("private suspend fun performRootMount(")
             .substringBefore("fun confirmRootDowngrade()")
 
         assertFalse(patcher.contains("rootMountInputSupported"))
+        assertTrue(worker.contains("INPUT_VERSION_NAME_KEY"))
+        assertTrue(worker.contains("INPUT_VERSION_CODE_KEY"))
         assertTrue(rootMount.contains("val originalInputIsSplit"))
-        assertTrue(rootMount.contains("if (originalInputIsSplit) installedStock"))
+        assertTrue(rootMount.contains("val sourceVersionName = patchedSourceVersionName"))
+        assertTrue(rootMount.contains("val targetVersionCode = patchedSourceVersionCode"))
+        assertTrue(rootMount.contains("Patched APK source version code is unavailable"))
+        assertTrue(rootMount.contains("input.selectedApp.version?.takeIf(String::isNotBlank)"))
+        assertTrue(rootMount.contains("input.selectedApp.versionCode"))
+        assertTrue(rootMount.contains("installedBaseInfo.versionName != sourceVersionName"))
+        assertTrue(rootMount.contains("?.takeUnless { originalInputIsSplit }"))
         assertFalse(rootMount.contains("throw IllegalArgumentException(app.getString(R.string.mount_split_not_supported))"))
     }
 
     @Test
-    fun `saved root app can rebuild a missing committed payload after unmount`() {
+    fun `batch mount never guesses stock identity from patched output`() {
+        val batch = source("domain/batch/BatchPatchCoordinator.kt")
+        val rootMount = batch.substringAfter("private suspend fun installWithRootMount(")
+            .substringBefore("private suspend fun executeRootMount(")
+
+        assertTrue(rootMount.contains("item.version?.takeIf(String::isNotBlank)"))
+        assertTrue(rootMount.contains("Patched APK source version name is unavailable"))
+        assertTrue(rootMount.contains("val stockVersionCode = item.versionCode"))
+        assertTrue(rootMount.contains("Patched APK source version code is unavailable"))
+        assertFalse(rootMount.contains("item.version ?: patchedInfo.versionName.orEmpty()"))
+        assertFalse(rootMount.contains("item.versionCode ?: patchedVersionCode"))
+    }
+
+    @Test
+    fun `saved root app only rebuilds from an unambiguous saved payload`() {
         val saved = source("ui/viewmodel/InstalledAppInfoViewModel.kt")
         val mountSavedPayload = saved.substringAfter("private suspend fun mountSavedPayload(")
             .substringBefore("private suspend fun stockApksForRootSwitch(")
@@ -79,6 +102,10 @@ class MountInstallerRoutingContractTest {
         assertTrue(fallbackLookup > committedMount)
         assertTrue(mountSavedPayload.contains("operation = RootMountOperation.MOUNT_ONLY"))
         assertTrue(mountSavedPayload.contains("patchedApk = fallbackPayload?.first"))
+        assertTrue(mountSavedPayload.contains("pm.getVersionCode(savedPackage) == installedVersionCode"))
+        assertFalse(mountSavedPayload.contains("retainedSourceMatchesInstalled"))
+        assertFalse(mountSavedPayload.contains("filesystem.findOriginalAppFile("))
+        assertFalse(mountSavedPayload.contains("expectedStockVersionCode"))
         assertTrue(mountSavedPayload.contains("stockApksForRootSwitch(packageName)"))
     }
 

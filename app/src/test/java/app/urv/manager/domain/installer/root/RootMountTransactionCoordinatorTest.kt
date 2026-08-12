@@ -78,6 +78,118 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `mount only avoids full APK snapshots when the saved module is already verified`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.module.snapshotCalls)
+        assertEquals(0, fixture.module.stockSnapshotCalls)
+        assertEquals(0, fixture.module.stageCalls)
+        assertEquals(0, fixture.module.ensureSpaceCalls)
+    }
+
+    @Test
+    fun `mount only does not reuse a module with a different stock target`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous.copy(
+            stockPath = "/data/app/other/base.apk"
+        )
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.snapshotCalls)
+    }
+
+    @Test
+    fun `mount only does not reuse an unexpectedly active module`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous.copy(
+            active = true,
+            status = "MOUNTED"
+        )
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.snapshotCalls)
+    }
+
+    @Test
+    fun `mount only refuses committed state that still requires repair`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "REPAIR_REQUIRED"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous.copy(status = "STOCK")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.PREPARING, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertTrue(failure.message.contains("repair", ignoreCase = true))
+        assertEquals(0, fixture.module.enableCalls)
+        assertEquals(0, fixture.verifier.verifyCalls)
+        assertTrue(fixture.scheduler.scheduledUsers.isEmpty())
+    }
+
+    @Test
+    fun `reused inactive module is not restored from a nonexistent snapshot after mount failure`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous
+        fixture.verifier.verifyFailure = IllegalStateException("Mount verification failed")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.VERIFYING, failure.phase)
+        assertEquals(RootRecoveryState.STOCK, failure.recoveryState)
+        assertEquals(0, fixture.module.snapshotCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertTrue(fixture.module.disabled)
+        assertEquals(false, fixture.store.committed?.active)
+        assertEquals("STOCK", fixture.store.committed?.status)
+    }
+
+    @Test
     fun `mount only rejects an ambiguous recovery payload when the module is missing`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial).copy(
@@ -186,6 +298,61 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `rebuild preparation failure reports corrupt committed stock recovery`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.corruptCommitted = true
+        fixture.module.spaceFailure = IllegalStateException("Insufficient rollback space")
+        val patched = fixture.artifact("saved-patched.apk", 2, "saved-patched")
+        val stock = fixture.artifact("installed-stock.apk", 2, "stock-2")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.MOUNT_ONLY,
+                patched = patched.first,
+                stock = stock.first
+            )
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.PREPARING, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertEquals("The stock app was restored and left unmounted.", failure.describeOutcome())
+        assertTrue(fixture.module.disabled)
+    }
+
+    @Test
+    fun `rebuild preparation failure reports corrupt committed uninstalled recovery`() = runBlocking {
+        val fixture = Fixture(
+            initial = defaultState().copy(
+                installed = false,
+                basePath = null,
+                baseSha256 = null
+            )
+        )
+        fixture.store.corruptCommitted = true
+        fixture.module.spaceFailure = IllegalStateException("Insufficient rollback space")
+        val patched = fixture.artifact("saved-patched.apk", 2, "saved-patched")
+        val stock = fixture.artifact("installed-stock.apk", 2, "stock-2")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.MOUNT_ONLY,
+                patched = patched.first,
+                stock = stock.first
+            )
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.PREPARING, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertEquals(
+            "Automatic recovery removed stale root mount state and left the app uninstalled.",
+            failure.describeOutcome()
+        )
+        assertTrue(fixture.module.disabled)
+    }
+
+    @Test
     fun `bundle switch never calls PackageInstaller`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
@@ -201,7 +368,37 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(emptyList(), fixture.installer.replaceCalls)
         assertEquals(0, fixture.installer.uninstallCalls)
         assertEquals(1, fixture.module.stageCalls)
+        assertEquals(0, fixture.module.stockSnapshotCalls)
         assertEquals(listOf(0), fixture.scheduler.scheduledUsers)
+    }
+
+    @Test
+    fun `bundle switch accepts a patched version code override with exact stock proof`() = runBlocking {
+        val fixture = Fixture()
+        val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
+        val patched = fixture.artifact(
+            "patched-max-version.apk",
+            Int.MAX_VALUE.toLong(),
+            "patched-max-version"
+        )
+        fixture.reader.artifacts[patched.first.path] = patched.second.copy(versionName = "2")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                patched = patched.first,
+                stock = stock.first
+            ).copy(
+                expectedVersionName = "2",
+                expectedVersionCode = Int.MAX_VALUE.toLong(),
+                expectedStockVersionCode = 2
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(emptyList(), fixture.installer.replaceCalls)
+        assertEquals(2, fixture.store.committed?.versionCode)
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
     }
 
     @Test
@@ -533,6 +730,27 @@ class RootMountTransactionCoordinatorTest {
             mismatch.coordinator.execute(mismatch.request(RootMountOperation.UNMOUNT))
         )
         assertTrue(mismatch.scheduler.stoppedPackages.isEmpty())
+    }
+
+    @Test
+    fun `unmount retains a newer same signer split stock update`() = runBlocking {
+        val raw = defaultState()
+        val previous = committed(raw)
+        val fixture = Fixture(initial = raw.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        fixture.verifier.onRemove = {
+            fixture.reader.state = fixture.rawState(3, "stock-3").copy(
+                splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+            )
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.UNMOUNT)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
     }
 
     @Test
@@ -1139,6 +1357,469 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `mount request resumes automatically after interrupted transaction recovery`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
+        fixture.store.active = journal(RootMountPhase.PREPARING, fixture.initial)
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                patched = patched.first,
+                stock = stock.first
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.stageCalls)
+        assertEquals(null, fixture.store.active)
+        assertEquals(2, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `resumed preparation failure preserves interrupted recovery outcome`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
+        fixture.store.active = journal(RootMountPhase.PREPARING, fixture.initial)
+        fixture.lock.onRelease = {
+            if (fixture.lock.releaseCalls == 1) {
+                fixture.store.readActiveFailure = IllegalStateException("State read failed")
+            }
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                patched = patched.first,
+                stock = stock.first
+            )
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.PREPARING, failure.phase)
+        assertEquals(RootRecoveryState.STOCK, failure.recoveryState)
+        assertEquals("The stock app was restored and left unmounted.", failure.describeOutcome())
+        assertEquals(2, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `mount only reports repatch after recovery retains updated stock`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val repatch = assertIs<RootMountResult.RequiresRepatch>(result)
+        assertTrue(repatch.reason.contains("standalone APK"))
+        assertFalse(repatch.reason.contains("Repatch it"))
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals(1, fixture.lock.releaseCalls)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `stock replacement does not resume after recovery retains updated stock`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.REPLACE_STOCK_AND_MOUNT,
+                patched = patched.first,
+                stock = stock.first
+            )
+        )
+
+        assertIs<RootMountResult.RequiresRepatch>(result)
+        assertEquals(emptyList(), fixture.installer.replaceCalls)
+        assertEquals(1, fixture.lock.releaseCalls)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `fresh patch for recovered updated stock resumes automatically`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val patched = fixture.artifact("patched-v3.apk", 3, "patched-3")
+        val stock = fixture.artifact("stock-v3.apk", 3, "stock-3")
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                patched = patched.first,
+                stock = stock.first
+            ).copy(
+                expectedVersionName = "3",
+                expectedVersionCode = 3,
+                expectedStockVersionCode = 3
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.stageCalls)
+        assertEquals(2, fixture.lock.releaseCalls)
+        assertEquals(3, fixture.store.committed?.versionCode)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `mount only immediately reports a persisted repatch requirement`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial).copy(
+            active = false,
+            status = "REPATCH_REQUIRED"
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3").copy(
+            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val repatch = assertIs<RootMountResult.RequiresRepatch>(result)
+        assertTrue(repatch.reason.contains("standalone APK"))
+        assertFalse(repatch.reason.contains("Repatch it"))
+        assertEquals(0, fixture.reader.readCalls)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.snapshotCalls)
+        assertTrue(fixture.scheduler.scheduledPackages.isEmpty())
+        assertEquals(null, fixture.store.active)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+        assertEquals(1, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `unmount does not restart after recovery already leaves verified stock`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.UNMOUNT)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.lock.releaseCalls)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `permanent unmount finishes module removal after updated stock recovery`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        val result = fixture.coordinator.execute(
+            RootMountRequest(
+                packageName = PACKAGE,
+                operation = RootMountOperation.UNMOUNT,
+                removeModuleAfterUnmount = true
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(2, fixture.lock.releaseCalls)
+        assertEquals(1, fixture.module.removeCalls)
+        assertEquals(null, fixture.store.committed)
+    }
+
+    @Test
+    fun `interrupted recovery retains a newer same signer stock update`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals(null, fixture.store.active)
+        assertEquals(false, fixture.store.committed?.active)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+        assertTrue(fixture.module.disabled)
+    }
+
+    @Test
+    fun `interrupted recovery retains a newer same signer split stock update`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3").copy(
+            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+        assertTrue(fixture.module.disabled)
+    }
+
+    @Test
+    fun `interrupted recovery rejects an external update with an unsafe split path`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3").copy(
+            splitPaths = listOf("/data/app/$PACKAGE/../untrusted.apk")
+        )
+        fixture.installer.onBackupRestore = { fixture.reader.state = fixture.initial }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToPreviousMount>(result)
+        assertEquals(1, fixture.installer.backupRestoreCalls)
+    }
+
+    @Test
+    fun `interrupted recovery retains an update below the requested replacement`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v4.apk",
+                packageName = PACKAGE,
+                versionName = "4",
+                versionCode = 4,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v4")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `interrupted recovery does not mistake transaction installed stock for an external update`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val requested = fixture.rawState(3, "stock-3")
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v3.apk",
+                packageName = PACKAGE,
+                versionName = requested.versionName,
+                versionCode = requireNotNull(requested.versionCode),
+                signerSha256 = requested.signerSha256,
+                sha256 = requireNotNull(requested.baseSha256)
+            )
+        )
+        fixture.reader.state = requested
+        fixture.installer.onBackupRestore = { fixture.reader.state = fixture.initial }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToPreviousMount>(result)
+        assertEquals(1, fixture.installer.backupRestoreCalls)
+    }
+
+    @Test
+    fun `corrupt journal recovery retains a newer same signer stock update`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.corruptActive = true
+        fixture.reader.state = fixture.rawState(3, "stock-3")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertFalse(fixture.store.corruptActive)
+        assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `recovery never trusts a newer package signed by someone else`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(
+            RootMountPhase.INSTALLING_STOCK,
+            fixture.initial,
+            previous
+        ).copy(
+            stockArtifact = RootArtifactState(
+                path = "/cache/requested-v1.apk",
+                packageName = PACKAGE,
+                versionName = "1",
+                versionCode = 1,
+                signerSha256 = fixture.initial.signerSha256,
+                sha256 = testSha256("requested-v1")
+            )
+        )
+        fixture.reader.state = fixture.rawState(3, "foreign-stock").copy(
+            signerSha256 = testSha256("foreign-signer")
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Failure>(result)
+        assertEquals(1, fixture.installer.backupRestoreCalls)
+        assertTrue(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
     fun `automatic recovery refuses a corrupt journal with no Android user`() = runBlocking {
         val fixture = Fixture()
         fixture.store.corruptActive = true
@@ -1559,12 +2240,14 @@ class RootMountTransactionCoordinatorTest {
         val artifacts = mutableMapOf<String, RootArtifactState>()
         var stabilityFailures = 0
         var readFailures = 0
+        var readCalls = 0
         var stops = true
         var stopChecks = 0
         var lastExpected: RootPackageState? = null
         var installedUsers: Set<Int>? = null
 
         override suspend fun read(packageName: String, userId: Int): RootPackageState {
+            readCalls++
             if (readFailures > 0) {
                 readFailures--
                 throw IllegalStateException("PackageManager state read failed")
@@ -1637,6 +2320,9 @@ class RootMountTransactionCoordinatorTest {
 
     private class FakeModule(private val reader: FakePackageReader) : RootModuleStorage {
         var stageCalls = 0
+        var snapshotCalls = 0
+        var stockSnapshotCalls = 0
+        var ensureSpaceCalls = 0
         var disabled = false
         var spaceFailure: Throwable? = null
         var removeFailure: Throwable? = null
@@ -1652,21 +2338,25 @@ class RootMountTransactionCoordinatorTest {
         var enableFailure: Throwable? = null
         val updatedStates = mutableListOf<RootCommittedState>()
         override suspend fun ensureRollbackSpace(packageName: String, stockPaths: List<String>, incomingBytes: Long) {
+            ensureSpaceCalls++
             spaceFailure?.let { throw it }
         }
         override suspend fun snapshot(
             packageName: String,
             preferredPayload: RootBackupArtifact?
         ): String? {
+            snapshotCalls++
             preferredSnapshotPayload = preferredPayload
             return snapshotHash
         }
         override suspend fun readLegacyPayload(packageName: String): RootBackupArtifact? = legacyPayload
         override suspend fun readCommittedState(packageName: String): RootCommittedState? = committedState
-        override suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact> =
-            paths.mapIndexed { index, _ ->
+        override suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact> {
+            stockSnapshotCalls++
+            return paths.mapIndexed { index, _ ->
                 RootBackupArtifact("/data/adb/urv/transactions/$packageName/backup/package/$index.apk", requireNotNull(reader.state.baseSha256))
             }
+        }
         override suspend fun commitSnapshot(packageName: String) = Unit
         override suspend fun stageAndActivate(
             transactionId: String,
@@ -1778,6 +2468,7 @@ class RootMountTransactionCoordinatorTest {
         var releaseCalls = 0
         var acquireFailure: Throwable? = null
         var releaseFailure: Throwable? = null
+        var onRelease: (() -> Unit)? = null
         override suspend fun acquire(packageName: String, transactionId: String): RootLockHandle {
             acquireFailure?.let { throw it }
             return RootLockHandle(
@@ -1791,6 +2482,7 @@ class RootMountTransactionCoordinatorTest {
         }
         override suspend fun release(handle: RootLockHandle) {
             releaseCalls++
+            onRelease?.invoke()
             releaseFailure?.let { throw it }
         }
     }
