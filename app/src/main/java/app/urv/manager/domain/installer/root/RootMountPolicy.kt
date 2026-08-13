@@ -74,7 +74,12 @@ object RootMountPolicy {
                 "Raw stock and patched payload must be separate verified APKs"
             }
             if (installed.installed && installed.signerSha256 != null) {
-                require(artifact.signerSha256 == installed.signerSha256) {
+                val exactInstalledStock =
+                    installed.baseSha256 != null &&
+                        artifact.sha256 == installed.baseSha256 &&
+                        artifact.versionCode == installed.versionCode &&
+                        artifact.versionName == installed.versionName
+                require(exactInstalledStock || artifact.signerSha256 == installed.signerSha256) {
                     "Stock signing certificate mismatch"
                 }
             }

@@ -85,6 +85,7 @@ interface RootMountVerification {
         extraTargets: Set<String>,
         allowLazyRecovery: Boolean
     ): List<String>
+    suspend fun verifyRootMounted(expected: RootCommittedState): RootPackageState
     suspend fun verifyMounted(expected: RootCommittedState): RootPackageState
 }
 

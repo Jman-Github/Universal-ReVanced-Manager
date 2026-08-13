@@ -19,6 +19,21 @@ class RootModuleStoreContractTest {
     }
 
     @Test
+    fun `enabling a saved module refreshes changed runtime scripts without rewriting identical files`() {
+        val source = source().readText()
+        val enable = source.substringAfter("override suspend fun enable(")
+            .substringBefore("override suspend fun disable(")
+
+        assertTrue(enable.contains("copyAsset(\"root/post-fs-data.sh\""))
+        assertTrue(enable.contains("copyAsset(\"root/service.sh\""))
+        assertTrue(enable.contains("val serviceNext = \"\$serviceTarget.urv-next\""))
+        assertTrue(enable.contains("sha256sum"))
+        assertTrue(enable.contains("[ -L \${shellQuote(serviceTarget)} ]"))
+        assertTrue(enable.contains("mv -f"))
+        assertTrue(enable.contains("rm -f \${shellQuote(\"\$module/disable\")}"))
+    }
+
+    @Test
     fun `successful commit removes temporary rollback module`() {
         val source = source().readText()
         val commit = source.substringAfter("override suspend fun commitSnapshot(")

@@ -294,10 +294,41 @@ class RootModuleStore(
 
     override suspend fun enable(packageName: String) {
         val module = RootPaths.module(packageName)
-        runModuleCommand(
-            "set -eu; [ -d ${shellQuote(module)} ]; rm -f ${shellQuote("$module/disable")}; " +
-                "sync -f ${shellQuote(module)} 2>/dev/null || sync"
-        ).requireSuccess("Enable root mount module")
+        val local = File(app.cacheDir, "root-runtime-$packageName-${System.nanoTime()}").apply {
+            check(mkdirs()) { "Failed to create root runtime staging directory" }
+        }
+        try {
+            val postFsSource = local.resolve("post-fs-data.sh")
+            val serviceSource = local.resolve("service.sh")
+            copyAsset("root/post-fs-data.sh", postFsSource)
+            copyAsset("root/service.sh", serviceSource)
+            val postFsTarget = "$module/post-fs-data.sh"
+            val serviceTarget = "$module/service.sh"
+            val postFsNext = "$postFsTarget.urv-next"
+            val serviceNext = "$serviceTarget.urv-next"
+            runModuleCommand(
+                "set -eu; [ -d ${shellQuote(module)} ] && [ ! -L ${shellQuote(module)} ]; " +
+                    "rm -f ${shellQuote(postFsNext)} ${shellQuote(serviceNext)}; " +
+                    "if [ ! -f ${shellQuote(postFsTarget)} ] || [ -L ${shellQuote(postFsTarget)} ] || " +
+                    "[ \"${'$'}(sha256sum ${shellQuote(postFsSource.absolutePath)} | awk '{print ${'$'}1}')\" != " +
+                    "\"${'$'}(sha256sum ${shellQuote(postFsTarget)} | awk '{print ${'$'}1}')\" ]; then " +
+                    "cp ${shellQuote(postFsSource.absolutePath)} ${shellQuote(postFsNext)}; " +
+                    "chmod 755 ${shellQuote(postFsNext)}; chown 0:0 ${shellQuote(postFsNext)}; " +
+                    "sync -f ${shellQuote(postFsNext)} 2>/dev/null || sync; " +
+                    "mv -f ${shellQuote(postFsNext)} ${shellQuote(postFsTarget)}; fi; " +
+                    "if [ ! -f ${shellQuote(serviceTarget)} ] || [ -L ${shellQuote(serviceTarget)} ] || " +
+                    "[ \"${'$'}(sha256sum ${shellQuote(serviceSource.absolutePath)} | awk '{print ${'$'}1}')\" != " +
+                    "\"${'$'}(sha256sum ${shellQuote(serviceTarget)} | awk '{print ${'$'}1}')\" ]; then " +
+                    "cp ${shellQuote(serviceSource.absolutePath)} ${shellQuote(serviceNext)}; " +
+                    "chmod 755 ${shellQuote(serviceNext)}; chown 0:0 ${shellQuote(serviceNext)}; " +
+                    "sync -f ${shellQuote(serviceNext)} 2>/dev/null || sync; " +
+                    "mv -f ${shellQuote(serviceNext)} ${shellQuote(serviceTarget)}; fi; " +
+                    "rm -f ${shellQuote("$module/disable")}; " +
+                    "sync -f ${shellQuote(module)} 2>/dev/null || sync"
+            ).requireSuccess("Refresh and enable root mount module")
+        } finally {
+            local.deleteRecursively()
+        }
     }
 
     override suspend fun disable(packageName: String) {
@@ -326,6 +357,13 @@ class RootModuleStore(
             "set -eu; rm -rf ${shellQuote(backupRoot)}; " +
                 "sync -f ${shellQuote(RootPaths.transaction(packageName))} 2>/dev/null || sync"
         ).requireSuccess("Remove committed root mount backups")
+    }
+
+    private fun copyAsset(asset: String, destination: File) {
+        val content = app.assets.open(asset).bufferedReader().use { it.readText() }
+            .replace("\r\n", "\n")
+            .replace('\r', '\n')
+        destination.writeText(content)
     }
 
     private fun writeAsset(

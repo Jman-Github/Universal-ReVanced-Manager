@@ -30,18 +30,29 @@ class RootMountVerifier(
         mountTable: List<MountInfoEntry>
     ): List<MountInfoEntry> {
         val sources = urvSources(packageName)
-        val sourceInodes = sources.mapNotNull { path -> inode(path) }.toSet()
+        var sourceInodes: Set<String>? = null
         val owned = linkedSetOf<MountInfoEntry>()
         mountTable.filter { isSafeApkPath(it.mountPoint) }
             .groupBy(MountInfoEntry::mountPoint)
             .forEach { (target, layers) ->
-                owned += layers.filter { entry ->
+                val directlyOwned = layers.filter { entry ->
                     normalizedMountPath(entry.root) in sources ||
                         normalizedMountPath(entry.source) in sources
                 }
+                owned += directlyOwned
+
+                // Current URV mounts expose their module path directly in mountinfo. Only
+                // pay for inode probes when the visible layer cannot be identified by path,
+                // which keeps ordinary mount/remount cleanup from issuing many redundant
+                // stat calls across every APK mount on the device.
                 val visibleLayer = layers.maxByOrNull(MountInfoEntry::mountId)
-                if (visibleLayer != null && inode(target) in sourceInodes) {
-                    owned += visibleLayer
+                if (visibleLayer != null && visibleLayer !in directlyOwned) {
+                    val inodes = sourceInodes ?: sources.mapNotNull { path -> inode(path) }
+                        .toSet()
+                        .also { sourceInodes = it }
+                    if (inode(target) in inodes) {
+                        owned += visibleLayer
+                    }
                 }
             }
         return mountTable.filter { it in owned }
@@ -78,7 +89,22 @@ class RootMountVerifier(
         allowLazyRecovery: Boolean
     ): List<String> {
         val lazyUnmounts = mutableListOf<String>()
-        val sourceInodes = knownSourceInodes(packageName)
+        var sourceInodes: Set<String>? = null
+        suspend fun revalidateBeforeLazyUnmount(target: String): Boolean {
+            val latestMountTable = mountTableReader.read()
+            val allAtTarget = latestMountTable.filter { it.mountPoint == target }
+            val urvAtTarget = findUrvMounts(packageName, latestMountTable)
+                .filter { it.mountPoint == target }
+            if (urvAtTarget.isEmpty()) return false
+            if (allAtTarget.size != urvAtTarget.size) {
+                val inodes = sourceInodes ?: knownSourceInodes(packageName)
+                    .also { sourceInodes = it }
+                check(visibleTargetIsUrv(target, inodes)) {
+                    "Foreign mount layer shares URV target $target; refusing to lazily unmount another owner's layer"
+                }
+            }
+            return true
+        }
         val targets = findUrvMounts(packageName, extraTargets)
             .map { it.mountPoint }
             .distinct()
@@ -89,26 +115,23 @@ class RootMountVerifier(
             allowLazyRecovery
         )
         for (target in targets) {
-            var normalAttempts = 0
+            var unmountAttempts = 0
+            var lazyAttempts = 0
             while (true) {
                 val mountTable = mountTableReader.read()
                 val allAtTarget = mountTable.filter { it.mountPoint == target }
                 val urvAtTarget = findUrvMounts(packageName, mountTable)
                     .filter { it.mountPoint == target }
                 if (urvAtTarget.isEmpty()) break
-                val visibleLayerIsUrv = visibleTargetIsUrv(target, sourceInodes)
-                check(allAtTarget.size == urvAtTarget.size || visibleLayerIsUrv) {
-                    "Foreign mount layer shares URV target $target; refusing to unmount another owner's layer"
+                if (allAtTarget.size != urvAtTarget.size) {
+                    val inodes = sourceInodes ?: knownSourceInodes(packageName)
+                        .also { sourceInodes = it }
+                    check(visibleTargetIsUrv(target, inodes)) {
+                        "Foreign mount layer shares URV target $target; refusing to unmount another owner's layer"
+                    }
                 }
-                if (normalAttempts >= MAX_NORMAL_UNMOUNTS) {
-                    check(allowLazyRecovery) { "Too many mount layers remained at $target" }
-                    shell.runIsolatedBounded(
-                        "umount -l ${shellQuote(target)}",
-                        UNMOUNT_TIMEOUT_SECONDS,
-                        "root mount lazy unmount"
-                    ).requireSuccess("Recovery lazy unmount $target")
-                    if (target !in lazyUnmounts) lazyUnmounts += target
-                    break
+                check(unmountAttempts < MAX_UNMOUNT_ATTEMPTS) {
+                    "Too many mount layers remained at $target"
                 }
                 val normal = shell.runIsolatedBounded(
                     "umount ${shellQuote(target)}",
@@ -117,14 +140,21 @@ class RootMountVerifier(
                 )
                 if (!normal.isSuccess) {
                     if (!allowLazyRecovery) normal.requireSuccess("Unmount $target")
+
+                    // A failed umount can race with namespace teardown. Re-read ownership
+                    // before using lazy detach so a newly exposed foreign layer is never
+                    // detached just because the previous visible layer belonged to URV.
+                    if (!revalidateBeforeLazyUnmount(target)) break
+                    check(lazyAttempts < MAX_LAZY_UNMOUNTS) { "Too many mount layers remained at $target" }
                     shell.runIsolatedBounded(
                         "umount -l ${shellQuote(target)}",
                         UNMOUNT_TIMEOUT_SECONDS,
                         "root mount lazy unmount"
-                    ).requireSuccess("Recovery lazy unmount $target")
+                    ).requireSuccess("Lazy unmount $target")
                     if (target !in lazyUnmounts) lazyUnmounts += target
+                    lazyAttempts++
                 }
-                normalAttempts++
+                unmountAttempts++
             }
         }
         val remaining = findUrvMounts(packageName, extraTargets)
@@ -132,7 +162,25 @@ class RootMountVerifier(
         return lazyUnmounts.distinct()
     }
 
+    override suspend fun verifyRootMounted(expected: RootCommittedState): RootPackageState =
+        verifyMountedState(expected, verifyShadowHash = true)
+
     override suspend fun verifyMounted(expected: RootCommittedState): RootPackageState {
+        val packageState = verifyMountedState(expected, verifyShadowHash = false)
+        namespaces.verify(expected)
+        if (expected.preserveStockAcrossBoot) {
+            val stockShadowPath = requireNotNull(expected.stockShadowPath)
+            check(sha256(stockShadowPath) == expected.stockShadowSha256) {
+                "Stock shadow hash mismatch"
+            }
+        }
+        return packageState
+    }
+
+    private suspend fun verifyMountedState(
+        expected: RootCommittedState,
+        verifyShadowHash: Boolean
+    ): RootPackageState {
         val allAtTarget = mountTableReader.mountsAt(setOf(expected.stockPath))
         val mounts = findUrvMounts(expected.packageName, allAtTarget)
         val requiredLayers = if (expected.preserveStockAcrossBoot) 2 else 1
@@ -151,8 +199,10 @@ class RootMountVerifier(
             check(mounts.any { it.referencesMountSource(stockShadowPath) }) {
                 "Stock shadow mount layer is missing"
             }
-            check(sha256(stockShadowPath) == expected.stockShadowSha256) {
-                "Stock shadow hash mismatch"
+            if (verifyShadowHash) {
+                check(sha256(stockShadowPath) == expected.stockShadowSha256) {
+                    "Stock shadow hash mismatch"
+                }
             }
         }
         val sourceInode = inode(expected.patchedPath)
@@ -172,7 +222,6 @@ class RootMountVerifier(
         check(packageState.launcherResolvable == expected.launcherResolvable) {
             "Package launcher resolution changed during mount"
         }
-        namespaces.verify(expected)
         return packageState
     }
 
@@ -205,7 +254,8 @@ class RootMountVerifier(
     }
 
     private companion object {
-        const val MAX_NORMAL_UNMOUNTS = 8
+        const val MAX_UNMOUNT_ATTEMPTS = 16
+        const val MAX_LAZY_UNMOUNTS = 16
         const val MAX_URV_MOUNT_LAYERS = 8
         const val UNMOUNT_TIMEOUT_SECONDS = 15L
         const val METADATA_TIMEOUT_SECONDS = 15L

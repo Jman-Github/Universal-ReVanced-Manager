@@ -412,13 +412,55 @@ class RootMountTransactionCoordinator(
                         val installedOnlyForRequestedUser = runCatching {
                             packageStateReader.installedUserIds(packageName)
                         }.getOrNull() == setOf(userId)
-                        if (installedOnlyForRequestedUser &&
-                            runCatching { mountVerifier.verifyMounted(committed) }.isSuccess
-                        ) {
-                            moduleStore.enable(packageName)
-                            true to RootMountResult.Success(committed.transactionId)
-                        } else {
+                        if (!installedOnlyForRequestedUser) {
                             false to null
+                        } else {
+                            val initialVerification = runCatchingPreservingCancellation {
+                                mountVerifier.verifyMounted(committed)
+                            }
+                            if (initialVerification.isSuccess) {
+                                moduleStore.enable(packageName)
+                                true to RootMountResult.Success(committed.transactionId)
+                            } else {
+                                // A package or Zygote namespace can lose a propagated bind while
+                                // the root mount itself remains correct. Repair the committed mount
+                                // in place first so background reconciliation does not tear down a
+                                // working patched app just because one namespace drifted.
+                                val nonDestructiveRepair = runCatchingPreservingCancellation {
+                                    stopAndWait(packageName, userId)
+                                    requireExclusivePackageUser(packageName, userId)
+                                    // Prove the root mount and PackageManager identity before
+                                    // touching namespace state. If stock actually changed, fall
+                                    // through without remounting an obsolete patched payload.
+                                    mountVerifier.verifyRootMounted(committed)
+                                    mountVerifier.mountEverywhere(committed)
+                                    mountVerifier.verifyMounted(committed)
+                                    check(packageStateReader.waitUntilStopped(packageName, 1_000)) {
+                                        "Target app restarted during non-destructive reconciliation"
+                                    }
+                                }
+                                if (nonDestructiveRepair.isSuccess) {
+                                    moduleStore.enable(packageName)
+                                    transactionStore.appendDiagnostic(
+                                        packageName,
+                                        "repair-${scanId.take(8)}",
+                                        "Repaired committed mount namespaces in place after verification failed: " +
+                                            (initialVerification.exceptionOrNull()?.message ?: "unknown verification failure")
+                                    )
+                                    true to RootMountResult.Success(committed.transactionId)
+                                } else {
+                                    transactionStore.appendDiagnostic(
+                                        packageName,
+                                        "repair-${scanId.take(8)}",
+                                        "Non-destructive committed mount repair was not possible; " +
+                                            "falling back to full reconciliation. Initial verification: " +
+                                            (initialVerification.exceptionOrNull()?.message ?: "unknown failure") +
+                                            "; repair: " +
+                                            (nonDestructiveRepair.exceptionOrNull()?.message ?: "unknown failure")
+                                    )
+                                    false to null
+                                }
+                            }
                         }
                     } finally {
                         withContext(NonCancellable) {
@@ -651,10 +693,14 @@ class RootMountTransactionCoordinator(
                 initialMountedState.basePath,
                 previousCommitted?.stockPath
             ) + requireNotNull(journal).candidateMountTargets
+            // The target app has been force-stopped and verified quiescent above. Android can
+            // still report an owned APK bind mount as EBUSY because of mount-namespace
+            // propagation, so permit a lazy detach here instead of failing a healthy mount
+            // transaction and immediately doing the same lazy detach during rollback.
             val lazyUnmounts = mountVerifier.removeAllUrvMounts(
                 request.packageName,
                 knownTargets,
-                allowLazyRecovery = request.operation == RootMountOperation.UNMOUNT
+                allowLazyRecovery = true
             )
             if (lazyUnmounts.isNotEmpty()) {
                 transactionStore.appendDiagnostic(

@@ -143,20 +143,31 @@ remove_target_mounts() {
   remove_zygote_payload_mounts || return 1
   attempts=0
   while target_is_mounted; do
-    ownership="$(target_mount_counts)"
+    ownership="$(target_mount_counts)" || return 1
     total_mounts="${ownership%%:*}"
     urv_mounts="${ownership##*:}"
     [ "$total_mounts" = 1 ] && target_matches_urv_inode && urv_mounts=1
     [ "$total_mounts" = "$urv_mounts" ] || return 1
-    [ "$attempts" -lt 8 ] || return 1
-    umount "$URV_STOCK_PATH" || return 1
+    [ "$attempts" -lt 16 ] || return 1
+    if ! umount "$URV_STOCK_PATH"; then
+      # Re-check the visible stack before lazy detach. Another root tool can race
+      # URV even while URV's own package lock is held.
+      ownership="$(target_mount_counts)" || return 1
+      total_mounts="${ownership%%:*}"
+      urv_mounts="${ownership##*:}"
+      [ "$total_mounts" = 1 ] && target_matches_urv_inode && urv_mounts=1
+      if [ "$total_mounts" -gt 0 ]; then
+        [ "$total_mounts" = "$urv_mounts" ] || return 1
+        umount -l "$URV_STOCK_PATH" || return 1
+      fi
+    fi
     attempts=$((attempts + 1))
   done
 }
 
 remove_failed_urv_mounts() {
   remove_zygote_payload_mounts || return 1
-  ownership="$(target_mount_counts)"
+  ownership="$(target_mount_counts)" || return 1
   total_mounts="${ownership%%:*}"
   urv_mounts="${ownership##*:}"
   [ "$total_mounts" -gt 0 ] || return 0
@@ -164,9 +175,12 @@ remove_failed_urv_mounts() {
     remove_target_mounts || return 1
   elif target_matches_urv_inode; then
     # The URV layer is currently on top, so peeling exactly one layer cannot remove a foreign mount.
-    umount "$URV_STOCK_PATH" || return 1
+    if ! umount "$URV_STOCK_PATH" && target_is_mounted; then
+      target_matches_urv_inode || return 1
+      umount -l "$URV_STOCK_PATH" || return 1
+    fi
   fi
-  ownership="$(target_mount_counts)"
+  ownership="$(target_mount_counts)" || return 1
   [ "${ownership##*:}" = 0 ]
 }
 
@@ -398,8 +412,14 @@ remove_zygote_payload_mounts() {
     attempts=0
     while namespace_target_is_mounted "$pid"; do
       if namespace_visible_matches_urv_inode "$pid"; then
-        [ "$attempts" -lt 8 ] || return 1
-        nsenter -t "$pid" -m -- umount "$URV_STOCK_PATH" || return 1
+        [ "$attempts" -lt 16 ] || return 1
+        if ! nsenter -t "$pid" -m -- umount "$URV_STOCK_PATH" &&
+           namespace_target_is_mounted "$pid"; then
+          # Match Manager cleanup semantics: prove the visible layer is still URV-owned
+          # immediately before using lazy detach.
+          namespace_visible_matches_urv_inode "$pid" || return 1
+          nsenter -t "$pid" -m -- umount -l "$URV_STOCK_PATH" || return 1
+        fi
         attempts=$((attempts + 1))
       elif namespace_has_urv_layer "$pid"; then
         # A foreign layer hides a URV layer. Do not peel another owner's mount.
@@ -617,14 +637,28 @@ if [ "$mount_count" -gt 0 ]; then
         echo VERIFIED >"$transaction_dir/boot-status"
         exit 0
       fi
-      log_status "Zygote namespace verification failed; removing URV mounts"
-      remove_zygote_payload_mounts || log_status "Unable to remove every Zygote mount"
+      log_status "Zygote namespace verification failed; retrying after package quiescence"
+      stop_and_wait || {
+        log_status "Unable to quiesce package; existing root mount left for Manager recovery"
+        exit 0
+      }
+      if mount_and_verify_zygotes && root_mount_layout_valid &&
+         [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ]; then
+        log_status "Early Zygote namespace repair succeeded"
+        echo VERIFIED >"$transaction_dir/boot-status"
+        exit 0
+      fi
+      log_status "Zygote namespace repair failed; falling back to verified stock"
+      remove_target_mounts || { log_status "Failed to remove every stale mount"; exit 0; }
+      mount_count=0
     fi
   fi
-  log_status "Early mount metadata mismatch; removing stale mount"
-  stop_and_wait || { log_status "Unable to quiesce package; stale mount left for Manager recovery"; exit 0; }
-  remove_target_mounts || { log_status "Failed to remove every stale mount"; exit 0; }
-  mount_count=0
+  if [ "$mount_count" -gt 0 ]; then
+    log_status "Early mount metadata mismatch; removing stale mount"
+    stop_and_wait || { log_status "Unable to quiesce package; stale mount left for Manager recovery"; exit 0; }
+    remove_target_mounts || { log_status "Failed to remove every stale mount"; exit 0; }
+    mount_count=0
+  fi
 fi
 
 stock_hash="$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')"

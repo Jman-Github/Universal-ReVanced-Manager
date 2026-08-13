@@ -369,6 +369,7 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(0, fixture.installer.uninstallCalls)
         assertEquals(1, fixture.module.stageCalls)
         assertEquals(0, fixture.module.stockSnapshotCalls)
+        assertEquals(listOf(true), fixture.verifier.lazyRecoveryCalls)
         assertEquals(listOf(0), fixture.scheduler.scheduledUsers)
     }
 
@@ -2091,6 +2092,25 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `package reconciliation repairs namespace drift without unmounting the committed mount`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.verifier.transientVerifyFailures = 1
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(2, fixture.verifier.verifyCalls)
+        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(1, fixture.module.enableCalls)
+        assertTrue(fixture.shell.commands.any { it.contains("force-stop --user 0") })
+        assertTrue(fixture.store.diagnostics.any { it.contains("Repaired committed mount namespaces in place") })
+    }
+
+    @Test
     fun `startup scan continues after package lock release failure`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
@@ -2481,13 +2501,19 @@ class RootMountTransactionCoordinatorTest {
 
     private class FakeVerifier(private val reader: FakePackageReader) : RootMountVerification {
         var verifyCalls = 0
+        var rootVerifyCalls = 0
+        var mountCalls = 0
         var removeCalls = 0
         val mounts = mutableListOf<MountInfoEntry>()
         val lazyRecoveryCalls = mutableListOf<Boolean>()
         var onRemove: (suspend () -> Unit)? = null
         var verifyFailure: Throwable? = null
+        var transientVerifyFailures = 0
+        var rootVerifyFailure: Throwable? = null
         var clearFailure: Throwable? = null
-        override suspend fun mountEverywhere(expected: RootCommittedState) = Unit
+        override suspend fun mountEverywhere(expected: RootCommittedState) {
+            mountCalls++
+        }
         override suspend fun findUrvMounts(packageName: String, extraTargets: Set<String>): List<MountInfoEntry> = mounts.toList()
         override suspend fun verifyTargetsClear(targets: Set<String>) {
             clearFailure?.let { throw it }
@@ -2502,8 +2528,17 @@ class RootMountTransactionCoordinatorTest {
             onRemove?.invoke()
             return emptyList()
         }
+        override suspend fun verifyRootMounted(expected: RootCommittedState): RootPackageState {
+            rootVerifyCalls++
+            rootVerifyFailure?.let { throw it }
+            return reader.state
+        }
         override suspend fun verifyMounted(expected: RootCommittedState): RootPackageState {
             verifyCalls++
+            if (transientVerifyFailures > 0) {
+                transientVerifyFailures--
+                throw IllegalStateException("transient namespace verification failure")
+            }
             verifyFailure?.let { throw it }
             return reader.state
         }

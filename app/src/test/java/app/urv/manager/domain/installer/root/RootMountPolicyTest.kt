@@ -108,6 +108,22 @@ class RootMountPolicyTest {
     }
 
     @Test
+    fun `exact installed stock bytes tolerate archive signer parsing differences`() {
+        val patched = artifact(hash = "patched")
+        val installedStock = artifact(
+            signer = "archive-parser-signer",
+            hash = requireNotNull(installed.baseSha256)
+        )
+
+        RootMountPolicy.validateSafeMount(
+            installed.packageName,
+            installed,
+            patched,
+            listOf(installedStock)
+        )
+    }
+
+    @Test
     fun `explicit stock identity permits a patched version code override`() {
         val patched = artifact(version = Int.MAX_VALUE.toLong(), hash = "patched")
             .copy(versionName = installed.versionName)

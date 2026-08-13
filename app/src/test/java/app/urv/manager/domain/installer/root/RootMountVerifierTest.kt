@@ -45,6 +45,7 @@ class RootMountVerifierTest {
 
         assertEquals(emptyList(), lazy)
         assertFalse(shell.commands.any { it.startsWith("umount -l") })
+        assertFalse(shell.commands.any { it.startsWith("stat -c") })
         assertFalse(shell.mounted)
     }
 
@@ -109,6 +110,37 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `full verification hashes the stock shadow after namespace verification`() = runBlocking {
+        val target = "/data/app/com.example.app/base.apk"
+        val shell = MountShell(
+            target,
+            mountLayerSources = listOf(
+                RootPaths.moduleStockApk(PACKAGE),
+                RootPaths.moduleApk(PACKAGE)
+            )
+        )
+        val expected = committedState().copy(stockPath = target)
+        val verifier = verifier(shell, MatchingPackageReader(expected))
+
+        verifier.verifyMounted(expected)
+
+        val namespaceVerification = shell.commands.indexOfFirst {
+            it.contains("Zygote namespaces did not stabilize during verification")
+        }
+        val shadowHash = shell.commands.indexOfLast {
+            it.startsWith("sha256sum") && it.contains(shellQuote(RootPaths.moduleStockApk(PACKAGE)))
+        }
+        assertTrue(namespaceVerification >= 0)
+        assertTrue(shadowHash > namespaceVerification)
+        assertEquals(
+            1,
+            shell.commands.count {
+                it.startsWith("sha256sum") && it.contains(shellQuote(RootPaths.moduleStockApk(PACKAGE)))
+            }
+        )
+    }
+
+    @Test
     fun `normal unmount failure cannot silently become lazy unmount`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(target, failNormalUnmount = true)
@@ -122,7 +154,7 @@ class RootMountVerifierTest {
     }
 
     @Test
-    fun `lazy unmount is available only to an explicit recovery caller`() = runBlocking {
+    fun `lazy unmount is available when the caller has quiesced the package`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(target, failNormalUnmount = true)
         val verifier = verifier(shell)
@@ -135,12 +167,45 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `stale stacks beyond the old peel limit keep using normal unmount while it succeeds`() = runBlocking {
+        val target = "/data/app/com.example.app/base.apk"
+        val shell = MountShell(target, mountLayers = 10)
+        val verifier = verifier(shell)
+
+        val lazy = verifier.removeAllUrvMounts(PACKAGE, setOf(target), allowLazyRecovery = true)
+
+        assertEquals(emptyList(), lazy)
+        assertEquals(10, shell.commands.count { it.startsWith("umount ") && !it.startsWith("umount -l") })
+        assertFalse(shell.commands.any { it.startsWith("umount -l") })
+        assertFalse(shell.mounted)
+    }
+
+    @Test
+    fun `lazy fallback rechecks ownership after a normal unmount failure`() = runBlocking {
+        val target = "/data/app/com.example.app/base.apk"
+        val shell = MountShell(
+            target,
+            failNormalUnmount = true,
+            foreignLayerOnMountTableRead = 3
+        )
+        val verifier = verifier(shell)
+
+        assertFailsWith<IllegalStateException> {
+            verifier.removeAllUrvMounts(PACKAGE, setOf(target), allowLazyRecovery = true)
+        }
+
+        assertTrue(shell.mounted)
+        assertFalse(shell.commands.any { it.startsWith("umount -l") })
+    }
+
+    @Test
     fun `zygote targets are checked before root bind mounts are created`() = runBlocking {
         val shell = CapturingShell()
         RootMountNamespaces(shell).mount(committedState())
 
         val command = shell.commands.single()
-        val preflight = command.indexOf("if ! namespace_target_clear \"${'$'}pid\"; then")
+        val preflight = command.indexOf("elif ! namespace_target_clear \"${'$'}pid\"; then")
+        val rootReuseCheck = command.indexOf("if ! namespace_matches \"${'$'}self_pid\"; then")
         val rootShadowBind = command.indexOf(
             "mount -o bind ${shellQuote(RootPaths.moduleStockApk(PACKAGE))} ${shellQuote(TARGET)}"
         )
@@ -149,13 +214,15 @@ class RootMountVerifierTest {
             "mount -o bind ${shellQuote(RootPaths.moduleApk(PACKAGE))} ${shellQuote(TARGET)}"
         )
         assertTrue(preflight >= 0)
-        assertTrue(rootShadowBind > preflight)
+        assertTrue(rootReuseCheck > preflight)
+        assertTrue(rootShadowBind > rootReuseCheck)
         assertTrue(rootPrivate > rootShadowBind)
         assertTrue(rootBind > rootPrivate)
         assertTrue(command.contains("-v patched_root='${RootPaths.moduleApk(PACKAGE).removePrefix("/data")}'"))
         assertTrue(command.contains("-v shadow_root='${RootPaths.moduleStockApk(PACKAGE).removePrefix("/data")}'"))
         assertFalse(command.contains("-m sha256sum"))
         assertEquals(1, Regex("sha256sum").findAll(command).count())
+        assertEquals(2, Regex("validate_shadow_hash").findAll(command).count())
         assertTrue(command.contains("live_zygote_pids"))
         assertTrue(command.contains("namespace_matches_shadow"))
         assertTrue(command.contains("nsenter -t \"${'$'}pid\" -m -- awk"))
@@ -183,6 +250,8 @@ class RootMountVerifierTest {
 
         val command = shell.commands.single()
         assertTrue(command.contains("while [ \"${'$'}verify_attempt\" -lt 20 ]"))
+        assertEquals(1, Regex("validate_shadow_hash").findAll(command).count())
+        assertTrue(command.contains("validate_shadow_file"))
         assertTrue(command.contains("validate_zygote \"${'$'}pid\" || { zygote_changed=1; continue; }"))
         assertTrue(command.contains("Zygote namespaces did not stabilize during verification"))
         assertFalse(command.contains("disappeared during verification"))
@@ -205,6 +274,7 @@ class RootMountVerifierTest {
         assertTrue(command.contains("nsenter -t \"${'$'}pid\" -m -- umount"))
         assertFalse(command.contains("nsenter -t \"${'$'}pid\" -m umount"))
         assertTrue(command.contains("if [ 0 = 1 ]; then"))
+        assertTrue(command.contains("max_attempts=8"))
         assertEquals(listOf(60L to "Zygote namespace cleanup"), shell.boundedOperations)
     }
 
@@ -216,6 +286,9 @@ class RootMountVerifierTest {
 
         val command = shell.commands.single()
         assertTrue(command.contains("if [ 1 = 1 ]; then"))
+        assertTrue(command.contains("max_attempts=16"))
+        assertTrue(command.contains("Failed to re-inspect ${'$'}target in Zygote namespace ${'$'}pid"))
+        assertTrue(command.contains("Zygote mount ownership changed before lazy unmount"))
         assertTrue(command.contains("nsenter -t \"${'$'}pid\" -m -- umount -l"))
         assertTrue(command.contains("URV_LAZY_UNMOUNT:%s"))
     }
@@ -255,12 +328,14 @@ class RootMountVerifierTest {
         private val mountLayers: Int = 1,
         private val includeForeignLayer: Boolean = false,
         private val exposeSourcePath: Boolean = true,
+        private val foreignLayerOnMountTableRead: Int? = null,
         mountLayerSources: List<String>? = null
     ) : RootShellGateway {
         val commands = mutableListOf<String>()
         private val remainingUrvSources =
             (mountLayerSources ?: List(mountLayers) { source }).toMutableList()
         private var foreignLayerMounted = includeForeignLayer
+        private var mountTableReads = 0
         val mounted: Boolean get() = remainingUrvSources.isNotEmpty() || foreignLayerMounted
 
         private fun inodeFor(path: String): String = when (path) {
@@ -278,6 +353,8 @@ class RootMountVerifierTest {
             commands += command
             return when {
                 command == "cat /proc/self/mountinfo" -> {
+                    mountTableReads++
+                    if (mountTableReads == foreignLayerOnMountTableRead) foreignLayerMounted = true
                     val lines = if (mounted) {
                         val urv = remainingUrvSources.mapIndexed { index, layerSource ->
                             val root = if (exposeSourcePath) {

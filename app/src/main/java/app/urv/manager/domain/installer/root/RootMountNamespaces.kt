@@ -19,7 +19,10 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                   for pid in ${'$'}before; do
                     validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                     if ! namespace_matches "${'$'}pid"; then
-                      if ! namespace_target_clear "${'$'}pid"; then
+                      if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ] &&
+                          namespace_matches_shadow "${'$'}pid"; then
+                        :
+                      elif ! namespace_target_clear "${'$'}pid"; then
                         validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                         echo "Foreign mount conflict in Zygote namespace ${'$'}pid" >&2
                         exit 1
@@ -44,18 +47,21 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                   chcon u:object_r:apk_data_file:s0 ${shellQuote(expected.patchedPath)}
                 fi
                 validate_shadow_hash
-                if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ]; then
-                  mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}
-                  mount -o private none ${shellQuote(expected.stockPath)} || {
-                    echo "Failed to isolate the stock shadow bind mount" >&2
+                self_pid="${'$'}${'$'}"
+                if ! namespace_matches "${'$'}self_pid"; then
+                  if ! namespace_target_clear "${'$'}self_pid"; then
+                    echo "Root APK target is occupied by a non-matching mount" >&2
                     exit 1
-                  }
+                  fi
+                  if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ]; then
+                    mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}
+                    mount -o private none ${shellQuote(expected.stockPath)} || {
+                      echo "Failed to isolate the stock shadow bind mount" >&2
+                      exit 1
+                    }
+                  fi
+                  mount -o bind ${shellQuote(expected.patchedPath)} ${shellQuote(expected.stockPath)}
                 fi
-                mount -o bind ${shellQuote(expected.patchedPath)} ${shellQuote(expected.stockPath)}
-                validate_shadow_hash || {
-                  echo "Stock shadow changed while applying the patched mount" >&2
-                  exit 1
-                }
                 mount_stable=0
                 mount_attempt=0
                 while [ "${'$'}mount_attempt" -lt $ZYGOTE_STABILITY_ATTEMPTS ]; do
@@ -126,7 +132,9 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
         shell.runIsolatedBounded(
             namespaceHelpers(expected) + """
                 set -eu
-                validate_shadow_hash
+                # RootMountVerifier validates the stock-shadow hash after this namespace check,
+                # so only verify that the source file still exists while inspecting namespaces.
+                validate_shadow_file
                 verify_stable=0
                 verify_attempt=0
                 while [ "${'$'}verify_attempt" -lt $ZYGOTE_STABILITY_ATTEMPTS ]; do
@@ -218,6 +226,7 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                   [ "${'$'}self_namespace" != "${'$'}zygote_namespace" ] || continue
                   for target in $targetWords; do
                     attempts=0
+                    max_attempts=${if (allowLazyRecovery) "16" else "8"}
                     while nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; do
                       target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
                         echo "Failed to inspect ${'$'}target in Zygote namespace ${'$'}pid" >&2
@@ -235,17 +244,34 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                         fi
                         break
                       fi
-                      [ "${'$'}attempts" -lt 8 ] || {
+                      [ "${'$'}attempts" -lt "${'$'}max_attempts" ] || {
                         echo "Too many URV mount layers remained at ${'$'}target in Zygote namespace ${'$'}pid" >&2
                         exit 1
                       }
                       if ! nsenter -t "${'$'}pid" -m -- umount "${'$'}target"; then
                         if [ ${if (allowLazyRecovery) "1" else "0"} = 1 ]; then
-                          nsenter -t "${'$'}pid" -m -- umount -l "${'$'}target" || {
-                            echo "Failed to lazily unmount ${'$'}target in Zygote namespace ${'$'}pid" >&2
-                            exit 1
-                          }
-                          printf 'URV_LAZY_UNMOUNT:%s\n' "${'$'}target"
+                          if nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; then
+                            # Re-prove visible ownership after the failed normal unmount. A
+                            # foreign layer can appear between the first check and lazy detach.
+                            target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
+                              echo "Failed to re-inspect ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                              exit 1
+                            }
+                            owned=0
+                            for candidate in $allowed; do
+                              [ -f "${'$'}candidate" ] || continue
+                              [ "${'$'}(stat -c '%d:%i' "${'$'}candidate" 2>/dev/null)" = "${'$'}target_inode" ] && owned=1 && break
+                            done
+                            [ "${'$'}owned" = 1 ] || {
+                              echo "Zygote mount ownership changed before lazy unmount at ${'$'}target" >&2
+                              exit 1
+                            }
+                            nsenter -t "${'$'}pid" -m -- umount -l "${'$'}target" || {
+                              echo "Failed to lazily unmount ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                              exit 1
+                            }
+                            printf 'URV_LAZY_UNMOUNT:%s\n' "${'$'}target"
+                          fi
                         else
                           echo "Failed to unmount ${'$'}target in Zygote namespace ${'$'}pid" >&2
                           exit 1
