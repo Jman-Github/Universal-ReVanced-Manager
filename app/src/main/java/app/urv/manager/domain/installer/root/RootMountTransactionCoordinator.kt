@@ -682,7 +682,7 @@ class RootMountTransactionCoordinator(
                         check(rawStock.basePath?.isSafeAbsoluteApkPath() == true) {
                             "Unmounted stock base path is unsafe"
                         }
-                    } ?: check(isStructurallyVerifiedStock(rawStock)) {
+                    } ?: check(isStructurallyVerifiedExternalStock(rawStock)) {
                         "Raw stock package state could not be verified after unmount"
                     }
                 } else {
@@ -1852,7 +1852,7 @@ class RootMountTransactionCoordinator(
         if (initial?.installed == false && !restored.installed) {
             return initial.packageName == journal.packageName && initial.userId == journal.userId
         }
-        if (!restored.installed || restored.topology != "SINGLE") {
+        if (!restored.installed) {
             return false
         }
         if (initial?.installed == true) {
@@ -1861,6 +1861,7 @@ class RootMountTransactionCoordinator(
                     restored.versionCode == initial.versionCode &&
                     restored.signerSha256 == initial.signerSha256 &&
                     restored.basePath == initial.basePath &&
+                    restored.topology == initial.topology &&
                     restored.enabled == initial.enabled &&
                     restored.launcherResolvable == initial.launcherResolvable &&
                     journal.patchedArtifact?.let { patched ->
@@ -1872,6 +1873,7 @@ class RootMountTransactionCoordinator(
                 restored.versionCode == initial.versionCode &&
                 restored.signerSha256 == initial.signerSha256 &&
                 restored.baseSha256 == initial.baseSha256 &&
+                restored.topology == initial.topology &&
                 restored.enabled == initial.enabled &&
                 restored.launcherResolvable == initial.launcherResolvable
             if (matchesInitial) return true
@@ -1881,7 +1883,8 @@ class RootMountTransactionCoordinator(
         return restored.versionName == requested.versionName &&
             restored.versionCode == requested.versionCode &&
             restored.signerSha256 == requested.signerSha256 &&
-            restored.baseSha256 == requested.sha256
+            restored.baseSha256 == requested.sha256 &&
+            restored.topology == requested.topology
     }
 
     private fun matchesCommittedStock(committed: RootCommittedState, state: RootPackageState): Boolean =

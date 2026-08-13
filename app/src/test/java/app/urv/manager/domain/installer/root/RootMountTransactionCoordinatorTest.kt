@@ -670,6 +670,24 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `unmount accepts structurally valid split stock without committed state`() = runBlocking {
+        val split = defaultState().copy(
+            splitPaths = listOf(
+                "/data/app/$PACKAGE/split_config.arm64_v8a.apk",
+                "/data/app/$PACKAGE/split_config.en.apk"
+            )
+        )
+        val fixture = Fixture(initial = split)
+
+        val result = fixture.coordinator.execute(fixture.request(RootMountOperation.UNMOUNT))
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(null, fixture.store.active)
+        assertEquals(null, fixture.store.committed)
+        assertTrue(fixture.module.disabled)
+    }
+
+    @Test
     fun `stale legacy module cannot authorize a bundle switch`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("new-patched-v2.apk", 2, "new-patched")
@@ -884,6 +902,33 @@ class RootMountTransactionCoordinatorTest {
 
         assertIs<RootMountResult.RecoveredToStock>(result)
         assertEquals(null, fixture.store.committed)
+    }
+
+    @Test
+    fun `recovery accepts unchanged split package from repair-required unmount`() = runBlocking {
+        val split = defaultState().copy(
+            splitPaths = listOf(
+                "/data/app/$PACKAGE/split_config.arm64_v8a.apk",
+                "/data/app/$PACKAGE/split_config.en.apk"
+            )
+        )
+        val fixture = Fixture(initial = split)
+        fixture.store.active = journal(
+            RootMountPhase.ROLLING_BACK,
+            split
+        ).copy(
+            operation = RootMountOperation.UNMOUNT,
+            stockMutationStarted = false,
+            registrationGap = false,
+            status = "REPAIR_REQUIRED"
+        )
+
+        val result = fixture.coordinator.execute(fixture.request(RootMountOperation.RECOVER))
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(null, fixture.store.active)
+        assertEquals(null, fixture.store.committed)
+        assertTrue(fixture.module.disabled)
     }
 
     @Test
