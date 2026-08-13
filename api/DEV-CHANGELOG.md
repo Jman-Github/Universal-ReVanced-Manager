@@ -8,6 +8,7 @@
 # Bug fixes
 
 - Fixed saved patched apps installed through Shizuku-based custom installers showing Shell instead of the selected installer
+- Fixed pre-release updates not being detected for some patch bundles imported through GitHub or GitLab URLs
 
 
 # CI

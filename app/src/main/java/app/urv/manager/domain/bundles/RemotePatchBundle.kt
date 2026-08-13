@@ -432,32 +432,8 @@ class JsonPatchBundle(
         url(manifestUrl)
     }.getOrThrow()
 
-    private fun repositoryReleaseSource(): RepositoryReleaseSource? {
-        val parsed = runCatching { Url(endpoint) }.getOrNull() ?: return null
-        val segments = parsed.encodedPath.trim('/').split('/').filter(String::isNotBlank)
-        return when {
-            parsed.host.equals("raw.githubusercontent.com", ignoreCase = true) &&
-                segments.size == 4 &&
-                segments[3].equals("patches-bundle.json", ignoreCase = true) -> {
-                RepositoryReleaseSource.GitHub(
-                    repositoryUrl = "https://github.com/${segments[0]}/${segments[1]}"
-                )
-            }
-
-            parsed.host.equals("gitlab.com", ignoreCase = true) -> {
-                val rawIndex = segments.indexOf("-")
-                if (rawIndex < 2 || segments.getOrNull(rawIndex + 1) != "raw" ||
-                    !segments.getOrNull(rawIndex + 3).equals("patches-bundle.json", ignoreCase = true) ||
-                    segments.size != rawIndex + 4
-                ) return null
-                RepositoryReleaseSource.GitLab(
-                    repositoryPath = segments.take(rawIndex).joinToString("/")
-                )
-            }
-
-            else -> null
-        }
-    }
+    private fun repositoryReleaseSource(): RepositoryReleaseSource? =
+        RepositoryReleaseSourceParser.parse(endpoint)
 
     private suspend fun requestLatestRepositoryRelease(
         source: RepositoryReleaseSource,
@@ -574,10 +550,6 @@ class JsonPatchBundle(
         Instant.parse(this).toLocalDateTime(TimeZone.UTC)
     }.getOrNull()
 
-    private sealed interface RepositoryReleaseSource {
-        data class GitHub(val repositoryUrl: String) : RepositoryReleaseSource
-        data class GitLab(val repositoryPath: String) : RepositoryReleaseSource
-    }
 }
 
 class APIPatchBundle(

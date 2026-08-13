@@ -2573,42 +2573,6 @@ class PatchBundleRepository(
         }
     }
 
-    private fun gitHubRepositoryManifestUrl(pathSegments: List<String>): String? {
-        if (pathSegments.size < 2) return null
-        if (pathSegments.size > 2 && pathSegments[2] != "tree") return null
-        if (pathSegments.size > 4) return null
-
-        val owner = pathSegments[0]
-        val repo = pathSegments[1].removeSuffix(".git").takeIf { it.isNotBlank() } ?: return null
-        val ref = if (pathSegments.size == 4 && pathSegments[2] == "tree") {
-            pathSegments[3].takeIf { it.isNotBlank() } ?: "HEAD"
-        } else {
-            "HEAD"
-        }
-
-        return "https://raw.githubusercontent.com/$owner/$repo/$ref/patches-bundle.json"
-    }
-
-    private fun gitLabRepositoryManifestUrl(pathSegments: List<String>): String? {
-        if (pathSegments.size < 2) return null
-        val markerIndex = pathSegments.indexOf("-")
-        if (markerIndex >= 0) {
-            val repoSegments = pathSegments.take(markerIndex)
-            if (repoSegments.size < 2) return null
-            val mode = pathSegments.getOrNull(markerIndex + 1) ?: return null
-            if (mode != "tree") return null
-            val refSegments = pathSegments.drop(markerIndex + 2)
-            if (refSegments.size > 1) return null
-            val ref = refSegments.firstOrNull()?.takeIf { it.isNotBlank() } ?: "HEAD"
-            return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/$ref/patches-bundle.json"
-        }
-
-        val repoSegments = pathSegments.toMutableList()
-        repoSegments[repoSegments.lastIndex] = repoSegments.last().removeSuffix(".git")
-        if (repoSegments.any { it.isBlank() }) return null
-        return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/HEAD/patches-bundle.json"
-    }
-
     private fun gitLabBlobUrlToRawUrl(pathSegments: List<String>): String? {
         val markerIndex = pathSegments.indexOf("-")
         if (markerIndex < 0) return null
