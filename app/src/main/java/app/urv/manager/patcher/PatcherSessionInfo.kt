@@ -9,7 +9,9 @@ data class PatcherSessionInfo(
     val patchCount: Int? = null,
     val runtimeProcess: Boolean? = null,
     val memoryLimitMb: Int? = null,
-    val nativeLibsStripped: Boolean? = null
+    val nativeLibsStripped: Boolean? = null,
+    val startedAtElapsedRealtimeMs: Long? = null,
+    val elapsedMs: Long? = null
 )
 
 fun PatcherSessionInfo.withFallback(fallback: PatcherSessionInfo): PatcherSessionInfo =
@@ -19,7 +21,10 @@ fun PatcherSessionInfo.withFallback(fallback: PatcherSessionInfo): PatcherSessio
         patchCount = patchCount ?: fallback.patchCount,
         runtimeProcess = runtimeProcess ?: fallback.runtimeProcess,
         memoryLimitMb = memoryLimitMb ?: fallback.memoryLimitMb,
-        nativeLibsStripped = nativeLibsStripped ?: fallback.nativeLibsStripped
+        nativeLibsStripped = nativeLibsStripped ?: fallback.nativeLibsStripped,
+        startedAtElapsedRealtimeMs =
+            startedAtElapsedRealtimeMs ?: fallback.startedAtElapsedRealtimeMs,
+        elapsedMs = elapsedMs ?: fallback.elapsedMs
     )
 
 fun parsePatcherSessionInfo(messages: Iterable<String>): PatcherSessionInfo =
@@ -28,6 +33,26 @@ fun parsePatcherSessionInfo(messages: Iterable<String>): PatcherSessionInfo =
     }
 
 fun PatcherSessionInfo.updatedFromLog(message: String): PatcherSessionInfo {
+    if (message.startsWith("Patching session started ")) {
+        return copy(
+            startedAtElapsedRealtimeMs = PATCH_SESSION_START.find(message)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?: startedAtElapsedRealtimeMs,
+            elapsedMs = null
+        )
+    }
+    if (message.startsWith("Patching session finished ")) {
+        return copy(
+            elapsedMs = PATCH_SESSION_ELAPSED.find(message)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?.coerceAtLeast(0L)
+                ?: elapsedMs
+        )
+    }
     if (message.startsWith("Patching started at ")) {
         return copy(
             apkSizeBytes = PATCH_START_SIZE.find(message)
@@ -73,6 +98,8 @@ fun PatcherSessionInfo.updatedFromLog(message: String): PatcherSessionInfo {
     return this
 }
 
+private val PATCH_SESSION_START = Regex("\\belapsedRealtime=(\\d+)ms\\b")
+private val PATCH_SESSION_ELAPSED = Regex("\\belapsed=(\\d+)ms\\b")
 private val PATCH_START_SIZE = Regex("\\bsize=(\\d+)")
 private val PATCH_START_SPLIT = Regex("\\bsplit=(true|false)\\b")
 private val PATCH_START_COUNT = Regex("\\bpatches=(\\d+)\\b")

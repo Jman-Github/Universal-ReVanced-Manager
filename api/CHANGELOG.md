@@ -271,6 +271,7 @@
 - Replaced active Install actions with Cancel controls across single and batch patching, allowing in-progress internal, Shizuku, root/mount, external, Install All, and automatic post-patch installations to be cancelled without discarding completed patch results https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/661
 - Added custom installer names to installed app details and label instead of showing the generic `Custom installer` label https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/655
 - Added per-bundle pre-release update checks for patch bundles imported from GitHub and GitLab repository links https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/629
+- Added elapsed patching time to the Patcher Information widget for both regular and batch patching
 
 
 # Bug fixes
@@ -452,6 +453,7 @@
 - All prereleases/releases are published with a universal (all ABI) APK, and the ABI specific APKs. The in-app updater now automatically picks the APK that matches your ABI
 - Updated manager release APK filenames to use canonical ABI labels such as arm64-v8a, armeabi-v7a, and universal, and updated the in-app updater/workflows to match the new asset names while preserving compatibility with older releases https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/428
 - Added JVM unit test checks before dev and release APK builds
+- Added a manual debug build workflow that uploads dev APK artifacts with a `-debug` version suffix without publishing a release
 
 
 # v1.8.0 (2026-02-15)

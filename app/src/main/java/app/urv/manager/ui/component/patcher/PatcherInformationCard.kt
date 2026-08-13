@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Build
 import android.os.StatFs
+import android.os.SystemClock
 import android.text.format.Formatter
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
@@ -26,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.util.toast
+import kotlinx.coroutines.delay
 
 data class PatcherInformation(
     val appVersion: String?,
@@ -144,15 +147,18 @@ fun PatcherInformationCard(
                                 }.orPlaceholder()
                             )
                         )
-                        InformationItemContent(
-                            item = InformationItem(
+                        InformationRow(
+                            first = InformationItem(
                                 R.string.patcher_information_patch_bundles,
                                 information.patchBundles
                                     .takeIf { it.isNotEmpty() }
                                     ?.joinToString(separator = "\n")
                                     .orPlaceholder()
                             ),
-                            modifier = Modifier.fillMaxWidth()
+                            second = InformationItem(
+                                R.string.patcher_information_elapsed_time,
+                                elapsedTimeDisplayValue(information.session)
+                            )
                         )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -234,6 +240,41 @@ private fun appVersionDisplayValue(version: String?, versionCode: Long?): String
         versionCode != null -> versionCode.toString()
         else -> INFORMATION_PLACEHOLDER
     }
+}
+
+@Composable
+private fun elapsedTimeDisplayValue(session: PatcherSessionInfo): String {
+    val elapsedMs = produceState<Long?>(
+        initialValue = session.elapsedMs ?: session.startedAtElapsedRealtimeMs?.let { startedAt ->
+            (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+        },
+        key1 = session.startedAtElapsedRealtimeMs,
+        key2 = session.elapsedMs
+    ) {
+        session.elapsedMs?.let { finalElapsed ->
+            value = finalElapsed.coerceAtLeast(0L)
+            return@produceState
+        }
+        val startedAt = session.startedAtElapsedRealtimeMs ?: run {
+            value = null
+            return@produceState
+        }
+        while (true) {
+            value = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+            delay(1_000L)
+        }
+    }.value ?: return INFORMATION_PLACEHOLDER
+
+    val totalSeconds = elapsedMs / 1_000L
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return stringResource(
+        R.string.patcher_information_elapsed_time_format,
+        hours,
+        minutes,
+        seconds
+    )
 }
 
 @Composable

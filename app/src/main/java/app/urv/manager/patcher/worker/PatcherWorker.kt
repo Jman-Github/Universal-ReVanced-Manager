@@ -1439,8 +1439,9 @@ class PatcherWorker(
             persistProgressSnapshot(sequence, event, totalPatchCount)
         }
 
+        val startTime = SystemClock.elapsedRealtime()
         return try {
-            val startTime = System.currentTimeMillis()
+            workerLogger.info("Patching session started elapsedRealtime=${startTime}ms")
             val autoSaveDownloads = prefs.autoSaveDownloaderApks.get()
 
             if (args.input is SelectedApp.Installed) {
@@ -1879,7 +1880,7 @@ class PatcherWorker(
                 }
             }
 
-            val elapsed = System.currentTimeMillis() - startTime
+            val elapsed = (SystemClock.elapsedRealtime() - startTime).coerceAtLeast(0L)
             val rt = Runtime.getRuntime()
             val usedMem = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024)
             val totalMem = rt.totalMemory() / (1024 * 1024)
@@ -2113,6 +2114,13 @@ class PatcherWorker(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.stackTraceToString()))
             )
         } finally {
+            val sessionElapsed =
+                (SystemClock.elapsedRealtime() - startTime).coerceAtLeast(0L)
+            runCatching {
+                workerLogger.info("Patching session finished elapsed=${sessionElapsed}ms")
+            }.onFailure { error ->
+                Log.d(tag, "Failed to publish patching session duration", error)
+            }
             activeRuntime = null
             activeMorpheRuntime = null
             activeSplitMergeRuntime = null

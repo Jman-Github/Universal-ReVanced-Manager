@@ -1904,6 +1904,8 @@ Details: %2$s</string>
     <string name="patcher_information_patches">Patches</string>
     <string name="patcher_information_split_apk">Split APK</string>
     <string name="patcher_information_patch_bundles">Patch bundles</string>
+    <string name="patcher_information_elapsed_time">Time elapsed</string>
+    <string name="patcher_information_elapsed_time_format">%1$dh %2$dm %3$ds</string>
     <string name="patcher_information_manager">Manager</string>
     <string name="patcher_information_patcher">Patcher</string>
     <string name="patcher_information_runtime">Runtime</string>

@@ -2,6 +2,8 @@
 
 # Features
 
+- Added elapsed patching time to the Patcher Information widget for both regular and batch patching
+
 
 # Bug fixes
 
