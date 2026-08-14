@@ -2900,7 +2900,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             // legitimately have the same package/version but a different signing certificate.
             val installedStock = installedBaseInfo.applicationInfo?.sourceDir
                 ?.let(::File)
-                ?.takeIf(File::isFile)
                 ?: throw IllegalStateException(
                     app.getString(R.string.install_app_fail_missing_stock)
                 )

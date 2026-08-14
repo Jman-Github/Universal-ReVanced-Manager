@@ -403,6 +403,31 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `bundle switch keeps committed stock identity while the registered base is mounted`() = runBlocking {
+        val stockState = defaultState()
+        val mountedState = stockState.copy(baseSha256 = testSha256("previous-patched"))
+        val fixture = Fixture(mountedState)
+        val previous = committed(stockState)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.onRemove = { fixture.reader.state = stockState }
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val registeredStock = File(requireNotNull(fixture.initial.basePath))
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                patched = patched.first,
+                stock = registeredStock
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(stockState.baseSha256, fixture.store.committed?.stockSha256)
+        assertEquals(listOf(patched.first.absolutePath), fixture.reader.inspectedPaths)
+    }
+
+    @Test
     fun `progress observer failures cannot alter a verified transaction`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
@@ -2072,6 +2097,7 @@ class RootMountTransactionCoordinatorTest {
 
         assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.module.enableCalls)
+        assertEquals(listOf(false), fixture.module.enableRepairPayloads)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(1, fixture.lock.releaseCalls)
     }
@@ -2108,6 +2134,107 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(1, fixture.module.enableCalls)
         assertTrue(fixture.shell.commands.any { it.contains("force-stop --user 0") })
         assertTrue(fixture.store.diagnostics.any { it.contains("Repaired committed mount namespaces in place") })
+    }
+
+    @Test
+    fun `package reconciliation stays retryable while target app is repeatedly reopened`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.reader.stops = false
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        val busy = assertIs<RootMountResult.Busy>(result)
+        assertEquals(RootMountPhase.STOPPING_APP, busy.phase)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
+
+        val retryWhileRunning = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Busy>(retryWhileRunning)
+        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
+
+        fixture.reader.stops = true
+        val completed = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(completed)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(0, fixture.verifier.mountCalls)
+        assertEquals(listOf(true, false, false), fixture.module.enableRepairPayloads)
+        assertTrue(fixture.store.diagnostics.any { it.contains("Deferred committed mount reconciliation") })
+    }
+
+    @Test
+    fun `package reconciliation stays retryable when target app restarts after namespace repair`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.reader.stopResults.addAll(listOf(true, false))
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Busy>(result)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(2, fixture.verifier.verifyCalls)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
+
+        val retry = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(retry)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(1, fixture.verifier.mountCalls)
+    }
+
+    @Test
+    fun `full reconciliation stays retryable when app reopens before mount changes`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
+        fixture.reader.stopResults.addAll(listOf(true, false))
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Busy>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertTrue(fixture.store.diagnostics.any { it.contains("before changing mounts") })
+    }
+
+    @Test
+    fun `full reconciliation commits verified mounts and retries when app reopens during mount`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
+        fixture.reader.stopResults.addAll(listOf(true, true, false, false))
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        val busy = assertIs<RootMountResult.Busy>(result)
+        assertEquals(RootMountPhase.VERIFYING, busy.phase)
+        assertEquals(1, fixture.verifier.removeCalls)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
+
+        val retry = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(retry)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(1, fixture.verifier.mountCalls)
     }
 
     @Test
@@ -2307,9 +2434,11 @@ class RootMountTransactionCoordinatorTest {
         var readFailures = 0
         var readCalls = 0
         var stops = true
+        val stopResults = ArrayDeque<Boolean>()
         var stopChecks = 0
         var lastExpected: RootPackageState? = null
         var installedUsers: Set<Int>? = null
+        val inspectedPaths = mutableListOf<String>()
 
         override suspend fun read(packageName: String, userId: Int): RootPackageState {
             readCalls++
@@ -2321,7 +2450,10 @@ class RootMountTransactionCoordinatorTest {
         }
         override suspend fun installedUserIds(packageName: String): Set<Int> =
             installedUsers ?: if (state.installed) setOf(state.userId) else emptySet()
-        override fun inspect(file: File): RootArtifactState = requireNotNull(artifacts[file.absolutePath])
+        override fun inspect(file: File): RootArtifactState {
+            inspectedPaths += file.absolutePath
+            return requireNotNull(artifacts[file.absolutePath])
+        }
         override suspend fun waitForStable(expected: RootPackageState, consecutiveReads: Int): RootPackageState {
             lastExpected = expected
             if (stabilityFailures > 0) {
@@ -2333,7 +2465,7 @@ class RootMountTransactionCoordinatorTest {
         override suspend fun runningPids(packageName: String): List<Int> = emptyList()
         override suspend fun waitUntilStopped(packageName: String, timeoutMs: Long): Boolean {
             stopChecks++
-            return stops
+            return if (stopResults.isEmpty()) stops else stopResults.removeFirst()
         }
     }
 
@@ -2400,6 +2532,7 @@ class RootMountTransactionCoordinatorTest {
         var purgeCalls = 0
         var purgeFailure: Throwable? = null
         var enableCalls = 0
+        val enableRepairPayloads = mutableListOf<Boolean>()
         var enableFailure: Throwable? = null
         val updatedStates = mutableListOf<RootCommittedState>()
         override suspend fun ensureRollbackSpace(packageName: String, stockPaths: List<String>, incomingBytes: Long) {
@@ -2441,8 +2574,9 @@ class RootMountTransactionCoordinatorTest {
             restoreCalls++
             return true
         }
-        override suspend fun enable(packageName: String) {
+        override suspend fun enable(packageName: String, repairPayloads: Boolean) {
             enableCalls++
+            enableRepairPayloads += repairPayloads
             enableFailure?.let { throw it }
         }
         override suspend fun disable(packageName: String) { disabled = true }

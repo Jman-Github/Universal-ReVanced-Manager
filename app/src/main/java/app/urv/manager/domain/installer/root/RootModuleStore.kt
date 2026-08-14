@@ -14,13 +14,14 @@ class RootModuleStore(
         incomingBytes: Long
     ) {
         require(incomingBytes >= 0) { "Invalid incoming payload size" }
+        val duplicatedIncomingBytes = Math.multiplyExact(incomingBytes, 2)
         val stockSizeCommands = stockPaths.joinToString("; ") { path ->
             "size=\"${'$'}(stat -c %s ${shellQuote(path)})\"; " +
-                "required_bytes=${'$'}((required_bytes + size))"
+                "required_bytes=${'$'}((required_bytes + size * 2))"
         }
         val stockSizeClause = stockSizeCommands.takeIf(String::isNotEmpty)?.plus("; ").orEmpty()
         runModuleCommand(
-            "set -eu; required_bytes=$incomingBytes; $stockSizeClause" +
+            "set -eu; required_bytes=$duplicatedIncomingBytes; $stockSizeClause" +
                 "if [ -d ${shellQuote(RootPaths.module(packageName))} ]; then " +
                 "module_kb=\"${'$'}(du -sk ${shellQuote(RootPaths.module(packageName))} | awk '{print ${'$'}1}')\"; " +
                 "required_bytes=${'$'}((required_bytes + module_kb * 1024)); fi; " +
@@ -176,7 +177,8 @@ class RootModuleStore(
         runModuleCommand(
             "set -eu; rm -rf ${shellQuote("$backupRoot/module.previous")} " +
                 "${shellQuote("$backupRoot/module.next")} ${shellQuote("$backupRoot/package.previous")} " +
-                "${shellQuote("$backupRoot/package.next")} ${shellQuote(RootPaths.rollbackModule(packageName))} " +
+                "${shellQuote("$backupRoot/package.next")} ${shellQuote("$backupRoot/payload.previous")} " +
+                "${shellQuote("$backupRoot/payload.next")} ${shellQuote(RootPaths.rollbackModule(packageName))} " +
                 "${shellQuote(RootPaths.legacyPackage(packageName))}; " +
                 "rm -f ${shellQuote(RootPaths.legacyService(packageName))}; " +
                 "sync"
@@ -204,32 +206,53 @@ class RootModuleStore(
             val stage = RootPaths.stagingModule(packageName, transactionId)
             val active = RootPaths.module(packageName)
             val rollback = RootPaths.rollbackModule(packageName)
+            val backupRoot = RootPaths.backup(packageName)
+            val canonical = RootPaths.canonicalPayload(packageName)
+            val canonicalNext = "$backupRoot/payload.next"
+            val canonicalPrevious = "$backupRoot/payload.previous"
+            val canonicalPatched = "$canonicalNext/patched"
+            val canonicalStock = "$canonicalNext/stock"
             val apkName = "$packageName.apk"
             val stockApkName = "$packageName-stock.apk"
             val stockPath = requireNotNull(compatible.basePath)
             val stockHash = requireNotNull(compatible.baseSha256)
             runModuleCommand(
-                "set -eu; rm -rf ${shellQuote(stage)} ${shellQuote(rollback)}; " +
-                    "mkdir -p ${shellQuote(stage)}; chmod 700 ${shellQuote(stage)}; " +
+                "set -eu; rm -rf ${shellQuote(stage)} ${shellQuote(rollback)} ${shellQuote(canonicalNext)}; " +
+                "mkdir -p ${shellQuote(stage)}; chmod 700 ${shellQuote(stage)}; " +
+                    "mkdir -p ${shellQuote(backupRoot)} ${shellQuote(canonicalNext)}; " +
+                    "chmod 700 ${shellQuote(backupRoot)} ${shellQuote(canonicalNext)}; " +
                     "cp ${shellQuote(local.resolve("post-fs-data.sh").absolutePath)} ${shellQuote("$stage/post-fs-data.sh")}; " +
                     "cp ${shellQuote(local.resolve("service.sh").absolutePath)} ${shellQuote("$stage/service.sh")}; " +
                     "cp ${shellQuote(local.resolve("module.prop").absolutePath)} ${shellQuote("$stage/module.prop")}; " +
                     "cp ${shellQuote(local.resolve("state.env").absolutePath)} ${shellQuote("$stage/state.env")}; " +
                     "cp ${shellQuote(patchedApk.absolutePath)} ${shellQuote("$stage/$apkName")}; " +
                     "cp ${shellQuote(stockPath)} ${shellQuote("$stage/$stockApkName")}; " +
+                    "cp ${shellQuote(patchedApk.absolutePath)} ${shellQuote(canonicalPatched)}; " +
+                    "cp ${shellQuote(stockPath)} ${shellQuote(canonicalStock)}; " +
                     "chmod 755 ${shellQuote("$stage/post-fs-data.sh")} ${shellQuote("$stage/service.sh")}; " +
                     "chmod 600 ${shellQuote("$stage/state.env")}; chmod 644 ${shellQuote("$stage/module.prop")} " +
                     "${shellQuote("$stage/$apkName")} ${shellQuote("$stage/$stockApkName")}; " +
+                    "chmod 600 ${shellQuote(canonicalPatched)} ${shellQuote(canonicalStock)}; " +
                     "chown -R 0:0 ${shellQuote(stage)}; " +
+                    "chown -R 0:0 ${shellQuote(canonicalNext)}; " +
                     "chcon u:object_r:apk_data_file:s0 ${shellQuote("$stage/$apkName")} ${shellQuote("$stage/$stockApkName")}; " +
                     "test \"${'$'}(sha256sum ${shellQuote("$stage/$apkName")} | awk '{print ${'$'}1}')\" = ${shellQuote(patchedHash)}; " +
                     "test \"${'$'}(sha256sum ${shellQuote("$stage/$stockApkName")} | awk '{print ${'$'}1}')\" = ${shellQuote(stockHash)}; " +
+                    "test \"${'$'}(sha256sum ${shellQuote(canonicalPatched)} | awk '{print ${'$'}1}')\" = ${shellQuote(patchedHash)}; " +
+                    "test \"${'$'}(sha256sum ${shellQuote(canonicalStock)} | awk '{print ${'$'}1}')\" = ${shellQuote(stockHash)}; " +
                     "sync -f ${shellQuote("$stage/$apkName")} 2>/dev/null || sync; " +
                     "sync -f ${shellQuote("$stage/$stockApkName")} 2>/dev/null || sync; " +
+                    "sync -f ${shellQuote(canonicalPatched)} 2>/dev/null || sync; " +
+                    "sync -f ${shellQuote(canonicalStock)} 2>/dev/null || sync; " +
                     "sync -f ${shellQuote(stage)} 2>/dev/null || sync; " +
+                    "sync -f ${shellQuote(canonicalNext)} 2>/dev/null || sync; " +
                     "if [ -d ${shellQuote(active)} ]; then mv ${shellQuote(active)} ${shellQuote(rollback)}; fi; " +
+                    "rm -rf ${shellQuote(canonicalPrevious)}; " +
+                    "if [ -d ${shellQuote(canonical)} ]; then mv ${shellQuote(canonical)} ${shellQuote(canonicalPrevious)}; fi; " +
                     "mv ${shellQuote(stage)} ${shellQuote(active)}; " +
-                    "sync -f ${shellQuote(RootPaths.MODULES)} 2>/dev/null || sync"
+                    "mv ${shellQuote(canonicalNext)} ${shellQuote(canonical)}; " +
+                    "sync -f ${shellQuote(RootPaths.MODULES)} 2>/dev/null || sync; " +
+                    "sync -f ${shellQuote(backupRoot)} 2>/dev/null || sync"
             ).requireSuccess("Atomically activate root module")
             return RootPaths.moduleApk(packageName)
         } finally {
@@ -278,6 +301,8 @@ class RootModuleStore(
         val restoreNext = "${RootPaths.MODULES}/.$packageName-revanced.urv-restore"
         val backupPayload = "$backup/$packageName.apk"
         val rollbackPayload = "$rollback/$packageName.apk"
+        val canonical = RootPaths.canonicalPayload(packageName)
+        val canonicalPrevious = "${RootPaths.backup(packageName)}/payload.previous"
         val result = runModuleCommand(
             "set -eu; rm -rf ${shellQuote(restoreNext)}; " +
                 "if [ -f ${shellQuote(backupPayload)} ]; then " +
@@ -287,12 +312,15 @@ class RootModuleStore(
                 "sync -f ${shellQuote(RootPaths.MODULES)} 2>/dev/null || sync; exit 1; fi; " +
                 "rm -rf ${shellQuote(active)} ${shellQuote(rollback)}; " +
                 "mv ${shellQuote(restoreNext)} ${shellQuote(active)}; " +
+                "if [ -d ${shellQuote(canonicalPrevious)} ]; then " +
+                "rm -rf ${shellQuote(canonical)}; " +
+                "mv ${shellQuote(canonicalPrevious)} ${shellQuote(canonical)}; fi; " +
                 "sync -f ${shellQuote(RootPaths.MODULES)} 2>/dev/null || sync"
         )
         return result.isSuccess
     }
 
-    override suspend fun enable(packageName: String) {
+    override suspend fun enable(packageName: String, repairPayloads: Boolean) {
         val module = RootPaths.module(packageName)
         val local = File(app.cacheDir, "root-runtime-$packageName-${System.nanoTime()}").apply {
             check(mkdirs()) { "Failed to create root runtime staging directory" }
@@ -306,8 +334,54 @@ class RootModuleStore(
             val serviceTarget = "$module/service.sh"
             val postFsNext = "$postFsTarget.urv-next"
             val serviceNext = "$serviceTarget.urv-next"
+            val statePath = "$module/state.env"
+            val payloadMaintenance = if (repairPayloads) {
+                val backupRoot = RootPaths.backup(packageName)
+                val canonicalPayload = RootPaths.canonicalPayload(packageName)
+                val canonicalPatched = RootPaths.canonicalPatched(packageName)
+                val canonicalStock = RootPaths.canonicalStock(packageName)
+                "[ ! -L ${shellQuote(backupRoot)} ] && [ ! -L ${shellQuote(canonicalPayload)} ]; " +
+                    "mkdir -p ${shellQuote(backupRoot)} ${shellQuote(canonicalPayload)}; " +
+                    "[ -d ${shellQuote(backupRoot)} ] && [ ! -L ${shellQuote(backupRoot)} ]; " +
+                    "[ -d ${shellQuote(canonicalPayload)} ] && [ ! -L ${shellQuote(canonicalPayload)} ]; " +
+                    "chmod 700 ${shellQuote(backupRoot)} ${shellQuote(canonicalPayload)}; " +
+                    "chown 0:0 ${shellQuote(backupRoot)} ${shellQuote(canonicalPayload)}; " +
+                    "repair_payload() { source=\"${'$'}1\"; target=\"${'$'}2\"; expected=\"${'$'}3\"; " +
+                    "[ -f \"${'$'}target\" ] && [ ! -L \"${'$'}target\" ] && " +
+                    "[ \"${'$'}(sha256sum \"${'$'}target\" 2>/dev/null | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ] && return 0; " +
+                    "[ -f \"${'$'}source\" ] && [ ! -L \"${'$'}source\" ] || return 1; " +
+                    "[ \"${'$'}(sha256sum \"${'$'}source\" | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ] || return 1; " +
+                    "next=\"${'$'}target.urv-repair\"; rm -f \"${'$'}next\"; cp \"${'$'}source\" \"${'$'}next\"; " +
+                    "chmod 644 \"${'$'}next\"; chown 0:0 \"${'$'}next\"; chcon u:object_r:apk_data_file:s0 \"${'$'}next\"; " +
+                    "[ \"${'$'}(sha256sum \"${'$'}next\" | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ]; " +
+                    "mv -f \"${'$'}next\" \"${'$'}target\"; }; " +
+                    "ensure_canonical_payload() { source=\"${'$'}1\"; target=\"${'$'}2\"; expected=\"${'$'}3\"; " +
+                    "[ -f \"${'$'}source\" ] && [ ! -L \"${'$'}source\" ] || return 1; " +
+                    "[ \"${'$'}(sha256sum \"${'$'}source\" | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ] || return 1; " +
+                    "if [ -f \"${'$'}target\" ] && [ ! -L \"${'$'}target\" ] && " +
+                    "[ \"${'$'}(sha256sum \"${'$'}target\" | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ]; then " +
+                    "chmod 600 \"${'$'}target\"; chown 0:0 \"${'$'}target\"; return 0; fi; " +
+                    "next=\"${'$'}target.urv-seed\"; rm -f \"${'$'}next\"; cp \"${'$'}source\" \"${'$'}next\"; " +
+                    "chmod 600 \"${'$'}next\"; chown 0:0 \"${'$'}next\"; " +
+                    "[ \"${'$'}(sha256sum \"${'$'}next\" | awk '{print ${'$'}1}')\" = \"${'$'}expected\" ]; " +
+                    "sync -f \"${'$'}next\" 2>/dev/null || sync; mv -f \"${'$'}next\" \"${'$'}target\"; }; " +
+                    "repair_payload ${shellQuote(canonicalPatched)} \"${'$'}URV_PATCHED_PATH\" \"${'$'}URV_PATCHED_SHA256\"; " +
+                    "if [ \"${'$'}URV_PRESERVE_STOCK\" = 1 ]; then " +
+                    "repair_payload ${shellQuote(canonicalStock)} \"${'$'}URV_STOCK_SHADOW_PATH\" \"${'$'}URV_STOCK_SHADOW_SHA256\"; fi; " +
+                    "ensure_canonical_payload \"${'$'}URV_PATCHED_PATH\" ${shellQuote(canonicalPatched)} \"${'$'}URV_PATCHED_SHA256\"; " +
+                    "if [ \"${'$'}URV_PRESERVE_STOCK\" = 1 ]; then " +
+                    "ensure_canonical_payload \"${'$'}URV_STOCK_SHADOW_PATH\" ${shellQuote(canonicalStock)} \"${'$'}URV_STOCK_SHADOW_SHA256\"; fi; " +
+                    "sync -f ${shellQuote(canonicalPayload)} 2>/dev/null || sync; "
+            } else {
+                ""
+            }
             runModuleCommand(
                 "set -eu; [ -d ${shellQuote(module)} ] && [ ! -L ${shellQuote(module)} ]; " +
+                    "[ -f ${shellQuote(statePath)} ] && [ ! -L ${shellQuote(statePath)} ]; " +
+                    "[ \"${'$'}(stat -c %a ${shellQuote(statePath)})\" = 600 ]; " +
+                    "[ \"${'$'}(stat -c %u ${shellQuote(statePath)})\" = 0 ]; " +
+                    ". ${shellQuote(statePath)}; " +
+                    payloadMaintenance +
                     "rm -f ${shellQuote(postFsNext)} ${shellQuote(serviceNext)}; " +
                     "if [ ! -f ${shellQuote(postFsTarget)} ] || [ -L ${shellQuote(postFsTarget)} ] || " +
                     "[ \"${'$'}(sha256sum ${shellQuote(postFsSource.absolutePath)} | awk '{print ${'$'}1}')\" != " +

@@ -1,7 +1,14 @@
 package app.urv.manager.domain.installer.root
 
-/** Mirrors and verifies URV-owned bind mounts in every live Zygote mount namespace. */
-class RootMountNamespaces(private val shell: RootShellGateway) {
+/** Mirrors and verifies URV-owned binds, and removes them from Zygote and Manager namespaces. */
+class RootMountNamespaces(
+    private val shell: RootShellGateway,
+    private val managerPid: Int? = null
+) {
+    init {
+        require(managerPid == null || managerPid > 0) { "Invalid Manager process ID" }
+    }
+
     suspend fun mount(expected: RootCommittedState) {
         shell.runIsolatedBounded(
             namespaceHelpers(expected) + """
@@ -216,20 +223,21 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                     END { exit !owned }
                   ' /proc/self/mountinfo
                 }
-                for pid in ${'$'}(zygote_pids); do
-                  validate_zygote "${'$'}pid" || continue
+                cleanup_namespace() {
+                  pid="${'$'}1"
+                  namespace_label="${'$'}2"
                   self_namespace="${'$'}(readlink /proc/self/ns/mnt)" || {
                     echo "Failed to inspect the root mount namespace" >&2
                     exit 1
                   }
-                  zygote_namespace="${'$'}(readlink /proc/${'$'}pid/ns/mnt)" || continue
-                  [ "${'$'}self_namespace" != "${'$'}zygote_namespace" ] || continue
+                  target_namespace="${'$'}(readlink /proc/${'$'}pid/ns/mnt)" || return 0
+                  [ "${'$'}self_namespace" != "${'$'}target_namespace" ] || return 0
                   for target in $targetWords; do
                     attempts=0
                     max_attempts=${if (allowLazyRecovery) "16" else "8"}
                     while nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; do
                       target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
-                        echo "Failed to inspect ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                        echo "Failed to inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                         exit 1
                       }
                       owned=0
@@ -239,13 +247,13 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                       done
                       if [ "${'$'}owned" != 1 ]; then
                         if namespace_has_owned_layer "${'$'}pid" "${'$'}target"; then
-                          echo "Foreign Zygote mount covers a URV layer at ${'$'}target" >&2
+                          echo "Foreign ${'$'}namespace_label mount covers a URV layer at ${'$'}target" >&2
                           exit 1
                         fi
                         break
                       fi
                       [ "${'$'}attempts" -lt "${'$'}max_attempts" ] || {
-                        echo "Too many URV mount layers remained at ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                        echo "Too many URV mount layers remained at ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                         exit 1
                       }
                       if ! nsenter -t "${'$'}pid" -m -- umount "${'$'}target"; then
@@ -254,7 +262,7 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                             # Re-prove visible ownership after the failed normal unmount. A
                             # foreign layer can appear between the first check and lazy detach.
                             target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
-                              echo "Failed to re-inspect ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                              echo "Failed to re-inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                               exit 1
                             }
                             owned=0
@@ -263,23 +271,30 @@ class RootMountNamespaces(private val shell: RootShellGateway) {
                               [ "${'$'}(stat -c '%d:%i' "${'$'}candidate" 2>/dev/null)" = "${'$'}target_inode" ] && owned=1 && break
                             done
                             [ "${'$'}owned" = 1 ] || {
-                              echo "Zygote mount ownership changed before lazy unmount at ${'$'}target" >&2
+                              echo "${'$'}namespace_label mount ownership changed before lazy unmount at ${'$'}target" >&2
                               exit 1
                             }
                             nsenter -t "${'$'}pid" -m -- umount -l "${'$'}target" || {
-                              echo "Failed to lazily unmount ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                              echo "Failed to lazily unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                               exit 1
                             }
                             printf 'URV_LAZY_UNMOUNT:%s\n' "${'$'}target"
                           fi
                         else
-                          echo "Failed to unmount ${'$'}target in Zygote namespace ${'$'}pid" >&2
+                          echo "Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                           exit 1
                         fi
                       fi
                       attempts=${'$'}((attempts + 1))
                     done
                   done
+                }
+                ${managerPid?.let { pid ->
+                    "if [ -r /proc/$pid/ns/mnt ]; then cleanup_namespace $pid Manager; fi"
+                }.orEmpty()}
+                for pid in ${'$'}(zygote_pids); do
+                  validate_zygote "${'$'}pid" || continue
+                  cleanup_namespace "${'$'}pid" Zygote
                 done
             """.trimIndent(),
             REMOVE_TIMEOUT_SECONDS,

@@ -26,7 +26,7 @@ val rootModule = module {
     single<RootShellGateway> { LibsuRootShellGateway(get()) }
     single<PackageStateReader> { AndroidPackageStateReader(get(), get()) }
     single { MountTableReader(get()) }
-    single { RootMountNamespaces(get()) }
+    single { RootMountNamespaces(get(), android.os.Process.myPid()) }
     single<RootTransactionStorage> { RootTransactionStore(get()) }
     single<RootModuleStorage> { RootModuleStore(get(), get()) }
     single<RootPackageInstallation> { RootPackageInstaller(get()) }

@@ -15,6 +15,8 @@ private data class CorruptCommittedRecoveryDecision(
     val verifiedOutcome: String? = null
 )
 
+private class RootTargetAppBusyException(message: String) : IllegalStateException(message)
+
 private data class RootMountPreparation(
     val initialMountedState: RootPackageState,
     val patchedArtifact: RootArtifactState?,
@@ -183,7 +185,9 @@ class RootMountTransactionCoordinator(
             requireExclusivePackageUser(request.packageName, request.userId)
         }
         val patchedArtifact = request.patchedApk?.let(packageStateReader::inspect)
-        val stockArtifacts = request.stockApks.map(packageStateReader::inspect)
+        val stockArtifacts = request.stockApks.map { stockApk ->
+            inspectRequestedStock(request, initialMountedState, previousCommitted, stockApk)
+        }
         val preflightMounts = mountVerifier.findUrvMounts(
             request.packageName,
             setOfNotNull(initialMountedState.basePath, previousCommitted?.stockPath)
@@ -249,11 +253,59 @@ class RootMountTransactionCoordinator(
             } else {
                 emptyList()
             }
-            val incomingBytes = request.stockApks.sumOf { it.length() } +
+            val stockInputBytes = if (
+                RootMountPolicy.classifyStockTransition(
+                    initialMountedState,
+                    stockArtifacts.singleOrNull()
+                ) != RootMountPolicy.StockTransition.NONE
+            ) {
+                request.stockApks.sumOf { it.length() }
+            } else {
+                0L
+            }
+            val incomingBytes = stockInputBytes +
                 (request.patchedApk?.length() ?: 0L)
             moduleStore.ensureRollbackSpace(request.packageName, rollbackPaths, incomingBytes)
         }
         return preparation
+    }
+
+    private fun inspectRequestedStock(
+        request: RootMountRequest,
+        installed: RootPackageState,
+        committed: RootCommittedState?,
+        stockApk: File
+    ): RootArtifactState {
+        val installedBasePath = installed.basePath
+        val isRegisteredInstalledBase =
+            request.operation == RootMountOperation.SWITCH_PATCHED_BUILD &&
+                installed.installed &&
+                installedBasePath != null &&
+                stockApk.absolutePath == File(installedBasePath).absolutePath
+        if (!isRegisteredInstalledBase) return packageStateReader.inspect(stockApk)
+
+        val committedStock = committed?.takeIf { state ->
+            state.active &&
+                state.packageName == request.packageName &&
+                state.userId == request.userId &&
+                state.stockPath == installedBasePath
+        }
+        // Both the root shell and this app process can still see the patched bind at the
+        // registered base path. While that committed mount is active, its saved identity is
+        // the trustworthy description of the raw stock file exposed after unmounting.
+        return RootArtifactState(
+            path = requireNotNull(installedBasePath),
+            packageName = committedStock?.packageName ?: installed.packageName,
+            versionName = committedStock?.versionName ?: installed.versionName,
+            versionCode = committedStock?.versionCode ?: requireNotNull(installed.versionCode) {
+                "Installed version code is unavailable"
+            },
+            signerSha256 = committedStock?.signerSha256 ?: installed.signerSha256,
+            sha256 = committedStock?.stockSha256 ?: requireNotNull(installed.baseSha256) {
+                "Installed APK hash is unavailable"
+            },
+            topology = committedStock?.topology ?: installed.topology
+        )
     }
 
     suspend fun recoverIncompleteTransactions(userId: Int): Map<String, RootMountResult> {
@@ -414,12 +466,53 @@ class RootMountTransactionCoordinator(
                         }.getOrNull() == setOf(userId)
                         if (!installedOnlyForRequestedUser) {
                             false to null
+                        } else if (committed.status == MOUNTED_PENDING_APP_STOP_STATUS) {
+                            val pendingCompletion = runCatchingPreservingCancellation {
+                                stopAndWait(packageName, userId)
+                                requireExclusivePackageUser(packageName, userId)
+                                mountVerifier.verifyMounted(committed)
+                                if (!packageStateReader.waitUntilStopped(packageName, 1_000)) {
+                                    throw RootTargetAppBusyException(
+                                        "Target app restarted while completing reconciliation"
+                                    )
+                                }
+                            }
+                            if (pendingCompletion.isSuccess) {
+                                transactionStore.writeCommitted(committed.copy(status = "MOUNTED"))
+                                moduleStore.enable(packageName, repairPayloads = false)
+                                true to RootMountResult.Success(committed.transactionId)
+                            } else if (
+                                pendingCompletion.exceptionOrNull() is RootTargetAppBusyException
+                            ) {
+                                moduleStore.enable(packageName, repairPayloads = false)
+                                val busyReason = pendingCompletion.exceptionOrNull()?.message
+                                transactionStore.appendDiagnostic(
+                                    packageName,
+                                    "busy-${scanId.take(8)}",
+                                    "Deferred completion of committed mount reconciliation because the " +
+                                        "target app did not remain stopped: " +
+                                        (busyReason ?: "target app is active")
+                                )
+                                true to RootMountResult.Busy(
+                                    RootMountPhase.STOPPING_APP,
+                                    busyReason
+                                )
+                            } else {
+                                transactionStore.appendDiagnostic(
+                                    packageName,
+                                    "repair-${scanId.take(8)}",
+                                    "Could not complete pending app shutdown; falling back to full " +
+                                        "reconciliation: " +
+                                        (pendingCompletion.exceptionOrNull()?.message ?: "unknown failure")
+                                )
+                                false to null
+                            }
                         } else {
                             val initialVerification = runCatchingPreservingCancellation {
                                 mountVerifier.verifyMounted(committed)
                             }
                             if (initialVerification.isSuccess) {
-                                moduleStore.enable(packageName)
+                                moduleStore.enable(packageName, repairPayloads = false)
                                 true to RootMountResult.Success(committed.transactionId)
                             } else {
                                 // A package or Zygote namespace can lose a propagated bind while
@@ -435,8 +528,10 @@ class RootMountTransactionCoordinator(
                                     mountVerifier.verifyRootMounted(committed)
                                     mountVerifier.mountEverywhere(committed)
                                     mountVerifier.verifyMounted(committed)
-                                    check(packageStateReader.waitUntilStopped(packageName, 1_000)) {
-                                        "Target app restarted during non-destructive reconciliation"
+                                    if (!packageStateReader.waitUntilStopped(packageName, 1_000)) {
+                                        throw RootTargetAppBusyException(
+                                            "Target app restarted during non-destructive reconciliation"
+                                        )
                                     }
                                 }
                                 if (nonDestructiveRepair.isSuccess) {
@@ -448,6 +543,24 @@ class RootMountTransactionCoordinator(
                                             (initialVerification.exceptionOrNull()?.message ?: "unknown verification failure")
                                     )
                                     true to RootMountResult.Success(committed.transactionId)
+                                } else if (
+                                    nonDestructiveRepair.exceptionOrNull() is RootTargetAppBusyException
+                                ) {
+                                    transactionStore.writeCommitted(
+                                        committed.copy(status = MOUNTED_PENDING_APP_STOP_STATUS)
+                                    )
+                                    moduleStore.enable(packageName)
+                                    val busyReason = nonDestructiveRepair.exceptionOrNull()?.message
+                                    transactionStore.appendDiagnostic(
+                                        packageName,
+                                        "busy-${scanId.take(8)}",
+                                        "Deferred committed mount reconciliation because the target app " +
+                                            "did not remain stopped: ${busyReason ?: "target app is active"}"
+                                    )
+                                    true to RootMountResult.Busy(
+                                        RootMountPhase.STOPPING_APP,
+                                        busyReason
+                                    )
                                 } else {
                                     transactionStore.appendDiagnostic(
                                         packageName,
@@ -1128,6 +1241,26 @@ class RootMountTransactionCoordinator(
             val diagnosticId = "root-${transactionId.take(8)}"
             val failedPhase = currentPhase
             val failureMessage = failure.message ?: failure.javaClass.simpleName
+            if (
+                failure is RootTargetAppBusyException &&
+                request.operation == RootMountOperation.RECONCILE &&
+                failedPhase == RootMountPhase.STOPPING_APP &&
+                !stockChanged &&
+                !moduleChanged &&
+                runCatchingPreservingCancellation {
+                    transactionStore.clearActive(request.packageName)
+                }.isSuccess
+            ) {
+                runCatchingPreservingCancellation {
+                    transactionStore.appendDiagnostic(
+                        request.packageName,
+                        "busy-${transactionId.take(8)}",
+                        "Deferred reconciliation before changing mounts because the target app " +
+                            "did not remain stopped: $failureMessage"
+                    )
+                }
+                return RootMountResult.Busy(RootMountPhase.STOPPING_APP, failureMessage)
+            }
             runCatching {
                 transactionStore.appendDiagnostic(request.packageName, diagnosticId, failure.stackTraceToString())
             }
@@ -1365,8 +1498,10 @@ class RootMountTransactionCoordinator(
                 "root mount force-stop"
             ).requireSuccess("Stop target app for Android user $installedUserId")
         }
-        check(packageStateReader.waitUntilStopped(packageName)) {
-            "Target package processes did not exit; shared-UID ownership may be unsafe"
+        if (!packageStateReader.waitUntilStopped(packageName)) {
+            throw RootTargetAppBusyException(
+                "Target package processes did not exit; shared-UID ownership may be unsafe"
+            )
         }
     }
 
@@ -1481,7 +1616,14 @@ class RootMountTransactionCoordinator(
             )
         )
         if (stockPathChanged) moduleStore.updateState(reconciledState)
-        stopAndWait(request.packageName, request.userId)
+        try {
+            stopAndWait(request.packageName, request.userId)
+        } catch (_: RootTargetAppBusyException) {
+            // The old mount has already been removed, so rolling back solely because the app
+            // relaunched would turn temporary process activity into repair-required state.
+            // Rebuild and verify the root/Zygote mounts below, then let reconciliation retry
+            // after the newly launched process exits.
+        }
         requireExclusivePackageUser(request.packageName, request.userId)
         moduleStore.enable(request.packageName)
         mountVerifier.verifyTargetsClear(setOf(reconciledState.stockPath))
@@ -1489,14 +1631,27 @@ class RootMountTransactionCoordinator(
         reportProgress(onPhase, RootMountPhase.VERIFYING)
         transactionStore.writeActive(journal.copy(phase = RootMountPhase.VERIFYING))
         mountVerifier.verifyMounted(reconciledState)
-        check(packageStateReader.waitUntilStopped(request.packageName, 1_000)) {
-            "Target app restarted during reconciliation"
+        val targetStayedStopped = packageStateReader.waitUntilStopped(request.packageName, 1_000)
+        val committedStatus = if (targetStayedStopped) {
+            "MOUNTED"
+        } else {
+            MOUNTED_PENDING_APP_STOP_STATUS
         }
         transactionStore.complete(
             journal.copy(phase = RootMountPhase.COMPLETED),
-            reconciledState.copy(active = true, status = "MOUNTED")
+            reconciledState.copy(active = true, status = committedStatus)
         )
-        return RootMountResult.Success(transactionId)
+        return if (targetStayedStopped) {
+            RootMountResult.Success(transactionId)
+        } else {
+            val reason = "Target app restarted during reconciliation"
+            transactionStore.appendDiagnostic(
+                request.packageName,
+                "busy-${transactionId.take(8)}",
+                "Committed the verified root and Zygote mounts, but $reason; reconciliation will retry"
+            )
+            RootMountResult.Busy(RootMountPhase.VERIFYING, reason)
+        }
     }
 
     private fun checkCommittedIdentity(committed: RootCommittedState, current: RootPackageState) {
@@ -2077,7 +2232,7 @@ class RootMountTransactionCoordinator(
                 state.stockShadowSha256 == state.stockSha256)
         val versionName = state.versionName
         val validStatus = if (state.active) {
-            state.status == "MOUNTED"
+            state.status in ACTIVE_COMMITTED_STATUSES
         } else {
             state.status in INACTIVE_COMMITTED_STATUSES
         }
@@ -2163,6 +2318,8 @@ class RootMountTransactionCoordinator(
             "REPATCH_REQUIRED",
             "REPAIR_REQUIRED"
         )
+        const val MOUNTED_PENDING_APP_STOP_STATUS = "MOUNTED_PENDING_APP_STOP"
+        val ACTIVE_COMMITTED_STATUSES = setOf("MOUNTED", MOUNTED_PENDING_APP_STOP_STATUS)
         fun mutexFor(packageName: String): Mutex = mutexes.getOrPut(packageName) { Mutex() }
     }
 }

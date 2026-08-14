@@ -39,7 +39,7 @@ interface RootModuleStorage {
     ): String
     suspend fun updateState(state: RootCommittedState)
     suspend fun restorePrevious(packageName: String): Boolean
-    suspend fun enable(packageName: String)
+    suspend fun enable(packageName: String, repairPayloads: Boolean = true)
     suspend fun disable(packageName: String)
     suspend fun removeActive(packageName: String)
     suspend fun purgeBackups(packageName: String)

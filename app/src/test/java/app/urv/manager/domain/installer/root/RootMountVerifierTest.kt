@@ -269,13 +269,23 @@ class RootMountVerifierTest {
         assertTrue(command.contains("validate_zygote \"${'$'}pid\" || continue"))
         assertTrue(command.contains("namespace_has_owned_layer"))
         assertTrue(command.contains("if namespace_has_owned_layer \"${'$'}pid\" \"${'$'}target\"; then"))
-        assertTrue(command.contains("Foreign Zygote mount covers a URV layer"))
-        assertTrue(command.contains("Failed to unmount ${'$'}target in Zygote namespace ${'$'}pid"))
+        assertTrue(command.contains("Foreign ${'$'}namespace_label mount covers a URV layer"))
+        assertTrue(command.contains("Failed to unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid"))
         assertTrue(command.contains("nsenter -t \"${'$'}pid\" -m -- umount"))
         assertFalse(command.contains("nsenter -t \"${'$'}pid\" -m umount"))
         assertTrue(command.contains("if [ 0 = 1 ]; then"))
         assertTrue(command.contains("max_attempts=8"))
         assertEquals(listOf(60L to "Zygote namespace cleanup"), shell.boundedOperations)
+    }
+
+    @Test
+    fun `cleanup also removes owned mounts inherited by the Manager process`() = runBlocking {
+        val shell = CapturingShell()
+        RootMountNamespaces(shell, managerPid = 4242).removeOwned(PACKAGE, setOf(TARGET))
+
+        val command = shell.commands.single()
+        assertTrue(command.contains("if [ -r /proc/4242/ns/mnt ]; then cleanup_namespace 4242 Manager; fi"))
+        assertTrue(command.contains("cleanup_namespace \"${'$'}pid\" Zygote"))
     }
 
     @Test
@@ -287,8 +297,8 @@ class RootMountVerifierTest {
         val command = shell.commands.single()
         assertTrue(command.contains("if [ 1 = 1 ]; then"))
         assertTrue(command.contains("max_attempts=16"))
-        assertTrue(command.contains("Failed to re-inspect ${'$'}target in Zygote namespace ${'$'}pid"))
-        assertTrue(command.contains("Zygote mount ownership changed before lazy unmount"))
+        assertTrue(command.contains("Failed to re-inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid"))
+        assertTrue(command.contains("${'$'}namespace_label mount ownership changed before lazy unmount"))
         assertTrue(command.contains("nsenter -t \"${'$'}pid\" -m -- umount -l"))
         assertTrue(command.contains("URV_LAZY_UNMOUNT:%s"))
     }
