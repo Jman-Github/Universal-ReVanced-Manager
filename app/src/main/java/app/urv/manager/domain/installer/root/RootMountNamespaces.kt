@@ -87,7 +87,7 @@ class RootMountNamespaces(
                         shadow_ready=1
                       elif namespace_target_clear "${'$'}pid"; then
                         if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ]; then
-                          if ! nsenter -t "${'$'}pid" -m -- mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}; then
+                          if ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}; then
                             validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                             echo "Failed to mount the stock shadow in Zygote namespace ${'$'}pid" >&2
                             exit 1
@@ -100,12 +100,12 @@ class RootMountNamespaces(
                         exit 1
                       fi
                       if [ "${'$'}shadow_ready" = 1 ] &&
-                          ! nsenter -t "${'$'}pid" -m -- mount -o private none ${shellQuote(expected.stockPath)}; then
+                          ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount -o private none ${shellQuote(expected.stockPath)}; then
                         validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                         echo "Failed to isolate the stock shadow in Zygote namespace ${'$'}pid" >&2
                         exit 1
                       fi
-                      if ! nsenter -t "${'$'}pid" -m -- mount -o bind ${shellQuote(expected.patchedPath)} ${shellQuote(expected.stockPath)}; then
+                      if ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount -o bind ${shellQuote(expected.patchedPath)} ${shellQuote(expected.stockPath)}; then
                         validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                         echo "Failed to mount the patched APK in Zygote namespace ${'$'}pid" >&2
                         exit 1
@@ -205,7 +205,7 @@ class RootMountNamespaces(
                 namespace_has_owned_layer() {
                   pid="${'$'}1"
                   target="${'$'}2"
-                  nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" -v allowed="${'$'}allowed_sources" '
+                  nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" -v allowed="${'$'}allowed_sources" '
                     BEGIN { count=split(allowed, candidates, "\n") }
                     ${'$'}5 == target {
                       separator=0
@@ -235,8 +235,8 @@ class RootMountNamespaces(
                   for target in $targetWords; do
                     attempts=0
                     max_attempts=${if (allowLazyRecovery) "16" else "8"}
-                    while nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; do
-                      target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
+                    while nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; do
+                      target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
                         echo "Failed to inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                         exit 1
                       }
@@ -256,12 +256,12 @@ class RootMountNamespaces(
                         echo "Too many URV mount layers remained at ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                         exit 1
                       }
-                      if ! nsenter -t "${'$'}pid" -m -- umount "${'$'}target"; then
+                      if ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount "${'$'}target"; then
                         if [ ${if (allowLazyRecovery) "1" else "0"} = 1 ]; then
-                          if nsenter -t "${'$'}pid" -m -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; then
+                          if nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo; then
                             # Re-prove visible ownership after the failed normal unmount. A
                             # foreign layer can appear between the first check and lazy detach.
-                            target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
+                            target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}target" 2>/dev/null)" || {
                               echo "Failed to re-inspect ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                               exit 1
                             }
@@ -274,7 +274,7 @@ class RootMountNamespaces(
                               echo "${'$'}namespace_label mount ownership changed before lazy unmount at ${'$'}target" >&2
                               exit 1
                             }
-                            nsenter -t "${'$'}pid" -m -- umount -l "${'$'}target" || {
+                            nsenter --mount="/proc/${'$'}pid/ns/mnt" -- umount -l "${'$'}target" || {
                               echo "Failed to lazily unmount ${'$'}target in ${'$'}namespace_label namespace ${'$'}pid" >&2
                               exit 1
                             }
@@ -322,13 +322,13 @@ class RootMountNamespaces(
             }
             namespace_target_clear() {
               pid="${'$'}1"
-              ! nsenter -t "${'$'}pid" -m -- awk -v target=${shellQuote(expected.stockPath)} \
+              ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target=${shellQuote(expected.stockPath)} \
                 '${'$'}5 == target { found=1 } END { exit !found }' /proc/self/mountinfo
             }
             namespace_matches_shadow() {
               [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ] || return 1
               pid="${'$'}1"
-              ownership="${'$'}(nsenter -t "${'$'}pid" -m -- awk \
+              ownership="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk \
                 -v target=${shellQuote(expected.stockPath)} \
                 -v shadow=${shellQuote(expected.stockShadowPath.orEmpty())} \
                 -v shadow_root=${shellQuote(shadowRoot)} '
@@ -344,13 +344,13 @@ class RootMountNamespaces(
                 ' /proc/self/mountinfo)" || return 1
               [ "${'$'}ownership" = "1:1" ] || return 1
               source_inode="${'$'}(stat -c '%d:%i' ${shellQuote(expected.stockShadowPath.orEmpty())} 2>/dev/null)" || return 1
-              target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' ${shellQuote(expected.stockPath)} 2>/dev/null)" || return 1
+              target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' ${shellQuote(expected.stockPath)} 2>/dev/null)" || return 1
               [ "${'$'}source_inode" = "${'$'}target_inode" ]
             }
             namespace_matches() {
               pid="${'$'}1"
               validate_shadow_file || return 1
-              ownership="${'$'}(nsenter -t "${'$'}pid" -m -- awk \
+              ownership="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk \
                 -v target=${shellQuote(expected.stockPath)} \
                 -v patched=${shellQuote(expected.patchedPath)} \
                 -v patched_root=${shellQuote(patchedRoot)} \
@@ -370,7 +370,7 @@ class RootMountNamespaces(
                 ' /proc/self/mountinfo)" || return 1
               [ "${'$'}ownership" = "${if (expected.preserveStockAcrossBoot) "2:2" else "1:1"}" ] || return 1
               source_inode="${'$'}(stat -c '%d:%i' ${shellQuote(expected.patchedPath)} 2>/dev/null)" || return 1
-              target_inode="${'$'}(nsenter -t "${'$'}pid" -m -- stat -c '%d:%i' ${shellQuote(expected.stockPath)} 2>/dev/null)" || return 1
+              target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' ${shellQuote(expected.stockPath)} 2>/dev/null)" || return 1
               [ "${'$'}source_inode" = "${'$'}target_inode" ]
             }
         """.trimIndent() + "\n"
@@ -379,7 +379,7 @@ class RootMountNamespaces(
     private fun discoveryHelpers(): String = """
         zygote_pids() {
           { pidof zygote64 2>/dev/null || true; pidof zygote 2>/dev/null || true; } |
-            tr ' ' '\n' | awk '/^[0-9]+${'$'}/' | sort -n -u | paste -sd ' ' -
+            tr ' ' '\n' | awk '/^[0-9]+${'$'}/ && ${'$'}0 > 1' | sort -n -u | paste -sd ' ' -
         }
         validate_zygote() {
           pid="${'$'}1"

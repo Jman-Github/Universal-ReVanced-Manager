@@ -415,9 +415,22 @@ class RootInstaller(
             fileSize.coerceAtLeast(0L) / BYTES_PER_TIMEOUT_SECOND)
             .coerceAtMost(DIRECT_INSTALL_MAX_TIMEOUT_SECONDS)
 
-    // A job may use exit for local control flow. Keep it inside a subshell so it cannot
-    // terminate libsu's cached mount-master shell before the result marker is collected.
-    private fun isolateShellJob(command: String): String = "(\n$command\n)"
+    // Magisk normally honors FLAG_MOUNT_MASTER, while KernelSU can accept it without
+    // leaving the caller's mount namespace. Avoid an unnecessary nsenter on Magisk and
+    // explicitly enter init's namespace only when the shell is still isolated. The long
+    // mount option is accepted by Android Toybox and the root-manager BusyBox applets.
+    // Keep the command in a child shell so a local exit cannot terminate libsu's shell.
+    private fun isolateShellJob(command: String): String = """
+        (
+        current_mount_ns="${'$'}(readlink /proc/self/ns/mnt)" || exit 1
+        init_mount_ns="${'$'}(readlink /proc/1/ns/mnt)" || exit 1
+        if [ "${'$'}current_mount_ns" = "${'$'}init_mount_ns" ]; then
+          /system/bin/sh -c ${shellQuote(command)}
+        else
+          nsenter --mount=/proc/1/ns/mnt -- /system/bin/sh -c ${shellQuote(command)}
+        fi
+        )
+    """.trimIndent()
 
     private fun shellQuote(value: String): String = "'" + value.replace("'", "'\\''") + "'"
 

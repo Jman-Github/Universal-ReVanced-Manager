@@ -204,7 +204,7 @@ stop_and_wait() {
 
 zygote_pids() {
   { pidof zygote64 2>/dev/null || true; pidof zygote 2>/dev/null || true; } |
-    tr ' ' '\n' | awk '/^[0-9]+$/' | sort -n -u
+    tr ' ' '\n' | awk '/^[0-9]+$/ && $0 > 1' | sort -n -u
 }
 
 validate_zygote() {
@@ -225,7 +225,7 @@ live_zygote_pids() {
 namespace_mount_ownership() {
   pid="$1"
   allowed_sources="$(known_mount_sources)" || return 1
-  nsenter -t "$pid" -m -- awk \
+  nsenter --mount="/proc/$pid/ns/mnt" -- awk \
     -v target="$URV_STOCK_PATH" \
     -v allowed="$allowed_sources" '
       BEGIN { count=split(allowed, candidates, "\n") }
@@ -255,9 +255,9 @@ namespace_matches_payload() {
   [ "$URV_PRESERVE_STOCK" = 1 ] && expected_ownership="2:2"
   [ "$ownership" = "$expected_ownership" ] || return 1
   source_inode="$(stat -c '%d:%i' "$URV_PATCHED_PATH" 2>/dev/null)" || return 1
-  target_inode="$(nsenter -t "$pid" -m -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
+  target_inode="$(nsenter --mount="/proc/$pid/ns/mnt" -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
   [ "$source_inode" = "$target_inode" ] || return 1
-  mounted_hash="$(nsenter -t "$pid" -m -- sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" || return 1
+  mounted_hash="$(nsenter --mount="/proc/$pid/ns/mnt" -- sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" || return 1
   [ "$mounted_hash" = "$URV_PATCHED_SHA256" ]
 }
 
@@ -267,13 +267,13 @@ namespace_matches_shadow() {
   ownership="$(namespace_mount_ownership "$pid")" || return 1
   [ "$ownership" = "1:1" ] || return 1
   source_inode="$(stat -c '%d:%i' "$URV_STOCK_SHADOW_PATH" 2>/dev/null)" || return 1
-  target_inode="$(nsenter -t "$pid" -m -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
+  target_inode="$(nsenter --mount="/proc/$pid/ns/mnt" -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
   [ "$source_inode" = "$target_inode" ]
 }
 
 namespace_target_is_mounted() {
   pid="$1"
-  nsenter -t "$pid" -m -- awk -v target="$URV_STOCK_PATH" \
+  nsenter --mount="/proc/$pid/ns/mnt" -- awk -v target="$URV_STOCK_PATH" \
     '$5 == target { found=1 } END { exit !found }' /proc/self/mountinfo
 }
 
@@ -283,7 +283,7 @@ namespace_target_clear() {
 
 namespace_visible_matches_urv_inode() {
   pid="$1"
-  target_inode="$(nsenter -t "$pid" -m -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
+  target_inode="$(nsenter --mount="/proc/$pid/ns/mnt" -- stat -c '%d:%i' "$URV_STOCK_PATH" 2>/dev/null)" || return 1
   rollback_path="${MODDIR%/*}/.$URV_PACKAGE-revanced.urv-rollback/$URV_PACKAGE.apk"
   backup_path="/data/adb/urv/transactions/$URV_PACKAGE/backup/module/$URV_PACKAGE.apk"
   rollback_shadow_path="${MODDIR%/*}/.$URV_PACKAGE-revanced.urv-rollback/$URV_PACKAGE-stock.apk"
@@ -300,7 +300,7 @@ namespace_visible_matches_urv_inode() {
 namespace_has_urv_layer() {
   pid="$1"
   allowed_sources="$(known_mount_sources)" || return 1
-  nsenter -t "$pid" -m -- awk -v target="$URV_STOCK_PATH" -v allowed="$allowed_sources" '
+  nsenter --mount="/proc/$pid/ns/mnt" -- awk -v target="$URV_STOCK_PATH" -v allowed="$allowed_sources" '
     BEGIN { count=split(allowed, candidates, "\n") }
     $5 == target {
       separator=0
@@ -369,7 +369,7 @@ mount_and_verify_zygotes() {
           shadow_ready=1
         elif namespace_target_clear "$pid"; then
           if [ "$URV_PRESERVE_STOCK" = 1 ]; then
-            if ! nsenter -t "$pid" -m -- mount -o bind "$URV_STOCK_SHADOW_PATH" "$URV_STOCK_PATH"; then
+            if ! nsenter --mount="/proc/$pid/ns/mnt" -- mount -o bind "$URV_STOCK_SHADOW_PATH" "$URV_STOCK_PATH"; then
               validate_zygote "$pid" || { zygote_changed=1; continue; }
               return 1
             fi
@@ -380,11 +380,11 @@ mount_and_verify_zygotes() {
           return 1
         fi
         if [ "$shadow_ready" = 1 ] &&
-           ! nsenter -t "$pid" -m -- mount -o private none "$URV_STOCK_PATH"; then
+           ! nsenter --mount="/proc/$pid/ns/mnt" -- mount -o private none "$URV_STOCK_PATH"; then
           validate_zygote "$pid" || { zygote_changed=1; continue; }
           return 1
         fi
-        if ! nsenter -t "$pid" -m -- mount -o bind "$URV_PATCHED_PATH" "$URV_STOCK_PATH"; then
+        if ! nsenter --mount="/proc/$pid/ns/mnt" -- mount -o bind "$URV_PATCHED_PATH" "$URV_STOCK_PATH"; then
           validate_zygote "$pid" || { zygote_changed=1; continue; }
           return 1
         fi
@@ -413,12 +413,12 @@ remove_zygote_payload_mounts() {
     while namespace_target_is_mounted "$pid"; do
       if namespace_visible_matches_urv_inode "$pid"; then
         [ "$attempts" -lt 16 ] || return 1
-        if ! nsenter -t "$pid" -m -- umount "$URV_STOCK_PATH" &&
+        if ! nsenter --mount="/proc/$pid/ns/mnt" -- umount "$URV_STOCK_PATH" &&
            namespace_target_is_mounted "$pid"; then
           # Match Manager cleanup semantics: prove the visible layer is still URV-owned
           # immediately before using lazy detach.
           namespace_visible_matches_urv_inode "$pid" || return 1
-          nsenter -t "$pid" -m -- umount -l "$URV_STOCK_PATH" || return 1
+          nsenter --mount="/proc/$pid/ns/mnt" -- umount -l "$URV_STOCK_PATH" || return 1
         fi
         attempts=$((attempts + 1))
       elif namespace_has_urv_layer "$pid"; then
