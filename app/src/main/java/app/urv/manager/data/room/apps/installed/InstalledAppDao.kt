@@ -32,6 +32,9 @@ interface InstalledAppDao {
     @Query("UPDATE installed_app SET sort_order = :sortOrder WHERE current_package_name = :packageName")
     suspend fun updateSortOrder(packageName: String, sortOrder: Int)
 
+    @Query("UPDATE installed_app SET repatch_source_path = NULL WHERE repatch_source_path IS NOT NULL")
+    suspend fun clearRepatchSourcePaths()
+
     @Query(
         "SELECT bundle, patch_name FROM applied_patch" +
                 " WHERE package_name = :packageName"

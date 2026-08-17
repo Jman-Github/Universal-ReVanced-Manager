@@ -17,6 +17,7 @@ import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.di.*
 import app.urv.manager.domain.batch.batchOriginalPackageName
 import app.urv.manager.domain.batch.retainedBatchOutputPaths
+import app.urv.manager.domain.batch.retainedBatchRepatchSourcePaths
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.root.RootMountResult
@@ -63,6 +64,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
@@ -149,20 +151,41 @@ class ManagerApplication : Application() {
 
         scope.launch {
             prefs.preload()
+            installedAppRepository.pruneRepatchInputs()
+            val persistedBatchResults = listOf(
+                prefs.lastBatchPatchResult.get(),
+                prefs.lastAutoPatchResult.get()
+            )
+            val staleBatchOutputCutoff =
+                System.currentTimeMillis() - BATCH_OUTPUT_STALE_AGE_MILLIS
             runCatching {
                 fs.pruneBatchPatchOutputFiles(
-                    retainedPaths = retainedBatchOutputPaths(
-                        json,
-                        listOf(
-                            prefs.lastBatchPatchResult.get(),
-                            prefs.lastAutoPatchResult.get()
-                        )
-                    ),
-                    olderThanTimestampMillis =
-                        System.currentTimeMillis() - BATCH_OUTPUT_STALE_AGE_MILLIS
+                    retainedPaths = retainedBatchOutputPaths(json, persistedBatchResults),
+                    olderThanTimestampMillis = staleBatchOutputCutoff
                 )
             }.onFailure { error ->
                 Log.w(tag, "Failed to prune stale batch patch outputs", error)
+            }
+            runCatching {
+                val retainedRepatchSources =
+                    retainedBatchRepatchSourcePaths(json, persistedBatchResults).toMutableSet()
+                withContext(Dispatchers.IO) {
+                    workerRepository.workManager
+                        .getWorkInfosForUniqueWork(PatcherWorker.UNIQUE_WORK_NAME)
+                        .get()
+                        .mapNotNullTo(retainedRepatchSources) { workInfo ->
+                            workInfo.outputData
+                                .getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
+                                ?.takeIf(String::isNotBlank)
+                        }
+                }
+                fs.pruneRepatchInputStagingFiles(
+                    retainedPaths = retainedRepatchSources,
+                    olderThanTimestampMillis =
+                        System.currentTimeMillis() - REPATCH_INPUT_STAGING_STALE_AGE_MILLIS
+                )
+            }.onFailure { error ->
+                Log.w(tag, "Failed to prune stale Repatch input staging files", error)
             }
             prefs.enableManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
             prefs.migrateAnnouncementPushNotificationInterval()
@@ -544,6 +567,8 @@ class ManagerApplication : Application() {
         private const val LEGACY_MANAGER_REPO_URL = "https://github.com/Jman-Github/universal-revanced-manager"
         private const val LEGACY_MANAGER_REPO_API_URL = "https://api.github.com/repos/Jman-Github/universal-revanced-manager"
         private const val BATCH_OUTPUT_STALE_AGE_MILLIS = 24L * 60 * 60 * 1_000
+        private const val REPATCH_INPUT_STAGING_STALE_AGE_MILLIS =
+            30L * 24 * 60 * 60 * 1_000
     }
 }
 

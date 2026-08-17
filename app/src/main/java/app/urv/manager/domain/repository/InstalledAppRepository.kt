@@ -1,5 +1,6 @@
 package app.urv.manager.domain.repository
 
+import android.util.Log
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.platform.RetainedOriginalReference
 import app.urv.manager.data.room.AppDatabase
@@ -11,10 +12,13 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.savedAppBasePackage
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
+private const val TAG = "InstalledAppRepository"
 private const val INSTALLED_RECORD_TIMESTAMP_TOLERANCE_MS = 60_000L
 
 internal fun installedRecordMatchesCurrentPackage(
@@ -65,6 +69,10 @@ internal class PendingHistoricalSavedEntry(
         )
         val targetExisted = targetApk.isFile
         val previousLastModified = targetApk.takeIf(File::isFile)?.lastModified()
+        val sourceHasRetainedRepatchInput = sourceApp.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
         var replacementStarted = false
         var historicalEntryPersisted = false
         var keepBackup = false
@@ -87,10 +95,24 @@ internal class PendingHistoricalSavedEntry(
                 installType = InstallType.SAVED,
                 patchSelection = sourceSelection,
                 selectionPayload = sourceApp.selectionPayload,
-                createdAtOverride = sourceApp.createdAt
+                createdAtOverride = sourceApp.createdAt,
+                repatchSourcePath = sourceApp.repatchSourcePath,
+                updateRepatchSource = true
             )
             historicalEntryPersisted = true
-            return replacement()
+            if (sourceHasRetainedRepatchInput) {
+                val historicalSourceRetained = repository.get(targetPackageName)
+                    ?.repatchSourcePath
+                    ?.takeIf(String::isNotBlank)
+                    ?.let(::File)
+                    ?.isFile == true
+                check(historicalSourceRetained) {
+                    "Failed to preserve the historical Repatch input"
+                }
+            }
+            val result = replacement()
+            repository.pruneRepatchInputs()
+            return result
         } catch (error: Throwable) {
             if (replacementStarted) {
                 val fileRestoreError = runCatching {
@@ -234,45 +256,111 @@ class InstalledAppRepository(
         resetCreatedAt: Boolean = false,
         createdAtOverride: Long? = null,
         sortOrderOverride: Int? = null,
-        customInstallerPackageName: String? = null
+        customInstallerPackageName: String? = null,
+        repatchSourcePath: String? = null,
+        updateRepatchSource: Boolean = false
     ) {
-        patchOptionInputManager.updateReferences {
-            val existingApp = dao.get(currentPackageName)
-            val existingSortOrder = dao.getSortOrder(currentPackageName)
-            val sortOrder = sortOrderOverride
-                ?: existingSortOrder
-                ?: ((dao.getMaxSortOrder() ?: -1) + 1)
-            val createdAt = createdAtOverride ?: when {
-                existingApp == null -> System.currentTimeMillis()
-                resetCreatedAt -> System.currentTimeMillis()
-                else -> existingApp.createdAt
-            }
-            val persistedCustomInstallerPackageName = if (installType == InstallType.CUSTOM) {
-                customInstallerPackageName ?: existingApp?.customInstallerPackageName
-            } else {
-                null
-            }
-            dao.upsertApp(
-                InstalledApp(
-                    currentPackageName = currentPackageName,
-                    originalPackageName = originalPackageName,
-                    version = version,
-                    installType = installType,
-                    sortOrder = sortOrder,
-                    selectionPayload = selectionPayload,
-                    createdAt = createdAt,
-                    customInstallerPackageName = persistedCustomInstallerPackageName
-                ),
-                patchSelection.flatMap { (uid, patches) ->
-                    patches.map { patch ->
-                        AppliedPatch(
-                            packageName = currentPackageName,
-                            bundle = uid,
-                            patchName = patch
-                        )
-                    }
+        var createdRepatchSourcePath: String? = null
+        try {
+            patchOptionInputManager.updateReferences {
+                val existingApp = dao.get(currentPackageName)
+                val existingSortOrder = dao.getSortOrder(currentPackageName)
+                val sortOrder = sortOrderOverride
+                    ?: existingSortOrder
+                    ?: ((dao.getMaxSortOrder() ?: -1) + 1)
+                val createdAt = createdAtOverride ?: when {
+                    existingApp == null -> System.currentTimeMillis()
+                    resetCreatedAt -> System.currentTimeMillis()
+                    else -> existingApp.createdAt
                 }
-            )
+                val persistedCustomInstallerPackageName = if (installType == InstallType.CUSTOM) {
+                    customInstallerPackageName ?: existingApp?.customInstallerPackageName
+                } else {
+                    null
+                }
+                val persistedRepatchSourcePath = if (updateRepatchSource) {
+                    repatchSourcePath
+                        ?.takeIf(String::isNotBlank)
+                        ?.let { sourcePath ->
+                            runCatching {
+                                fs.persistRepatchInputFile(
+                                    entryKey = currentPackageName,
+                                    sourcePath = sourcePath,
+                                    retainedPath = existingApp?.repatchSourcePath
+                                ).also { persisted ->
+                                    if (persisted.created) {
+                                        createdRepatchSourcePath = persisted.file.absolutePath
+                                    }
+                                }.file.absolutePath
+                            }.onFailure { error ->
+                                Log.w(
+                                    TAG,
+                                    "Failed to retain Repatch input for $currentPackageName",
+                                    error
+                                )
+                            }.getOrNull()
+                        }
+                } else {
+                    existingApp?.repatchSourcePath
+                }
+                dao.upsertApp(
+                    InstalledApp(
+                        currentPackageName = currentPackageName,
+                        originalPackageName = originalPackageName,
+                        version = version,
+                        installType = installType,
+                        sortOrder = sortOrder,
+                        selectionPayload = selectionPayload,
+                        createdAt = createdAt,
+                        customInstallerPackageName = persistedCustomInstallerPackageName,
+                        repatchSourcePath = persistedRepatchSourcePath
+                    ),
+                    patchSelection.flatMap { (uid, patches) ->
+                        patches.map { patch ->
+                            AppliedPatch(
+                                packageName = currentPackageName,
+                                bundle = uid,
+                                patchName = patch
+                            )
+                        }
+                    }
+                )
+            }
+        } catch (error: Throwable) {
+            val committedRepatchSource = createdRepatchSourcePath?.let { createdPath ->
+                withContext(NonCancellable) {
+                    runCatching {
+                        dao.get(currentPackageName)?.repatchSourcePath == createdPath
+                    }.getOrDefault(false)
+                }
+            } == true
+            if (!committedRepatchSource) {
+                fs.deleteRepatchInputFile(createdRepatchSourcePath)
+            }
+            throw error
+        }
+    }
+
+    suspend fun pruneRepatchInputs() {
+        withContext(NonCancellable) {
+            runCatching {
+                patchOptionInputManager.updateReferences {
+                    fs.pruneRepatchInputFiles(
+                        dao.getAllSnapshot().map(InstalledApp::repatchSourcePath)
+                    )
+                }
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to prune stale Repatch inputs", error)
+            }
+        }
+    }
+
+    suspend fun clearRepatchInputs() {
+        withContext(NonCancellable) {
+            patchOptionInputManager.updateReferences {
+                dao.clearRepatchSourcePaths()
+                fs.pruneRepatchInputFiles(emptyList())
+            }
         }
     }
 
@@ -290,6 +378,7 @@ class InstalledAppRepository(
         if (previousApp == null) {
             patchOptionInputManager.updateReferences {
                 dao.get(targetPackageName)?.let { dao.delete(it) }
+                fs.deleteRepatchInputsForEntry(targetPackageName)
             }
             return
         }
@@ -302,7 +391,9 @@ class InstalledAppRepository(
             selectionPayload = previousApp.selectionPayload,
             createdAtOverride = previousApp.createdAt,
             sortOrderOverride = previousApp.sortOrder,
-            customInstallerPackageName = previousApp.customInstallerPackageName
+            customInstallerPackageName = previousApp.customInstallerPackageName,
+            repatchSourcePath = previousApp.repatchSourcePath,
+            updateRepatchSource = true
         )
     }
 
@@ -373,15 +464,20 @@ class InstalledAppRepository(
     suspend fun delete(installedApp: InstalledApp) {
         patchOptionInputManager.updateReferences {
             dao.delete(installedApp)
+            fs.deleteRepatchInputsForEntry(installedApp.currentPackageName)
         }
         cleanupDeletedAutoPatchTargets(listOf(installedApp))
         pruneRetainedOriginals()
     }
 
     suspend fun deleteByInstallType(installType: InstallType) {
-        val deletedApps = dao.getByInstallType(installType)
-        patchOptionInputManager.updateReferences {
+        val deletedApps = patchOptionInputManager.updateReferences {
+            val apps = dao.getByInstallType(installType)
             dao.deleteByInstallType(installType)
+            apps.forEach { app ->
+                fs.deleteRepatchInputsForEntry(app.currentPackageName)
+            }
+            apps
         }
         cleanupDeletedAutoPatchTargets(deletedApps)
         pruneRetainedOriginals()

@@ -330,8 +330,17 @@ class PatcherViewModel(
     var supportsRootMount by mutableStateOf(true)
         private set
     private var installedApp: InstalledApp? = null
+    private var currentSourceEntryKey: String?
+        get() = savedStateHandle.get<String>("current_source_entry_key") ?: input.sourceEntryKey
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>("current_source_entry_key")
+            } else {
+                savedStateHandle["current_source_entry_key"] = value
+            }
+        }
     private suspend fun sourceInstalledApp(): InstalledApp? =
-        input.sourceEntryKey
+        currentSourceEntryKey
             ?.let { installedAppRepository.get(it) }
             ?: installedAppRepository.get(packageName)
 
@@ -1667,6 +1676,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         }
 
+    private var patchedRepatchSourcePath: String?
+        get() = savedStateHandle.get("patched_repatch_source_path")
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>("patched_repatch_source_path")
+            } else {
+                savedStateHandle["patched_repatch_source_path"] = value
+            }
+        }
+
     private var patcherWorkerId: ParcelUuid?
         get() = savedStateHandle.get("patcher_worker_id")
         set(value) {
@@ -1740,6 +1759,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun startWorkerNow() {
         resetDexCompileState()
         resetFailureLogState()
+        fs.deleteRepatchInputStagingFile(patchedRepatchSourcePath)
+        patchedRepatchSourcePath = null
         patchedSourceVersionName = null
         patchedSourceVersionCode = null
         patcherMemoryUsageGeneration = -1L
@@ -2063,11 +2084,28 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             sanitizedSelectionFinal,
                             selectionPayload,
                             resetCreatedAt = true,
-                            customInstallerPackageName = customInstallerPackageName
+                            customInstallerPackageName = customInstallerPackageName,
+                            repatchSourcePath = patchedRepatchSourcePath,
+                            updateRepatchSource = true
                         )
                     effectiveShouldSaveForLater &&
                         savedCopyWritten &&
-                        !savedVariantAlreadyInstalled ->
+                        savedVariantAlreadyInstalled -> {
+                        val existingInstalled = requireNotNull(existingInstalledEntry)
+                        installedAppRepository.addOrUpdate(
+                            currentPackageName = persistedPackageName,
+                            originalPackageName = existingInstalled.originalPackageName,
+                            version = finalVersion,
+                            installType = existingInstalled.installType,
+                            patchSelection = sanitizedSelectionFinal,
+                            selectionPayload = selectionPayload,
+                            customInstallerPackageName = existingInstalled.customInstallerPackageName,
+                            repatchSourcePath = patchedRepatchSourcePath,
+                            updateRepatchSource = true
+                        )
+                    }
+                    effectiveShouldSaveForLater &&
+                        savedCopyWritten ->
                         installedAppRepository.addOrUpdate(
                             persistedPackageName,
                             packageName,
@@ -2075,7 +2113,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             InstallType.SAVED,
                             sanitizedSelectionFinal,
                             selectionPayload,
-                            resetCreatedAt = true
+                            resetCreatedAt = true,
+                            repatchSourcePath = patchedRepatchSourcePath,
+                            updateRepatchSource = true
                         )
                 }
             }
@@ -2093,43 +2133,80 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 throw error
             }
             savedCopyReplacement?.commit()
+            if (pendingHistoricalEntry == null) {
+                installedAppRepository.pruneRepatchInputs()
+            }
+
+            val persistedEntryHasRetainedRepatchInput = installedAppRepository
+                .get(persistedPackageName)
+                ?.repatchSourcePath
+                ?.takeIf(String::isNotBlank)
+                ?.let(::File)
+                ?.isFile == true
+            val preservedSavedEntry = if (!persistedEntryHasRetainedRepatchInput) {
+                sequenceOf(sourceSavedEntry)
+                    .plus(matchingSavedEntries.asSequence())
+                    .filterNotNull()
+                    .distinctBy(InstalledApp::currentPackageName)
+                    .firstOrNull { savedEntry ->
+                        savedEntry.currentPackageName != persistedPackageName &&
+                            savedEntry.repatchSourcePath
+                                ?.takeIf(String::isNotBlank)
+                                ?.let(::File)
+                                ?.isFile == true
+                    }
+            } else {
+                null
+            }
+            val preservedSavedEntryKey = preservedSavedEntry?.currentPackageName
+            if (preservedSavedEntryKey != null) {
+                Log.w(
+                    TAG,
+                    "Keeping saved entry $preservedSavedEntryKey because its Repatch input was not retained for $persistedPackageName"
+                )
+            }
+            val savedEntryCleanupTarget = preservedSavedEntryKey ?: persistedPackageName
 
             runPostCommitPersistenceStep(
                 "Failed to clean up saved app references after persistence"
             ) {
                 if (persistedInstallType != InstallType.SAVED) {
                     sourceSavedEntry?.takeIf {
-                        it.currentPackageName != persistedPackageName
+                        it.currentPackageName != persistedPackageName &&
+                            it.currentPackageName != preservedSavedEntryKey
                     }?.let { sourceEntry ->
                         installedAppRepository.migrateAutoPatchTarget(
                             sourceEntry.currentPackageName,
-                            persistedPackageName
+                            savedEntryCleanupTarget
                         )
                     }
-                    replacementSourceSavedEntry?.let { sourceEntry ->
-                        if (sourceEntry.currentPackageName != persistedPackageName) {
-                            installedAppRepository.delete(sourceEntry)
+                    replacementSourceSavedEntry
+                        ?.takeUnless { it.currentPackageName == preservedSavedEntryKey }
+                        ?.let { sourceEntry ->
+                            if (sourceEntry.currentPackageName != persistedPackageName) {
+                                installedAppRepository.delete(sourceEntry)
+                            }
+                            if (
+                                sourceEntry.currentPackageName != persistedPackageName ||
+                                sourceEntry.version != finalVersion
+                            ) {
+                                fs.getPatchedAppFile(
+                                    sourceEntry.currentPackageName,
+                                    sourceEntry.version
+                                ).takeIf { oldFile ->
+                                    oldFile.exists() &&
+                                        !oldFile.absolutePath.equals(
+                                            savedCopy.absolutePath,
+                                            ignoreCase = true
+                                        )
+                                }?.delete()
+                            }
                         }
-                        if (
-                            sourceEntry.currentPackageName != persistedPackageName ||
-                            sourceEntry.version != finalVersion
-                        ) {
-                            fs.getPatchedAppFile(
-                                sourceEntry.currentPackageName,
-                                sourceEntry.version
-                            ).takeIf { oldFile ->
-                                oldFile.exists() &&
-                                    !oldFile.absolutePath.equals(
-                                        savedCopy.absolutePath,
-                                        ignoreCase = true
-                                    )
-                            }?.delete()
-                        }
-                    }
                     collapseMatchingSavedEntriesForInstalledVariant(
                         packageName = finalPackageName,
                         installedPackageName = persistedPackageName,
-                        variantIdentity = newVariantIdentity
+                        variantIdentity = newVariantIdentity,
+                        preservedEntryKey = preservedSavedEntryKey
                     )
                 }
                 if (
@@ -2138,35 +2215,39 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     persistedInstallType == InstallType.SAVED
                 ) {
                     sourceSavedEntry?.takeIf {
-                        it.currentPackageName != persistedPackageName
+                        it.currentPackageName != persistedPackageName &&
+                            it.currentPackageName != preservedSavedEntryKey
                     }?.let { sourceEntry ->
                         installedAppRepository.migrateAutoPatchTarget(
                             sourceEntry.currentPackageName,
-                            persistedPackageName
+                            savedEntryCleanupTarget
                         )
                     }
-                    replacementSourceSavedEntry?.let { sourceEntry ->
-                        if (
-                            sourceEntry.currentPackageName == persistedPackageName &&
-                            sourceEntry.version != finalVersion
-                        ) {
-                            fs.getPatchedAppFile(
-                                sourceEntry.currentPackageName,
-                                sourceEntry.version
-                            ).takeIf { oldFile ->
-                                oldFile.exists() &&
-                                    !oldFile.absolutePath.equals(
-                                        savedCopy.absolutePath,
-                                        ignoreCase = true
-                                    )
-                            }?.delete()
+                    replacementSourceSavedEntry
+                        ?.takeUnless { it.currentPackageName == preservedSavedEntryKey }
+                        ?.let { sourceEntry ->
+                            if (
+                                sourceEntry.currentPackageName == persistedPackageName &&
+                                sourceEntry.version != finalVersion
+                            ) {
+                                fs.getPatchedAppFile(
+                                    sourceEntry.currentPackageName,
+                                    sourceEntry.version
+                                ).takeIf { oldFile ->
+                                    oldFile.exists() &&
+                                        !oldFile.absolutePath.equals(
+                                            savedCopy.absolutePath,
+                                            ignoreCase = true
+                                        )
+                                }?.delete()
+                            }
                         }
-                    }
                     if (!disableSavedAppOverwrite) {
                         collapseMatchingSavedEntriesForInstalledVariant(
                             packageName = finalPackageName,
                             installedPackageName = persistedPackageName,
-                            variantIdentity = newVariantIdentity
+                            variantIdentity = newVariantIdentity,
+                            preservedEntryKey = preservedSavedEntryKey
                         )
                     }
                 }
@@ -2204,6 +2285,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
             savedPatchedApp = savedPatchedApp ||
                 (effectiveShouldSaveForLater && (savedCopyWritten || savedCopy.exists()))
+            installedAppRepository.get(persistedPackageName)?.let { persistedApp ->
+                currentSourceEntryKey = persistedApp.currentPackageName
+                installedApp = persistedApp
+            }
             true
         }
     }
@@ -2322,6 +2407,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else if (cleanupLocalInput) {
             cleanupTemporaryLocalInput()
         }
+        fs.deleteRepatchInputStagingFile(patchedRepatchSourcePath)
+        patchedRepatchSourcePath = null
         tempDir.deleteRecursively()
     }
 
@@ -5260,7 +5347,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 WorkInfo.State.SUCCEEDED -> {
                     replayWorkerProgressSnapshots = false
                     workerRepository.clearActiveProgressSnapshot(id)
-                    patcherWorkerId = null
                     stopPatchingTaskMonitor()
                     clearPendingActivityInteractions()
                     clearPatchingNotification()
@@ -5275,6 +5361,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     } else {
                         null
                     }
+                    patchedRepatchSourcePath = workInfo.outputData
+                        .getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
+                        ?.takeIf(String::isNotBlank)
+                    patcherWorkerId = null
                     if (requiresSplitPreparation) {
                         updateSplitStepRequirement(
                             file = null,
@@ -5734,18 +5824,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
         packageName: String,
         installedPackageName: String,
-        variantIdentity: String
+        variantIdentity: String,
+        preservedEntryKey: String? = null
     ) {
+        val cleanupTargetPackageName = preservedEntryKey ?: installedPackageName
         installedAppRepository.getByInstallType(InstallType.SAVED)
             .filter { savedEntry ->
                 savedEntry.currentPackageName != installedPackageName &&
+                    savedEntry.currentPackageName != preservedEntryKey &&
                     isSavedAppEntryForPackage(savedEntry.currentPackageName, packageName)
             }
             .forEach { savedEntry ->
                 if (savedEntryIdentity(savedEntry) != variantIdentity) return@forEach
                 installedAppRepository.migrateAutoPatchTarget(
                     savedEntry.currentPackageName,
-                    installedPackageName
+                    cleanupTargetPackageName
                 )
                 installedAppRepository.delete(savedEntry)
                 fs.getPatchedAppFile(

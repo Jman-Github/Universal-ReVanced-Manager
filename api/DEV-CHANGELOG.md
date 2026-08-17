@@ -3,6 +3,7 @@
 # Features
 
 - Added elapsed patching time to the Patcher Information widget for both regular and batch patching
+- Added Repatch APK source retention so URV automatically reuses the original APK or split archive when repatching, with support for saved apps, batch patching, missing-source fallback, and Storage Management cleanup
 
 
 # Bug fixes

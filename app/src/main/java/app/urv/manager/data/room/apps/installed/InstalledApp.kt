@@ -25,5 +25,6 @@ data class InstalledApp(
     @ColumnInfo(name = "selection_payload") val selectionPayload: PatchProfilePayload? = null,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "custom_installer_package_name")
-    val customInstallerPackageName: String? = null
+    val customInstallerPackageName: String? = null,
+    @ColumnInfo(name = "repatch_source_path") val repatchSourcePath: String? = null
 )

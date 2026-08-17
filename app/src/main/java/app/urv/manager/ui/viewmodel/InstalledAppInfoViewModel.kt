@@ -347,6 +347,13 @@ class InstalledAppInfoViewModel(
             selectionPayload = selectionPayload,
             patchSelection = selection
         )
+        val matchingSavedEntries = installedAppRepository
+            .getByInstallType(InstallType.SAVED)
+            .filter { savedEntry ->
+                savedEntry.currentPackageName != targetPackage &&
+                    isSavedAppEntryForPackage(savedEntry.currentPackageName, targetPackage) &&
+                    savedVariantIdentity(savedEntry) == newVariantIdentity
+            }
 
         val pendingHistoricalEntry = if (sourceInstallType == InstallType.SAVED) {
             prepareReplacedInstalledVariant(
@@ -365,27 +372,67 @@ class InstalledAppInfoViewModel(
                 installType = installType,
                 patchSelection = selection,
                 selectionPayload = selectionPayload,
-                customInstallerPackageName = customInstallerPackageName
+                customInstallerPackageName = customInstallerPackageName,
+                repatchSourcePath = app.repatchSourcePath,
+                updateRepatchSource = true
             )
         }
         if (pendingHistoricalEntry != null) {
             pendingHistoricalEntry.commitWith(targetPackage, persistReplacement)
         } else {
             persistReplacement()
+            installedAppRepository.pruneRepatchInputs()
         }
+
+        val targetHasRetainedRepatchInput = installedAppRepository.get(targetPackage)
+            ?.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
+        val preservedSavedEntry = if (!targetHasRetainedRepatchInput) {
+            sequenceOf(app.takeIf { sourceInstallType == InstallType.SAVED })
+                .plus(matchingSavedEntries.asSequence())
+                .filterNotNull()
+                .distinctBy(InstalledApp::currentPackageName)
+                .firstOrNull { savedEntry ->
+                    savedEntry.currentPackageName != targetPackage &&
+                        savedEntry.repatchSourcePath
+                            ?.takeIf(String::isNotBlank)
+                            ?.let(::File)
+                            ?.isFile == true
+                }
+        } else {
+            null
+        }
+        val preservedSavedEntryKey = preservedSavedEntry?.currentPackageName
+        if (preservedSavedEntryKey != null) {
+            Log.w(
+                tag,
+                "Keeping saved entry $preservedSavedEntryKey because its Repatch input was not retained for $targetPackage"
+            )
+        }
+        val savedEntryCleanupTarget = preservedSavedEntryKey ?: targetPackage
 
         // Installing from a saved entry can migrate from a synthetic key
         // (for example, package__saved_<bundle-hash>) to the real package name.
-        // Remove the old saved row to avoid duplicate saved+installed entries.
-        if (sourceInstallType == InstallType.SAVED && sourceEntryKey != targetPackage) {
-            installedAppRepository.migrateAutoPatchTarget(sourceEntryKey, targetPackage)
+        // Remove the old saved row only after its Repatch source is safely transferred.
+        if (
+            sourceInstallType == InstallType.SAVED &&
+            sourceEntryKey != targetPackage &&
+            sourceEntryKey != preservedSavedEntryKey
+        ) {
+            installedAppRepository.migrateAutoPatchTarget(
+                sourceEntryKey,
+                savedEntryCleanupTarget
+            )
             installedAppRepository.delete(app)
         }
         if (installType != InstallType.SAVED) {
             collapseMatchingSavedEntriesForInstalledVariant(
                 packageName = targetPackage,
                 installedPackageName = targetPackage,
-                variantIdentity = newVariantIdentity
+                variantIdentity = newVariantIdentity,
+                preservedEntryKey = preservedSavedEntryKey
             )
         }
         try {
@@ -459,18 +506,21 @@ class InstalledAppInfoViewModel(
     private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
         packageName: String,
         installedPackageName: String,
-        variantIdentity: String
+        variantIdentity: String,
+        preservedEntryKey: String? = null
     ) {
+        val cleanupTargetPackageName = preservedEntryKey ?: installedPackageName
         installedAppRepository.getByInstallType(InstallType.SAVED)
             .filter { savedEntry ->
                 savedEntry.currentPackageName != installedPackageName &&
+                    savedEntry.currentPackageName != preservedEntryKey &&
                     isSavedAppEntryForPackage(savedEntry.currentPackageName, packageName)
             }
             .forEach { savedEntry ->
                 if (savedVariantIdentity(savedEntry) != variantIdentity) return@forEach
                 installedAppRepository.migrateAutoPatchTarget(
                     savedEntry.currentPackageName,
-                    installedPackageName
+                    cleanupTargetPackageName
                 )
                 installedAppRepository.delete(savedEntry)
                 filesystem.getPatchedAppFile(
@@ -740,18 +790,6 @@ class InstalledAppInfoViewModel(
             is InstallerManager.InstallPlan.Shizuku -> {
                 try {
                     shizukuInstaller.install(apk, targetPackage, plan.installerPackageNameOverride)
-                    val selection = appliedPatches ?: resolveAppliedSelection(app)
-                    withContext(Dispatchers.IO) {
-                        val payload = app.selectionPayload
-                        installedAppRepository.addOrUpdate(
-                            targetPackage,
-                            app.originalPackageName,
-                            app.version,
-                            InstallType.SHIZUKU,
-                            selection,
-                            payload
-                        )
-                    }
                     persistInstallMetadata(InstallType.SHIZUKU, app.version)
                     isMounted = false
                     markInstallSuccess(context.getString(R.string.saved_app_install_success))

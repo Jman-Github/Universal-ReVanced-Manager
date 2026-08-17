@@ -62,6 +62,7 @@ data class BatchPatchItem(
     val installing: Boolean = false,
     val saving: Boolean = false,
     val savedForLater: Boolean = false,
+    val repatchSourcePath: String? = null,
     val sourceEntryKey: String? = null,
     val profileInstallerToken: String? = null,
     val useMount: Boolean = false,
@@ -248,6 +249,8 @@ data class BatchResultItemSnapshot(
     val installMessage: String?,
     val installedPackageName: String?,
     val savedForLater: Boolean = false,
+    val repatchSourcePath: String? = null,
+    val sourceEntryKey: String? = null,
     val profileInstallerToken: String? = null,
     val useMount: Boolean = false,
     val patcherEngine: String? = null,
@@ -304,7 +307,23 @@ internal fun takeLastWithinCharacterBudget(
 internal fun retainedBatchOutputPaths(
     json: Json,
     serializedSnapshots: Iterable<String>
-): Set<String> = serializedSnapshots
+): Set<String> = decodedBatchResultItems(json, serializedSnapshots)
+    .mapNotNull(BatchResultItemSnapshot::patchedFilePath)
+    .filter(String::isNotBlank)
+    .toSet()
+
+internal fun retainedBatchRepatchSourcePaths(
+    json: Json,
+    serializedSnapshots: Iterable<String>
+): Set<String> = decodedBatchResultItems(json, serializedSnapshots)
+    .mapNotNull(BatchResultItemSnapshot::repatchSourcePath)
+    .filter(String::isNotBlank)
+    .toSet()
+
+private fun decodedBatchResultItems(
+    json: Json,
+    serializedSnapshots: Iterable<String>
+): Sequence<BatchResultItemSnapshot> = serializedSnapshots
     .asSequence()
     .filter(String::isNotBlank)
     .mapNotNull { serialized ->
@@ -313,6 +332,3 @@ internal fun retainedBatchOutputPaths(
         }.getOrNull()
     }
     .flatMap { snapshot -> snapshot.items.asSequence() }
-    .mapNotNull(BatchResultItemSnapshot::patchedFilePath)
-    .filter(String::isNotBlank)
-    .toSet()

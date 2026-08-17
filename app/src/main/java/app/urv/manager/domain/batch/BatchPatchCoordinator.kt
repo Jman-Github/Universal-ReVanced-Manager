@@ -103,7 +103,14 @@ private data class BatchInstallAttempt(
 private data class BatchPatchWorkerResult(
     val succeeded: Boolean,
     val inputVersionName: String? = null,
-    val inputVersionCode: Long? = null
+    val inputVersionCode: Long? = null,
+    val repatchSourcePath: String? = null
+)
+
+private data class PersistedBatchPatchedItem(
+    val file: File,
+    val repatchSourcePath: String?,
+    val sourceEntryKey: String?
 )
 
 private class PendingExternalInstallerLease(
@@ -452,6 +459,8 @@ class BatchPatchCoordinator(
                 try {
                     val output = fs.createBatchPatchOutputFile(item.packageName)
                     var keepOutput = false
+                    var repatchSourcePath: String? = null
+                    var keepRepatchSource = false
                     try {
                         val patchResult = runPatcher(
                             item,
@@ -460,29 +469,38 @@ class BatchPatchCoordinator(
                             queueIndex,
                             indexes.size
                         )
+                        repatchSourcePath = patchResult.repatchSourcePath
                         if (patchResult.succeeded) {
                             val resolvedItem = item.copy(
                                 version = patchResult.inputVersionName ?: item.version,
-                                versionCode = patchResult.inputVersionCode ?: item.versionCode
+                                versionCode = patchResult.inputVersionCode ?: item.versionCode,
+                                repatchSourcePath = patchResult.repatchSourcePath
                             )
-                            val finalOutput = if (
+                            val persistImmediately =
                                 shouldPersistBatchOutputImmediately(initial.scheduled)
-                            ) {
+                            val persistedItem = if (persistImmediately) {
                                 persistPatchedItem(resolvedItem, output)
                             } else {
                                 keepOutput = true
-                                output
+                                PersistedBatchPatchedItem(
+                                    file = output,
+                                    repatchSourcePath = resolvedItem.repatchSourcePath,
+                                    sourceEntryKey = resolvedItem.sourceEntryKey
+                                )
                             }
                             updateItem(itemIndex) {
                                 it.copy(
                                     state = BatchItemState.SUCCEEDED,
                                     version = resolvedItem.version,
                                     versionCode = resolvedItem.versionCode,
-                                    patchedFile = finalOutput,
+                                    repatchSourcePath = persistedItem.repatchSourcePath,
+                                    sourceEntryKey = persistedItem.sourceEntryKey,
+                                    patchedFile = persistedItem.file,
                                     savedForLater = initial.scheduled,
                                     message = null
                                 )
                             }
+                            keepRepatchSource = !persistImmediately
                         } else {
                             updateItem(itemIndex) {
                                 it.copy(
@@ -493,6 +511,9 @@ class BatchPatchCoordinator(
                         }
                     } finally {
                         if (!keepOutput) output.delete()
+                        if (!keepRepatchSource) {
+                            fs.deleteRepatchInputStagingFile(repatchSourcePath)
+                        }
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -699,7 +720,10 @@ class BatchPatchCoordinator(
                     info.outputData.getLong(PatcherWorker.INPUT_VERSION_CODE_KEY, 0L)
                 } else {
                     null
-                }
+                },
+                repatchSourcePath = info.outputData
+                    .getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
+                    ?.takeIf(String::isNotBlank)
             )
         } finally {
             if (activeWorkerId == id) activeWorkerId = null
@@ -747,7 +771,10 @@ class BatchPatchCoordinator(
         }
     }
 
-    private suspend fun persistPatchedItem(item: BatchPatchItem, output: File): File {
+    private suspend fun persistPatchedItem(
+        item: BatchPatchItem,
+        output: File
+    ): PersistedBatchPatchedItem {
         val info = pm.getPackageInfo(output)
         val version = info?.versionName?.takeIf(String::isNotBlank)
             ?: item.version
@@ -833,7 +860,9 @@ class BatchPatchCoordinator(
                 installType = InstallType.SAVED,
                 patchSelection = item.selection,
                 selectionPayload = selectionPayload,
-                resetCreatedAt = true
+                resetCreatedAt = true,
+                repatchSourcePath = item.repatchSourcePath,
+                updateRepatchSource = true
             )
         } catch (error: Throwable) {
             if (copiedOutput && replacementStarted) {
@@ -858,6 +887,7 @@ class BatchPatchCoordinator(
             stagingOutput.delete()
             if (!keepBackup) backupOutput.delete()
         }
+        installedAppRepository.pruneRepatchInputs()
 
         if (copiedOutput) {
             runPostCommitStep("Failed to remove the temporary batch patched APK") {
@@ -866,18 +896,42 @@ class BatchPatchCoordinator(
                 }
             }
         }
-        var sourceMigrationSucceeded = true
-        sourceSavedEntry?.let { sourceEntry ->
-            sourceMigrationSucceeded = runPostCommitStep(
-                "Failed to migrate automatic patch target from ${sourceEntry.currentPackageName} to $savedEntryKey"
-            ) {
-                installedAppRepository.migrateAutoPatchTarget(
-                    sourceEntry.currentPackageName,
-                    savedEntryKey
-                )
-            }
+        val persistedSavedEntry = installedAppRepository.get(savedEntryKey)
+        val sourceSavedEntryHasRetainedRepatchInput = sourceSavedEntry
+            ?.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
+        val persistedSavedEntryHasRetainedRepatchInput = persistedSavedEntry
+            ?.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
+        val preserveSourceSavedEntry =
+            sourceSavedEntry?.currentPackageName != savedEntryKey &&
+                sourceSavedEntryHasRetainedRepatchInput &&
+                !persistedSavedEntryHasRetainedRepatchInput
+        if (preserveSourceSavedEntry) {
+            Log.w(
+                TAG,
+                "Keeping saved entry ${sourceSavedEntry.currentPackageName} because its Repatch input was not retained for $savedEntryKey"
+            )
         }
+        var sourceMigrationSucceeded = true
+        sourceSavedEntry
+            ?.takeUnless { preserveSourceSavedEntry }
+            ?.let { sourceEntry ->
+                sourceMigrationSucceeded = runPostCommitStep(
+                    "Failed to migrate automatic patch target from ${sourceEntry.currentPackageName} to $savedEntryKey"
+                ) {
+                    installedAppRepository.migrateAutoPatchTarget(
+                        sourceEntry.currentPackageName,
+                        savedEntryKey
+                    )
+                }
+            }
         replacementSourceSavedEntry
+            ?.takeUnless { preserveSourceSavedEntry }
             ?.takeIf { canDeleteReplacedSavedEntry(sourceMigrationSucceeded) }
             ?.let { sourceEntry ->
                 runPostCommitStep(
@@ -910,7 +964,14 @@ class BatchPatchCoordinator(
         runPostCommitStep("Failed to prune retained original APKs") {
             installedAppRepository.pruneRetainedOriginals()
         }
-        return savedOutput
+        val retainedSourceOwner = sourceSavedEntry
+            ?.takeIf { preserveSourceSavedEntry }
+            ?: persistedSavedEntry
+        return PersistedBatchPatchedItem(
+            file = savedOutput,
+            repatchSourcePath = retainedSourceOwner?.repatchSourcePath,
+            sourceEntryKey = retainedSourceOwner?.currentPackageName ?: savedEntryKey
+        )
     }
 
     suspend fun saveForLater(packageName: String): Boolean =
@@ -954,10 +1015,13 @@ class BatchPatchCoordinator(
                     return@forEach
                 }
                 try {
-                    val savedFile = persistPatchedItem(currentItem, sourceFile)
+                    val persistedItem = persistPatchedItem(currentItem, sourceFile)
+                    fs.deleteRepatchInputStagingFile(currentItem.repatchSourcePath)
                     updateItemByPackage(packageName) {
                         it.copy(
-                            patchedFile = savedFile,
+                            patchedFile = persistedItem.file,
+                            repatchSourcePath = persistedItem.repatchSourcePath,
+                            sourceEntryKey = persistedItem.sourceEntryKey,
                             savedForLater = true,
                             saving = false
                         )
@@ -984,12 +1048,17 @@ class BatchPatchCoordinator(
         val snapshot = mutableState.value ?: return
         snapshot.unsavedPatchedItems.forEach { item ->
             item.patchedFile?.takeIf(File::isFile)?.delete()
+            fs.deleteRepatchInputStagingFile(item.repatchSourcePath)
         }
         mutableState.update { current ->
             current?.copy(
                 items = current.items.map { item ->
                     if (item.needsSaveBeforeLeaving) {
-                        item.copy(patchedFile = null, saving = false)
+                        item.copy(
+                            patchedFile = null,
+                            repatchSourcePath = null,
+                            saving = false
+                        )
                     } else {
                         item.copy(saving = false)
                     }
@@ -1082,7 +1151,10 @@ class BatchPatchCoordinator(
         }
     }
 
-    suspend fun attachApk(packageName: String, file: File): BatchPatchItem? {
+    suspend fun attachApk(
+        packageName: String,
+        file: File
+    ): BatchPatchItem? {
         val current = mutableState.value ?: return null
         val index = current.items.indexOfFirst { it.packageName == packageName }
         if (index < 0) return null
@@ -1527,7 +1599,7 @@ class BatchPatchCoordinator(
         if (installed) {
             withContext(NonCancellable) {
                 var metadataWarning: String? = null
-                val installedSavedFile = try {
+                val persistedInstalledItem = try {
                     persistInstalledPatchedItem(
                         item = item,
                         sourceFile = file,
@@ -1545,14 +1617,23 @@ class BatchPatchCoordinator(
                         R.string.batch_patch_metadata_save_failed,
                         error.message ?: error.javaClass.simpleName
                     )
-                    file
+                    PersistedBatchPatchedItem(
+                        file = file,
+                        repatchSourcePath = item.repatchSourcePath,
+                        sourceEntryKey = item.sourceEntryKey
+                    )
+                }
+                if (metadataWarning == null) {
+                    fs.deleteRepatchInputStagingFile(item.repatchSourcePath)
                 }
                 updateItem(index) {
                     it.copy(
                         installOutcome = BatchInstallOutcome.INSTALLED,
                         installMessage = metadataWarning,
                         installedPackageName = targetPackage,
-                        patchedFile = installedSavedFile,
+                        repatchSourcePath = persistedInstalledItem.repatchSourcePath,
+                        sourceEntryKey = persistedInstalledItem.sourceEntryKey,
+                        patchedFile = persistedInstalledItem.file,
                         installing = false
                     )
                 }
@@ -1612,7 +1693,7 @@ class BatchPatchCoordinator(
         val stockFile = when {
             stockNeedsReplacement -> verifiedRetainedStock
             appMounted -> null
-            else -> installedInfo?.applicationInfo?.sourceDir
+            else -> installedInfo.applicationInfo?.sourceDir
                 ?.let(::File)
                 ?.takeIf(File::isFile)
                 ?: verifiedRetainedStock
@@ -1845,7 +1926,7 @@ class BatchPatchCoordinator(
         targetPackage: String,
         installType: InstallType,
         customInstallerPackageName: String?
-    ): File {
+    ): PersistedBatchPatchedItem {
         val version = pm.getPackageInfo(sourceFile)?.versionName?.takeIf(String::isNotBlank)
             ?: item.version
             ?: "unknown"
@@ -1942,7 +2023,9 @@ class BatchPatchCoordinator(
                     selectionPayload = selectionPayload,
                     createdAtOverride = replacementTimestamp,
                     sortOrderOverride = replacementSortOrder,
-                    customInstallerPackageName = customInstallerPackageName
+                    customInstallerPackageName = customInstallerPackageName,
+                    repatchSourcePath = item.repatchSourcePath,
+                    updateRepatchSource = true
                 )
             }
             if (pendingHistoricalEntry != null) {
@@ -1980,13 +2063,46 @@ class BatchPatchCoordinator(
             stagingInstalledCopy.delete()
             if (!keepBackup) backupInstalledCopy.delete()
         }
+        if (pendingHistoricalEntry == null) {
+            installedAppRepository.pruneRepatchInputs()
+        }
+        val persistedTargetEntry = installedAppRepository.get(targetPackage)
+        val persistedTargetHasRetainedRepatchInput = persistedTargetEntry
+            ?.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
+        val preservedSavedEntry = if (!persistedTargetHasRetainedRepatchInput) {
+            sequenceOf(sourceSavedEntry)
+                .plus(matchingSavedEntries.asSequence())
+                .filterNotNull()
+                .distinctBy(InstalledApp::currentPackageName)
+                .firstOrNull { savedEntry ->
+                    savedEntry.currentPackageName != targetPackage &&
+                        savedEntry.repatchSourcePath
+                            ?.takeIf(String::isNotBlank)
+                            ?.let(::File)
+                            ?.isFile == true
+                }
+        } else {
+            null
+        }
+        val preservedSavedEntryKey = preservedSavedEntry?.currentPackageName
+        if (preservedSavedEntryKey != null) {
+            Log.w(
+                TAG,
+                "Keeping saved entry $preservedSavedEntryKey because its Repatch input was not retained for $targetPackage"
+            )
+        }
+        val savedEntryCleanupTarget = preservedSavedEntryKey ?: targetPackage
         matchingSavedEntries.forEach { savedEntry ->
+            if (savedEntry.currentPackageName == preservedSavedEntryKey) return@forEach
             val migrationSucceeded = runPostCommitStep(
-                "Failed to migrate automatic patch target from ${savedEntry.currentPackageName} to $targetPackage"
+                "Failed to migrate automatic patch target from ${savedEntry.currentPackageName} to $savedEntryCleanupTarget"
             ) {
                 installedAppRepository.migrateAutoPatchTarget(
                     savedEntry.currentPackageName,
-                    targetPackage
+                    savedEntryCleanupTarget
                 )
             }
             if (
@@ -2015,7 +2131,15 @@ class BatchPatchCoordinator(
             }
         }
 
-        if (!sourceFile.absolutePath.equals(installedCopy.absolutePath, ignoreCase = true)) {
+        val preservedSavedFile = preservedSavedEntry?.let { savedEntry ->
+            fs.getPatchedAppFile(savedEntry.currentPackageName, savedEntry.version)
+        }
+        val sourceFileBelongsToPreservedEntry = preservedSavedFile?.absolutePath
+            ?.equals(sourceFile.absolutePath, ignoreCase = true) == true
+        if (
+            !sourceFileBelongsToPreservedEntry &&
+            !sourceFile.absolutePath.equals(installedCopy.absolutePath, ignoreCase = true)
+        ) {
             runPostCommitStep("Failed to remove the temporary installed batch APK") {
                 check(sourceFile.delete() || !sourceFile.exists()) {
                     "The temporary installed batch APK could not be removed"
@@ -2025,7 +2149,11 @@ class BatchPatchCoordinator(
         runPostCommitStep("Failed to prune retained original APKs") {
             installedAppRepository.pruneRetainedOriginals()
         }
-        return installedCopy
+        return PersistedBatchPatchedItem(
+            file = installedCopy,
+            repatchSourcePath = persistedTargetEntry?.repatchSourcePath,
+            sourceEntryKey = targetPackage
+        )
     }
 
     private suspend fun prepareReplacedInstalledVariant(
@@ -2186,7 +2314,11 @@ class BatchPatchCoordinator(
             installJob?.isActive == true ||
             mutableState.value?.items?.any { it.saving } == true
         ) return
+        val snapshot = mutableState.value
         discardUnsavedPatchedFiles()
+        snapshot?.items?.forEach { item ->
+            fs.deleteRepatchInputStagingFile(item.repatchSourcePath)
+        }
         mutableState.value = null
         liveScheduledExecution = false
         releaseExecution()
@@ -2272,6 +2404,8 @@ class BatchPatchCoordinator(
                     installMessage = item.installMessage,
                     installedPackageName = item.installedPackageName,
                     savedForLater = item.savedForLater,
+                    repatchSourcePath = item.repatchSourcePath,
+                    sourceEntryKey = item.sourceEntryKey,
                     profileInstallerToken = item.profileInstallerToken,
                     useMount = item.useMount,
                     logLines = item.logLines.takeLast(MAX_LOG_LINES)
@@ -2355,6 +2489,8 @@ class BatchPatchCoordinator(
                     installMessage = item.installMessage?.take(MAX_RESULT_MESSAGE_LENGTH),
                     installedPackageName = item.installedPackageName,
                     savedForLater = item.savedForLater,
+                    repatchSourcePath = item.repatchSourcePath,
+                    sourceEntryKey = item.sourceEntryKey,
                     profileInstallerToken = item.profileInstallerToken,
                     useMount = item.useMount,
                     patcherEngine = item.patcherEngine,

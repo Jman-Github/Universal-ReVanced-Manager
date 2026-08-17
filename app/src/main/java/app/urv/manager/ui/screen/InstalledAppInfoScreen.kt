@@ -126,6 +126,7 @@ import app.urv.manager.util.toast
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import java.util.Locale
+import java.io.File
 import androidx.compose.runtime.rememberCoroutineScope
 import java.nio.file.Files
 import java.nio.file.Path
@@ -187,6 +188,7 @@ fun InstalledAppInfoScreen(
     var rootDiagnosticsExportInProgress by rememberSaveable { mutableStateOf(false) }
     var pendingRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingAction by rememberSaveable { mutableStateOf(initialAction) }
+    var pendingRepatchSourceWarningTarget by remember { mutableStateOf<String?>(null) }
     var showSavedEntryDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showSavedAppDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showSavedUninstallDialog by rememberSaveable { mutableStateOf(false) }
@@ -382,6 +384,18 @@ fun InstalledAppInfoScreen(
         } ?: false
     }
 
+    fun continueRepatch(targetPackageName: String) {
+        val selection = appliedSelection ?: return
+        val persistConfiguration = viewModel.installedApp?.installType != InstallType.SAVED
+        onPatchClick(
+            targetPackageName,
+            installedAppState?.currentPackageName,
+            selection,
+            selectionPayload,
+            persistConfiguration
+        )
+    }
+
     fun handleRepatchClick(targetPackageName: String) {
         if (!allowUniversalPatches && (appliedBundlesContainUniversal || appliedSelectionContainsUniversal)) {
             showUniversalBlockedDialog = true
@@ -389,7 +403,6 @@ fun InstalledAppInfoScreen(
         }
 
         val selection = appliedSelection ?: return
-        val persistConfiguration = viewModel.installedApp?.installType != InstallType.SAVED
         scope.launch {
             if (patchBundleRepository.selectionHasMixedBundleTypes(selection)) {
                 showMixedBundleDialog = true
@@ -399,13 +412,16 @@ fun InstalledAppInfoScreen(
                 showMixedRevancedPatcherDialog = true
                 return@launch
             }
-            onPatchClick(
-                targetPackageName,
-                installedAppState?.currentPackageName,
-                selection,
-                selectionPayload,
-                persistConfiguration
-            )
+            val sourcePath = installedAppState?.repatchSourcePath
+            val sourceAvailable = sourcePath
+                ?.takeIf(String::isNotBlank)
+                ?.let(::File)
+                ?.isFile == true
+            if (!sourceAvailable) {
+                pendingRepatchSourceWarningTarget = targetPackageName
+                return@launch
+            }
+            continueRepatch(targetPackageName)
         }
     }
 
@@ -504,6 +520,25 @@ fun InstalledAppInfoScreen(
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+        )
+    }
+
+    pendingRepatchSourceWarningTarget?.let { targetPackageName ->
+        val sourcePath = installedAppState?.repatchSourcePath
+        ConfirmDialog(
+            onDismiss = { pendingRepatchSourceWarningTarget = null },
+            onConfirm = {
+                pendingRepatchSourceWarningTarget = null
+                continueRepatch(targetPackageName)
+            },
+            title = stringResource(R.string.repatch_source_unavailable_title),
+            description = if (sourcePath.isNullOrBlank()) {
+                stringResource(R.string.repatch_source_not_remembered_description)
+            } else {
+                stringResource(R.string.repatch_source_missing_description)
+            },
+            icon = Icons.Outlined.WarningAmber,
+            confirmLabelRes = R.string.continue_
         )
     }
 

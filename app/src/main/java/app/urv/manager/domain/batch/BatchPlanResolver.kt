@@ -125,9 +125,19 @@ class BatchPlanResolver(
             ?: preferredBatchRecord(installedApps, resolvedPackageName)
         val sourceEntryKey = installedRecord?.currentPackageName
         val installedInfo = pm.getPackageInfo(resolvedPackageName)
-        val deviceInstalledRecord = installedInfo?.let { packageInfo ->
+        val trackedInstalledPackageName = installedRecord
+            ?.takeIf { it.installType != InstallType.SAVED }
+            ?.currentPackageName
+            ?.takeIf(String::isNotBlank)
+            ?: resolvedPackageName
+        val trackedInstalledInfo = if (trackedInstalledPackageName == resolvedPackageName) {
+            installedInfo
+        } else {
+            pm.getPackageInfo(trackedInstalledPackageName)
+        }
+        val deviceInstalledRecord = trackedInstalledInfo?.let { packageInfo ->
             installedAppRepository.getCurrentInstalledRecord(
-                packageName = resolvedPackageName,
+                packageName = trackedInstalledPackageName,
                 installedVersion = packageInfo.versionName,
                 installedLastUpdateTime = packageInfo.lastUpdateTime,
                 installedApk = packageInfo.applicationInfo?.sourceDir?.let(::File)
@@ -136,7 +146,7 @@ class BatchPlanResolver(
         val targetVersion = resolveBatchTargetVersion(
             selectedRecord = installedRecord,
             currentInstalledRecord = deviceInstalledRecord,
-            installedVersion = installedInfo?.versionName
+            installedVersion = trackedInstalledInfo?.versionName
         )
         val selectedSavedInfo = installedRecord
             ?.takeIf { it.installType == InstallType.SAVED }
@@ -152,9 +162,46 @@ class BatchPlanResolver(
             selectedSavedInfo?.versionName?.equals(targetVersion, ignoreCase = true) == true ->
                 PackageInfoCompat.getLongVersionCode(selectedSavedInfo)
             installedRecord?.installType != InstallType.SAVED &&
-                installedInfo?.versionName?.equals(targetVersion, ignoreCase = true) == true ->
-                PackageInfoCompat.getLongVersionCode(installedInfo)
+                trackedInstalledInfo?.versionName?.equals(targetVersion, ignoreCase = true) == true ->
+                PackageInfoCompat.getLongVersionCode(trackedInstalledInfo)
             else -> null
+        }
+        val rememberedSourceFile = installedRecord
+            ?.repatchSourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.takeIf(File::isFile)
+        val rememberedSourceInfo = rememberedSourceFile?.let { file ->
+            if (SplitApkPreparer.isSplitArchive(file)) {
+                runCatching {
+                    val extracted = SplitApkInspector.extractRepresentativeApk(
+                        source = file,
+                        workspace = fs.tempDir
+                    )
+                    try {
+                        extracted?.file?.let(pm::getPackageInfo)
+                    } finally {
+                        extracted?.cleanup?.invoke()
+                    }
+                }.getOrNull()
+            } else {
+                pm.getPackageInfo(file)
+            }
+        }
+        val validRememberedSource = rememberedSourceFile?.takeIf {
+            val sourceInfo = rememberedSourceInfo ?: return@takeIf false
+            val sourceVersionCode = PackageInfoCompat.getLongVersionCode(sourceInfo)
+            sourceInfo.packageName == resolvedPackageName &&
+                if (
+                    installedRecord.installType == InstallType.SAVED ||
+                    deviceInstalledRecord?.currentPackageName == installedRecord.currentPackageName
+                ) {
+                    true
+                } else {
+                    (targetVersion == null ||
+                        sourceInfo.versionName.equals(targetVersion, ignoreCase = true)) &&
+                        (targetVersionCode == null || sourceVersionCode == targetVersionCode)
+                }
         }
         val profiles = patchProfileRepository.profilesForPackageFlow(resolvedPackageName)
             .first()
@@ -238,6 +285,15 @@ class BatchPlanResolver(
                     temporary = false
                 )
             }
+            validRememberedSource != null -> SelectedApp.Local(
+                packageName = resolvedPackageName,
+                version = rememberedSourceInfo?.versionName ?: targetVersion.orEmpty(),
+                versionCode = rememberedSourceInfo?.let {
+                    PackageInfoCompat.getLongVersionCode(it)
+                },
+                file = validRememberedSource,
+                temporary = false
+            )
             validRetainedOriginal != null -> SelectedApp.Local(
                 packageName = resolvedPackageName,
                 version = retainedOriginalInfo?.versionName ?: targetVersion.orEmpty(),
@@ -275,6 +331,7 @@ class BatchPlanResolver(
             }
             installedInfo != null &&
                 deviceInstalledRecord == null &&
+                trackedInstalledPackageName == resolvedPackageName &&
                 automaticBatchSourceMatchesTarget(
                     selectedRecord = installedRecord,
                     targetVersion = targetVersion,
@@ -495,7 +552,10 @@ class BatchPlanResolver(
         }
     }
 
-    suspend fun reattach(item: BatchPatchItem, file: File): BatchPatchItem =
+    suspend fun reattach(
+        item: BatchPatchItem,
+        file: File
+    ): BatchPatchItem =
         preserveReattachedConfiguration(
             item,
             resolve(

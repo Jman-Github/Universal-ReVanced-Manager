@@ -517,6 +517,22 @@ fun DashboardScreen(
     var pendingQuickRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showQuickMixedBundleDialog by remember { mutableStateOf(false) }
     var showQuickMixedRevancedPatcherDialog by remember { mutableStateOf(false) }
+    var pendingRepatchSourceWarning by remember {
+        mutableStateOf<Pair<String?, () -> Unit>?>(null)
+    }
+
+    fun runRepatchOrWarn(app: InstalledApp, action: () -> Unit) {
+        val sourcePath = app.repatchSourcePath
+        val sourceAvailable = sourcePath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.isFile == true
+        if (sourceAvailable) {
+            action()
+        } else {
+            pendingRepatchSourceWarning = sourcePath to action
+        }
+    }
 
     LaunchedEffect(announcementSystemEnabled) {
         if (announcementSystemEnabled) {
@@ -1572,13 +1588,16 @@ fun DashboardScreen(
                 }
                 val payload = actionApp.selectionPayload
                 val persistConfiguration = actionApp.installType != InstallType.SAVED
-                mainVm.selectApp(
-                    packageName = actionApp.originalPackageName,
-                    patches = selection,
-                    selectionPayload = payload,
-                    persistConfiguration = persistConfiguration,
-                    returnToDashboard = true
-                )
+                runRepatchOrWarn(actionApp) {
+                    mainVm.selectApp(
+                        packageName = actionApp.originalPackageName,
+                        patches = selection,
+                        selectionPayload = payload,
+                        persistConfiguration = persistConfiguration,
+                        returnToDashboard = true,
+                        sourceEntryKey = actionApp.currentPackageName
+                    )
+                }
                 pendingQuickAction = null
             }
         }
@@ -2201,6 +2220,25 @@ fun DashboardScreen(
                 }
             ),
             icon = Icons.Outlined.Delete
+        )
+    }
+
+    pendingRepatchSourceWarning?.let { state ->
+        ConfirmDialog(
+            onDismiss = { pendingRepatchSourceWarning = null },
+            onConfirm = {
+                val action = state.second
+                pendingRepatchSourceWarning = null
+                action()
+            },
+            title = stringResource(R.string.repatch_source_unavailable_title),
+            description = if (state.first.isNullOrBlank()) {
+                stringResource(R.string.repatch_source_not_remembered_description)
+            } else {
+                stringResource(R.string.repatch_source_missing_description)
+            },
+            icon = Icons.Outlined.WarningAmber,
+            confirmLabelRes = R.string.continue_
         )
     }
 
@@ -3013,13 +3051,16 @@ fun DashboardScreen(
                                             }
                                             val payload = app.selectionPayload
                                             val persistConfiguration = app.installType != InstallType.SAVED
-                                            mainVm.selectApp(
-                                                packageName = app.originalPackageName,
-                                                patches = selection,
-                                                selectionPayload = payload,
-                                                persistConfiguration = persistConfiguration,
-                                                returnToDashboard = true
-                                            )
+                                            runRepatchOrWarn(app) {
+                                                mainVm.selectApp(
+                                                    packageName = app.originalPackageName,
+                                                    patches = selection,
+                                                    selectionPayload = payload,
+                                                    persistConfiguration = persistConfiguration,
+                                                    returnToDashboard = true,
+                                                    sourceEntryKey = app.currentPackageName
+                                                )
+                                            }
                                         }
                                         return@InstalledAppsScreen
                                     }

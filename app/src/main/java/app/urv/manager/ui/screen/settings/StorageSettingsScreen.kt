@@ -78,6 +78,7 @@ import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.domain.storage.clearManagerCache
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.GroupHeader
@@ -151,6 +152,16 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         refreshStorageUsage()
     }
 
+    suspend fun isPatcherWorkActive(): Boolean {
+        if (workerRepository.activeUniqueWorkId(PatcherWorker.UNIQUE_WORK_NAME) != null) return true
+        return withContext(Dispatchers.IO) {
+            workerRepository.workManager
+                .getWorkInfosForUniqueWork(PatcherWorker.UNIQUE_WORK_NAME)
+                .get()
+                .any { workInfo -> !workInfo.state.isFinished }
+        }
+    }
+
     fun clearTarget(target: StorageClearTarget) {
         if (target.blockedWhileStorageInUse && CacheCleanupGuard.isCacheInUse) {
             context.toast(context.getString(R.string.storage_cache_in_use))
@@ -158,6 +169,10 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
         }
         val areaName = target.title(context)
         coroutineScope.launch {
+            if (target == StorageClearTarget.RepatchInputs && isPatcherWorkActive()) {
+                context.toast(context.getString(R.string.patcher_already_running))
+                return@launch
+            }
             isLoading = true
             try {
                 val clearedBytes = clearStorageTarget(
@@ -715,7 +730,7 @@ private fun StorageAreaItem(
                     )
                     else -> StorageAreaActionButton(
                         text = stringResource(R.string.clear),
-                        enabled = !isLoading && area.stats.bytes > 0L
+                        enabled = !isLoading && (area.clearableBytes ?: area.stats.bytes) > 0L
                     ) { onClear(clearTarget) }
                 }
             }
@@ -848,7 +863,7 @@ private data class StorageSnapshot(
     val totalBytes: Long
 )
 
-private const val STORAGE_AREA_PLACEHOLDER_COUNT = 16
+private const val STORAGE_AREA_PLACEHOLDER_COUNT = 17
 private const val STORAGE_REFRESH_SHIMMER_MIN_MS = 1200L
 
 private data class StorageAreaUsage(
@@ -857,6 +872,7 @@ private data class StorageAreaUsage(
     val description: String,
     val stats: DirectoryStats,
     val clearTarget: StorageClearTarget?,
+    val clearableBytes: Long? = null,
     val children: List<StorageAreaUsage> = emptyList()
 )
 
@@ -875,6 +891,7 @@ private enum class StorageClearTarget {
     LsposedModules,
     PatchedApps,
     RetainedOriginals,
+    RepatchInputs,
     PatchProfileInputs,
     TemporaryWorkspace,
     UiTemporaryWorkspace,
@@ -892,6 +909,7 @@ private enum class StorageClearTarget {
             LsposedModules,
             PatchedApps,
             RetainedOriginals,
+            RepatchInputs,
             PatchProfileInputs,
             OtherInternalData,
             ExternalFiles -> true
@@ -916,6 +934,7 @@ private enum class StorageClearTarget {
             LsposedModules -> R.string.storage_clear_lsposed_modules_warning_description
             PatchedApps -> R.string.storage_clear_patched_apps_warning_description
             RetainedOriginals -> R.string.storage_clear_retained_originals_warning_description
+            RepatchInputs -> R.string.storage_clear_repatch_inputs_warning_description
             PatchProfileInputs -> R.string.storage_clear_patch_profile_inputs_warning_description
             OtherInternalData -> R.string.storage_clear_other_internal_data_warning_description
             ExternalFiles -> R.string.storage_clear_external_files_warning_description
@@ -945,6 +964,7 @@ private enum class StorageClearTarget {
             LsposedModules,
             PatchedApps,
             RetainedOriginals,
+            RepatchInputs,
             PatchProfileInputs,
             TemporaryWorkspace,
             UiTemporaryWorkspace,
@@ -970,6 +990,7 @@ private enum class StorageClearTarget {
             LsposedModules -> R.string.storage_lsposed_modules
             PatchedApps -> R.string.storage_patched_apps
             RetainedOriginals -> R.string.storage_retained_originals
+            RepatchInputs -> R.string.storage_repatch_inputs
             PatchProfileInputs -> R.string.storage_patch_profile_inputs
             TemporaryWorkspace -> R.string.storage_temporary_workspace
             UiTemporaryWorkspace -> R.string.storage_ui_temporary_workspace
@@ -1017,6 +1038,8 @@ private suspend fun loadStorageSnapshot(
     val patcherRuntimePluginsDir = context.privateAppDir("managed_patcher_runtime_plugins")
     val patchedAppsDir = context.privateAppDir("patched-apps")
     val retainedOriginalsDir = context.privateAppDir("original-apps")
+    val repatchInputsDir = context.privateAppDir("repatch-inputs")
+    val repatchInputStagingDir = context.privateAppDir("repatch-input-staging")
     val patchProfileInputsDir = context.privateAppDir("patch-profile-inputs")
     val temporaryWorkspaceDir = context.privateAppDir("ephemeral")
     val uiTemporaryWorkspaceDir = context.privateAppDir("ui_ephemeral")
@@ -1050,6 +1073,9 @@ private suspend fun loadStorageSnapshot(
     val patcherRuntimePluginsStats = patcherRuntimePluginsDir.directoryStats()
     val patchedAppsStats = patchedAppsDir.directoryStats()
     val retainedOriginalsStats = retainedOriginalsDir.directoryStats()
+    val retainedRepatchInputsStats = repatchInputsDir.directoryStats()
+    val repatchInputStagingStats = repatchInputStagingDir.directoryStats()
+    val repatchInputsStats = retainedRepatchInputsStats + repatchInputStagingStats
     val patchProfileInputsStats = patchProfileInputsDir.directoryStats()
     val temporaryWorkspaceStats = temporaryWorkspaceDir.directoryStats()
     val uiTemporaryWorkspaceStats = uiTemporaryWorkspaceDir.directoryStats()
@@ -1071,6 +1097,7 @@ private suspend fun loadStorageSnapshot(
         patcherRuntimePluginsStats,
         patchedAppsStats,
         retainedOriginalsStats,
+        repatchInputsStats,
         patchProfileInputsStats,
         temporaryWorkspaceStats,
         uiTemporaryWorkspaceStats
@@ -1185,6 +1212,14 @@ private suspend fun loadStorageSnapshot(
             description = context.getString(R.string.storage_retained_originals_description),
             stats = retainedOriginalsStats,
             clearTarget = StorageClearTarget.RetainedOriginals
+        ),
+        StorageAreaUsage(
+            targetKey = R.string.storage_repatch_inputs,
+            title = context.getString(R.string.storage_repatch_inputs),
+            description = context.getString(R.string.storage_repatch_inputs_description),
+            stats = repatchInputsStats,
+            clearTarget = StorageClearTarget.RepatchInputs,
+            clearableBytes = retainedRepatchInputsStats.bytes
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_patch_profile_inputs,
@@ -1310,6 +1345,11 @@ private suspend fun clearStorageTarget(
     StorageClearTarget.RetainedOriginals -> clearStorageDirectories(
         context.privateAppDir("original-apps")
     )
+    StorageClearTarget.RepatchInputs -> measureClearedStorage(
+        context.privateAppDir("repatch-inputs")
+    ) {
+        installedAppRepository.clearRepatchInputs()
+    }
     StorageClearTarget.PatchProfileInputs -> measureClearedStorage(context.privateAppDir("patch-profile-inputs")) {
         patchProfileRepository.profilesFlow().first()
             .filter { it.apkPath != null }
@@ -1389,6 +1429,8 @@ private fun Context.knownInternalStorageRoots(): List<File> = listOf(
     privateAppDir("managed_patcher_runtime_plugins"),
     privateAppDir("patched-apps"),
     privateAppDir("original-apps"),
+    privateAppDir("repatch-inputs"),
+    privateAppDir("repatch-input-staging"),
     privateAppDir("patch-profile-inputs"),
     privateAppDir("ephemeral"),
     privateAppDir("ui_ephemeral")

@@ -19,6 +19,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.nio.file.Path
+import java.security.MessageDigest
 import java.util.Locale
 import java.util.UUID
 
@@ -83,6 +84,9 @@ class Filesystem(private val app: Application) {
     private val patchOptionInputStagingDir =
         patchOptionInputsDir.resolve("$PATCH_OPTION_INPUT_STAGING_DIR_PREFIX${UUID.randomUUID()}")
     private val patchProfileInputsDir: File = app.getDir("patch-profile-inputs", Context.MODE_PRIVATE).apply { mkdirs() }
+    private val repatchInputsDir: File = app.getDir("repatch-inputs", Context.MODE_PRIVATE).apply { mkdirs() }
+    private val repatchInputStagingDir: File =
+        app.getDir("repatch-input-staging", Context.MODE_PRIVATE).apply { mkdirs() }
 
     init {
         val staleStagingInputs = patchOptionInputsDir.listFiles()
@@ -501,10 +505,183 @@ class Filesystem(private val app: Application) {
     private fun File.safeCanonicalPath(): String =
         runCatching { canonicalFile.absolutePath }.getOrElse { absoluteFile.absolutePath }
 
+    private fun File.isWithinDirectory(directory: File): Boolean {
+        val rootPath = directory.safeCanonicalPath()
+        val filePath = safeCanonicalPath()
+        return filePath != rootPath && filePath.startsWith("$rootPath${File.separator}")
+    }
+
     fun getPatchProfileInputFile(profileId: Int, extension: String): File {
         val sanitized = extension.lowercase(Locale.ROOT).takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
             ?: "apk"
         return patchProfileInputsDir.resolve("profile_${profileId}.$sanitized")
+    }
+
+    fun stageRepatchInputFile(source: File): File {
+        check(source.isFile) { "Repatch input source is unavailable" }
+        val extension = source.extension.lowercase(Locale.ROOT)
+            .takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
+            ?: "apk"
+        check(repatchInputStagingDir.mkdirs() || repatchInputStagingDir.isDirectory) {
+            "Unable to create the Repatch input staging directory"
+        }
+        val target = repatchInputStagingDir.resolve("input_${UUID.randomUUID()}.$extension")
+        return try {
+            source.copyTo(target, overwrite = false)
+            check(target.isFile && target.length() == source.length()) {
+                "Failed to verify the retained Repatch input"
+            }
+            target
+        } catch (error: Throwable) {
+            target.delete()
+            throw error
+        }
+    }
+
+    data class PersistedRepatchInput(val file: File, val created: Boolean)
+
+    fun persistRepatchInputFile(
+        entryKey: String,
+        sourcePath: String,
+        retainedPath: String? = null
+    ): PersistedRepatchInput {
+        val source = File(sourcePath)
+        check(source.isFile) { "Repatch input source is unavailable" }
+        val extension = source.extension.lowercase(Locale.ROOT)
+            .takeIf { it.matches(Regex("^[a-z0-9]{1,10}$")) }
+            ?: "apk"
+        val entryDir = repatchInputEntryDir(entryKey)
+        check(entryDir.mkdirs() || entryDir.isDirectory) {
+            "Unable to create the retained Repatch input directory"
+        }
+        val retainedFile = retainedPath
+            ?.takeIf(String::isNotBlank)
+            ?.let(::File)
+            ?.takeIf { it.isWithinDirectory(entryDir) }
+        val sourceInEntryDir = source.takeIf { it.isWithinDirectory(entryDir) }
+        val reusableFile = sequenceOf(sourceInEntryDir, retainedFile)
+            .filterNotNull()
+            .distinctBy { it.safeCanonicalPath() }
+            .firstOrNull { candidate ->
+                candidate.isFile &&
+                    candidate.extension.equals(extension, ignoreCase = true) &&
+                    filesMatch(source, candidate)
+            }
+        val protectedPaths = buildSet {
+            retainedFile?.let { add(it.safeCanonicalPath()) }
+            sourceInEntryDir?.let { add(it.safeCanonicalPath()) }
+            reusableFile?.let { add(it.safeCanonicalPath()) }
+        }
+        entryDir.listFiles().orEmpty().forEach { candidate ->
+            if (
+                candidate.isFile &&
+                candidate.safeCanonicalPath() !in protectedPaths
+            ) {
+                candidate.delete()
+            }
+        }
+        reusableFile?.let { return PersistedRepatchInput(it, created = false) }
+        val target = entryDir.resolve("input_${UUID.randomUUID()}.$extension")
+        return try {
+            source.copyTo(target, overwrite = false)
+            check(target.isFile && target.length() == source.length()) {
+                "Failed to verify the persisted Repatch input"
+            }
+            PersistedRepatchInput(target, created = true)
+        } catch (error: Throwable) {
+            target.delete()
+            throw error
+        }
+    }
+
+    fun deleteRepatchInputStagingFile(path: String?): Boolean {
+        val file = path?.takeIf(String::isNotBlank)?.let(::File) ?: return false
+        val stagingRoot = repatchInputStagingDir.safeCanonicalPath()
+        val filePath = file.safeCanonicalPath()
+        if (!filePath.startsWith("$stagingRoot${File.separator}")) return false
+        return !file.exists() || file.delete()
+    }
+
+    fun pruneRepatchInputStagingFiles(
+        retainedPaths: Collection<String>,
+        olderThanTimestampMillis: Long? = null
+    ): Int {
+        val retainedCanonicalPaths = retainedPaths
+            .asSequence()
+            .filter(String::isNotBlank)
+            .map(::File)
+            .mapTo(mutableSetOf()) { it.safeCanonicalPath() }
+        return repatchInputStagingDir.listFiles { file ->
+            file.isFile && file.name.startsWith("input_")
+        }.orEmpty().count { file ->
+            val oldEnough = olderThanTimestampMillis == null ||
+                file.lastModified() < olderThanTimestampMillis
+            oldEnough &&
+                file.safeCanonicalPath() !in retainedCanonicalPaths &&
+                file.delete()
+        }
+    }
+
+    fun deleteRepatchInputFile(path: String?): Boolean {
+        val file = path?.takeIf(String::isNotBlank)?.let(::File) ?: return false
+        val root = repatchInputsDir.safeCanonicalPath()
+        val filePath = file.safeCanonicalPath()
+        if (!filePath.startsWith("$root${File.separator}")) return false
+        return !file.exists() || file.delete()
+    }
+
+    fun pruneRepatchInputFiles(retainedPaths: Collection<String?>): Int {
+        val retainedCanonicalPaths = retainedPaths.mapNotNullTo(mutableSetOf()) { path ->
+            path?.takeIf(String::isNotBlank)
+                ?.let(::File)
+                ?.takeIf(File::isFile)
+                ?.safeCanonicalPath()
+        }
+        var removed = 0
+        repatchInputsDir.listFiles().orEmpty().forEach { entry ->
+            if (entry.isDirectory) {
+                entry.listFiles().orEmpty().forEach { candidate ->
+                    if (
+                        candidate.isFile &&
+                        candidate.safeCanonicalPath() !in retainedCanonicalPaths &&
+                        candidate.delete()
+                    ) {
+                        removed++
+                    }
+                }
+                if (entry.listFiles().isNullOrEmpty()) {
+                    entry.delete()
+                }
+            } else if (
+                entry.isFile &&
+                entry.safeCanonicalPath() !in retainedCanonicalPaths &&
+                entry.delete()
+            ) {
+                removed++
+            }
+        }
+        return removed
+    }
+
+    fun deleteRepatchInputsForEntry(entryKey: String): Int =
+        deleteDirectoryAndCountFiles(repatchInputEntryDir(entryKey)) +
+            deleteDirectoryAndCountFiles(legacyRepatchInputEntryDir(entryKey))
+
+    private fun repatchInputEntryDir(entryKey: String): File {
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(entryKey.toByteArray(Charsets.UTF_8))
+            .joinToString(separator = "") { byte ->
+                (byte.toInt() and 0xFF).toString(16).padStart(2, '0')
+            }
+        return repatchInputsDir.resolve(digest)
+    }
+
+    private fun legacyRepatchInputEntryDir(entryKey: String): File {
+        val encoded = Base64.encodeToString(
+            entryKey.toByteArray(Charsets.UTF_8),
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        ).ifBlank { "entry" }
+        return repatchInputsDir.resolve(encoded)
     }
 
     fun createPatchOptionInputFile(extension: String): File {

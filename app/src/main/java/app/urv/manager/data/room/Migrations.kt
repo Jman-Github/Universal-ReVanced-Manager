@@ -303,3 +303,9 @@ val MIGRATION_18_19 = object : Migration(18, 19) {
         )
     }
 }
+
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE installed_app ADD COLUMN repatch_source_path TEXT")
+    }
+}

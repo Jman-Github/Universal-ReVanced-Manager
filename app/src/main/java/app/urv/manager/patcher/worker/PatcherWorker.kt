@@ -1891,6 +1891,11 @@ class PatcherWorker(
             )
 
             Log.i(tag, "Patching succeeded".logFmt())
+            val repatchSourcePath = runCatching {
+                fs.stageRepatchInputFile(inputFile).absolutePath
+            }.onFailure { error ->
+                Log.w(tag, "Failed to retain Repatch input for ${args.packageName}", error)
+            }.getOrNull()
             val resultData = Data.Builder()
                 .putIntArray(FAILED_PATCH_INDEXES_KEY, currentFailedPatchIndexArray())
                 .apply {
@@ -1899,6 +1904,9 @@ class PatcherWorker(
                     }
                     resolvedInputVersionCode?.let {
                         putLong(INPUT_VERSION_CODE_KEY, it)
+                    }
+                    repatchSourcePath?.let {
+                        putString(REPATCH_SOURCE_PATH_KEY, it)
                     }
                 }
                 .build()
@@ -2210,6 +2218,7 @@ class PatcherWorker(
         const val FAILED_PATCH_INDEXES_KEY = "failed_patch_indexes"
         const val INPUT_VERSION_NAME_KEY = "input_version_name"
         const val INPUT_VERSION_CODE_KEY = "input_version_code"
+        const val REPATCH_SOURCE_PATH_KEY = "repatch_source_path"
         private const val WORK_DATA_MAX_BYTES = 9000
         private const val DOWNLOAD_PROGRESS_MIN_INTERVAL_MS = 150L
         private const val DOWNLOAD_PROGRESS_MIN_BYTES = 256 * 1024L
