@@ -1782,11 +1782,14 @@ fun PatchesSelectorScreen(
                                             }
                                         },
                                         text = {
+                                            val selectionProgress =
+                                                viewModel.bundleSelectionProgress(bundle)
                                             BundleTabContent(
                                                 displayName = bundleDisplayNames[bundle.uid] ?: bundle.name,
                                                 version = bundle.version.orEmpty(),
                                                 sourceType = bundleTypes[bundle.uid],
-                                                selectedCount = viewModel.bundleSelectionCount(bundle.uid)
+                                                selectedCount = selectionProgress.selectedCount,
+                                                totalCount = selectionProgress.totalCount
                                             )
                                         },
                                         selectedContentColor = MaterialTheme.colorScheme.primary,
@@ -2563,7 +2566,8 @@ private fun BundleTabContent(
     displayName: String,
     version: String,
     sourceType: BundleSourceType?,
-    selectedCount: Int? = null
+    selectedCount: Int? = null,
+    totalCount: Int? = null
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
@@ -2580,14 +2584,18 @@ private fun BundleTabContent(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.outline
         )
-        selectedCount?.let { count ->
+        if (selectedCount != null && totalCount != null) {
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
             ) {
                 Text(
-                    text = stringResource(R.string.patch_selector_item_description, count),
+                    text = stringResource(
+                        R.string.patch_selector_bundle_selection_progress,
+                        selectedCount,
+                        totalCount
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)

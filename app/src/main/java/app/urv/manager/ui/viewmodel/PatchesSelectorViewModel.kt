@@ -376,9 +376,20 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         return customPatchSelection == null && (currentDefaultSelection[bundleUid]?.isNotEmpty() == true)
     }
 
-    fun bundleSelectionCount(bundleUid: Int): Int {
-        val selection = customPatchSelection ?: currentDefaultSelection
-        return selection[bundleUid]?.size ?: 0
+    data class BundleSelectionProgress(
+        val selectedCount: Int,
+        val totalCount: Int
+    )
+
+    fun bundleSelectionProgress(bundle: PatchBundleInfo.Scoped): BundleSelectionProgress {
+        var selectedCount = 0
+        var totalCount = 0
+        bundle.patchSequence(allowIncompatiblePatches).forEach { patch ->
+            if (effectiveLockState(patch) == PatchLockState.LOCKED_OFF) return@forEach
+            totalCount++
+            if (isSelected(bundle.uid, patch)) selectedCount++
+        }
+        return BundleSelectionProgress(selectedCount, totalCount)
     }
 
     fun isSelected(bundle: Int, patch: PatchInfo): Boolean {
