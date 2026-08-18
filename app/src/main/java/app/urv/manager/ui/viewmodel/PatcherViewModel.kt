@@ -50,6 +50,10 @@ import app.urv.manager.domain.installer.InstallCancelledException
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
+import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
+import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
+import app.urv.manager.domain.installer.rootMountStockIdentityUsable
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.SessionDeadException
@@ -112,6 +116,7 @@ import app.urv.manager.util.PatchSelection
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.applyAvailability
 import app.urv.manager.patcher.patch.installerTypeFor
+import app.urv.manager.patcher.patch.isCompatibleWithInstallerRules
 import app.urv.manager.patcher.patch.removeGmsCoreSupport
 import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.patcherEngineDisplayName
@@ -308,6 +313,7 @@ class PatcherViewModel(
     private var internalInstallBaseline: Pair<Long?, Long?>? = null
     private var postTimeoutGraceJob: Job? = null
     private var activeInstallJob: Job? = null
+    private var rootMountModeOverrideRefreshJob: Job? = null
     private var installProgressToastJob: Job? = null
     private var installProgressToast: Toast? = null
     private var deferInstallProgressToasts = false
@@ -329,6 +335,8 @@ class PatcherViewModel(
         private set
     var supportsRootMount by mutableStateOf(true)
         private set
+    private var supportsRootMountModeOverride by mutableStateOf(false)
+    private var completedPatchHadFailures = false
     private var installedApp: InstalledApp? = null
     private var currentSourceEntryKey: String?
         get() = savedStateHandle.get<String>("current_source_entry_key") ?: input.sourceEntryKey
@@ -355,6 +363,164 @@ class PatcherViewModel(
 
     fun isInstallerTokenAllowed(token: InstallerManager.Token): Boolean =
         installerTokenMatchesPatchMode(token, usingMountInstall)
+
+    fun isInstallerTokenSelectable(token: InstallerManager.Token): Boolean =
+        installerTokenSelectableForPatchedOutput(
+            token = token,
+            useMount = usingMountInstall,
+            supportsRootMount = supportsRootMountModeOverride
+        )
+
+    private suspend fun patchSelectionSupportsRootMountModeOverride(
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): Boolean {
+        if (completedPatchHadFailures) return false
+        val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
+        val removeGmsCore = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            prefs.removeGmsCoreForPrimaryMount.get()
+        if (!availabilityEnabled && !removeGmsCore) return true
+
+        val bundles = patchBundleRepository.scopedBundleInfoFlow(
+            packageName,
+            sourceVersionName,
+            sourceVersionCode
+        ).first().associateBy { it.uid }
+        if (appliedSelection.isNotEmpty() && bundles.isEmpty()) return false
+        val allowIncompatible = prefs.disablePatchVersionCompatCheck.get() ||
+            bundles.any { (uid, bundle) ->
+                val selected = appliedSelection[uid].orEmpty()
+                bundle.incompatible.any { it.name in selected }
+            }
+        val patchesByBundle = bundles.mapValues { (_, bundle) ->
+            bundle.patchSequence(allowIncompatible).associateBy { it.name }
+        }
+        return appliedSelection.isCompatibleWithInstallerRules(
+            installerType = installerTypeFor(useMount = true),
+            eligibleBundlePatches = patchesByBundle,
+            availabilityEnabled = availabilityEnabled,
+            removeGmsCore = removeGmsCore
+        )
+    }
+
+    private fun verifiedStandaloneStockCandidates(
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): List<File> {
+        val retainedOriginals = fs.findOriginalAppFiles(
+            packageName = packageName,
+            version = sourceVersionName,
+            versionCode = sourceVersionCode
+        )
+        val repatchSource = patchedRepatchSourcePath?.let(::File)
+        return (sequenceOf(inputFile, repatchSource).filterNotNull() + retainedOriginals.asSequence())
+            .distinctBy { it.absolutePath }
+            .filter { candidate ->
+                if (
+                    !candidate.isFile ||
+                    fs.isManagedPatchedAppFile(candidate) ||
+                    SplitApkPreparer.isSplitArchive(candidate)
+                ) {
+                    return@filter false
+                }
+                val info = pm.getPackageInfo(candidate, includeSigning = true)
+                    ?: return@filter false
+                info.packageName == packageName &&
+                    info.versionName == sourceVersionName &&
+                    pm.getVersionCode(info) == sourceVersionCode &&
+                    info.sharedUserId == null &&
+                    packageInfoIsCompleteSingleApk(info) &&
+                    pm.getSignature(info) != null
+            }
+            .toList()
+    }
+
+    private fun installedSignerMatchesStockSource(
+        installedInfo: PackageInfo?,
+        stockSource: File
+    ): Boolean {
+        val stockArchive = pm.getPackageInfo(stockSource, includeSigning = true)
+            ?: return false
+        val stockSigner = pm.getSignature(stockArchive)?.toByteArray()
+            ?: return false
+        if (installedInfo == null) return true
+        val installedSigner = runCatching {
+            pm.getSignature(installedInfo.packageName).toByteArray()
+        }.getOrNull() ?: return false
+        return installedSigner.contentEquals(stockSigner)
+    }
+
+    private fun installedPackageMatchesSourceVersion(
+        installedInfo: PackageInfo?,
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): Boolean {
+        val installed = installedInfo ?: return false
+        return installed.versionName == sourceVersionName &&
+            pm.getVersionCode(installed) == sourceVersionCode &&
+            !installed.applicationInfo?.sourceDir.isNullOrBlank()
+    }
+
+    private suspend fun canSelectRootMountForPatchedOutput(): Boolean {
+        val patched = pm.getPackageInfo(outputFile, includeSigning = true) ?: return false
+        val sourceVersionName = patchedSourceVersionName
+            ?: input.selectedApp.version?.takeIf(String::isNotBlank)
+            ?: return false
+        val sourceVersionCode = patchedSourceVersionCode
+            ?: input.selectedApp.versionCode
+            ?: return false
+        if (!patchSelectionSupportsRootMountModeOverride(sourceVersionName, sourceVersionCode)) {
+            return false
+        }
+        val installedInfo = pm.getPackageInfo(packageName)
+        val stockCandidates = verifiedStandaloneStockCandidates(sourceVersionName, sourceVersionCode)
+        val stockSource = stockCandidates.firstOrNull {
+            installedSignerMatchesStockSource(installedInfo, it)
+        }
+        val installedMatchesSourceVersion = installedPackageMatchesSourceVersion(
+            installedInfo,
+            sourceVersionName,
+            sourceVersionCode
+        )
+        val installedHasSigningCertificate = installedInfo?.let { installed ->
+            runCatching { pm.getSignature(installed.packageName) }.getOrNull() != null
+        } == true
+        val hasUsableStockIdentity = rootMountStockIdentityUsable(
+            installedMatchesSourceVersion = installedMatchesSourceVersion,
+            installedHasSigningCertificate = installedHasSigningCertificate,
+            hasStandaloneStockSource = stockCandidates.isNotEmpty(),
+            standaloneStockIdentityCompatible = stockSource != null
+        )
+        return patchedOutputSupportsRootMount(
+            patchedPackageName = patched.packageName,
+            originalPackageName = packageName,
+            patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched),
+            patchedHasSigningCertificate = pm.getSignature(patched) != null,
+            installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true,
+            installedHasSharedUserId = installedInfo?.sharedUserId != null,
+            hasUsableStockIdentity = hasUsableStockIdentity,
+            patchedVersionMatchesSource = patched.versionName == sourceVersionName
+        )
+    }
+
+    private fun refreshRootMountModeOverrideAsync() {
+        rootMountModeOverrideRefreshJob?.cancel()
+        rootMountModeOverrideRefreshJob = viewModelScope.launch(Dispatchers.IO) {
+            val supported = try {
+                canSelectRootMountForPatchedOutput()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "Failed to refresh Rooted Mount compatibility", error)
+                false
+            }
+            withContext(Dispatchers.Main) {
+                if (_patcherSucceeded.value == true) {
+                    supportsRootMountModeOverride = supported
+                }
+            }
+        }
+    }
 
     var basePackageInstalled by mutableStateOf(pm.getPackageInfo(packageName) != null)
         private set
@@ -2333,6 +2499,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val pkg = intent.data?.schemeSpecificPart ?: return
             if (pkg == packageName) {
                 basePackageInstalled = action != Intent.ACTION_PACKAGE_REMOVED
+                if (_patcherSucceeded.value == true) {
+                    refreshRootMountModeOverrideAsync()
+                }
             }
             if (action == Intent.ACTION_PACKAGE_ADDED || action == Intent.ACTION_PACKAGE_REPLACED) {
                 handleExternalInstallSuccess(pkg)
@@ -2966,13 +3135,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         ) {
             "Patched APK does not match its stock source"
         }
+        val verifiedStockSource = verifiedStandaloneStockCandidates(
+            sourceVersionName,
+            targetVersionCode
+        ).firstOrNull { candidate ->
+            installedSignerMatchesStockSource(installedBaseInfo, candidate)
+        }
         val stockNeedsReplacement = installedBaseInfo == null ||
             pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
             installedBaseInfo.versionName != sourceVersionName
         val stockApks = if (stockNeedsReplacement) {
-            val stock = originalInput
-                ?.takeUnless { originalInputIsSplit }
-                ?.takeIf(File::isFile)
+            val stock = verifiedStockSource
                 ?: throw IllegalStateException(
                     app.getString(R.string.install_app_fail_missing_stock)
                 )
@@ -3447,8 +3620,56 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun installWithToken(token: InstallerManager.Token, automatic: Boolean = false) {
+        installWithTokenInternal(
+            token = token,
+            automatic = automatic,
+            allowModeOverride = false
+        )
+    }
+
+    fun installWithSelectedToken(token: InstallerManager.Token) {
+        val crossModeMountRequested =
+            token == InstallerManager.Token.AutoSaved && !usingMountInstall
+        if (!crossModeMountRequested) {
+            installWithTokenInternal(
+                token = token,
+                automatic = false,
+                allowModeOverride = false
+            )
+            return
+        }
         if (isInstalling) return
-        if (!isInstallerTokenAllowed(token)) {
+        viewModelScope.launch {
+            supportsRootMountModeOverride = withContext(Dispatchers.IO) {
+                try {
+                    canSelectRootMountForPatchedOutput()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.w(TAG, "Failed to validate Rooted Mount compatibility", error)
+                    false
+                }
+            }
+            installWithTokenInternal(
+                token = token,
+                automatic = false,
+                allowModeOverride = true
+            )
+        }
+    }
+
+    private fun installWithTokenInternal(
+        token: InstallerManager.Token,
+        automatic: Boolean,
+        allowModeOverride: Boolean
+    ) {
+        if (isInstalling) return
+        val tokenAllowed = if (allowModeOverride) {
+            isInstallerTokenSelectable(token)
+        } else {
+            isInstallerTokenAllowed(token)
+        }
+        if (!tokenAllowed) {
             showInstallFailure(
                 app.getString(R.string.installer_patch_mode_mismatch),
                 allowFallback = false
@@ -3458,7 +3679,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         viewModelScope.launch {
             runCatching {
                 val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
-                check(!usingMountInstall || expectedPackage == packageName) {
+                val requestedMount = token == InstallerManager.Token.AutoSaved
+                check(!requestedMount || expectedPackage == packageName) {
                     app.getString(R.string.root_mount_renamed_package_not_supported)
                 }
                 Log.d(TAG, "installWithToken() requested, token=$token, expected=$expectedPackage, outputExists=${outputFile.exists()}")
@@ -3468,7 +3690,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     sourceFile = outputFile,
                     expectedPackage = expectedPackage,
                     sourceLabel = null,
-                    allowMount = usingMountInstall && expectedPackage == packageName
+                    allowMount = requestedMount && expectedPackage == packageName
                 ) ?: throw IllegalStateException("Selected installer is unavailable")
                 Log.d(TAG, "installWithToken() resolved plan=${plan::class.java.simpleName}")
                 if (plan !is InstallerManager.InstallPlan.Mount &&
@@ -5372,17 +5594,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             merged = true
                         )
                     }
-                    applyFailedPatchIndexes(
-                        workInfo.outputData.getIntArray(PatcherWorker.FAILED_PATCH_INDEXES_KEY)
-                            ?.toSet()
-                            .orEmpty()
-                    )
+                    val failedPatchIndexes = workInfo.outputData
+                        .getIntArray(PatcherWorker.FAILED_PATCH_INDEXES_KEY)
+                        ?.toSet()
+                        .orEmpty()
+                    completedPatchHadFailures = failedPatchIndexes.isNotEmpty()
+                    applyFailedPatchIndexes(failedPatchIndexes)
                     reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     // Code adapted from Morphe, see third-party/NOTICE for more information
                     // https://github.com/MorpheApp/morphe-manager/pull/779
-                    supportsRootMount = pm.getPackageInfo(outputFile)?.packageName == packageName
+                    val patchedPackageInfo = pm.getPackageInfo(outputFile)
+                    supportsRootMount = patchedPackageInfo?.packageName == packageName
+                    supportsRootMountModeOverride = false
                     _patcherSucceeded.value = true
+                    refreshRootMountModeOverrideAsync()
                 }
 
                 WorkInfo.State.FAILED -> {

@@ -166,10 +166,11 @@ fun PatcherScreen(
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
     val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
-    val supportsRootMount = viewModel.usingMountInstall && viewModel.supportsRootMount
+    val supportsRootMount = viewModel.supportsRootMount
+    val mountModeSupportsRootMount = viewModel.usingMountInstall && supportsRootMount
     var mountInstallerAvailable by remember { mutableStateOf(false) }
-    LaunchedEffect(supportsRootMount) {
-        mountInstallerAvailable = if (supportsRootMount) {
+    LaunchedEffect(mountModeSupportsRootMount) {
+        mountInstallerAvailable = if (mountModeSupportsRootMount) {
             withContext(Dispatchers.IO) {
                 installerManager.describeEntry(
                     InstallerManager.Token.AutoSaved,
@@ -1070,12 +1071,12 @@ fun PatcherScreen(
                 target = InstallerManager.InstallTarget.PATCHER,
                 includeNone = false
             ).filter { entry ->
-                viewModel.isInstallerTokenAllowed(entry.token)
+                viewModel.isInstallerTokenSelectable(entry.token)
             }.filterNot { entry ->
                 entry.token == InstallerManager.Token.AutoSaved && !supportsRootMount
             },
             onDismiss = { showInstallerPicker = false },
-            onConfirm = viewModel::installWithToken,
+            onConfirm = viewModel::installWithSelectedToken,
             onOpenShizuku = installerManager::openShizukuApp
         )
     }

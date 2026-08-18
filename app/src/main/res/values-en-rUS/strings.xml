@@ -1800,6 +1800,7 @@ Details: %2$s</string>
     <string name="root_mount_update_guidance_title">Mounted app updates</string>
     <string name="root_mount_safe_update_notice">For fully safe updates, update mounted apps through URV Manager and disable external automatic updates. If KernelSU has Unmount modules by default enabled, open KernelSU &gt; Superuser &gt; the mounted app &gt; Profile &gt; Custom and disable Unmount modules. Otherwise the mounted patched APK may not take effect.</string>
     <string name="root_mount_renamed_package_not_supported">Root mount cannot be used because the patched APK has a different package name from the original app.</string>
+    <string name="root_mount_incompatible_output">Root mount is unavailable because this APK or its stock app does not meet the safety requirements.</string>
     <string name="root_mount_requires_installed_stock">Safe root mount requires a separately installed compatible stock app. One APK cannot be used as both stock and patched payload.</string>
     <string name="root_mount_download_version_mismatch">The downloaded APK does not exactly match the installed stock version required for a safe root mount.</string>
     <string name="root_mount_downgrade_confirmation">Android rejected the in-place downgrade. Continuing briefly unregisters the app for this user, keeps app data, and immediately installs verified stock. App data created by a newer version may still be incompatible.</string>

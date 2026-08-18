@@ -12,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -22,7 +23,7 @@ import app.urv.manager.domain.batch.BatchInstallOutcome
 import app.urv.manager.domain.batch.BatchItemState
 import app.urv.manager.domain.batch.BatchPatchItem
 import app.urv.manager.domain.installer.InstallerManager
-import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
@@ -36,7 +37,9 @@ import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.toast
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import java.nio.file.Files
 
@@ -52,6 +55,11 @@ internal fun rememberBatchResultActions(
     viewModel: BatchPatcherViewModel
 ): BatchResultActionCallbacks {
     val context = LocalContext.current
+    val currentInstallerPickerItemKey by rememberUpdatedState(
+        item?.let { current ->
+            Triple(current.packageName, current.patchedFile?.absolutePath, current.useMount)
+        }
+    )
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
     val installerManager: InstallerManager = koinInject()
@@ -81,6 +89,11 @@ internal fun rememberBatchResultActions(
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
+    var installerPickerSupportsRootMount by remember { mutableStateOf(false) }
+    var installerPickerSupportsRootMountPackage by remember { mutableStateOf(false) }
+    var installerPickerEligibilityItemKey by remember {
+        mutableStateOf<Triple<String, String?, Boolean>?>(null)
+    }
     var pendingPermissionPicker by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
@@ -159,6 +172,34 @@ internal fun rememberBatchResultActions(
         }
     }
 
+    suspend fun refreshInstallerPickerEligibility(requestedItem: BatchPatchItem): Boolean {
+        val requestedPackageName = requestedItem.packageName
+        val requestedItemKey = Triple(
+            requestedPackageName,
+            requestedItem.patchedFile?.absolutePath,
+            requestedItem.useMount
+        )
+        val (supportsRootMount, supportsRootMountPackage) = withContext(Dispatchers.IO) {
+            val packageCompatible = viewModel.supportsRootMountPackage(requestedPackageName)
+            val modeOverrideCompatible =
+                !requestedItem.useMount && viewModel.supportsRootMount(requestedPackageName)
+            modeOverrideCompatible to packageCompatible
+        }
+        if (currentInstallerPickerItemKey != requestedItemKey) return false
+        installerPickerSupportsRootMount = supportsRootMount
+        installerPickerSupportsRootMountPackage = supportsRootMountPackage
+        installerPickerEligibilityItemKey = requestedItemKey
+        return true
+    }
+
+    LaunchedEffect(showInstallerPicker, currentInstallerPickerItemKey) {
+        val currentItem = item ?: return@LaunchedEffect
+        if (!showInstallerPicker || installerPickerEligibilityItemKey == currentInstallerPickerItemKey) {
+            return@LaunchedEffect
+        }
+        refreshInstallerPickerEligibility(currentItem)
+    }
+
     LaunchedEffect(useCustomFilePicker) {
         if (!useCustomFilePicker) {
             showExportPicker = false
@@ -178,10 +219,14 @@ internal fun rememberBatchResultActions(
                 target = InstallerManager.InstallTarget.PATCHER,
                 includeNone = false
             ).filter { entry ->
-                installerTokenMatchesPatchMode(entry.token, item.useMount)
+                installerTokenSelectableForPatchedOutput(
+                    token = entry.token,
+                    useMount = item.useMount,
+                    supportsRootMount = installerPickerSupportsRootMount
+                )
             }.filterNot { entry ->
                 entry.token == InstallerManager.Token.AutoSaved &&
-                    !viewModel.supportsRootMount(item.packageName)
+                    !installerPickerSupportsRootMountPackage
             },
             onDismiss = { showInstallerPicker = false },
             onConfirm = { token ->
@@ -377,8 +422,13 @@ internal fun rememberBatchResultActions(
                 item.installing -> viewModel.cancelInstall()
                 item.installOutcome == BatchInstallOutcome.INSTALLED ->
                     viewModel.open(item.packageName)
-                item.hasAvailablePatchedFile && chooseInstallerPerInstall ->
-                    showInstallerPicker = true
+                item.hasAvailablePatchedFile && chooseInstallerPerInstall -> {
+                    pickerScope.launch {
+                        if (refreshInstallerPickerEligibility(item)) {
+                            showInstallerPicker = true
+                        }
+                    }
+                }
                 item.hasAvailablePatchedFile -> viewModel.install(item.packageName)
             }
         }

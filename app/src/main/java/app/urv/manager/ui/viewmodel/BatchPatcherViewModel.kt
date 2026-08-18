@@ -793,14 +793,15 @@ class BatchPatcherViewModel(
     fun installWithToken(packageName: String, token: InstallerManager.Token) =
         coordinator.install(packageName, token)
     fun installAll() = coordinator.installAll()
-    fun supportsRootMount(packageName: String): Boolean {
+    suspend fun supportsRootMount(packageName: String): Boolean =
+        coordinator.supportsRootMountModeOverride(packageName)
+    fun supportsRootMountPackage(packageName: String): Boolean {
         val item = state.value?.items?.firstOrNull { it.packageName == packageName }
             ?: return false
-        val patchedPackage = item.patchedFile
+        return item.patchedFile
             ?.takeIf(File::isFile)
             ?.let(pm::getPackageInfo)
-            ?.packageName
-        return patchedPackage == item.packageName
+            ?.packageName == item.packageName
     }
     fun open(packageName: String) {
         state.value?.items

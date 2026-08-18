@@ -331,28 +331,34 @@ class Filesystem(private val app: Application) {
         return target
     }
 
-    fun findOriginalAppFile(
+    fun findOriginalAppFiles(
         packageName: String,
         version: String? = null,
         versionCode: Long? = null
-    ): File? {
+    ): List<File> {
         val candidates = originalAppPackageDir(packageName).listFiles { file ->
             file.isFile &&
                 (version == null || retainedOriginalFileMatches(file.name, version, versionCode))
         }.orEmpty()
-        if (candidates.isEmpty()) return null
+        if (candidates.isEmpty()) return emptyList()
 
         val exactStem = if (version != null && versionCode != null) {
             retainedOriginalFileStem(version, versionCode)
         } else {
             null
         }
-        return candidates.maxWithOrNull(
-            compareBy<File> { candidate ->
+        return candidates.sortedWith(
+            compareByDescending<File> { candidate ->
                 if (exactStem != null && candidate.name.startsWith("$exactStem.")) 1 else 0
-            }.thenBy(File::lastModified)
+            }.thenByDescending { candidate -> candidate.lastModified() }
         )
     }
+
+    fun findOriginalAppFile(
+        packageName: String,
+        version: String? = null,
+        versionCode: Long? = null
+    ): File? = findOriginalAppFiles(packageName, version, versionCode).firstOrNull()
 
     fun isManagedPatchedAppFile(
         file: File,

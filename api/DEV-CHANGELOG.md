@@ -5,6 +5,7 @@
 - Added elapsed patching time to the Patcher Information widget for both regular and batch patching
 - Added Repatch APK source retention so URV automatically reuses the original APK or split archive when repatching, with support for saved apps, batch patching, missing-source fallback, and Storage Management cleanup
 - Added a delete action to individual saved unpatched app cards in Downloads, with a confirmation prompt before removing the stored APK
+- Bumped Morphe Patcher to `1.9.0`
 
 
 # Bug fixes
@@ -12,6 +13,7 @@
 - Fixed saved patched apps installed through Shizuku-based custom installers showing Shell instead of the selected installer
 - Fixed pre-release updates not being detected for some patch bundles imported through GitHub or GitLab URLs
 - Fixed patch bundle tabs showing inaccurate counts by displaying selected and available patches as a selected/total value
+- Fixed Rooted Mount being unavailable in post-patch installer choosers for compatible Standard patches
 
 
 # CI

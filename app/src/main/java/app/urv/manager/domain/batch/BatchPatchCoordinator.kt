@@ -20,6 +20,10 @@ import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
+import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
+import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
+import app.urv.manager.domain.installer.rootMountStockIdentityUsable
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
@@ -39,6 +43,8 @@ import app.urv.manager.patcher.updatedFromLog
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
+import app.urv.manager.patcher.patch.installerTypeFor
+import app.urv.manager.patcher.patch.isCompatibleWithInstallerRules
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.ui.model.SelectedApp
@@ -61,6 +67,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -104,7 +111,8 @@ private data class BatchPatchWorkerResult(
     val succeeded: Boolean,
     val inputVersionName: String? = null,
     val inputVersionCode: Long? = null,
-    val repatchSourcePath: String? = null
+    val repatchSourcePath: String? = null,
+    val hadPatchFailures: Boolean = false
 )
 
 private data class PersistedBatchPatchedItem(
@@ -474,7 +482,8 @@ class BatchPatchCoordinator(
                             val resolvedItem = item.copy(
                                 version = patchResult.inputVersionName ?: item.version,
                                 versionCode = patchResult.inputVersionCode ?: item.versionCode,
-                                repatchSourcePath = patchResult.repatchSourcePath
+                                repatchSourcePath = patchResult.repatchSourcePath,
+                                hadPatchFailures = patchResult.hadPatchFailures
                             )
                             val persistImmediately =
                                 shouldPersistBatchOutputImmediately(initial.scheduled)
@@ -497,6 +506,7 @@ class BatchPatchCoordinator(
                                     sourceEntryKey = persistedItem.sourceEntryKey,
                                     patchedFile = persistedItem.file,
                                     savedForLater = initial.scheduled,
+                                    hadPatchFailures = resolvedItem.hadPatchFailures,
                                     message = null
                                 )
                             }
@@ -723,7 +733,10 @@ class BatchPatchCoordinator(
                 },
                 repatchSourcePath = info.outputData
                     .getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
-                    ?.takeIf(String::isNotBlank)
+                    ?.takeIf(String::isNotBlank),
+                hadPatchFailures = info.outputData
+                    .getIntArray(PatcherWorker.FAILED_PATCH_INDEXES_KEY)
+                    ?.isNotEmpty() == true
             )
         } finally {
             if (activeWorkerId == id) activeWorkerId = null
@@ -1304,6 +1317,146 @@ class BatchPatchCoordinator(
         }
     }
 
+    private fun verifiedStandaloneStockCandidates(
+        item: BatchPatchItem,
+        packageName: String = item.packageName
+    ): List<File> {
+        val sourceVersionName = item.version?.takeIf(String::isNotBlank) ?: return emptyList()
+        val sourceVersionCode = item.versionCode ?: return emptyList()
+        val retainedOriginals = fs.findOriginalAppFiles(
+            packageName = packageName,
+            version = sourceVersionName,
+            versionCode = sourceVersionCode
+        )
+        val repatchSource = item.repatchSourcePath?.let(::File)
+        val localSource = (item.input as? SelectedApp.Local)?.file
+        return (sequenceOf(repatchSource, localSource).filterNotNull() + retainedOriginals.asSequence())
+            .distinctBy { it.absolutePath }
+            .filter { candidate ->
+                if (
+                    !candidate.isFile ||
+                    fs.isManagedPatchedAppFile(candidate) ||
+                    SplitApkPreparer.isSplitArchive(candidate)
+                ) {
+                    return@filter false
+                }
+                val info = pm.getPackageInfo(candidate, includeSigning = true)
+                    ?: return@filter false
+                info.packageName == packageName &&
+                    info.versionName == sourceVersionName &&
+                    pm.getVersionCode(info) == sourceVersionCode &&
+                    info.sharedUserId == null &&
+                    packageInfoIsCompleteSingleApk(info) &&
+                    pm.getSignature(info) != null
+            }
+            .toList()
+    }
+
+    private fun installedSignerMatchesStockSource(
+        installedInfo: android.content.pm.PackageInfo?,
+        stockSource: File
+    ): Boolean {
+        val stockArchive = pm.getPackageInfo(stockSource, includeSigning = true)
+            ?: return false
+        val stockSigner = pm.getSignature(stockArchive)?.toByteArray()
+            ?: return false
+        if (installedInfo == null) return true
+        val installedSigner = runCatching {
+            pm.getSignature(installedInfo.packageName).toByteArray()
+        }.getOrNull() ?: return false
+        return installedSigner.contentEquals(stockSigner)
+    }
+
+    private fun installedPackageMatchesSourceVersion(
+        installedInfo: android.content.pm.PackageInfo?,
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): Boolean {
+        val installed = installedInfo ?: return false
+        return installed.versionName == sourceVersionName &&
+            pm.getVersionCode(installed) == sourceVersionCode &&
+            !installed.applicationInfo?.sourceDir.isNullOrBlank()
+    }
+
+    private suspend fun patchSelectionSupportsRootMountModeOverride(
+        item: BatchPatchItem
+    ): Boolean {
+        if (item.hadPatchFailures) return false
+        val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
+        val removeGmsCore = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            prefs.removeGmsCoreForPrimaryMount.get()
+        if (!availabilityEnabled && !removeGmsCore) return true
+
+        val bundles = patchBundleRepository.scopedBundleInfoFlow(
+            item.packageName,
+            item.version,
+            item.versionCode
+        ).first()
+        if (item.selection.isNotEmpty() && bundles.isEmpty()) return false
+        val selectableByBundle = item.bundles.associate { it.uid to it.patchNames }
+        val patchesByBundle = bundles.associate { bundle ->
+            val selectable = selectableByBundle[bundle.uid].orEmpty()
+            bundle.uid to bundle.patches
+                .filter { it.name in selectable }
+                .associateBy { it.name }
+        }
+        return item.selection.isCompatibleWithInstallerRules(
+            installerType = installerTypeFor(useMount = true),
+            eligibleBundlePatches = patchesByBundle,
+            availabilityEnabled = availabilityEnabled,
+            removeGmsCore = removeGmsCore
+        )
+    }
+
+    private suspend fun canSelectRootMountForPatchedOutput(
+        item: BatchPatchItem,
+        patchedFile: File
+    ): Boolean {
+        if (!patchSelectionSupportsRootMountModeOverride(item)) return false
+        val patched = pm.getPackageInfo(patchedFile, includeSigning = true) ?: return false
+        val sourceVersionName = item.version?.takeIf(String::isNotBlank) ?: return false
+        val sourceVersionCode = item.versionCode ?: return false
+        val installedInfo = pm.getPackageInfo(item.packageName)
+        val stockCandidates = verifiedStandaloneStockCandidates(item)
+        val stockSource = stockCandidates.firstOrNull {
+            installedSignerMatchesStockSource(installedInfo, it)
+        }
+        val installedMatchesSourceVersion = installedPackageMatchesSourceVersion(
+            installedInfo,
+            sourceVersionName,
+            sourceVersionCode
+        )
+        val installedHasSigningCertificate = installedInfo?.let { installed ->
+            runCatching { pm.getSignature(installed.packageName) }.getOrNull() != null
+        } == true
+        val hasUsableStockIdentity = rootMountStockIdentityUsable(
+            installedMatchesSourceVersion = installedMatchesSourceVersion,
+            installedHasSigningCertificate = installedHasSigningCertificate,
+            hasStandaloneStockSource = stockCandidates.isNotEmpty(),
+            standaloneStockIdentityCompatible = stockSource != null
+        )
+        return patchedOutputSupportsRootMount(
+            patchedPackageName = patched.packageName,
+            originalPackageName = item.packageName,
+            patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched),
+            patchedHasSigningCertificate = pm.getSignature(patched) != null,
+            installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true,
+            installedHasSharedUserId = installedInfo?.sharedUserId != null,
+            hasUsableStockIdentity = hasUsableStockIdentity,
+            patchedVersionMatchesSource = patched.versionName == sourceVersionName
+        )
+    }
+
+    suspend fun supportsRootMountModeOverride(packageName: String): Boolean {
+        val item = mutableState.value?.items?.firstOrNull { it.packageName == packageName }
+            ?: return false
+        val patchedFile = item.patchedFile?.takeIf(File::isFile) ?: return false
+        return canSelectRootMountForPatchedOutput(
+            item = item,
+            patchedFile = patchedFile
+        )
+    }
+
     private suspend fun installOne(
         packageName: String,
         forceShizuku: Boolean = false,
@@ -1365,7 +1518,21 @@ class BatchPatchCoordinator(
         }
         val resolvedToken = explicitToken
             ?: InstallerManager.Token.AutoSaved.takeIf { item.useMount }
-        if (item.useMount && targetPackage != item.packageName) {
+        val supportsRootMount = targetPackage == item.packageName
+        val requestedMount = resolvedToken == InstallerManager.Token.AutoSaved
+        val crossModeMountRequested = installerToken != null && !item.useMount && requestedMount
+        val installedPackageInfo = if (crossModeMountRequested) {
+            pm.getPackageInfo(item.packageName)
+        } else {
+            null
+        }
+        val installedHasSplitApks = installedPackageInfo?.let(pm::hasSplitApks) == true
+        val supportsRootMountModeOverride = crossModeMountRequested &&
+            canSelectRootMountForPatchedOutput(
+                item = item,
+                patchedFile = file
+            )
+        if (requestedMount && !supportsRootMount) {
             updateItem(index) {
                 it.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
@@ -1378,10 +1545,34 @@ class BatchPatchCoordinator(
             }
             return
         }
-        if (
-            resolvedToken != null &&
-            !installerTokenMatchesPatchMode(resolvedToken, item.useMount)
-        ) {
+        if (crossModeMountRequested && !supportsRootMountModeOverride) {
+            val messageRes = if (installedHasSplitApks) {
+                R.string.mount_split_not_supported
+            } else {
+                R.string.root_mount_incompatible_output
+            }
+            updateItem(index) {
+                it.copy(
+                    installOutcome = BatchInstallOutcome.FAILED,
+                    installMessage = app.getString(messageRes),
+                    installedPackageName = targetPackage,
+                    installing = false
+                )
+            }
+            return
+        }
+        val tokenAllowed = if (resolvedToken == null) {
+            true
+        } else if (installerToken != null) {
+            installerTokenSelectableForPatchedOutput(
+                token = resolvedToken,
+                useMount = item.useMount,
+                supportsRootMount = supportsRootMountModeOverride
+            )
+        } else {
+            installerTokenMatchesPatchMode(resolvedToken, item.useMount)
+        }
+        if (!tokenAllowed) {
             updateItem(index) {
                 it.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
@@ -1401,7 +1592,7 @@ class BatchPatchCoordinator(
                     sourceFile = file,
                     expectedPackage = targetPackage,
                     sourceLabel = item.appName,
-                    allowMount = item.useMount && targetPackage == item.packageName
+                    allowMount = requestedMount && supportsRootMount
                 )
             } else {
                 installerManager.resolvePlan(
@@ -1672,20 +1863,11 @@ class BatchPatchCoordinator(
             ?: return BatchInstallAttempt("Patched APK source version name is unavailable")
         val stockVersionCode = item.versionCode
             ?: return BatchInstallAttempt("Patched APK source version code is unavailable")
-        val retainedOriginal = fs.findOriginalAppFile(
-            packageName = targetPackage,
-            version = stockVersionName,
-            versionCode = stockVersionCode
-        )
-        val retainedStock = retainedOriginal
-            ?.takeUnless(SplitApkPreparer::isSplitArchive)
-        val retainedInfo = retainedStock?.let(pm::getPackageInfo)
-        val verifiedRetainedStock = retainedStock?.takeIf {
-            retainedInfo?.packageName == targetPackage &&
-                retainedInfo.versionName == stockVersionName &&
-                pm.getVersionCode(retainedInfo) == stockVersionCode
-        }
         val installedInfo = pm.getPackageInfo(targetPackage)
+        val verifiedRetainedStock = verifiedStandaloneStockCandidates(item, targetPackage)
+            .firstOrNull { candidate ->
+                installedSignerMatchesStockSource(installedInfo, candidate)
+            }
         val stockNeedsReplacement = installedInfo == null ||
             installedInfo.versionName != stockVersionName ||
             pm.getVersionCode(installedInfo) != stockVersionCode
@@ -2408,6 +2590,7 @@ class BatchPatchCoordinator(
                     sourceEntryKey = item.sourceEntryKey,
                     profileInstallerToken = item.profileInstallerToken,
                     useMount = item.useMount,
+                    hadPatchFailures = item.hadPatchFailures,
                     logLines = item.logLines.takeLast(MAX_LOG_LINES)
                 )
             },
@@ -2479,9 +2662,7 @@ class BatchPatchCoordinator(
                                 )
                             }.getOrNull()
                         },
-                    bundles = item.bundles.map { bundle ->
-                        bundle.copy(patchNames = emptySet())
-                    },
+                    bundles = item.bundles,
                     state = item.state.name,
                     message = item.message?.take(MAX_RESULT_MESSAGE_LENGTH),
                     patchedFilePath = item.patchedFile?.absolutePath,
@@ -2493,6 +2674,7 @@ class BatchPatchCoordinator(
                     sourceEntryKey = item.sourceEntryKey,
                     profileInstallerToken = item.profileInstallerToken,
                     useMount = item.useMount,
+                    hadPatchFailures = item.hadPatchFailures,
                     patcherEngine = item.patcherEngine,
                     patcherSessionInfo = item.patcherSessionInfo,
                     logLines = takeLastWithinCharacterBudget(
@@ -2517,6 +2699,23 @@ class BatchPatchCoordinator(
                 json.encodeToString(snapshot)
             } catch (error: Exception) {
                 Log.e(TAG, "Failed to serialize the trimmed batch patch result", error)
+                return
+            }
+        }
+        if (serialized.toByteArray(Charsets.UTF_8).size > MAX_RESULT_SERIALIZED_BYTES) {
+            snapshot = snapshot.copy(
+                items = snapshot.items.map { item ->
+                    item.copy(
+                        bundles = item.bundles.map { bundle ->
+                            bundle.copy(patchNames = emptySet())
+                        }
+                    )
+                }
+            )
+            serialized = try {
+                json.encodeToString(snapshot)
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to serialize the compact batch patch result", error)
                 return
             }
         }

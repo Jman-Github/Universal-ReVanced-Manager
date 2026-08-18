@@ -77,3 +77,29 @@ fun PatchSelection.removeGmsCoreSupport(enabled: Boolean): PatchSelection {
         bundleUid.takeIf { filtered.isNotEmpty() }?.let { it to filtered }
     }.toMap()
 }
+
+/**
+ * Returns whether a completed patch selection already satisfies another installer's selection
+ * rules without adding or removing patches. This is used for safe post-patch installer switching.
+ */
+fun PatchSelection.isCompatibleWithInstallerRules(
+    installerType: PatchInstallerType,
+    eligibleBundlePatches: Map<Int, Map<String, PatchInfo>>,
+    availabilityEnabled: Boolean,
+    removeGmsCore: Boolean = false,
+): Boolean {
+    val current = filterValues { it.isNotEmpty() }
+    if (availabilityEnabled) {
+        val selectedPatchesAreKnown = current.all { (bundleUid, selected) ->
+            val known = eligibleBundlePatches[bundleUid] ?: return@all false
+            selected.all(known::containsKey)
+        }
+        if (!selectedPatchesAreKnown) return false
+    }
+
+    val adjusted = current
+        .applyAvailability(installerType, eligibleBundlePatches, availabilityEnabled)
+        .removeGmsCoreSupport(removeGmsCore)
+        .filterValues { it.isNotEmpty() }
+    return adjusted == current
+}

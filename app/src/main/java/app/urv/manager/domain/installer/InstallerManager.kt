@@ -32,6 +32,55 @@ internal fun installerTokenMatchesPatchMode(
 ): Boolean = token != InstallerManager.Token.None &&
     (token == InstallerManager.Token.AutoSaved) == useMount
 
+internal fun packageInfoIsCompleteSingleApk(packageInfo: PackageInfo): Boolean {
+    val splitRequiredValue =
+        packageInfo.applicationInfo?.metaData?.get("com.android.vending.splits.required")
+    val splitRequired = splitRequiredValue == true ||
+        splitRequiredValue?.toString()?.equals("true", ignoreCase = true) == true
+    return !splitRequired &&
+        packageInfo.splitNames.isNullOrEmpty() &&
+        packageInfo.applicationInfo?.splitSourceDirs.isNullOrEmpty()
+}
+
+internal fun patchedOutputSupportsRootMount(
+    patchedPackageName: String?,
+    originalPackageName: String,
+    patchedIsCompleteSingleApk: Boolean,
+    patchedHasSigningCertificate: Boolean,
+    installedHasSplitApks: Boolean,
+    installedHasSharedUserId: Boolean,
+    hasUsableStockIdentity: Boolean,
+    patchedVersionMatchesSource: Boolean
+): Boolean = patchedPackageName == originalPackageName &&
+    patchedIsCompleteSingleApk &&
+    patchedHasSigningCertificate &&
+    !installedHasSplitApks &&
+    !installedHasSharedUserId &&
+    hasUsableStockIdentity &&
+    patchedVersionMatchesSource
+
+internal fun rootMountStockIdentityUsable(
+    installedMatchesSourceVersion: Boolean,
+    installedHasSigningCertificate: Boolean,
+    hasStandaloneStockSource: Boolean,
+    standaloneStockIdentityCompatible: Boolean
+): Boolean {
+    val installedCanSupplyStock =
+        installedMatchesSourceVersion && installedHasSigningCertificate
+    return if (installedCanSupplyStock) {
+        !hasStandaloneStockSource || standaloneStockIdentityCompatible
+    } else {
+        hasStandaloneStockSource && standaloneStockIdentityCompatible
+    }
+}
+
+internal fun installerTokenSelectableForPatchedOutput(
+    token: InstallerManager.Token,
+    useMount: Boolean,
+    supportsRootMount: Boolean
+): Boolean = installerTokenMatchesPatchMode(token, useMount) ||
+    (!useMount && supportsRootMount && token == InstallerManager.Token.AutoSaved)
+
 class InstallerManager(
     private val app: Application,
     private val prefs: PreferencesManager,
