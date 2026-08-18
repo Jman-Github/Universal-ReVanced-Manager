@@ -4,35 +4,19 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: Build signed APK
+  prepare:
+    name: Prepare dev metadata
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+    outputs:
+      version: ${{ steps.changelog.outputs.version }}
+      base_version: ${{ steps.changelog.outputs.base_version }}
+      dev_suffix: ${{ steps.changelog.outputs.dev_suffix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        id: setup-java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set Gradle Java Home
-        run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
-
-      - name: Cache Gradle
-        uses: burrunan/gradle-cache-action@v3
-
-      - name: Setup keystore
-        run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "lts/*"
           cache: npm
@@ -66,6 +50,51 @@ jobs:
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `dev_suffix=${devSuffix}\n`);
           NODE
 
+      - name: Upload dev release notes
+        uses: actions/upload-artifact@v7
+        with:
+          name: dev-release-notes
+          retention-days: 1
+          if-no-files-found: error
+          path: dev_release_notes.md
+
+  build:
+    name: Build signed APKs
+    runs-on: ubuntu-latest
+    needs: prepare
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        id: setup-java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set Gradle Java Home
+        run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
+
+      - name: Cache Gradle
+        uses: burrunan/gradle-cache-action@v3.0.3
+
+      - name: Setup keystore
+        run: |
+          echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
+
+      - name: Run JVM unit tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
+            -PsignAsDebug \
+            :app:testDebugUnitTest
+
       - name: Build dev
         env:
           GITHUB_ACTOR: ${{ github.actor }}
@@ -75,50 +104,77 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
-            -Pversion="${{ steps.changelog.outputs.base_version }}" \
-            -PdevVersionSuffix="${{ steps.changelog.outputs.dev_suffix }}" \
-            :app:assembleDev
+            -Pversion="${{ needs.prepare.outputs.base_version }}" \
+            -PdevVersionSuffix="${{ needs.prepare.outputs.dev_suffix }}" \
+            :app:assembleDev \
+            :revanced.v21-runtime-plugin:assembleRelease
 
       - name: Locate dev artifacts
         id: artifact
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           APK_DIR="app/build/outputs/apk/dev"
-          VERSION="${{ steps.changelog.outputs.version }}"
+          REVANCED_V21_PLUGIN="revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
           EXPECTED=(
-            "universal-revanced-manager-${VERSION}-all.apk"
-            "universal-revanced-manager-${VERSION}-arm64_v8.apk"
-            "universal-revanced-manager-${VERSION}-armeabi_v7a.apk"
-            "universal-revanced-manager-${VERSION}-x86.apk"
-            "universal-revanced-manager-${VERSION}-x86_64.apk"
+            "${APK_DIR}/universal-revanced-manager-${VERSION}-universal.apk"
+            "${APK_DIR}/universal-revanced-manager-${VERSION}-arm64-v8a.apk"
+            "${APK_DIR}/universal-revanced-manager-${VERSION}-armeabi-v7a.apk"
+            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86.apk"
+            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86_64.apk"
+            "${REVANCED_V21_PLUGIN}"
           )
           for name in "${EXPECTED[@]}"; do
-            if [ ! -f "$APK_DIR/$name" ]; then
-              echo "Missing expected dev APK artifact: $APK_DIR/$name"
+            if [ ! -f "$name" ]; then
+              echo "Missing expected dev APK artifact: $name"
               ls -la "$APK_DIR" || true
+              ls -la "$(dirname "$REVANCED_V21_PLUGIN")" || true
               exit 1
             fi
-            echo "Found $APK_DIR/$name"
-          done
-          mapfile -t ACTUAL < <(find "$APK_DIR" -maxdepth 1 -type f -name 'universal-revanced-manager-*.apk' -printf '%f\n' | sort)
-          if [ "${#ACTUAL[@]}" -ne "${#EXPECTED[@]}" ]; then
-            echo "Unexpected number of manager APK artifacts. Expected ${#EXPECTED[@]}, found ${#ACTUAL[@]}"
-            printf 'Actual manager APKs:\n%s\n' "${ACTUAL[@]}"
-            ls -la "$APK_DIR" || true
-            exit 1
-          fi
-          for name in "${ACTUAL[@]}"; do
-            if [[ ! " ${EXPECTED[*]} " =~ " ${name} " ]]; then
-              echo "Unexpected manager APK artifact name: $name"
-              ls -la "$APK_DIR" || true
-              exit 1
-            fi
+            echo "Found $name"
           done
           echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: urv-dev
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-universal.apk
+            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-arm64-v8a.apk
+            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-armeabi-v7a.apk
+            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86.apk
+            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86_64.apk
+            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
+            app/build/outputs/apk/dev/output-metadata.json
+
+  publish:
+    name: Publish prerelease
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download dev APK artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: urv-dev
+          path: release-artifacts
+
+      - name: Download dev release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: dev-release-notes
+          path: .
 
       - name: Prepare prerelease tag
         id: release
         env:
-          VERSION: ${{ steps.changelog.outputs.version }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           if [ -z "${VERSION}" ]; then
             echo "Version extracted from dev changelog is empty."
@@ -126,26 +182,28 @@ jobs:
           fi
           echo "NEW_TAG=${VERSION}" >> "$GITHUB_OUTPUT"
 
+      - name: Collect APK assets
+        if: steps.release.outputs.NEW_TAG != ''
+        run: |
+          mkdir -p release-assets
+          find release-artifacts -type f -name '*.apk' -exec cp '{}' release-assets/ \;
+          APK_COUNT="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l)"
+          if [ "$APK_COUNT" -eq 0 ]; then
+            echo "No APK assets were found in downloaded artifacts."
+            find release-artifacts -type f -print
+            exit 1
+          fi
+          ls -la release-assets
+
       - name: Publish prerelease
         if: steps.release.outputs.NEW_TAG != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.release.outputs.NEW_TAG }}
-          APK_DIR: ${{ steps.artifact.outputs.apk_dir }}
         run: |
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
           else
             gh release edit "$TAG" --title "Universal ReVanced Manager ${TAG}" --notes-file dev_release_notes.md --prerelease
           fi
-          gh release upload "$TAG" "$APK_DIR"/*.apk --clobber
-
-      - name: Upload APK artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: universal-revanced-manager-dev-${{ github.sha }}
-          retention-days: 14
-          if-no-files-found: error
-          path: |
-            ${{ steps.artifact.outputs.apk_dir }}/*.apk
-            app/build/outputs/apk/dev/output-metadata.json
+          gh release upload "$TAG" release-assets/*.apk --clobber
