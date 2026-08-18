@@ -13,10 +13,10 @@ jobs:
       dev_suffix: ${{ steps.changelog.outputs.dev_suffix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "lts/*"
           cache: npm
@@ -51,11 +51,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Java
         id: setup-java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -64,7 +64,7 @@ jobs:
         run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
 
       - name: Cache Gradle
-        uses: burrunan/gradle-cache-action@v3
+        uses: burrunan/gradle-cache-action@v3.0.3
 
       - name: Setup keystore
         run: |
@@ -120,7 +120,7 @@ jobs:
           echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: urv-debug
           retention-days: 14

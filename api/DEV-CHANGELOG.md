@@ -17,6 +17,7 @@
 # CI
 
 - Added a manual debug build workflow that uploads dev APK artifacts with a `-debug` version suffix without publishing a release
+- Updated GitHub Actions dependencies to current Node 24-compatible versions, resolving Node.js 20 and deprecated action warnings
 
 
 # v1.8.1-dev.22 (2026-08-11)

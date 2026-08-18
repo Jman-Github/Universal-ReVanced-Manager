@@ -11,12 +11,12 @@ jobs:
       version: ${{ steps.changelog.outputs.version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "lts/*"
           cache: npm
@@ -47,7 +47,7 @@ jobs:
           NODE
 
       - name: Upload release notes
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-notes
           retention-days: 1
@@ -66,13 +66,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Java
         id: setup-java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -81,7 +81,7 @@ jobs:
         run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
 
       - name: Cache Gradle
-        uses: burrunan/gradle-cache-action@v3
+        uses: burrunan/gradle-cache-action@v3.0.3
 
       - name: Setup keystore
         run: |
@@ -134,7 +134,7 @@ jobs:
           echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: urv-release
           retention-days: 14
@@ -162,13 +162,13 @@ jobs:
       GH_REPO: ${{ github.repository }}
     steps:
       - name: Download release APK artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: urv-release
           path: release-artifacts
 
       - name: Download release notes
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: release-notes
           path: .
@@ -219,7 +219,7 @@ jobs:
 
       - name: Attest
         if: steps.release.outputs.NEW_TAG != ''
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: Universal ReVanced Manager ${{ steps.release.outputs.NEW_TAG }}
           subject-path: release-assets/*.apk

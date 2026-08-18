@@ -458,6 +458,7 @@
 - Updated manager release APK filenames to use canonical ABI labels such as arm64-v8a, armeabi-v7a, and universal, and updated the in-app updater/workflows to match the new asset names while preserving compatibility with older releases https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/428
 - Added JVM unit test checks before dev and release APK builds
 - Added a manual debug build workflow that uploads dev APK artifacts with a `-debug` version suffix without publishing a release
+- Updated GitHub Actions dependencies to current Node 24-compatible versions, resolving Node.js 20 and deprecated action warnings
 
 
 # v1.8.0 (2026-02-15)
