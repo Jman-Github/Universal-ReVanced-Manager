@@ -226,6 +226,15 @@ class DownloadsViewModel(
         }
     }
 
+    fun deleteApp(downloadedApp: DownloadedApp) {
+        viewModelScope.launch {
+            withContext(NonCancellable + Dispatchers.IO) {
+                downloadedAppRepository.delete(listOf(downloadedApp))
+            }
+            appSelection.remove(downloadedApp)
+        }
+    }
+
     fun installApp(
         downloadedApp: DownloadedApp,
         installerToken: InstallerManager.Token? = null

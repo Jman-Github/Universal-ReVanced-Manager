@@ -1630,6 +1630,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="downloaded_app_install_merge_log_waiting">Waiting for APK merge output…</string>
     <string name="downloaded_apps_delete_title">Delete downloaded apps</string>
     <string name="downloaded_apps_delete_description">Remove the selected downloaded apps and their stored APK files from the manager?</string>
+    <string name="downloaded_app_delete_title">Delete downloaded app</string>
+    <string name="downloaded_app_delete_description">Remove this downloaded app and its stored APK files from the manager?</string>
     <string name="already_patched">Already patched</string>
     <string name="patch_selector_sheet_filter_title">Filter</string>
     <string name="patch_selector_sheet_filter_compat_title">Compatibility</string>

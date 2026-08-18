@@ -192,6 +192,7 @@ fun DownloadsSettingsScreen(
     var sourceIdPendingDeletion by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdPendingTrustRevoke by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceIdInSettings by rememberSaveable { mutableStateOf<String?>(null) }
+    var appPendingDeletion by remember { mutableStateOf<DownloadedApp?>(null) }
     var appPendingInstallerChoice by remember { mutableStateOf<DownloadedApp?>(null) }
 
     LaunchedEffect(viewModel) {
@@ -294,6 +295,18 @@ fun DownloadsSettingsScreen(
                 viewModel.importPluginSource(url)
                 showImportUrlDialog = false
             }
+        )
+    }
+    appPendingDeletion?.let { app ->
+        ConfirmDialog(
+            onDismiss = { appPendingDeletion = null },
+            onConfirm = {
+                viewModel.deleteApp(app)
+                appPendingDeletion = null
+            },
+            title = stringResource(R.string.downloaded_app_delete_title),
+            description = stringResource(R.string.downloaded_app_delete_description),
+            icon = Icons.Outlined.Delete
         )
     }
     appPendingInstallerChoice?.let { app ->
@@ -1124,6 +1137,9 @@ fun DownloadsSettingsScreen(
                         onExport = {
                             openExportPicker(listOf(app).toExportState())
                         },
+                        onDelete = {
+                            appPendingDeletion = app
+                        },
                         onInstall = {
                             if (chooseInstallerPerInstall) {
                                 appPendingInstallerChoice = app
@@ -1157,6 +1173,7 @@ private fun DownloadedAppCard(
     installEnabled: Boolean,
     onSelectionChange: () -> Unit,
     onExport: () -> Unit,
+    onDelete: () -> Unit,
     onInstall: () -> Unit
 ) {
     val cardShape = RoundedCornerShape(18.dp)
@@ -1255,6 +1272,12 @@ private fun DownloadedAppCard(
                             enabled = installEnabled,
                             loading = isInstalling,
                             onClick = onInstall
+                        )
+                        DownloadedAppQuickAction(
+                            text = stringResource(R.string.delete),
+                            icon = Icons.Outlined.Delete,
+                            enabled = installEnabled,
+                            onClick = onDelete
                         )
                     }
                 }
