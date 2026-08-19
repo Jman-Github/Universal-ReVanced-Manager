@@ -302,6 +302,140 @@ class RootMountPolicyTest {
                 )
             )
         )
+        assertEquals(
+            false,
+            RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                RootMountJournal(
+                    transactionId = "tx",
+                    packageName = installed.packageName,
+                    userId = 0,
+                    operation = RootMountOperation.SWITCH_PATCHED_BUILD,
+                    phase = RootMountPhase.ROLLING_BACK,
+                    startedAtEpochMs = 1,
+                    moduleMutationStarted = false
+                )
+            )
+        )
+        assertEquals(
+            false,
+            RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                RootMountJournal(
+                    transactionId = "tx",
+                    packageName = installed.packageName,
+                    userId = 0,
+                    operation = RootMountOperation.SWITCH_PATCHED_BUILD,
+                    phase = RootMountPhase.ROLLING_BACK,
+                    startedAtEpochMs = 1,
+                    rollbackFromPhase = RootMountPhase.STOPPING_APP
+                )
+            )
+        )
+        listOf(RootMountOperation.MOUNT_ONLY, RootMountOperation.RECONCILE).forEach { operation ->
+            assertEquals(
+                false,
+                RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                    RootMountJournal(
+                        transactionId = "tx",
+                        packageName = installed.packageName,
+                        userId = 0,
+                        operation = operation,
+                        phase = RootMountPhase.ROLLING_BACK,
+                        startedAtEpochMs = 1,
+                        moduleMutationStarted = true,
+                        moduleRestoreRequired = false,
+                        status = "REPAIR_REQUIRED"
+                    )
+                )
+            )
+        }
+        assertEquals(
+            false,
+            RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                RootMountJournal(
+                    transactionId = "tx",
+                    packageName = installed.packageName,
+                    userId = 0,
+                    operation = RootMountOperation.RECONCILE,
+                    phase = RootMountPhase.VERIFYING,
+                    startedAtEpochMs = 1,
+                    moduleMutationStarted = true,
+                    status = "MODULE_STATE_RETARGET_PENDING"
+                )
+            )
+        )
+        assertEquals(
+            true,
+            RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                RootMountJournal(
+                    transactionId = "tx",
+                    packageName = installed.packageName,
+                    userId = 0,
+                    operation = RootMountOperation.RECONCILE,
+                    phase = RootMountPhase.VERIFYING,
+                    startedAtEpochMs = 1,
+                    moduleMutationStarted = true,
+                    moduleRestoreRequired = true,
+                    status = "MODULE_STATE_RETARGET_PENDING"
+                )
+            )
+        )
+        assertEquals(
+            false,
+            RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                RootMountJournal(
+                    transactionId = "tx",
+                    packageName = installed.packageName,
+                    userId = 0,
+                    operation = RootMountOperation.UNMOUNT,
+                    phase = RootMountPhase.SNAPSHOTTING,
+                    startedAtEpochMs = 1,
+                    status = "LEGACY_UNMOUNT_SNAPSHOT_PENDING"
+                )
+            )
+        )
+        listOf("LEGACY_UNMOUNT_STAGE_PENDING", "LEGACY_UNMOUNT_COMMIT_PENDING").forEach { status ->
+            assertEquals(
+                true,
+                RootMountPolicy.interruptedJournalMayHaveChangedModule(
+                    RootMountJournal(
+                        transactionId = "tx",
+                        packageName = installed.packageName,
+                        userId = 0,
+                        operation = RootMountOperation.UNMOUNT,
+                        phase = RootMountPhase.ROLLING_BACK,
+                        startedAtEpochMs = 1,
+                        rollbackFromPhase = RootMountPhase.STAGING_PATCHED_PAYLOAD,
+                        status = status
+                    )
+                ),
+                status
+            )
+        }
+    }
+
+    @Test
+    fun `legacy journals infer mount mutation from the forward phase`() {
+        val beforeMutation = RootMountJournal(
+            transactionId = "tx",
+            packageName = installed.packageName,
+            userId = 0,
+            operation = RootMountOperation.UNMOUNT,
+            phase = RootMountPhase.STOPPING_APP,
+            startedAtEpochMs = 1
+        )
+        val afterMutation = beforeMutation.copy(phase = RootMountPhase.REMOVING_OLD_MOUNTS)
+        val rollingBackAfterMutation = afterMutation.copy(
+            phase = RootMountPhase.ROLLING_BACK,
+            rollbackFromPhase = RootMountPhase.REMOVING_OLD_MOUNTS
+        )
+        val rollingBackWithOldFalseMarker = rollingBackAfterMutation.copy(mountMutationStarted = false)
+        val explicitNoMutation = beforeMutation.copy(mountMutationStarted = false)
+
+        assertEquals(false, RootMountPolicy.interruptedJournalMayHaveChangedMounts(beforeMutation))
+        assertEquals(true, RootMountPolicy.interruptedJournalMayHaveChangedMounts(afterMutation))
+        assertEquals(true, RootMountPolicy.interruptedJournalMayHaveChangedMounts(rollingBackAfterMutation))
+        assertEquals(true, RootMountPolicy.interruptedJournalMayHaveChangedMounts(rollingBackWithOldFalseMarker))
+        assertEquals(false, RootMountPolicy.interruptedJournalMayHaveChangedMounts(explicitNoMutation))
     }
 
     @Test

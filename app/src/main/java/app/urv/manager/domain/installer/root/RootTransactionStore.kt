@@ -30,7 +30,10 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
         readJson(RootPaths.active(packageName))
 
     override suspend fun activeExists(packageName: String): Boolean =
-        runStoreCommand("[ -f ${shellQuote(RootPaths.active(packageName))} ]").isSuccess
+        fileExists(
+            RootPaths.active(packageName),
+            "Inspect root transaction journal"
+        )
 
     override suspend fun clearActive(packageName: String) {
         runStoreCommand(
@@ -54,16 +57,33 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
         readJson(RootPaths.committed(packageName))
 
     override suspend fun committedExists(packageName: String): Boolean =
-        runStoreCommand("[ -f ${shellQuote(RootPaths.committed(packageName))} ]").isSuccess
+        fileExists(
+            RootPaths.committed(packageName),
+            "Inspect root mount committed state"
+        )
 
     override suspend fun complete(journal: RootMountJournal, committed: RootCommittedState?) {
-        writeActive(journal.copy(phase = RootMountPhase.COMPLETED))
-        if (committed != null) writeCommitted(committed)
-        runStoreCommand(
-            "set -eu; rm -f ${shellQuote(RootPaths.active(journal.packageName))}; " +
-                "sync -f ${shellQuote(RootPaths.transaction(journal.packageName))} 2>/dev/null || sync"
+        writeActive(
+            journal.copy(
+                phase = RootMountPhase.COMPLETED,
+                completionStateRecorded = true,
+                completionCommittedState = committed
+            )
         )
-            .requireSuccess("Complete root transaction journal")
+        if (committed != null) writeCommitted(committed)
+        // The completed marker and committed result are already durable at this point. Journal
+        // deletion is cleanup only: if the root-shell transport fails before or after the unlink,
+        // either the recovery-safe COMPLETED marker remains or the journal is already gone.
+        // Never turn that ambiguous cleanup result into a rollback of the durable transaction.
+        try {
+            runStoreCommand(
+                "set -eu; rm -f ${shellQuote(RootPaths.active(journal.packageName))}; " +
+                    "sync -f ${shellQuote(RootPaths.transaction(journal.packageName))} 2>/dev/null || sync || true"
+            )
+        } catch (_: Exception) {
+            // Cleanup failures, including cancellation, are ambiguous but harmless after
+            // durable completion. The caller can observe cancellation at its next boundary.
+        }
     }
 
     override suspend fun appendDiagnostic(packageName: String, diagnosticId: String, message: String) {
@@ -96,10 +116,12 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
 
     private suspend fun listPackagesWith(fileName: String): List<String> {
         val result = runStoreCommand(
-            "for f in ${RootPaths.ROOT}/transactions/*/${shellQuote(fileName)}; do " +
-                "[ -f \"${'$'}f\" ] && basename \"${'$'}(dirname \"${'$'}f\")\"; done"
+            "set -eu; for f in ${RootPaths.ROOT}/transactions/*/${shellQuote(fileName)}; do " +
+                "[ -f \"${'$'}f\" ] || continue; " +
+                "basename \"${'$'}(dirname \"${'$'}f\")\"; done"
         )
-        return if (result.isSuccess) result.stdout.map(String::trim).filter(String::isNotEmpty) else emptyList()
+        result.requireSuccess("List root transaction state")
+        return result.stdout.map(String::trim).filter(String::isNotEmpty)
     }
 
     override suspend fun exportDiagnostics(packageName: String): String {
@@ -163,9 +185,26 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
         )
 
     private suspend inline fun <reified T> readJson(path: String): T? {
-        val result = runStoreCommand("cat ${shellQuote(path)} 2>/dev/null")
-        if (!result.isSuccess || result.stdout.isEmpty()) return null
+        val result = runStoreCommand(
+            "set -eu; if [ -f ${shellQuote(path)} ]; then cat ${shellQuote(path)}; " +
+                "else exit $MISSING_JSON_STATUS; fi"
+        )
+        if (result.status == MISSING_JSON_STATUS) return null
+        result.requireSuccess("Read ${path.substringAfterLast('/')}")
+        if (result.stdout.isEmpty()) return null
         return runCatching { json.decodeFromString<T>(result.stdout.joinToString("\n")) }.getOrNull()
+    }
+
+    private suspend fun fileExists(path: String, operation: String): Boolean {
+        val result = runStoreCommand(
+            "if [ -f ${shellQuote(path)} ]; then printf '1\\n'; else printf '0\\n'; fi"
+        )
+        result.requireSuccess(operation)
+        return when (result.stdout.singleOrNull()?.trim()) {
+            "1" -> true
+            "0" -> false
+            else -> error("$operation returned an invalid result")
+        }
     }
 
     private suspend fun atomicWrite(path: String, content: String) {
@@ -183,6 +222,7 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
     }
 
     private companion object {
+        const val MISSING_JSON_STATUS = 44
         const val STORE_TIMEOUT_SECONDS = 30L
     }
 }

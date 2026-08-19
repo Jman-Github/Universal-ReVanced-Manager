@@ -258,6 +258,77 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `running target process namespaces are verified against the patched mount`() = runBlocking {
+        val shell = CapturingShell()
+        RootMountNamespaces(shell).verifyProcesses(committedState(), listOf(1234, 5678))
+
+        val command = shell.commands.single()
+        assertTrue(command.contains("package_name=${shellQuote(PACKAGE)}"))
+        assertTrue(command.contains("pm list packages -U --user 0"))
+        assertTrue(command.contains("process_matches_package"))
+        assertTrue(command.contains("/proc/${'$'}pid/status"))
+        assertTrue(command.contains("[ \"${'$'}process_uid\" -ge 0 ] && [ \"${'$'}process_uid\" -lt 100000 ] || return 1"))
+        assertTrue(command.indexOf("process_uid=\"") < command.indexOf("case \"${'$'}process_name\" in"))
+        assertTrue(command.contains("for pid in 1234 5678; do"))
+        assertTrue(command.contains("/proc/${'$'}pid/cmdline"))
+        assertTrue(command.contains("[ -d \"/proc/${'$'}pid\" ] || continue"))
+        assertTrue(command.contains("Could not inspect target process mount namespace"))
+        assertTrue(command.contains("namespace_id=\"${'$'}(readlink \"/proc/${'$'}pid/ns/mnt\""))
+        assertTrue(command.contains("verified_namespace_id=\"${'$'}(readlink \"/proc/${'$'}pid/ns/mnt\""))
+        assertTrue(command.contains("Target process mount namespace changed during verification"))
+        assertEquals(2, command.split("if ! process_matches_package \"${'$'}pid\"; then").size - 1)
+        assertTrue(command.contains("Target process identity changed during namespace verification"))
+        assertTrue(command.contains("\"${'$'}package_name\"|\"${'$'}package_name\":*)"))
+        assertTrue(command.contains("if ! namespace_matches \"${'$'}pid\"; then"))
+        assertTrue(command.contains("Patched APK is not visible in target process namespace"))
+        assertEquals(listOf(60L to "target process namespace verification"), shell.boundedOperations)
+    }
+
+    @Test
+    fun `process identity verification scopes package names to the requested Android user`() = runBlocking {
+        val shell = CapturingShell()
+        RootMountNamespaces(shell).verifyProcesses(
+            committedState().copy(userId = 10),
+            listOf(1234)
+        )
+
+        val command = shell.commands.single()
+        assertTrue(command.contains("pm list packages -U --user 10"))
+        assertTrue(
+            command.contains(
+                "[ \"${'$'}process_uid\" -ge 1000000 ] && " +
+                    "[ \"${'$'}process_uid\" -lt 1100000 ] || return 1"
+            )
+        )
+    }
+
+    @Test
+    fun `running target process namespaces are verified against stock during recovery`() = runBlocking {
+        val shell = CapturingShell()
+        RootMountNamespaces(shell).verifyStockProcesses(PACKAGE, 0, TARGET, listOf(1234))
+
+        val command = shell.commands.single()
+        assertTrue(command.contains("package_name=${shellQuote(PACKAGE)}"))
+        assertTrue(command.contains("pm list packages -U --user 0"))
+        assertTrue(command.contains("process_matches_package"))
+        assertTrue(command.contains("/proc/${'$'}pid/status"))
+        assertTrue(command.contains("[ \"${'$'}process_uid\" -ge 0 ] && [ \"${'$'}process_uid\" -lt 100000 ] || return 1"))
+        assertTrue(command.indexOf("process_uid=\"") < command.indexOf("case \"${'$'}process_name\" in"))
+        assertTrue(command.contains("stock_path=${shellQuote(TARGET)}"))
+        assertTrue(command.contains("stock_inode=\"${'$'}(stat -c '%d:%i' \"${'$'}stock_path\")\""))
+        assertTrue(command.contains("[ -d \"/proc/${'$'}pid\" ] || continue"))
+        assertTrue(command.contains("Could not inspect target process mount namespace"))
+        assertTrue(command.contains("namespace_id=\"${'$'}(readlink \"/proc/${'$'}pid/ns/mnt\""))
+        assertTrue(command.contains("verified_namespace_id=\"${'$'}(readlink \"/proc/${'$'}pid/ns/mnt\""))
+        assertTrue(command.contains("Target process mount namespace changed during stock verification"))
+        assertEquals(2, command.split("if ! process_matches_package \"${'$'}pid\"; then").size - 1)
+        assertTrue(command.contains("Target process identity changed during stock namespace verification"))
+        assertTrue(command.contains("nsenter --mount=\"/proc/${'$'}pid/ns/mnt\" -- stat -c '%d:%i'"))
+        assertTrue(command.contains("still sees a non-stock APK"))
+        assertEquals(listOf(60L to "target process stock namespace verification"), shell.boundedOperations)
+    }
+
+    @Test
     fun `foreign only zygote mounts are left untouched during cleanup`() = runBlocking {
         val shell = CapturingShell()
         RootMountNamespaces(shell).removeOwned(PACKAGE, setOf(TARGET))

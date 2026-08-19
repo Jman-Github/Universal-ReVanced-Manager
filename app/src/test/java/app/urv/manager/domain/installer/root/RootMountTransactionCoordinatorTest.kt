@@ -1,7 +1,10 @@
 package app.urv.manager.domain.installer.root
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import java.io.File
 import java.security.MessageDigest
 import kotlin.test.Test
@@ -50,6 +53,29 @@ class RootMountTransactionCoordinatorTest {
         assertEquals("MOUNTED", fixture.store.committed?.status)
         assertEquals(1, fixture.module.enableCalls)
         assertEquals(1, fixture.verifier.verifyCalls)
+    }
+
+    @Test
+    fun `mount only retarget failure does not restore an older module snapshot`() = runBlocking {
+        val movedPath = "/data/app/new/$PACKAGE/base.apk"
+        val fixture = Fixture(initial = defaultState().copy(basePath = movedPath))
+        val previous = committed(defaultState()).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.verifyFailure = IllegalStateException("retargeted mount verification failed")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.STOCK, failure.recoveryState)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertEquals(movedPath, fixture.module.updatedStates.last().stockPath)
+        assertEquals(false, fixture.store.committed?.active)
     }
 
     @Test
@@ -190,6 +216,31 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `stock rollback verifies a surviving target process sees the stock apk`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        fixture.store.committed = previous
+        fixture.module.committedState = previous
+        fixture.reader.stops = false
+        fixture.reader.running = listOf(2468)
+        fixture.verifier.verifyFailure = IllegalStateException("Mount verification failed")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.MOUNT_ONLY)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.STOCK, failure.recoveryState)
+        assertEquals(2, fixture.verifier.stockProcessVerifyCalls)
+        assertEquals(listOf(listOf(2468), listOf(2468)), fixture.verifier.verifiedStockProcessPids)
+        assertEquals(false, fixture.store.committed?.active)
+        assertEquals("STOCK", fixture.store.committed?.status)
+    }
+
+    @Test
     fun `mount only rejects an ambiguous recovery payload when the module is missing`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial).copy(
@@ -258,6 +309,32 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `active transaction does not promote unfinished module state to committed`() = runBlocking {
+        val fixture = Fixture()
+        fixture.module.committedState = committed(fixture.initial).copy(
+            transactionId = "unfinished-module-state"
+        )
+        fixture.store.active = journal(
+            RootMountPhase.STAGING_PATCHED_PAYLOAD,
+            fixture.initial
+        ).copy(
+            stockMutationStarted = false,
+            registrationGap = false,
+            moduleMutationStarted = true,
+            moduleRestoreRequired = true,
+            mountMutationStarted = false
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(0, fixture.module.readCommittedStateCalls)
+        assertEquals(null, fixture.store.committed)
+    }
+
+    @Test
     fun `mount only rebuilds when committed state is missing`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("saved-patched.apk", 2, "saved-patched")
@@ -295,6 +372,47 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(1, fixture.module.stageCalls)
         assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
         assertTrue(fixture.module.disabled)
+    }
+
+    @Test
+    fun `corrupt committed recovery verifies stock in a restarted target process`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.corruptCommitted = true
+        fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.runningResults.addAll(
+            listOf(listOf(9753), listOf(9753), listOf(9753))
+        )
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(2, fixture.verifier.stockProcessVerifyCalls)
+        assertEquals(
+            listOf(listOf(9753), listOf(9753)),
+            fixture.verifier.verifiedStockProcessPids
+        )
+        assertFalse(fixture.store.committedExists(PACKAGE))
+    }
+
+    @Test
+    fun `caller cancellation cannot interrupt corrupt committed recovery`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.corruptCommitted = true
+        lateinit var executionJob: Job
+        fixture.verifier.onRemove = {
+            executionJob.cancel(CancellationException("caller cancelled corrupt committed recovery"))
+            yield()
+        }
+
+        val execution = async {
+            executionJob = requireNotNull(coroutineContext[Job])
+            fixture.coordinator.execute(fixture.request(RootMountOperation.RECOVER))
+        }
+
+        assertFailsWith<CancellationException> { execution.await() }
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertTrue(fixture.module.disabled)
+        assertFalse(fixture.store.committedExists(PACKAGE))
     }
 
     @Test
@@ -374,6 +492,196 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `bundle switch succeeds when target app immediately restarts`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.stopResults.addAll(listOf(false, false, false))
+        fixture.reader.running = listOf(2468)
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(2, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(2468), listOf(2468)), fixture.verifier.verifiedProcessPids)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertTrue(fixture.store.diagnostics.any { it.contains("restart-tolerant mounting") })
+        assertTrue(fixture.store.diagnostics.any { it.contains("running process namespaces") })
+    }
+
+    @Test
+    fun `bundle switch verifies the replacement pid when target process changes during verification`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.stopResults.addAll(listOf(false, false, false))
+        fixture.reader.runningResults.addAll(
+            listOf(listOf(1001), listOf(1002), listOf(1002), listOf(1002))
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(3, fixture.verifier.processVerifyCalls)
+        assertEquals(
+            listOf(listOf(1001), listOf(1002), listOf(1002)),
+            fixture.verifier.verifiedProcessPids
+        )
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `bundle switch rechecks the pid set after the second namespace probe`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.stopResults.addAll(listOf(false, false, false))
+        fixture.reader.running = listOf(1002)
+        fixture.reader.runningResults.addAll(
+            listOf(
+                listOf(1001),
+                listOf(1001),
+                listOf(1002),
+                listOf(1002),
+                listOf(1002)
+            )
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(4, fixture.verifier.processVerifyCalls)
+        assertEquals(
+            listOf(listOf(1001), listOf(1001), listOf(1002), listOf(1002)),
+            fixture.verifier.verifiedProcessPids
+        )
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+    }
+
+    @Test
+    fun `bundle switch rolls back when restarted target process cannot see patched mount`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.stopResults.addAll(listOf(false, false, false))
+        fixture.reader.running = listOf(1357)
+        fixture.verifier.processVerifyFailure = IllegalStateException("target process kept stale mount")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.PREVIOUS_MOUNT, failure.recoveryState)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(1, fixture.module.restoreCalls)
+    }
+
+    @Test
+    fun `failed module mutation journal write does not restore an untouched module`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.store.writeActiveFailureOnceWhen = { journal ->
+            journal.phase == RootMountPhase.STAGING_PATCHED_PAYLOAD &&
+                journal.moduleMutationStarted == true &&
+                journal.moduleRestoreRequired == true
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.PREVIOUS_MOUNT, failure.recoveryState)
+        assertEquals(0, fixture.module.stageCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `bundle switch retargets an unchanged stock apk after Android moves its data path`() = runBlocking {
+        val oldStock = defaultState()
+        val relocatedStock = oldStock.copy(basePath = "/data/app/relocated/$PACKAGE/base.apk")
+        val fixture = Fixture(relocatedStock)
+        val previous = committed(oldStock)
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(relocatedStock.basePath, fixture.store.committed?.stockPath)
+        assertEquals(relocatedStock.baseSha256, fixture.store.committed?.stockSha256)
+        assertEquals(emptyList(), fixture.installer.replaceCalls)
+    }
+
+    @Test
+    fun `unmount returns busy without rollback when target restarts before any mutation`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.reader.stops = false
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.UNMOUNT)
+        )
+
+        val busy = assertIs<RootMountResult.Busy>(result)
+        assertEquals(RootMountPhase.STOPPING_APP, busy.phase)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertTrue(fixture.store.diagnostics.any { it.contains("before changing mounts") })
+    }
+
+    @Test
+    fun `initial force stop shell failure leaves the existing mount untouched`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.shell.failOnceOn = "am force-stop"
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.STOPPING_APP, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
     fun `bundle switch accepts a patched version code override with exact stock proof`() = runBlocking {
         val fixture = Fixture()
         val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
@@ -446,7 +754,89 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
-    fun `cancellation rolls back and releases the package lock`() = runBlocking {
+    fun `rollback progress cancellation cannot interrupt mandatory recovery`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.transientVerifyFailures = 1
+        var rollbackProgressCalls = 0
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        ) { phase ->
+            if (phase == RootMountPhase.ROLLING_BACK) {
+                rollbackProgressCalls++
+                throw CancellationException("detached UI cancelled rollback progress")
+            }
+        }
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.PREVIOUS_MOUNT, failure.recoveryState)
+        assertEquals(1, rollbackProgressCalls)
+        assertEquals(1, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `failure rollback completes when caller is cancelled during recovery`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.verifier.onRemove = {
+            if (fixture.verifier.removeCalls >= 2) yield()
+        }
+
+        val execution = async {
+            val executionJob = requireNotNull(coroutineContext[Job])
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+            ) { phase ->
+                if (phase == RootMountPhase.ROLLING_BACK) {
+                    executionJob.cancel(CancellationException("caller cancelled during rollback"))
+                }
+            }
+        }
+
+        assertFailsWith<CancellationException> { execution.await() }
+        assertEquals(1, fixture.module.restoreCalls)
+        assertTrue(fixture.verifier.removeCalls >= 2)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `cancellation from completed progress does not roll back a committed mount`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+
+        assertFailsWith<CancellationException> {
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+            ) { phase ->
+                if (phase == RootMountPhase.COMPLETED) {
+                    throw CancellationException("cancelled after commit")
+                }
+            }
+        }
+
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertEquals(1, fixture.verifier.removeCalls)
+    }
+
+    @Test
+    fun `cancellation before mutation clears the journal and releases the package lock`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
         val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
@@ -464,10 +854,11 @@ class RootMountTransactionCoordinatorTest {
             )
         }
 
-        assertTrue(RootMountPhase.ROLLING_BACK in phases)
+        assertFalse(RootMountPhase.ROLLING_BACK in phases)
         assertEquals(1, fixture.lock.releaseCalls)
         assertEquals(null, fixture.store.active)
-        assertTrue(fixture.module.disabled)
+        assertFalse(fixture.module.disabled)
+        assertEquals(0, fixture.verifier.removeCalls)
     }
 
     @Test
@@ -488,7 +879,11 @@ class RootMountTransactionCoordinatorTest {
                     patched = patched.first,
                     stock = stock.first
                 )
-            )
+            ) { phase ->
+                if (phase == RootMountPhase.ROLLING_BACK) {
+                    throw CancellationException("detached UI cancelled rollback progress")
+                }
+            }
         }
 
         assertEquals(1, fixture.installer.backupRestoreCalls)
@@ -1155,7 +1550,7 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
-    fun `rollback space failure and process ownership uncertainty abort before mount mutation`() = runBlocking {
+    fun `rollback space failure and strict process ownership uncertainty abort before mount mutation`() = runBlocking {
         val lowStorage = Fixture()
         val patched = lowStorage.artifact("patched-v2.apk", 2, "patched-2")
         val stock = lowStorage.artifact("stock-v2.apk", 2, "stock-2")
@@ -1181,13 +1576,13 @@ class RootMountTransactionCoordinatorTest {
 
         val processResult = uncertainProcesses.coordinator.execute(
             uncertainProcesses.request(
-                RootMountOperation.SWITCH_PATCHED_BUILD,
+                RootMountOperation.REPLACE_STOCK_AND_MOUNT,
                 patched = secondPatched.first,
                 stock = secondStock.first
             )
         )
 
-        assertIs<RootMountResult.Failure>(processResult)
+        assertIs<RootMountResult.Busy>(processResult)
         assertEquals(0, uncertainProcesses.verifier.removeCalls)
         assertEquals(0, uncertainProcesses.module.stageCalls)
         assertEquals(0, uncertainProcesses.installer.replaceCalls.size)
@@ -1411,7 +1806,7 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
-    fun `recovery is fail-safe from every persisted phase`() = runBlocking {
+    fun `recovery skips untouched pre-mutation journals and stays fail-safe after mutation`() = runBlocking {
         RootMountPhase.entries.forEach { phase ->
             val fixture = Fixture()
             fixture.store.active = journal(phase, fixture.initial)
@@ -1421,14 +1816,384 @@ class RootMountTransactionCoordinatorTest {
                 fixture.request(RootMountOperation.RECOVER)
             )
 
-            assertIs<RootMountResult.RecoveredToStock>(result, "phase=$phase")
+            val mayHaveMutated =
+                phase == RootMountPhase.ROLLING_BACK || phase >= RootMountPhase.REMOVING_OLD_MOUNTS
+            if (mayHaveMutated) {
+                assertIs<RootMountResult.RecoveredToStock>(result, "phase=$phase")
+                assertTrue(fixture.module.disabled, "phase=$phase")
+            } else {
+                assertIs<RootMountResult.Success>(result, "phase=$phase")
+                assertFalse(fixture.module.disabled, "phase=$phase")
+                assertEquals(0, fixture.verifier.removeCalls, "phase=$phase")
+            }
             assertEquals(null, fixture.store.active, "phase=$phase")
-            assertTrue(fixture.module.disabled, "phase=$phase")
         }
     }
 
     @Test
-    fun `mount request resumes automatically after interrupted transaction recovery`() = runBlocking {
+    fun `interrupted pre-mutation transaction leaves an existing committed mount untouched`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial, previous)
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.module.disabled)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `untouched journal cleanup failure never triggers rollback`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial, previous)
+        fixture.store.clearActiveFailure = IllegalStateException("transaction storage is read-only")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.STOPPING_APP, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.module.disabled)
+        assertTrue(fixture.store.activeExists(PACKAGE))
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+        assertTrue(fixture.store.diagnostics.any { it.contains("left for a later retry") })
+    }
+
+    @Test
+    fun `persisted rollback with a false mount marker is recovered conservatively`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial, previous).copy(
+            phase = RootMountPhase.ROLLING_BACK,
+            rollbackFromPhase = RootMountPhase.STOPPING_APP,
+            stockMutationStarted = false,
+            registrationGap = false,
+            mountMutationStarted = false
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToPreviousMount>(result)
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertTrue(
+            fixture.store.activeWrites.any {
+                it.phase == RootMountPhase.ROLLING_BACK && it.mountMutationStarted == true
+            }
+        )
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `rollback completion cleanup failure keeps the restored previous mount`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.store.completeCleanupFailure = IllegalStateException("rollback journal delete failed")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootRecoveryState.PREVIOUS_MOUNT, failure.recoveryState)
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(1, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `completion cleanup failure does not roll back the newly committed mount`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.store.completeCleanupFailure = IllegalStateException("active journal delete failed")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+        )
+
+        val failure = assertIs<RootMountResult.Failure>(result)
+        assertEquals(RootMountPhase.COMPLETED, failure.phase)
+        assertEquals(RootRecoveryState.NONE, failure.recoveryState)
+        assertTrue(failure.describeOutcome().contains("preserved"))
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertEquals(1, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `completion cleanup cancellation does not roll back the newly committed mount`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.store.completeCleanupFailure = CancellationException("active journal delete cancelled")
+
+        assertFailsWith<CancellationException> {
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched = patched.first)
+            )
+        }
+
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertEquals(1, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `completed journal does not roll back an already durable commit`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val completed = previous.copy(
+            transactionId = "completed",
+            committedAtEpochMs = 2
+        )
+        fixture.store.committed = completed
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial, previous).copy(
+            transactionId = completed.transactionId,
+            phase = RootMountPhase.COMPLETED,
+            mountMutationStarted = true,
+            completionStateRecorded = true,
+            completionCommittedState = completed
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(completed, fixture.store.committed)
+        assertTrue(fixture.store.diagnostics.any { it.contains("already durable") })
+    }
+
+    @Test
+    fun `legacy completed journal preserves a matching durable commit`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val completed = previous.copy(
+            transactionId = "legacy-completed",
+            committedAtEpochMs = 2
+        )
+        fixture.store.committed = completed
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial, previous).copy(
+            transactionId = completed.transactionId
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(completed, fixture.store.committed)
+    }
+
+    @Test
+    fun `legacy completed unmount preserves an inactive durable commit`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val inactive = previous.copy(
+            active = false,
+            status = "STOCK",
+            committedAtEpochMs = 2
+        )
+        fixture.store.committed = inactive
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial, previous).copy(
+            operation = RootMountOperation.UNMOUNT
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(inactive, fixture.store.committed)
+    }
+
+    @Test
+    fun `legacy completed mount preserves a reactivated durable commit`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(
+            active = false,
+            status = "STOCK"
+        )
+        val mounted = previous.copy(
+            active = true,
+            status = "MOUNTED",
+            committedAtEpochMs = 2
+        )
+        fixture.store.committed = mounted
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial, previous).copy(
+            operation = RootMountOperation.MOUNT_ONLY
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(mounted, fixture.store.committed)
+    }
+
+    @Test
+    fun `legacy completed repeat mount preserves a matching durable commit`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val completed = previous.copy(committedAtEpochMs = 2)
+        fixture.store.committed = completed
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial, previous).copy(
+            operation = RootMountOperation.MOUNT_ONLY,
+            stockMutationStarted = false,
+            registrationGap = false
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertEquals(0, fixture.module.restoreCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(completed, fixture.store.committed)
+    }
+
+    @Test
+    fun `legacy completed reconciliation without final-state proof rolls back conservatively`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial, previous).copy(
+            operation = RootMountOperation.RECONCILE,
+            stockMutationStarted = false,
+            registrationGap = false
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToPreviousMount>(result)
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `legacy completed permanent removal preserves cleared committed metadata`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.active = journal(RootMountPhase.COMPLETED, fixture.initial).copy(
+            operation = RootMountOperation.UNMOUNT,
+            status = "MODULE_REMOVED"
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(null, fixture.store.committed)
+    }
+
+    @Test
+    fun `completed marker without its committed write still rolls back`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        val intended = previous.copy(
+            transactionId = "new-completed",
+            patchedSha256 = testSha256("new-completed-patch"),
+            committedAtEpochMs = 2
+        )
+        fixture.store.committed = previous
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial, previous).copy(
+            transactionId = intended.transactionId,
+            phase = RootMountPhase.COMPLETED,
+            stockMutationStarted = false,
+            registrationGap = false,
+            moduleMutationStarted = false,
+            moduleRestoreRequired = false,
+            mountMutationStarted = true,
+            completionStateRecorded = true,
+            completionCommittedState = intended
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToPreviousMount>(result)
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(previous.patchedSha256, fixture.store.committed?.patchedSha256)
+    }
+
+    @Test
+    fun `completed null commit does not resurrect module state`() = runBlocking {
+        val fixture = Fixture()
+        fixture.module.committedState = committed(fixture.initial).copy(active = false, status = "STOCK")
+        fixture.store.active = journal(RootMountPhase.STOPPING_APP, fixture.initial).copy(
+            phase = RootMountPhase.COMPLETED,
+            mountMutationStarted = true,
+            completionStateRecorded = true,
+            completionCommittedState = null
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(0, fixture.module.readCommittedStateCalls)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+        assertEquals(null, fixture.store.committed)
+    }
+
+    @Test
+    fun `mount request continues after discarding an untouched interrupted transaction`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
         val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
@@ -1445,7 +2210,50 @@ class RootMountTransactionCoordinatorTest {
         assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.module.stageCalls)
         assertEquals(null, fixture.store.active)
-        assertEquals(2, fixture.lock.releaseCalls)
+        assertEquals(1, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `interrupted recovery progress cancellation cannot block mandatory rollback`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.active = journal(RootMountPhase.REMOVING_OLD_MOUNTS, fixture.initial)
+        var rollbackProgressCalls = 0
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        ) { phase ->
+            if (phase == RootMountPhase.ROLLING_BACK) {
+                rollbackProgressCalls++
+                throw CancellationException("detached UI cancelled interrupted recovery")
+            }
+        }
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(1, rollbackProgressCalls)
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `caller cancellation cannot interrupt rollback of an already mutated journal`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.active = journal(RootMountPhase.REMOVING_OLD_MOUNTS, fixture.initial)
+        fixture.verifier.onRemove = { yield() }
+
+        val execution = async {
+            val executionJob = requireNotNull(coroutineContext[Job])
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.RECOVER)
+            ) { phase ->
+                if (phase == RootMountPhase.ROLLING_BACK) {
+                    executionJob.cancel(CancellationException("caller cancelled interrupted recovery"))
+                }
+            }
+        }
+
+        assertFailsWith<CancellationException> { execution.await() }
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertFalse(fixture.store.activeExists(PACKAGE))
     }
 
     @Test
@@ -1453,7 +2261,7 @@ class RootMountTransactionCoordinatorTest {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
         val stock = fixture.artifact("stock-v2.apk", 2, "stock-2")
-        fixture.store.active = journal(RootMountPhase.PREPARING, fixture.initial)
+        fixture.store.active = journal(RootMountPhase.REMOVING_OLD_MOUNTS, fixture.initial)
         fixture.lock.onRelease = {
             if (fixture.lock.releaseCalls == 1) {
                 fixture.store.readActiveFailure = IllegalStateException("State read failed")
@@ -1859,6 +2667,71 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `caller cancellation cannot interrupt corrupt journal recovery`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.corruptActive = true
+        lateinit var executionJob: Job
+        fixture.verifier.onRemove = {
+            executionJob.cancel(CancellationException("caller cancelled corrupt journal recovery"))
+            yield()
+        }
+
+        val execution = async {
+            executionJob = requireNotNull(coroutineContext[Job])
+            fixture.coordinator.execute(fixture.request(RootMountOperation.RECOVER))
+        }
+
+        assertFailsWith<CancellationException> { execution.await() }
+        assertTrue(fixture.verifier.removeCalls > 0)
+        assertTrue(fixture.module.disabled)
+        assertFalse(fixture.store.corruptActive)
+    }
+
+    @Test
+    fun `corrupt journal recovery verifies stock in a restarted target process`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.corruptActive = true
+        fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.runningResults.addAll(
+            listOf(listOf(2468), listOf(2468), listOf(2468))
+        )
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.RecoveredToStock>(result)
+        assertEquals(2, fixture.verifier.stockProcessVerifyCalls)
+        assertEquals(
+            listOf(listOf(2468), listOf(2468)),
+            fixture.verifier.verifiedStockProcessPids
+        )
+        assertFalse(fixture.store.corruptActive)
+    }
+
+    @Test
+    fun `corrupt journal recovery fails closed when restarted process still sees a stale mount`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial)
+        fixture.store.committed = previous
+        fixture.store.corruptActive = true
+        fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.running = listOf(1357)
+        fixture.verifier.stockProcessVerifyFailure = IllegalStateException("target process kept stale mount")
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.RECOVER)
+        )
+
+        assertIs<RootMountResult.Failure>(result)
+        assertEquals(1, fixture.verifier.stockProcessVerifyCalls)
+        assertTrue(fixture.store.corruptActive)
+        assertEquals("REPAIR_REQUIRED", fixture.store.committed?.status)
+    }
+
+    @Test
     fun `recovery never trusts a newer package signed by someone else`() = runBlocking {
         val fixture = Fixture()
         val previous = committed(fixture.initial)
@@ -2053,6 +2926,11 @@ class RootMountTransactionCoordinatorTest {
         )
         assertEquals("/data/app/new/$PACKAGE/base.apk", movedPath.module.updatedStates.single().stockPath)
         assertEquals("/data/app/new/$PACKAGE/base.apk", movedPath.store.committed?.stockPath)
+        val verifyingJournal = movedPath.store.activeWrites.single { it.phase == RootMountPhase.VERIFYING }
+        assertEquals(true, verifyingJournal.moduleMutationStarted)
+        assertEquals(false, verifyingJournal.moduleRestoreRequired)
+        assertEquals("/data/app/new/$PACKAGE/base.apk", verifyingJournal.expectedPackageState?.basePath)
+        assertEquals("MODULE_STATE_RETARGET_PENDING", verifyingJournal.status)
 
         val failedRetarget = Fixture(
             initial = defaultState().copy(basePath = "/data/app/new/$PACKAGE/base.apk")
@@ -2062,6 +2940,7 @@ class RootMountTransactionCoordinatorTest {
         val retargetFailure = assertIs<RootMountResult.Failure>(
             failedRetarget.coordinator.execute(failedRetarget.request(RootMountOperation.RECONCILE))
         )
+        assertEquals(RootMountPhase.VERIFYING, retargetFailure.phase)
         assertEquals(RootRecoveryState.STOCK, retargetFailure.recoveryState)
         assertEquals("/data/app/new/$PACKAGE/base.apk", failedRetarget.store.committed?.stockPath)
         assertEquals(false, failedRetarget.store.committed?.active)
@@ -2107,14 +2986,37 @@ class RootMountTransactionCoordinatorTest {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
+        fixture.reader.running = listOf(2468)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
         assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.module.enableCalls)
+        assertEquals(2, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(2468), listOf(2468)), fixture.verifier.verifiedProcessPids)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(0, fixture.reader.stopChecks)
         assertTrue(fixture.shell.commands.none { it.contains("force-stop") })
+    }
+
+    @Test
+    fun `package reconciliation repairs a stale running target process namespace`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.scheduler.tracked += PACKAGE
+        fixture.reader.running = listOf(1357)
+        fixture.verifier.processVerifyFailure = IllegalStateException("target process sees stale mount")
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(1357)), fixture.verifier.verifiedProcessPids)
+        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(0, fixture.verifier.removeCalls)
+        assertTrue(fixture.shell.commands.any { it.contains("force-stop --user 0") })
+        assertTrue(fixture.store.diagnostics.any { it.contains("Repaired committed mount namespaces in place") })
     }
 
     @Test
@@ -2137,60 +3039,48 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
-    fun `package reconciliation stays retryable while target app is repeatedly reopened`() = runBlocking {
+    fun `package reconciliation verifies a repeatedly reopened target process instead of deferring`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.reader.stops = false
+        fixture.reader.running = listOf(1234)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        val busy = assertIs<RootMountResult.Busy>(result)
-        assertEquals(RootMountPhase.STOPPING_APP, busy.phase)
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(2, fixture.verifier.verifyCalls)
+        assertEquals(2, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(1234), listOf(1234)), fixture.verifier.verifiedProcessPids)
         assertEquals(0, fixture.verifier.removeCalls)
         assertFalse(fixture.store.activeExists(PACKAGE))
         assertEquals(true, fixture.store.committed?.active)
-        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
-
-        val retryWhileRunning = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
-
-        assertIs<RootMountResult.Busy>(retryWhileRunning)
-        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
-
-        fixture.reader.stops = true
-        val completed = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
-
-        assertIs<RootMountResult.Success>(completed)
         assertEquals("MOUNTED", fixture.store.committed?.status)
-        assertEquals(0, fixture.verifier.mountCalls)
-        assertEquals(listOf(true, false, false), fixture.module.enableRepairPayloads)
-        assertTrue(fixture.store.diagnostics.any { it.contains("Deferred committed mount reconciliation") })
+        assertTrue(fixture.store.diagnostics.any { it.contains("Repaired committed mount namespaces in place") })
     }
 
     @Test
-    fun `package reconciliation stays retryable when target app restarts after namespace repair`() = runBlocking {
+    fun `package reconciliation accepts a verified target restart after namespace repair`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.running = listOf(4321)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Busy>(result)
+        assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.verifier.mountCalls)
         assertEquals(2, fixture.verifier.verifyCalls)
+        assertEquals(2, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(4321), listOf(4321)), fixture.verifier.verifiedProcessPids)
         assertEquals(0, fixture.verifier.removeCalls)
         assertFalse(fixture.store.activeExists(PACKAGE))
         assertEquals(true, fixture.store.committed?.active)
-        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
-
-        val retry = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
-
-        assertIs<RootMountResult.Success>(retry)
         assertEquals("MOUNTED", fixture.store.committed?.status)
-        assertEquals(1, fixture.verifier.mountCalls)
     }
 
     @Test
@@ -2212,29 +3102,26 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
-    fun `full reconciliation commits verified mounts and retries when app reopens during mount`() = runBlocking {
+    fun `full reconciliation commits a verified mount when app reopens during mount`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
         fixture.reader.stopResults.addAll(listOf(true, true, false, false))
+        fixture.reader.running = listOf(5678)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        val busy = assertIs<RootMountResult.Busy>(result)
-        assertEquals(RootMountPhase.VERIFYING, busy.phase)
+        assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.verifier.removeCalls)
         assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals(2, fixture.verifier.processVerifyCalls)
+        assertEquals(listOf(listOf(5678), listOf(5678)), fixture.verifier.verifiedProcessPids)
         assertFalse(fixture.store.activeExists(PACKAGE))
         assertEquals(true, fixture.store.committed?.active)
-        assertEquals("MOUNTED_PENDING_APP_STOP", fixture.store.committed?.status)
-
-        val retry = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
-
-        assertIs<RootMountResult.Success>(retry)
         assertEquals("MOUNTED", fixture.store.committed?.status)
-        assertEquals(1, fixture.verifier.mountCalls)
+        assertTrue(fixture.store.diagnostics.any { it.contains("restarted target process namespaces") })
     }
 
     @Test
@@ -2417,11 +3304,16 @@ class RootMountTransactionCoordinatorTest {
     private class FakeShell : RootShellGateway {
         val commands = mutableListOf<String>()
         var cancelOnceOn: String? = null
+        var failOnceOn: String? = null
         override suspend fun run(command: String): RootCommandResult {
             commands += command
             cancelOnceOn?.takeIf(command::contains)?.let {
                 cancelOnceOn = null
                 throw CancellationException("cancelled during $it")
+            }
+            failOnceOn?.takeIf(command::contains)?.let {
+                failOnceOn = null
+                return RootCommandResult(1, emptyList(), listOf("forced shell failure during $it"))
             }
             return RootCommandResult(0, emptyList(), emptyList())
         }
@@ -2438,6 +3330,8 @@ class RootMountTransactionCoordinatorTest {
         var stopChecks = 0
         var lastExpected: RootPackageState? = null
         var installedUsers: Set<Int>? = null
+        var running = emptyList<Int>()
+        val runningResults = ArrayDeque<List<Int>>()
         val inspectedPaths = mutableListOf<String>()
 
         override suspend fun read(packageName: String, userId: Int): RootPackageState {
@@ -2462,7 +3356,8 @@ class RootMountTransactionCoordinatorTest {
             }
             return state
         }
-        override suspend fun runningPids(packageName: String): List<Int> = emptyList()
+        override suspend fun runningPids(packageName: String): List<Int> =
+            if (runningResults.isEmpty()) running else runningResults.removeFirst()
         override suspend fun waitUntilStopped(packageName: String, timeoutMs: Long): Boolean {
             stopChecks++
             return if (stopResults.isEmpty()) stops else stopResults.removeFirst()
@@ -2475,17 +3370,30 @@ class RootMountTransactionCoordinatorTest {
         var corruptActive = false
         var corruptCommitted = false
         var readActiveFailure: Throwable? = null
+        var clearActiveFailure: Throwable? = null
+        var completeCleanupFailure: Throwable? = null
         var incompletePackages: List<String>? = null
+        var writeActiveFailureOnceWhen: ((RootMountJournal) -> Boolean)? = null
         val diagnostics = mutableListOf<String>()
+        val activeWrites = mutableListOf<RootMountJournal>()
 
         override suspend fun initialize() = Unit
-        override suspend fun writeActive(journal: RootMountJournal) { active = journal }
+        override suspend fun writeActive(journal: RootMountJournal) {
+            val failWhen = writeActiveFailureOnceWhen
+            if (failWhen != null && failWhen(journal)) {
+                writeActiveFailureOnceWhen = null
+                throw IllegalStateException("Root transaction journal write failed")
+            }
+            active = journal
+            activeWrites += journal
+        }
         override suspend fun readActive(packageName: String): RootMountJournal? {
             readActiveFailure?.let { throw it }
             return active
         }
         override suspend fun activeExists(packageName: String): Boolean = corruptActive || active != null
         override suspend fun clearActive(packageName: String) {
+            clearActiveFailure?.let { throw it }
             active = null
             corruptActive = false
         }
@@ -2498,8 +3406,16 @@ class RootMountTransactionCoordinatorTest {
         override suspend fun committedExists(packageName: String): Boolean =
             corruptCommitted || committed != null
         override suspend fun complete(journal: RootMountJournal, committed: RootCommittedState?) {
-            active = null
+            val completedJournal = journal.copy(
+                phase = RootMountPhase.COMPLETED,
+                completionStateRecorded = true,
+                completionCommittedState = committed
+            )
+            active = completedJournal
+            activeWrites += completedJournal
             if (committed != null) this.committed = committed
+            completeCleanupFailure?.let { throw it }
+            active = null
         }
         override suspend fun appendDiagnostic(packageName: String, diagnosticId: String, message: String) {
             diagnostics += "$diagnosticId:$message"
@@ -2526,6 +3442,7 @@ class RootMountTransactionCoordinatorTest {
         var snapshotHash: String? = null
         var legacyPayload: RootBackupArtifact? = null
         var committedState: RootCommittedState? = null
+        var readCommittedStateCalls = 0
         var preferredSnapshotPayload: RootBackupArtifact? = null
         var restoreCalls = 0
         var removeCalls = 0
@@ -2548,7 +3465,10 @@ class RootMountTransactionCoordinatorTest {
             return snapshotHash
         }
         override suspend fun readLegacyPayload(packageName: String): RootBackupArtifact? = legacyPayload
-        override suspend fun readCommittedState(packageName: String): RootCommittedState? = committedState
+        override suspend fun readCommittedState(packageName: String): RootCommittedState? {
+            readCommittedStateCalls++
+            return committedState
+        }
         override suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact> {
             stockSnapshotCalls++
             return paths.mapIndexed { index, _ ->
@@ -2636,14 +3556,20 @@ class RootMountTransactionCoordinatorTest {
     private class FakeVerifier(private val reader: FakePackageReader) : RootMountVerification {
         var verifyCalls = 0
         var rootVerifyCalls = 0
+        var processVerifyCalls = 0
+        var stockProcessVerifyCalls = 0
         var mountCalls = 0
         var removeCalls = 0
+        val verifiedProcessPids = mutableListOf<List<Int>>()
+        val verifiedStockProcessPids = mutableListOf<List<Int>>()
         val mounts = mutableListOf<MountInfoEntry>()
         val lazyRecoveryCalls = mutableListOf<Boolean>()
         var onRemove: (suspend () -> Unit)? = null
         var verifyFailure: Throwable? = null
         var transientVerifyFailures = 0
         var rootVerifyFailure: Throwable? = null
+        var processVerifyFailure: Throwable? = null
+        var stockProcessVerifyFailure: Throwable? = null
         var clearFailure: Throwable? = null
         override suspend fun mountEverywhere(expected: RootCommittedState) {
             mountCalls++
@@ -2675,6 +3601,21 @@ class RootMountTransactionCoordinatorTest {
             }
             verifyFailure?.let { throw it }
             return reader.state
+        }
+        override suspend fun verifyProcessMounted(expected: RootCommittedState, pids: List<Int>) {
+            processVerifyCalls++
+            verifiedProcessPids += pids
+            processVerifyFailure?.let { throw it }
+        }
+        override suspend fun verifyProcessStock(
+            packageName: String,
+            userId: Int,
+            stockPath: String,
+            pids: List<Int>
+        ) {
+            stockProcessVerifyCalls++
+            verifiedStockProcessPids += pids
+            stockProcessVerifyFailure?.let { throw it }
         }
     }
 

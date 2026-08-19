@@ -3,6 +3,7 @@ package app.urv.manager.domain.installer.root
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -28,6 +29,17 @@ private data class RootMountPreparation(
 ) {
     val legacyMigration: Boolean get() = legacyPayload != null
 }
+
+private data class InterruptedJournalResolution(
+    val result: RootMountResult? = null,
+    val previousCommitted: RootCommittedState?,
+    val recoveredModuleState: RootCommittedState?,
+    val corruptCommitted: Boolean
+)
+
+private data class DurableCompletion(
+    val committedState: RootCommittedState?
+)
 
 class RootMountTransactionCoordinator(
     private val shell: RootShellGateway,
@@ -468,41 +480,20 @@ class RootMountTransactionCoordinator(
                             false to null
                         } else if (committed.status == MOUNTED_PENDING_APP_STOP_STATUS) {
                             val pendingCompletion = runCatchingPreservingCancellation {
-                                stopAndWait(packageName, userId)
                                 requireExclusivePackageUser(packageName, userId)
                                 mountVerifier.verifyMounted(committed)
-                                if (!packageStateReader.waitUntilStopped(packageName, 1_000)) {
-                                    throw RootTargetAppBusyException(
-                                        "Target app restarted while completing reconciliation"
-                                    )
-                                }
+                                finalizeMountedProcessState(committed)
                             }
                             if (pendingCompletion.isSuccess) {
                                 transactionStore.writeCommitted(committed.copy(status = "MOUNTED"))
                                 moduleStore.enable(packageName, repairPayloads = false)
                                 true to RootMountResult.Success(committed.transactionId)
-                            } else if (
-                                pendingCompletion.exceptionOrNull() is RootTargetAppBusyException
-                            ) {
-                                moduleStore.enable(packageName, repairPayloads = false)
-                                val busyReason = pendingCompletion.exceptionOrNull()?.message
-                                transactionStore.appendDiagnostic(
-                                    packageName,
-                                    "busy-${scanId.take(8)}",
-                                    "Deferred completion of committed mount reconciliation because the " +
-                                        "target app did not remain stopped: " +
-                                        (busyReason ?: "target app is active")
-                                )
-                                true to RootMountResult.Busy(
-                                    RootMountPhase.STOPPING_APP,
-                                    busyReason
-                                )
                             } else {
                                 transactionStore.appendDiagnostic(
                                     packageName,
                                     "repair-${scanId.take(8)}",
-                                    "Could not complete pending app shutdown; falling back to full " +
-                                        "reconciliation: " +
+                                    "Could not verify the pending mount in the restarted target process; " +
+                                        "falling back to full reconciliation: " +
                                         (pendingCompletion.exceptionOrNull()?.message ?: "unknown failure")
                                 )
                                 false to null
@@ -510,6 +501,9 @@ class RootMountTransactionCoordinator(
                         } else {
                             val initialVerification = runCatchingPreservingCancellation {
                                 mountVerifier.verifyMounted(committed)
+                                verifyStableRunningProcessState(packageName) { pids ->
+                                    mountVerifier.verifyProcessMounted(committed, pids)
+                                }
                             }
                             if (initialVerification.isSuccess) {
                                 moduleStore.enable(packageName, repairPayloads = false)
@@ -520,7 +514,12 @@ class RootMountTransactionCoordinator(
                                 // in place first so background reconciliation does not tear down a
                                 // working patched app just because one namespace drifted.
                                 val nonDestructiveRepair = runCatchingPreservingCancellation {
-                                    stopAndWait(packageName, userId)
+                                    try {
+                                        stopAndWait(packageName, userId)
+                                    } catch (_: RootTargetAppBusyException) {
+                                        // Continue after proving the existing root mount below. The
+                                        // target is force-stopped again after Zygote is repaired.
+                                    }
                                     requireExclusivePackageUser(packageName, userId)
                                     // Prove the root mount and PackageManager identity before
                                     // touching namespace state. If stock actually changed, fall
@@ -528,11 +527,7 @@ class RootMountTransactionCoordinator(
                                     mountVerifier.verifyRootMounted(committed)
                                     mountVerifier.mountEverywhere(committed)
                                     mountVerifier.verifyMounted(committed)
-                                    if (!packageStateReader.waitUntilStopped(packageName, 1_000)) {
-                                        throw RootTargetAppBusyException(
-                                            "Target app restarted during non-destructive reconciliation"
-                                        )
-                                    }
+                                    finalizeMountedProcessState(committed)
                                 }
                                 if (nonDestructiveRepair.isSuccess) {
                                     moduleStore.enable(packageName)
@@ -543,24 +538,6 @@ class RootMountTransactionCoordinator(
                                             (initialVerification.exceptionOrNull()?.message ?: "unknown verification failure")
                                     )
                                     true to RootMountResult.Success(committed.transactionId)
-                                } else if (
-                                    nonDestructiveRepair.exceptionOrNull() is RootTargetAppBusyException
-                                ) {
-                                    transactionStore.writeCommitted(
-                                        committed.copy(status = MOUNTED_PENDING_APP_STOP_STATUS)
-                                    )
-                                    moduleStore.enable(packageName)
-                                    val busyReason = nonDestructiveRepair.exceptionOrNull()?.message
-                                    transactionStore.appendDiagnostic(
-                                        packageName,
-                                        "busy-${scanId.take(8)}",
-                                        "Deferred committed mount reconciliation because the target app " +
-                                            "did not remain stopped: ${busyReason ?: "target app is active"}"
-                                    )
-                                    true to RootMountResult.Busy(
-                                        RootMountPhase.STOPPING_APP,
-                                        busyReason
-                                    )
                                 } else {
                                     transactionStore.appendDiagnostic(
                                         packageName,
@@ -646,6 +623,7 @@ class RootMountTransactionCoordinator(
         var currentPhase = RootMountPhase.PREPARING
         var stockChanged = false
         var moduleChanged = false
+        var transactionCompleted = false
         var stockBackup: RootBackupArtifact? = null
         var preparingRecoveryOutcome: String? = null
         fun progress(phase: RootMountPhase) {
@@ -654,8 +632,8 @@ class RootMountTransactionCoordinator(
         }
         suspend fun persist(transform: (RootMountJournal) -> RootMountJournal = { it }) {
             val updated = transform(requireNotNull(journal)).copy(phase = currentPhase)
-            journal = updated
             transactionStore.writeActive(updated)
+            journal = updated
         }
 
         try {
@@ -664,9 +642,12 @@ class RootMountTransactionCoordinator(
             val validStoredCommitted = storedCommitted?.takeIf {
                 isValidCommittedState(request.packageName, it)
             }
-            val recoveredModuleState = if (
+            val interrupted = transactionStore.readActive(request.packageName)
+            val activeExists = transactionStore.activeExists(request.packageName)
+            var recoveredModuleState = if (
                 validStoredCommitted == null &&
                 !committedFileExists &&
+                !activeExists &&
                 request.operation in MANUAL_STATE_RECOVERY_OPERATIONS
             ) {
                 moduleStore.readCommittedState(request.packageName)?.takeIf {
@@ -683,8 +664,8 @@ class RootMountTransactionCoordinator(
                     "Recovered missing transaction state from the verified root module state"
                 )
             }
-            val previousCommitted = validStoredCommitted ?: recoveredModuleState
-            val corruptCommitted = committedFileExists && previousCommitted == null
+            var previousCommitted = validStoredCommitted ?: recoveredModuleState
+            var corruptCommitted = committedFileExists && previousCommitted == null
             if (previousCommitted != null && previousCommitted.userId != request.userId) {
                 val diagnosticId = "user-${transactionId.take(8)}"
                 transactionStore.appendDiagnostic(
@@ -700,47 +681,26 @@ class RootMountTransactionCoordinator(
                     "This root mount is committed for a different Android user"
                 )
             }
-            val interrupted = transactionStore.readActive(request.packageName)
-            val activeExists = transactionStore.activeExists(request.packageName)
             if (activeExists && interrupted == null) {
                 return recoverCorruptJournal(request, previousCommitted, transactionId)
             }
             if (interrupted != null) {
-                if (interrupted.packageName != request.packageName || interrupted.userId < 0) {
-                    return recoverCorruptJournal(request, previousCommitted, transactionId)
-                }
-                if (interrupted.userId != request.userId) {
-                    val diagnosticId = "user-${transactionId.take(8)}"
-                    transactionStore.appendDiagnostic(
-                        request.packageName,
-                        diagnosticId,
-                        "Interrupted root mount belongs to Android user ${interrupted.userId}; " +
-                            "request for user ${request.userId} cannot recover it"
-                    )
-                    return RootMountResult.Failure(
-                        interrupted.phase,
-                        RootRecoveryState.NONE,
-                        diagnosticId,
-                        "The unfinished root mount belongs to Android user ${interrupted.userId}, " +
-                            "not the current user ${request.userId}"
-                    )
-                }
-                journal = interrupted.copy(transactionId = transactionId, phase = RootMountPhase.ROLLING_BACK)
-                progress(RootMountPhase.ROLLING_BACK)
-                persist()
-                return rollback(
-                    journal = requireNotNull(journal),
-                    stockChanged = RootMountPolicy.interruptedJournalMayHaveChangedStock(interrupted),
-                    moduleChanged = RootMountPolicy.interruptedJournalMayHaveChangedModule(interrupted),
-                    stockBackup = interrupted.initialPackageState?.baseSha256?.let { hash ->
-                        RootBackupArtifact(
-                            "${RootPaths.backup(request.packageName)}/package/0.apk",
-                            hash
-                        )
-                    },
-                    diagnosticId = "recovery-${transactionId.take(8)}",
-                    reason = "Recovered interrupted transaction"
+                val resolution = resolveInterruptedJournal(
+                    request,
+                    interrupted,
+                    transactionId,
+                    storedCommitted,
+                    validStoredCommitted,
+                    committedFileExists,
+                    previousCommitted,
+                    recoveredModuleState,
+                    corruptCommitted,
+                    onPhase
                 )
+                resolution.result?.let { return it }
+                previousCommitted = resolution.previousCommitted
+                recoveredModuleState = resolution.recoveredModuleState
+                corruptCommitted = resolution.corruptCommitted
             }
             if (corruptCommitted) {
                 val recoveryDecision = handleCorruptCommittedState(
@@ -798,31 +758,21 @@ class RootMountTransactionCoordinator(
 
             progress(RootMountPhase.STOPPING_APP)
             persist()
-            stopAndWait(request.packageName, request.userId)
+            val restartTolerantMount = request.operation in RESTART_TOLERANT_MOUNT_OPERATIONS
+            stopForMountMutation(
+                request,
+                restartTolerantMount,
+                transactionId,
+                "before mount cleanup"
+            )
 
             progress(RootMountPhase.REMOVING_OLD_MOUNTS)
-            persist()
+            persist { it.copy(mountMutationStarted = true) }
             val knownTargets = setOfNotNull(
                 initialMountedState.basePath,
                 previousCommitted?.stockPath
             ) + requireNotNull(journal).candidateMountTargets
-            // The target app has been force-stopped and verified quiescent above. Android can
-            // still report an owned APK bind mount as EBUSY because of mount-namespace
-            // propagation, so permit a lazy detach here instead of failing a healthy mount
-            // transaction and immediately doing the same lazy detach during rollback.
-            val lazyUnmounts = mountVerifier.removeAllUrvMounts(
-                request.packageName,
-                knownTargets,
-                allowLazyRecovery = true
-            )
-            if (lazyUnmounts.isNotEmpty()) {
-                transactionStore.appendDiagnostic(
-                    request.packageName,
-                    "unmount-${transactionId.take(8)}",
-                    "Unmount used lazy detach after process quiescence: ${lazyUnmounts.joinToString()}"
-                )
-            }
-            mountVerifier.verifyTargetsClear(knownTargets)
+            removeOldMountsForTransaction(request.packageName, knownTargets, transactionId)
 
             if (request.operation == RootMountOperation.UNMOUNT) {
                 val rawStock = packageStateReader.read(request.packageName, request.userId)
@@ -879,7 +829,13 @@ class RootMountTransactionCoordinator(
                     }
 
                     progress(RootMountPhase.STAGING_PATCHED_PAYLOAD)
-                    persist { it.copy(status = "LEGACY_UNMOUNT_STAGE_PENDING") }
+                    persist {
+                        it.copy(
+                            status = "LEGACY_UNMOUNT_STAGE_PENDING",
+                            moduleMutationStarted = true,
+                            moduleRestoreRequired = true
+                        )
+                    }
                     moduleChanged = true
                     val patchedPath = moduleStore.stageAndActivate(
                         transactionId = transactionId,
@@ -919,6 +875,12 @@ class RootMountTransactionCoordinator(
                             "Root module removal backup could not be verified"
                         }
                     }
+                    persist {
+                        it.copy(
+                            moduleMutationStarted = true,
+                            moduleRestoreRequired = true
+                        )
+                    }
                     moduleChanged = true
                 }
                 progress(RootMountPhase.COMMITTING)
@@ -951,6 +913,7 @@ class RootMountTransactionCoordinator(
                 withContext(NonCancellable) {
                     if (inactive == null) transactionStore.clearCommitted(request.packageName)
                     transactionStore.complete(requireNotNull(journal), inactive)
+                    transactionCompleted = true
                     if (request.removeModuleAfterUnmount) {
                         val cleanupFailure = runCatching {
                             moduleStore.purgeBackups(request.packageName)
@@ -973,7 +936,16 @@ class RootMountTransactionCoordinator(
 
             val initial = packageStateReader.read(request.packageName, request.userId)
             if (request.operation == RootMountOperation.RECONCILE) {
-                return reconcile(request, requireNotNull(previousCommitted), initial, transactionId, onPhase, requireNotNull(journal))
+                return reconcile(
+                    request,
+                    requireNotNull(previousCommitted),
+                    initial,
+                    transactionId,
+                    onPhase,
+                    requireNotNull(journal)
+                ) {
+                    transactionCompleted = true
+                }
             }
 
             progress(RootMountPhase.SNAPSHOTTING)
@@ -1021,7 +993,7 @@ class RootMountTransactionCoordinator(
                         initial.versionCode == patchedArtifact?.versionCode
                     ) { "Legacy mount and raw stock versions differ" }
                 } else {
-                    checkCommittedCompatibility(
+                    checkCommittedIdentity(
                         requireNotNull(previousCommitted) {
                             "No committed stock identity is available for bundle switching"
                         },
@@ -1163,6 +1135,8 @@ class RootMountTransactionCoordinator(
                     persist {
                         it.copy(
                             expectedPackageState = compatible,
+                            moduleMutationStarted = true,
+                            moduleRestoreRequired = false,
                             status = "MODULE_STATE_RETARGET_PENDING"
                         )
                     }
@@ -1175,7 +1149,13 @@ class RootMountTransactionCoordinator(
             }
             val activePatchedPath = mountOnlyCommitted?.patchedPath ?: run {
                 progress(RootMountPhase.STAGING_PATCHED_PAYLOAD)
-                persist { it.copy(expectedPackageState = compatible) }
+                persist {
+                    it.copy(
+                        expectedPackageState = compatible,
+                        moduleMutationStarted = true,
+                        moduleRestoreRequired = true
+                    )
+                }
                 moduleChanged = true
                 moduleStore.stageAndActivate(
                     transactionId = transactionId,
@@ -1198,35 +1178,84 @@ class RootMountTransactionCoordinator(
             )
 
             progress(RootMountPhase.MOUNTING)
-            persist { it.copy(expectedPackageState = compatible) }
-            stopAndWait(request.packageName, request.userId)
-            requireExclusivePackageUser(request.packageName, request.userId)
-            mountVerifier.verifyTargetsClear(setOf(committed.stockPath))
-            mountVerifier.mountEverywhere(committed)
+            persist {
+                it.copy(
+                    expectedPackageState = compatible,
+                    mountMutationStarted = true
+                )
+            }
+            applyMountBeforeVerification(
+                request,
+                committed,
+                restartTolerantMount,
+                transactionId
+            )
 
             progress(RootMountPhase.VERIFYING)
             persist()
-            mountVerifier.verifyMounted(committed)
-            check(packageStateReader.waitUntilStopped(request.packageName, 1_000)) {
-                "Target app restarted during verification"
-            }
+            verifyMountedTargetAfterApplication(committed, transactionId)
 
             progress(RootMountPhase.COMMITTING)
             persist()
-            moduleStore.commitSnapshot(request.packageName)
-            transactionStore.complete(requireNotNull(journal), committed)
+            withContext(NonCancellable) {
+                moduleStore.commitSnapshot(request.packageName)
+                transactionStore.complete(
+                    requireNotNull(journal),
+                    committed.copy(status = "MOUNTED")
+                )
+                transactionCompleted = true
+            }
             progress(RootMountPhase.COMPLETED)
             return RootMountResult.Success(transactionId)
         } catch (cancelled: CancellationException) {
-            val activeJournal = journal
+            if (transactionCompleted) throw cancelled
+            val localJournal = journal
+            val activeJournal = withContext(NonCancellable) {
+                runCatching { transactionStore.readActive(request.packageName) }.getOrNull() ?: localJournal
+            }
+            val cancelledPhase = activeJournal?.phase ?: currentPhase
+            if (
+                activeJournal != null &&
+                preserveDurableCompletionOnCancellation(request, activeJournal, transactionId)
+            ) {
+                throw cancelled
+            }
+            val mutationStarted = activeJournal?.let { active ->
+                stockChanged ||
+                    moduleChanged ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedStock(active) ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedModule(active) ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedMounts(active) ||
+                    active.moduleMutationStarted == true
+            } ?: false
+            if (activeJournal != null && !mutationStarted) {
+                withContext(NonCancellable) {
+                    runCatching { transactionStore.clearActive(request.packageName) }
+                        .onFailure { cleanupFailure ->
+                            runCatching {
+                                transactionStore.appendDiagnostic(
+                                    request.packageName,
+                                    "cancel-${transactionId.take(8)}",
+                                    "Cancellation occurred before any package, module, or mount mutation, " +
+                                        "but the untouched journal could not be cleared; existing state was left unchanged: " +
+                                        (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                                )
+                            }
+                        }
+                }
+                throw cancelled
+            }
             if (activeJournal != null) {
                 currentPhase = RootMountPhase.ROLLING_BACK
-                reportProgress(onPhase, RootMountPhase.ROLLING_BACK)
+                reportMandatoryRecoveryProgress(onPhase)
             }
             val cancellationRecovery = withContext(NonCancellable) {
                 activeJournal?.let {
                     rollback(
-                        it.copy(phase = RootMountPhase.ROLLING_BACK),
+                        it.copy(
+                            phase = RootMountPhase.ROLLING_BACK,
+                            rollbackFromPhase = it.rollbackFromPhase ?: cancelledPhase
+                        ),
                         stockChanged || RootMountPolicy.interruptedJournalMayHaveChangedStock(it),
                         moduleChanged || RootMountPolicy.interruptedJournalMayHaveChangedModule(it),
                         stockBackup,
@@ -1239,32 +1268,63 @@ class RootMountTransactionCoordinator(
             throw cancelled
         } catch (failure: Throwable) {
             val diagnosticId = "root-${transactionId.take(8)}"
-            val failedPhase = currentPhase
+            val activeJournal = runCatchingPreservingCancellation {
+                transactionStore.readActive(request.packageName)
+            }.getOrNull() ?: journal
+            val failedPhase = activeJournal?.phase ?: currentPhase
             val failureMessage = failure.message ?: failure.javaClass.simpleName
-            if (
-                failure is RootTargetAppBusyException &&
-                request.operation == RootMountOperation.RECONCILE &&
-                failedPhase == RootMountPhase.STOPPING_APP &&
-                !stockChanged &&
-                !moduleChanged &&
-                runCatchingPreservingCancellation {
+            durableCompletionFailureResult(
+                request,
+                activeJournal,
+                diagnosticId,
+                failureMessage
+            )?.let { return it }
+            val mutationStarted = activeJournal?.let { active ->
+                stockChanged ||
+                    moduleChanged ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedStock(active) ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedModule(active) ||
+                    RootMountPolicy.interruptedJournalMayHaveChangedMounts(active) ||
+                    active.moduleMutationStarted == true
+            } ?: false
+            if (activeJournal != null && !mutationStarted) {
+                val journalCleanupFailure = runCatchingPreservingCancellation {
                     transactionStore.clearActive(request.packageName)
-                }.isSuccess
-            ) {
+                }.exceptionOrNull()
+                val cleanupNote = journalCleanupFailure?.let {
+                    " The untouched journal could not be cleared and was left for a later retry: " +
+                        (it.message ?: it.javaClass.simpleName)
+                }.orEmpty()
+                if (failure is RootTargetAppBusyException) {
+                    runCatchingPreservingCancellation {
+                        transactionStore.appendDiagnostic(
+                            request.packageName,
+                            "busy-${transactionId.take(8)}",
+                            "Deferred root mount operation before changing mounts or any package/module state " +
+                                "because the target app did not remain stopped: $failureMessage$cleanupNote"
+                        )
+                    }
+                    return RootMountResult.Busy(failedPhase, failureMessage)
+                }
                 runCatchingPreservingCancellation {
                     transactionStore.appendDiagnostic(
                         request.packageName,
-                        "busy-${transactionId.take(8)}",
-                        "Deferred reconciliation before changing mounts because the target app " +
-                            "did not remain stopped: $failureMessage"
+                        diagnosticId,
+                        "Root mount operation failed before changing any package, module, or mount state: " +
+                            failure.stackTraceToString() + cleanupNote
                     )
                 }
-                return RootMountResult.Busy(RootMountPhase.STOPPING_APP, failureMessage)
+                return RootMountResult.Failure(
+                    failedPhase,
+                    RootRecoveryState.NONE,
+                    diagnosticId,
+                    failureMessage,
+                    preparingRecoveryOutcome
+                )
             }
             runCatching {
                 transactionStore.appendDiagnostic(request.packageName, diagnosticId, failure.stackTraceToString())
             }
-            val activeJournal = journal
             if (activeJournal == null) {
                 return RootMountResult.Failure(
                     failedPhase,
@@ -1275,15 +1335,20 @@ class RootMountTransactionCoordinator(
                 )
             }
             currentPhase = RootMountPhase.ROLLING_BACK
-            reportProgress(onPhase, RootMountPhase.ROLLING_BACK)
-            val recovery = rollback(
-                activeJournal.copy(phase = RootMountPhase.ROLLING_BACK),
-                stockChanged || RootMountPolicy.interruptedJournalMayHaveChangedStock(activeJournal),
-                moduleChanged || RootMountPolicy.interruptedJournalMayHaveChangedModule(activeJournal),
-                stockBackup,
-                diagnosticId,
-                failureMessage
-            )
+            reportMandatoryRecoveryProgress(onPhase)
+            val recovery = withContext(NonCancellable) {
+                rollback(
+                    activeJournal.copy(
+                        phase = RootMountPhase.ROLLING_BACK,
+                        rollbackFromPhase = activeJournal.rollbackFromPhase ?: failedPhase
+                    ),
+                    stockChanged || RootMountPolicy.interruptedJournalMayHaveChangedStock(activeJournal),
+                    moduleChanged || RootMountPolicy.interruptedJournalMayHaveChangedModule(activeJournal),
+                    stockBackup,
+                    diagnosticId,
+                    failureMessage
+                )
+            }
             return when (recovery) {
                 is RootMountResult.RecoveredToPreviousMount -> RootMountResult.Failure(
                     failedPhase,
@@ -1314,6 +1379,79 @@ class RootMountTransactionCoordinator(
         }
     }
 
+    private suspend fun stopForMountMutation(
+        request: RootMountRequest,
+        restartTolerant: Boolean,
+        transactionId: String,
+        context: String
+    ) {
+        try {
+            stopAndWait(request.packageName, request.userId)
+        } catch (busy: RootTargetAppBusyException) {
+            if (!restartTolerant) throw busy
+            transactionStore.appendDiagnostic(
+                request.packageName,
+                "busy-${transactionId.take(8)}",
+                "Target app restarted $context; continuing with restart-tolerant mounting: " +
+                    (busy.message ?: "target app is active")
+            )
+        }
+    }
+
+    private suspend fun removeOldMountsForTransaction(
+        packageName: String,
+        targets: Set<String>,
+        transactionId: String
+    ) {
+        // The target was force-stopped first, but restart-tolerant operations may continue if
+        // Android immediately relaunches it. Ownership verification keeps lazy detach bounded to
+        // URV layers even while process or mount-namespace activity is still settling.
+        val lazyUnmounts = mountVerifier.removeAllUrvMounts(
+            packageName,
+            targets,
+            allowLazyRecovery = true
+        )
+        if (lazyUnmounts.isNotEmpty()) {
+            transactionStore.appendDiagnostic(
+                packageName,
+                "unmount-${transactionId.take(8)}",
+                "Unmount used ownership-verified lazy detach: ${lazyUnmounts.joinToString()}"
+            )
+        }
+        mountVerifier.verifyTargetsClear(targets)
+    }
+
+    private suspend fun applyMountBeforeVerification(
+        request: RootMountRequest,
+        committed: RootCommittedState,
+        restartTolerant: Boolean,
+        transactionId: String
+    ) {
+        stopForMountMutation(
+            request,
+            restartTolerant,
+            transactionId,
+            "before applying the new mount"
+        )
+        requireExclusivePackageUser(request.packageName, request.userId)
+        mountVerifier.verifyTargetsClear(setOf(committed.stockPath))
+        mountVerifier.mountEverywhere(committed)
+    }
+
+    private suspend fun verifyMountedTargetAfterApplication(
+        committed: RootCommittedState,
+        transactionId: String
+    ) {
+        mountVerifier.verifyMounted(committed)
+        if (finalizeMountedProcessState(committed)) {
+            transactionStore.appendDiagnostic(
+                committed.packageName,
+                "restart-${transactionId.take(8)}",
+                "Target app restarted after the root/Zygote mount was verified; its running process namespaces also see the patched APK"
+            )
+        }
+    }
+
     private suspend fun snapshotStockForRollback(
         packageName: String,
         initial: RootPackageState
@@ -1324,6 +1462,141 @@ class RootMountTransactionCoordinator(
             "Raw stock rollback snapshot hash mismatch"
         }
         return backup
+    }
+
+    private suspend fun resolveInterruptedJournal(
+        request: RootMountRequest,
+        interrupted: RootMountJournal,
+        transactionId: String,
+        storedCommitted: RootCommittedState?,
+        validStoredCommitted: RootCommittedState?,
+        committedFileExists: Boolean,
+        previousCommitted: RootCommittedState?,
+        recoveredModuleState: RootCommittedState?,
+        corruptCommitted: Boolean,
+        onPhase: (RootMountPhase) -> Unit
+    ): InterruptedJournalResolution {
+        if (interrupted.packageName != request.packageName || interrupted.userId < 0) {
+            return InterruptedJournalResolution(
+                result = recoverCorruptJournal(request, previousCommitted, transactionId),
+                previousCommitted = previousCommitted,
+                recoveredModuleState = recoveredModuleState,
+                corruptCommitted = corruptCommitted
+            )
+        }
+        if (interrupted.userId != request.userId) {
+            val diagnosticId = "user-${transactionId.take(8)}"
+            transactionStore.appendDiagnostic(
+                request.packageName,
+                diagnosticId,
+                "Interrupted root mount belongs to Android user ${interrupted.userId}; " +
+                    "request for user ${request.userId} cannot recover it"
+            )
+            return InterruptedJournalResolution(
+                result = RootMountResult.Failure(
+                    interrupted.phase,
+                    RootRecoveryState.NONE,
+                    diagnosticId,
+                    "The unfinished root mount belongs to Android user ${interrupted.userId}, " +
+                        "not the current user ${request.userId}"
+                ),
+                previousCommitted = previousCommitted,
+                recoveredModuleState = recoveredModuleState,
+                corruptCommitted = corruptCommitted
+            )
+        }
+
+        val durableCompletion = recordedCompletion(
+            interrupted,
+            storedCommitted,
+            validStoredCommitted,
+            committedFileExists
+        )
+        if (durableCompletion != null) {
+            val recordedCompletionState = durableCompletion.committedState
+            val cleanupFailure = runCatchingPreservingCancellation {
+                if (recordedCompletionState == null) transactionStore.clearCommitted(request.packageName)
+                transactionStore.clearActive(request.packageName)
+            }.exceptionOrNull()
+            if (cleanupFailure != null) {
+                val diagnosticId = "complete-${transactionId.take(8)}"
+                runCatchingPreservingCancellation {
+                    transactionStore.appendDiagnostic(
+                        request.packageName,
+                        diagnosticId,
+                        "The completed root mount metadata is already durable, but its stale transaction " +
+                            "journal could not be cleared; the recorded completed result was preserved and " +
+                            "no rollback was attempted: " +
+                            (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                    )
+                }
+                return InterruptedJournalResolution(
+                    result = RootMountResult.Failure(
+                        RootMountPhase.COMPLETED,
+                        RootRecoveryState.NONE,
+                        diagnosticId,
+                        "Completed root transaction journal cleanup failed",
+                        "The completed transaction result was preserved; only stale journal cleanup failed."
+                    ),
+                    previousCommitted = recordedCompletionState,
+                    recoveredModuleState = if (recordedCompletionState == null) null else recoveredModuleState,
+                    corruptCommitted = false
+                )
+            }
+            runCatchingPreservingCancellation {
+                transactionStore.appendDiagnostic(
+                    request.packageName,
+                    "complete-${transactionId.take(8)}",
+                    "Cleared a stale completed transaction journal after proving its committed metadata was already durable"
+                )
+            }
+            return InterruptedJournalResolution(
+                previousCommitted = recordedCompletionState,
+                recoveredModuleState = if (recordedCompletionState == null) null else recoveredModuleState,
+                corruptCommitted = false
+            )
+        }
+
+        val mutationStarted =
+            RootMountPolicy.interruptedJournalMayHaveChangedStock(interrupted) ||
+                RootMountPolicy.interruptedJournalMayHaveChangedModule(interrupted) ||
+                RootMountPolicy.interruptedJournalMayHaveChangedMounts(interrupted) ||
+                interrupted.moduleMutationStarted == true
+        if (!mutationStarted) {
+            transactionStore.clearActive(request.packageName)
+            return InterruptedJournalResolution(
+                previousCommitted = previousCommitted,
+                recoveredModuleState = recoveredModuleState,
+                corruptCommitted = corruptCommitted
+            )
+        }
+
+        val recoveringJournal = interrupted.copy(
+            transactionId = transactionId,
+            phase = RootMountPhase.ROLLING_BACK,
+            rollbackFromPhase = interrupted.rollbackFromPhase
+                ?: interrupted.phase.takeUnless { it == RootMountPhase.ROLLING_BACK }
+        )
+        reportMandatoryRecoveryProgress(onPhase)
+        val recovery = withContext(NonCancellable) {
+            transactionStore.writeActive(recoveringJournal)
+            rollback(
+                journal = recoveringJournal,
+                stockChanged = RootMountPolicy.interruptedJournalMayHaveChangedStock(interrupted),
+                moduleChanged = RootMountPolicy.interruptedJournalMayHaveChangedModule(interrupted),
+                stockBackup = interrupted.initialPackageState?.baseSha256?.let { hash ->
+                    RootBackupArtifact("${RootPaths.backup(request.packageName)}/package/0.apk", hash)
+                },
+                diagnosticId = "recovery-${transactionId.take(8)}",
+                reason = "Recovered interrupted transaction"
+            )
+        }
+        return InterruptedJournalResolution(
+            result = recovery,
+            previousCommitted = previousCommitted,
+            recoveredModuleState = recoveredModuleState,
+            corruptCommitted = corruptCommitted
+        )
     }
 
     private fun createJournal(
@@ -1350,6 +1623,9 @@ class RootMountTransactionCoordinator(
         previousCommitted = previousCommitted,
         candidateMountTargets = candidateMountTargets,
         reusableCommittedModule = reusableCommittedModule,
+        moduleMutationStarted = false,
+        moduleRestoreRequired = false,
+        mountMutationStarted = false,
         status = if (legacyMigration) "LEGACY_MIGRATION" else null
     )
 
@@ -1484,7 +1760,7 @@ class RootMountTransactionCoordinator(
         }
     }
 
-    private suspend fun stopAndWait(packageName: String, userId: Int) {
+    private suspend fun forceStopPackageUsers(packageName: String, userId: Int) {
         val installedUserIds = packageStateReader.installedUserIds(packageName)
         if (packageStateReader.read(packageName, userId).installed) {
             check(userId in installedUserIds) {
@@ -1498,11 +1774,64 @@ class RootMountTransactionCoordinator(
                 "root mount force-stop"
             ).requireSuccess("Stop target app for Android user $installedUserId")
         }
+    }
+
+    private suspend fun stopAndWait(packageName: String, userId: Int) {
+        forceStopPackageUsers(packageName, userId)
         if (!packageStateReader.waitUntilStopped(packageName)) {
             throw RootTargetAppBusyException(
                 "Target package processes did not exit; shared-UID ownership may be unsafe"
             )
         }
+    }
+
+    private suspend fun finalizeMountedProcessState(expected: RootCommittedState): Boolean {
+        forceStopPackageUsers(expected.packageName, expected.userId)
+        if (packageStateReader.waitUntilStopped(expected.packageName, POST_MOUNT_STOP_GRACE_MS)) {
+            return false
+        }
+        return verifyStableRunningProcessState(expected.packageName) { pids ->
+            mountVerifier.verifyProcessMounted(expected, pids)
+        }
+    }
+
+    private suspend fun finalizeStockProcessState(stock: RootPackageState) {
+        if (!stock.installed) return
+        val stockPath = requireNotNull(stock.basePath) { "Recovered stock base path is unavailable" }
+        check(stockPath.isSafeAbsoluteApkPath()) { "Recovered stock base path is unsafe" }
+        forceStopPackageUsers(stock.packageName, stock.userId)
+        if (packageStateReader.waitUntilStopped(stock.packageName, POST_MOUNT_STOP_GRACE_MS)) return
+        verifyStableRunningProcessState(stock.packageName) { pids ->
+            mountVerifier.verifyProcessStock(stock.packageName, stock.userId, stockPath, pids)
+        }
+    }
+
+    private suspend fun verifyStableRunningProcessState(
+        packageName: String,
+        verify: suspend (List<Int>) -> Unit
+    ): Boolean {
+        var sawRunningProcess = false
+        repeat(PROCESS_NAMESPACE_STABILITY_ATTEMPTS) {
+            val before = packageStateReader.runningPids(packageName).distinct().sorted()
+            if (before.isEmpty()) return sawRunningProcess
+            sawRunningProcess = true
+            verify(before)
+            val after = packageStateReader.runningPids(packageName).distinct().sorted()
+            if (after.isEmpty()) return true
+            if (before == after) {
+                // Re-check the stable PID set once more, then confirm the process list still
+                // matches after that second namespace probe. Without the final read, a process
+                // could be replaced during the second probe and the replacement would be unseen.
+                verify(after)
+                val confirmed = packageStateReader.runningPids(packageName).distinct().sorted()
+                if (confirmed.isEmpty()) return true
+                if (confirmed == after) return true
+            }
+            delay(PROCESS_NAMESPACE_STABILITY_DELAY_MS)
+        }
+        throw RootTargetAppBusyException(
+            "Target package process set did not stabilize during namespace verification"
+        )
     }
 
     private suspend fun waitForPackageManagerIdle() {
@@ -1537,15 +1866,26 @@ class RootMountTransactionCoordinator(
         current: RootPackageState,
         transactionId: String,
         onPhase: (RootMountPhase) -> Unit,
-        journal: RootMountJournal
+        journal: RootMountJournal,
+        onTransactionCompleted: () -> Unit
     ): RootMountResult {
+        suspend fun completeReconciliation(
+            completionJournal: RootMountJournal,
+            state: RootCommittedState?
+        ) {
+            withContext(NonCancellable) {
+                transactionStore.complete(completionJournal, state)
+                onTransactionCompleted()
+            }
+        }
+
         val otherUserIds = packageStateReader.installedUserIds(request.packageName) - request.userId
         if (otherUserIds.isNotEmpty()) {
             val reason = "Root mounting is unsafe because the package is also installed for Android " +
                 "users ${otherUserIds.sorted().joinToString()}"
             moduleStore.disable(request.packageName)
             transactionStore.markRepatchRequired(request.packageName, reason)
-            transactionStore.complete(
+            completeReconciliation(
                 journal.copy(phase = RootMountPhase.COMPLETED),
                 committed.copy(active = false, status = "REPATCH_REQUIRED")
             )
@@ -1556,14 +1896,14 @@ class RootMountTransactionCoordinator(
             RootMountPolicy.ReconcileDecision.INACTIVE -> {
                 moduleStore.disable(request.packageName)
                 val inactive = committed.copy(active = false, status = "INACTIVE")
-                transactionStore.complete(journal.copy(phase = RootMountPhase.COMPLETED), inactive)
+                completeReconciliation(journal.copy(phase = RootMountPhase.COMPLETED), inactive)
                 stopReconciliation(request.packageName, request.userId, transactionId)
                 return RootMountResult.Success(transactionId)
             }
             RootMountPolicy.ReconcileDecision.REPATCH_REQUIRED -> {
                 moduleStore.disable(request.packageName)
                 transactionStore.markRepatchRequired(request.packageName, "External package change is incompatible")
-                transactionStore.complete(
+                completeReconciliation(
                     journal.copy(phase = RootMountPhase.COMPLETED),
                     committed.copy(active = false, status = "REPATCH_REQUIRED")
                 )
@@ -1580,7 +1920,7 @@ class RootMountTransactionCoordinator(
                     diagnosticId,
                     "External reconciliation left an existing repair-required transaction unchanged"
                 )
-                transactionStore.complete(journal.copy(phase = RootMountPhase.COMPLETED), committed)
+                completeReconciliation(journal.copy(phase = RootMountPhase.COMPLETED), committed)
                 stopReconciliation(request.packageName, request.userId, transactionId)
                 return RootMountResult.Failure(
                     RootMountPhase.ROLLING_BACK,
@@ -1608,50 +1948,46 @@ class RootMountTransactionCoordinator(
             committed
         }
         reportProgress(onPhase, RootMountPhase.MOUNTING)
-        transactionStore.writeActive(
-            journal.copy(
-                phase = RootMountPhase.MOUNTING,
-                expectedPackageState = current,
-                status = if (stockPathChanged) "MODULE_STATE_RETARGET_PENDING" else journal.status
-            )
+        val mountingJournal = journal.copy(
+            phase = RootMountPhase.MOUNTING,
+            expectedPackageState = current,
+            moduleMutationStarted = journal.moduleMutationStarted == true || stockPathChanged,
+            moduleRestoreRequired = false,
+            mountMutationStarted = true,
+            status = if (stockPathChanged) "MODULE_STATE_RETARGET_PENDING" else journal.status
         )
+        transactionStore.writeActive(mountingJournal)
         if (stockPathChanged) moduleStore.updateState(reconciledState)
         try {
             stopAndWait(request.packageName, request.userId)
         } catch (_: RootTargetAppBusyException) {
             // The old mount has already been removed, so rolling back solely because the app
             // relaunched would turn temporary process activity into repair-required state.
-            // Rebuild and verify the root/Zygote mounts below, then let reconciliation retry
-            // after the newly launched process exits.
+            // Rebuild root/Zygote first, then force-stop once more and verify any restarted
+            // target process against the patched mount before committing.
         }
         requireExclusivePackageUser(request.packageName, request.userId)
         moduleStore.enable(request.packageName)
         mountVerifier.verifyTargetsClear(setOf(reconciledState.stockPath))
         mountVerifier.mountEverywhere(reconciledState)
         reportProgress(onPhase, RootMountPhase.VERIFYING)
-        transactionStore.writeActive(journal.copy(phase = RootMountPhase.VERIFYING))
-        mountVerifier.verifyMounted(reconciledState)
-        val targetStayedStopped = packageStateReader.waitUntilStopped(request.packageName, 1_000)
-        val committedStatus = if (targetStayedStopped) {
-            "MOUNTED"
-        } else {
-            MOUNTED_PENDING_APP_STOP_STATUS
-        }
-        transactionStore.complete(
-            journal.copy(phase = RootMountPhase.COMPLETED),
-            reconciledState.copy(active = true, status = committedStatus)
+        transactionStore.writeActive(
+            mountingJournal.copy(phase = RootMountPhase.VERIFYING)
         )
-        return if (targetStayedStopped) {
-            RootMountResult.Success(transactionId)
-        } else {
-            val reason = "Target app restarted during reconciliation"
+        mountVerifier.verifyMounted(reconciledState)
+        val restartedAfterMount = finalizeMountedProcessState(reconciledState)
+        if (restartedAfterMount) {
             transactionStore.appendDiagnostic(
                 request.packageName,
-                "busy-${transactionId.take(8)}",
-                "Committed the verified root and Zygote mounts, but $reason; reconciliation will retry"
+                "restart-${transactionId.take(8)}",
+                "Reconciliation verified the patched APK in the restarted target process namespaces"
             )
-            RootMountResult.Busy(RootMountPhase.VERIFYING, reason)
         }
+        completeReconciliation(
+            mountingJournal.copy(phase = RootMountPhase.COMPLETED),
+            reconciledState.copy(active = true, status = "MOUNTED")
+        )
+        return RootMountResult.Success(transactionId)
     }
 
     private fun checkCommittedIdentity(committed: RootCommittedState, current: RootPackageState) {
@@ -1667,11 +2003,6 @@ class RootMountTransactionCoordinator(
         check(current.launcherResolvable == committed.launcherResolvable) { "Launcher resolution mismatch" }
     }
 
-    private fun checkCommittedCompatibility(committed: RootCommittedState, current: RootPackageState) {
-        checkCommittedIdentity(committed, current)
-        check(current.basePath == committed.stockPath) { "Stock base path mismatch" }
-    }
-
     private suspend fun rollback(
         journal: RootMountJournal,
         stockChanged: Boolean,
@@ -1681,13 +2012,36 @@ class RootMountTransactionCoordinator(
         reason: String
     ): RootMountResult {
         val packageName = journal.packageName
+        val rollbackFromPhase = journal.rollbackFromPhase
+            ?: journal.phase.takeUnless { it == RootMountPhase.ROLLING_BACK }
         return try {
-            transactionStore.writeActive(journal.copy(phase = RootMountPhase.ROLLING_BACK, diagnosticId = diagnosticId))
-            val stopped = runCatchingPreservingCancellation {
+            transactionStore.writeActive(
+                journal.copy(
+                    phase = RootMountPhase.ROLLING_BACK,
+                    rollbackFromPhase = rollbackFromPhase,
+                    mountMutationStarted = true,
+                    diagnosticId = diagnosticId
+                )
+            )
+            transactionStore.appendDiagnostic(
+                packageName,
+                diagnosticId,
+                "Rollback context: fromPhase=${rollbackFromPhase ?: "unknown"}, " +
+                    "stockMutationStarted=${journal.stockMutationStarted}, " +
+                    "registrationGap=${journal.registrationGap}, " +
+                    "moduleMutationStarted=${journal.moduleMutationStarted ?: "legacy-unknown"}, " +
+                    "moduleRestoreRequired=${journal.moduleRestoreRequired ?: "legacy-unknown"}, " +
+                    "mountMutationStarted=${journal.mountMutationStarted ?: "legacy-unknown"}"
+            )
+            try {
                 stopAndWait(packageName, journal.userId)
-                true
-            }.getOrDefault(false)
-            check(stopped) { "Could not quiesce target app during rollback" }
+            } catch (_: RootTargetAppBusyException) {
+                transactionStore.appendDiagnostic(
+                    packageName,
+                    diagnosticId,
+                    "Target app restarted during rollback; continuing with ownership-verified mount cleanup"
+                )
+            }
             val targets = setOfNotNull(
                 journal.initialPackageState?.basePath,
                 journal.expectedPackageState?.basePath,
@@ -1702,7 +2056,7 @@ class RootMountTransactionCoordinator(
                 transactionStore.appendDiagnostic(
                     packageName,
                     diagnosticId,
-                    "Recovery used lazy unmount after process quiescence: ${lazyUnmounts.joinToString()}"
+                    "Recovery used ownership-verified lazy unmount: ${lazyUnmounts.joinToString()}"
                 )
             }
             mountVerifier.verifyTargetsClear(targets)
@@ -1748,22 +2102,42 @@ class RootMountTransactionCoordinator(
                 packageStateReader.installedUserIds(packageName) == setOf(journal.userId)
             }.getOrDefault(false)
             if (previous != null && previous.active && previousMountUserSafe &&
-                runCatching { checkCommittedCompatibility(previous, restoredState) }.isSuccess &&
-                restoredState.baseSha256 == previous.stockSha256
+                runCatching { checkCommittedIdentity(previous, restoredState) }.isSuccess &&
+                restoredState.baseSha256 == previous.stockSha256 &&
+                restoredState.basePath?.isSafeAbsoluteApkPath() == true
             ) {
-                stopAndWait(packageName, journal.userId)
+                val restoredPrevious = previous.copy(
+                    transactionId = if (restoredState.basePath != previous.stockPath) {
+                        journal.transactionId
+                    } else {
+                        previous.transactionId
+                    },
+                    stockPath = requireNotNull(restoredState.basePath),
+                    committedAtEpochMs = System.currentTimeMillis()
+                )
+                if (restoredPrevious.stockPath != previous.stockPath) {
+                    moduleStore.updateState(restoredPrevious)
+                }
+                try {
+                    stopAndWait(packageName, journal.userId)
+                } catch (_: RootTargetAppBusyException) {
+                    // The previous payload will be re-established in root/Zygote first, then
+                    // any restarted target process is verified after one more force-stop.
+                }
                 requireExclusivePackageUser(packageName, journal.userId)
                 moduleStore.enable(packageName)
-                mountVerifier.verifyTargetsClear(setOf(previous.stockPath))
-                mountVerifier.mountEverywhere(previous)
-                mountVerifier.verifyMounted(previous)
-                transactionStore.complete(journal, previous)
+                mountVerifier.verifyTargetsClear(setOf(restoredPrevious.stockPath))
+                mountVerifier.mountEverywhere(restoredPrevious)
+                mountVerifier.verifyMounted(restoredPrevious)
+                finalizeMountedProcessState(restoredPrevious)
+                transactionStore.complete(journal, restoredPrevious.copy(status = "MOUNTED"))
                 RootMountResult.RecoveredToPreviousMount(journal.transactionId, diagnosticId, reason)
             } else {
                 moduleStore.disable(packageName)
                 val externalStockUpdate = retainedExternalUpdate ||
                     isVerifiedExternalStockUpdate(journal, restoredState)
                 if (isVerifiedStockRecovery(journal, restoredState) || externalStockUpdate) {
+                    finalizeStockProcessState(restoredState)
                     val stockState = inactiveCommittedForVerifiedStock(
                         previous,
                         restoredState,
@@ -1777,6 +2151,7 @@ class RootMountTransactionCoordinator(
                     transactionStore.writeActive(
                         journal.copy(
                             phase = RootMountPhase.ROLLING_BACK,
+                            rollbackFromPhase = rollbackFromPhase,
                             diagnosticId = diagnosticId,
                             status = "REPAIR_REQUIRED"
                         )
@@ -1795,6 +2170,42 @@ class RootMountTransactionCoordinator(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (rollbackFailure: Throwable) {
+            val durableCompletedRecovery = runCatchingPreservingCancellation {
+                transactionStore.readActive(packageName)?.let { active ->
+                    readDurableCompletion(active)
+                }
+            }.getOrNull()
+            if (durableCompletedRecovery != null) {
+                runCatchingPreservingCancellation {
+                    if (durableCompletedRecovery.committedState == null) {
+                        transactionStore.clearCommitted(packageName)
+                    }
+                    transactionStore.clearActive(packageName)
+                }.onFailure { cleanupFailure ->
+                    runCatchingPreservingCancellation {
+                        transactionStore.appendDiagnostic(
+                            packageName,
+                            diagnosticId,
+                            "Recovery result was already durable, so no fallback was attempted; stale completed " +
+                                "journal cleanup failed: " +
+                                (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                        )
+                    }
+                }
+                return if (durableCompletedRecovery.committedState?.active == true) {
+                    RootMountResult.RecoveredToPreviousMount(
+                        journal.transactionId,
+                        diagnosticId,
+                        "$reason; previous mount recovery was already committed"
+                    )
+                } else {
+                    RootMountResult.RecoveredToStock(
+                        journal.transactionId,
+                        diagnosticId,
+                        "$reason; stock recovery was already committed"
+                    )
+                }
+            }
             runCatchingPreservingCancellation {
                 transactionStore.appendDiagnostic(
                     packageName,
@@ -1802,8 +2213,16 @@ class RootMountTransactionCoordinator(
                     "Rollback failed: ${rollbackFailure.stackTraceToString()}"
                 )
             }
-            val stockFallback = runCatchingPreservingCancellation {
-                stopAndWait(packageName, journal.userId)
+            var stockFallback = runCatchingPreservingCancellation {
+                try {
+                    stopAndWait(packageName, journal.userId)
+                } catch (_: RootTargetAppBusyException) {
+                    transactionStore.appendDiagnostic(
+                        packageName,
+                        diagnosticId,
+                        "Target app restarted during stock fallback; continuing with ownership-verified cleanup"
+                    )
+                }
                 val targets = setOfNotNull(
                     journal.initialPackageState?.basePath,
                     journal.expectedPackageState?.basePath,
@@ -1818,7 +2237,7 @@ class RootMountTransactionCoordinator(
                     transactionStore.appendDiagnostic(
                         packageName,
                         diagnosticId,
-                        "Stock fallback used lazy unmount after process quiescence: ${lazyUnmounts.joinToString()}"
+                        "Stock fallback used ownership-verified lazy unmount: ${lazyUnmounts.joinToString()}"
                     )
                 }
                 mountVerifier.verifyTargetsClear(targets)
@@ -1828,6 +2247,7 @@ class RootMountTransactionCoordinator(
                 check(isVerifiedStockRecovery(journal, stock) || externalStockUpdate) {
                     "Stock fallback state could not be verified"
                 }
+                finalizeStockProcessState(stock)
                 val inactive = inactiveCommittedForVerifiedStock(
                     journal.previousCommitted,
                     stock,
@@ -1837,6 +2257,33 @@ class RootMountTransactionCoordinator(
                 transactionStore.complete(journal, inactive)
                 stopReconciliation(packageName, journal.userId, diagnosticId)
             }.isSuccess
+            if (!stockFallback) {
+                val durableStockFallback = runCatchingPreservingCancellation {
+                    transactionStore.readActive(packageName)?.let { active ->
+                        readDurableCompletion(active)?.takeIf {
+                            it.committedState?.active != true
+                        }
+                    }
+                }.getOrNull()
+                if (durableStockFallback != null) {
+                    runCatchingPreservingCancellation {
+                        if (durableStockFallback.committedState == null) {
+                            transactionStore.clearCommitted(packageName)
+                        }
+                        transactionStore.clearActive(packageName)
+                    }.onFailure { cleanupFailure ->
+                        runCatchingPreservingCancellation {
+                            transactionStore.appendDiagnostic(
+                                packageName,
+                                diagnosticId,
+                                "Verified stock fallback was already durable; stale completed journal cleanup failed: " +
+                                    (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                            )
+                        }
+                    }
+                    stockFallback = true
+                }
+            }
             if (stockFallback) {
                 RootMountResult.RecoveredToStock(
                     journal.transactionId,
@@ -1861,6 +2308,14 @@ class RootMountTransactionCoordinator(
     }
 
     private suspend fun recoverCorruptJournal(
+        request: RootMountRequest,
+        previousCommitted: RootCommittedState?,
+        transactionId: String
+    ): RootMountResult = withContext(NonCancellable) {
+        recoverCorruptJournalMandatory(request, previousCommitted, transactionId)
+    }
+
+    private suspend fun recoverCorruptJournalMandatory(
         request: RootMountRequest,
         previousCommitted: RootCommittedState?,
         transactionId: String
@@ -1922,7 +2377,15 @@ class RootMountTransactionCoordinator(
             matchesCommittedStock(it, restored) || externalStockUpdate
         }
             ?: isStructurallyVerifiedStock(restored)
-        val recoveryProven = stopped && mountsRemoved && moduleDisabled && stockProven
+        val processStateProven = if (stopped && mountsRemoved && moduleDisabled && stockProven) {
+            runCatchingPreservingCancellation {
+                finalizeStockProcessState(restored)
+            }.isSuccess
+        } else {
+            false
+        }
+        val recoveryProven =
+            stopped && mountsRemoved && moduleDisabled && stockProven && processStateProven
         val inactive = previousCommitted?.copy(
             active = false,
             status = when {
@@ -1963,6 +2426,15 @@ class RootMountTransactionCoordinator(
         userId: Int,
         transactionId: String,
         reason: String
+    ): RootMountResult = withContext(NonCancellable) {
+        recoverCorruptCommittedStateMandatory(packageName, userId, transactionId, reason)
+    }
+
+    private suspend fun recoverCorruptCommittedStateMandatory(
+        packageName: String,
+        userId: Int,
+        transactionId: String,
+        reason: String
     ): RootMountResult {
         val diagnosticId = "committed-${transactionId.take(8)}"
         val initial = packageStateReader.read(packageName, userId)
@@ -1993,7 +2465,15 @@ class RootMountTransactionCoordinator(
         val moduleDisabled = runCatching { moduleStore.disable(packageName) }.isSuccess
         val restored = packageStateReader.read(packageName, userId)
         val stockProven = !restored.installed || isStructurallyVerifiedStock(restored)
-        val recoveryProven = stopped && mountsRemoved && moduleDisabled && stockProven
+        val processStateProven = if (stopped && mountsRemoved && moduleDisabled && stockProven) {
+            runCatchingPreservingCancellation {
+                finalizeStockProcessState(restored)
+            }.isSuccess
+        } else {
+            false
+        }
+        val recoveryProven =
+            stopped && mountsRemoved && moduleDisabled && stockProven && processStateProven
         transactionStore.appendDiagnostic(
             packageName,
             diagnosticId,
@@ -2224,6 +2704,166 @@ class RootMountTransactionCoordinator(
             diagnosticId = diagnosticId
         )
 
+    private fun recordedCompletion(
+        journal: RootMountJournal,
+        storedCommitted: RootCommittedState?,
+        validStoredCommitted: RootCommittedState?,
+        committedFileExists: Boolean
+    ): DurableCompletion? {
+        if (journal.phase != RootMountPhase.COMPLETED) return null
+        if (journal.completionStateRecorded == true) {
+            return when (val recorded = journal.completionCommittedState) {
+                null -> DurableCompletion(null).takeIf {
+                    storedCommitted == null && !committedFileExists
+                }
+                else -> DurableCompletion(recorded).takeIf {
+                    validStoredCommitted == recorded
+                }
+            }
+        }
+        if (journal.completionStateRecorded != null) return null
+
+        // Journals written before completionStateRecorded existed persisted COMPLETED before
+        // writing the final committed state. Prove the effective final state from durable metadata
+        // instead of assuming a missing legacy field means the committed result was null.
+        if (validStoredCommitted?.transactionId == journal.transactionId) {
+            return DurableCompletion(validStoredCommitted)
+        }
+        val previous = journal.previousCommitted
+        if (
+            previous?.active == true &&
+            validStoredCommitted != null &&
+            !validStoredCommitted.active &&
+            validStoredCommitted.status in setOf("STOCK", "INACTIVE", "REPATCH_REQUIRED") &&
+            sameCommittedPayloadIdentity(previous, validStoredCommitted)
+        ) {
+            return DurableCompletion(validStoredCommitted)
+        }
+        if (
+            previous?.active == false &&
+            validStoredCommitted?.active == true &&
+            validStoredCommitted.status == "MOUNTED" &&
+            sameCommittedPayloadIdentity(previous, validStoredCommitted)
+        ) {
+            return DurableCompletion(validStoredCommitted)
+        }
+        if (
+            journal.operation == RootMountOperation.MOUNT_ONLY &&
+            previous?.active == true &&
+            validStoredCommitted?.active == true &&
+            validStoredCommitted.stockPath == previous.stockPath &&
+            sameCommittedPayloadIdentity(previous, validStoredCommitted)
+        ) {
+            return DurableCompletion(validStoredCommitted)
+        }
+        if (
+            journal.operation == RootMountOperation.UNMOUNT &&
+            journal.status == "MODULE_REMOVED" &&
+            storedCommitted == null &&
+            !committedFileExists
+        ) {
+            return DurableCompletion(null)
+        }
+        return null
+    }
+
+    private fun sameCommittedPayloadIdentity(
+        expected: RootCommittedState,
+        actual: RootCommittedState
+    ): Boolean =
+        actual.transactionId == expected.transactionId &&
+            actual.packageName == expected.packageName &&
+            actual.userId == expected.userId &&
+            actual.versionName == expected.versionName &&
+            actual.versionCode == expected.versionCode &&
+            actual.signerSha256 == expected.signerSha256 &&
+            actual.stockSha256 == expected.stockSha256 &&
+            actual.patchedPath == expected.patchedPath &&
+            actual.patchedSha256 == expected.patchedSha256 &&
+            actual.stockShadowPath == expected.stockShadowPath &&
+            actual.stockShadowSha256 == expected.stockShadowSha256 &&
+            actual.preserveStockAcrossBoot == expected.preserveStockAcrossBoot &&
+            actual.topology == expected.topology &&
+            actual.enabled == expected.enabled &&
+            actual.launcherResolvable == expected.launcherResolvable
+
+    private suspend fun readDurableCompletion(journal: RootMountJournal): DurableCompletion? {
+        val storedCommitted = transactionStore.readCommitted(journal.packageName)
+        val committedFileExists = transactionStore.committedExists(journal.packageName)
+        val validStoredCommitted = storedCommitted?.takeIf {
+            isValidCommittedState(journal.packageName, it)
+        }
+        return recordedCompletion(
+            journal,
+            storedCommitted,
+            validStoredCommitted,
+            committedFileExists
+        )
+    }
+
+    private suspend fun preserveDurableCompletionOnCancellation(
+        request: RootMountRequest,
+        activeJournal: RootMountJournal,
+        transactionId: String
+    ): Boolean = withContext(NonCancellable) {
+        val durableCompletion = runCatching { readDurableCompletion(activeJournal) }.getOrNull()
+            ?: return@withContext false
+        runCatching {
+            if (durableCompletion.committedState == null) {
+                transactionStore.clearCommitted(request.packageName)
+            }
+            transactionStore.clearActive(request.packageName)
+        }.onFailure { cleanupFailure ->
+            runCatching {
+                transactionStore.appendDiagnostic(
+                    request.packageName,
+                    "cancel-${transactionId.take(8)}",
+                    "Cancellation occurred after the completed transaction result was already durable; " +
+                        "no rollback was attempted. Stale journal cleanup also failed: " +
+                        (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                )
+            }
+        }
+        true
+    }
+
+    private suspend fun durableCompletionFailureResult(
+        request: RootMountRequest,
+        activeJournal: RootMountJournal?,
+        diagnosticId: String,
+        failureMessage: String
+    ): RootMountResult.Failure? {
+        activeJournal ?: return null
+        val durableCompletion = runCatchingPreservingCancellation {
+            readDurableCompletion(activeJournal)
+        }.getOrNull() ?: return null
+        val cleanupFailure = runCatchingPreservingCancellation {
+            if (durableCompletion.committedState == null) {
+                transactionStore.clearCommitted(request.packageName)
+            }
+            transactionStore.clearActive(request.packageName)
+        }.exceptionOrNull()
+        val cleanupNote = cleanupFailure?.let {
+            " Stale completed-journal cleanup also failed: " +
+                (it.message ?: it.javaClass.simpleName)
+        }.orEmpty()
+        runCatchingPreservingCancellation {
+            transactionStore.appendDiagnostic(
+                request.packageName,
+                diagnosticId,
+                "The transaction result was already durably completed before this failure, so no rollback " +
+                    "was attempted. Original failure: $failureMessage$cleanupNote"
+            )
+        }
+        return RootMountResult.Failure(
+            RootMountPhase.COMPLETED,
+            RootRecoveryState.NONE,
+            diagnosticId,
+            failureMessage,
+            "The completed transaction result was preserved; no rollback was performed."
+        )
+    }
+
     private fun isValidCommittedState(packageName: String, state: RootCommittedState): Boolean {
         val safeStockPath = state.stockPath.isSafeAbsoluteApkPath()
         val expectedPatchedPath = RootPaths.moduleApk(packageName)
@@ -2286,6 +2926,14 @@ class RootMountTransactionCoordinator(
         }
     }
 
+    private fun reportMandatoryRecoveryProgress(onPhase: (RootMountPhase) -> Unit) {
+        try {
+            onPhase(RootMountPhase.ROLLING_BACK)
+        } catch (_: Throwable) {
+            // Once state may have changed, rollback must not be interrupted by a UI observer.
+        }
+    }
+
     private suspend fun <T> runCatchingPreservingCancellation(
         block: suspend () -> T
     ): Result<T> = try {
@@ -2303,6 +2951,10 @@ class RootMountTransactionCoordinator(
             RootMountOperation.SWITCH_PATCHED_BUILD,
             RootMountOperation.REPLACE_STOCK_AND_MOUNT
         )
+        val RESTART_TOLERANT_MOUNT_OPERATIONS = setOf(
+            RootMountOperation.MOUNT_ONLY,
+            RootMountOperation.SWITCH_PATCHED_BUILD
+        )
         val MANUAL_STATE_RECOVERY_OPERATIONS = setOf(
             RootMountOperation.MOUNT_ONLY,
             RootMountOperation.UNMOUNT,
@@ -2310,6 +2962,9 @@ class RootMountTransactionCoordinator(
         )
         val RESUMABLE_AFTER_RECOVERY_OPERATIONS = MOUNTING_OPERATIONS + RootMountOperation.UNMOUNT
         const val FORCE_STOP_TIMEOUT_SECONDS = 15L
+        const val POST_MOUNT_STOP_GRACE_MS = 1_000L
+        const val PROCESS_NAMESPACE_STABILITY_ATTEMPTS = 5
+        const val PROCESS_NAMESPACE_STABILITY_DELAY_MS = 100L
         const val PACKAGE_MANAGER_IDLE_TIMEOUT_SECONDS = 70L
         val SHA256 = Regex("[0-9a-f]{64}")
         val INACTIVE_COMMITTED_STATUSES = setOf(

@@ -87,6 +87,8 @@ interface RootMountVerification {
     ): List<String>
     suspend fun verifyRootMounted(expected: RootCommittedState): RootPackageState
     suspend fun verifyMounted(expected: RootCommittedState): RootPackageState
+    suspend fun verifyProcessMounted(expected: RootCommittedState, pids: List<Int>)
+    suspend fun verifyProcessStock(packageName: String, userId: Int, stockPath: String, pids: List<Int>)
 }
 
 data class RootLockHandle(

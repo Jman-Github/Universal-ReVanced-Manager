@@ -151,9 +151,17 @@ class AndroidPackageStateReader(
     }
 
     override suspend fun runningPids(packageName: String): List<Int> {
+        val packageUid = pm.getApplicationInfo(packageName)?.uid ?: -1
+        val packageAppId = if (packageUid >= 0) packageUid % PER_USER_RANGE else -1
         val result = runQuery(
-            "ps -A -o PID,NAME 2>/dev/null | awk -v pkg=${shellQuote(packageName)} " +
-                "'${'$'}2 == pkg || index(${'$'}2, pkg \":\") == 1 { print ${'$'}1 }'"
+            "if ps -A -o PID,UID,NAME >/dev/null 2>&1; then " +
+                "ps -A -o PID,UID,NAME 2>/dev/null | " +
+                "awk -v pkg=${shellQuote(packageName)} -v app_id=$packageAppId " +
+                "-v per_user=$PER_USER_RANGE " +
+                "'((app_id >= 0) && (${'$'}2 % per_user) == app_id) || " +
+                "${'$'}3 == pkg || index(${'$'}3, pkg \":\") == 1 { print ${'$'}1 }'; " +
+                "else ps -A -o PID,NAME 2>/dev/null | awk -v pkg=${shellQuote(packageName)} " +
+                "'${'$'}2 == pkg || index(${'$'}2, pkg \":\") == 1 { print ${'$'}1 }'; fi"
         )
         result.requireSuccess("Inspect target package processes")
         return result.stdout.mapNotNull { it.trim().toIntOrNull() }.distinct()

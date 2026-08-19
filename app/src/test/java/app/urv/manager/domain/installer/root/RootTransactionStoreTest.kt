@@ -1,7 +1,9 @@
 package app.urv.manager.domain.installer.root
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -34,6 +36,67 @@ class RootTransactionStoreTest {
     }
 
     @Test
+    fun `missing journal still reads as absent`() = runBlocking {
+        val store = RootTransactionStore(RecordingStoreShell())
+
+        assertNull(store.readActive(PACKAGE))
+    }
+
+    @Test
+    fun `existence check failure is not treated as file absence`(): Unit = runBlocking {
+        val shell = RecordingStoreShell(failExistenceCheck = true)
+        val store = RootTransactionStore(shell)
+
+        assertFailsWith<RootCommandException> {
+            store.committedExists(PACKAGE)
+        }
+    }
+
+    @Test
+    fun `journal read failure is not treated as missing or corrupt state`(): Unit = runBlocking {
+        val shell = RecordingStoreShell(failRead = true)
+        val store = RootTransactionStore(shell)
+
+        assertFailsWith<RootCommandException> {
+            store.readActive(PACKAGE)
+        }
+    }
+
+    @Test
+    fun `transaction listing failure is not treated as an empty store`(): Unit = runBlocking {
+        val shell = RecordingStoreShell(failList = true)
+        val store = RootTransactionStore(shell)
+
+        assertFailsWith<RootCommandException> {
+            store.listIncompletePackages()
+        }
+    }
+
+    @Test
+    fun `completed journal cleanup failure does not fail a durable transaction`() = runBlocking {
+        val shell = RecordingStoreShell(
+            completionCleanupFailure = IllegalStateException("cleanup transport failed")
+        )
+        val store = RootTransactionStore(shell)
+
+        store.complete(journal(), null)
+
+        assertTrue(shell.commands.any { it.startsWith("set -eu; rm -f") && it.contains("active.json") })
+    }
+
+    @Test
+    fun `completed journal cleanup cancellation does not undo durable completion`() = runBlocking {
+        val shell = RecordingStoreShell(
+            completionCleanupFailure = CancellationException("cleanup cancelled after unlink")
+        )
+        val store = RootTransactionStore(shell)
+
+        store.complete(journal(), null)
+
+        assertTrue(shell.commands.any { it.startsWith("set -eu; rm -f") && it.contains("active.json") })
+    }
+
+    @Test
     fun `diagnostics export uses readable named sections`() = runBlocking {
         val shell = RecordingStoreShell()
         val store = RootTransactionStore(shell)
@@ -51,14 +114,32 @@ class RootTransactionStoreTest {
         assertTrue(command.contains("Not present."))
     }
 
-    private class RecordingStoreShell(private val truncatedActive: Boolean = false) : RootShellGateway {
+    private class RecordingStoreShell(
+        private val truncatedActive: Boolean = false,
+        private val failExistenceCheck: Boolean = false,
+        private val failRead: Boolean = false,
+        private val failList: Boolean = false,
+        private val completionCleanupFailure: Throwable? = null
+    ) : RootShellGateway {
         val commands = mutableListOf<String>()
 
         override suspend fun run(command: String): RootCommandResult {
             commands += command
             return when {
-                command.startsWith("[ -f") && truncatedActive -> success()
-                command.startsWith("cat ") && truncatedActive -> success("{\"transactionId\":")
+                command.startsWith("set -eu; if [ -f") && failRead ->
+                    RootCommandResult(-1, emptyList(), emptyList())
+                command.startsWith("set -eu; if [ -f") && truncatedActive ->
+                    success("{\"transactionId\":")
+                command.startsWith("set -eu; if [ -f") ->
+                    RootCommandResult(44, emptyList(), emptyList())
+                command.startsWith("if [ -f") && failExistenceCheck ->
+                    RootCommandResult(1, emptyList(), listOf("existence check failed"))
+                command.startsWith("if [ -f") && truncatedActive -> success("1")
+                command.startsWith("if [ -f") -> success("0")
+                command.startsWith("set -eu; for f in ") && failList ->
+                    RootCommandResult(-1, emptyList(), emptyList())
+                command.startsWith("set -eu; rm -f") && completionCleanupFailure != null ->
+                    throw completionCleanupFailure
                 else -> success()
             }
         }

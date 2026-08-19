@@ -108,19 +108,45 @@ object RootMountPolicy {
     fun interruptedJournalMayHaveChangedStock(journal: RootMountJournal): Boolean =
         journal.stockMutationStarted || journal.registrationGap
 
-    fun interruptedJournalMayHaveChangedModule(journal: RootMountJournal): Boolean = when (journal.operation) {
-        RootMountOperation.SWITCH_PATCHED_BUILD,
-        RootMountOperation.REPLACE_STOCK_AND_MOUNT ->
-            journal.phase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
+    fun interruptedJournalMayHaveChangedMounts(journal: RootMountJournal): Boolean {
+        // A persisted rollback journal is itself a mutation boundary: rollback can remove
+        // mounts even when the interrupted forward transaction had not reached mount cleanup.
+        if (journal.phase == RootMountPhase.ROLLING_BACK) return true
+        journal.mountMutationStarted?.let { return it }
+        val forwardPhase = journal.rollbackFromPhase ?: journal.phase
+        return forwardPhase >= RootMountPhase.REMOVING_OLD_MOUNTS
+    }
 
-        RootMountOperation.UNMOUNT ->
-            journal.status == "MODULE_REMOVAL_PENDING" || journal.status == "MODULE_REMOVED"
+    fun interruptedJournalMayHaveChangedModule(journal: RootMountJournal): Boolean {
+        journal.moduleRestoreRequired?.let { return it }
+        if (
+            journal.status == "MODULE_STATE_RETARGET_PENDING" &&
+            journal.operation in setOf(RootMountOperation.MOUNT_ONLY, RootMountOperation.RECONCILE)
+        ) {
+            // Backward compatibility for journals written before moduleRestoreRequired existed.
+            return false
+        }
+        journal.moduleMutationStarted?.let { return it }
+        val forwardPhase = journal.rollbackFromPhase ?: journal.phase
+        return when (journal.operation) {
+            RootMountOperation.SWITCH_PATCHED_BUILD,
+            RootMountOperation.REPLACE_STOCK_AND_MOUNT ->
+                forwardPhase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
 
-        RootMountOperation.MOUNT_ONLY ->
-            !journal.reusableCommittedModule &&
-                journal.phase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
+            RootMountOperation.UNMOUNT ->
+                journal.status in setOf(
+                    "LEGACY_UNMOUNT_STAGE_PENDING",
+                    "LEGACY_UNMOUNT_COMMIT_PENDING",
+                    "MODULE_REMOVAL_PENDING",
+                    "MODULE_REMOVED"
+                )
 
-        RootMountOperation.RECOVER,
-        RootMountOperation.RECONCILE -> false
+            RootMountOperation.MOUNT_ONLY ->
+                !journal.reusableCommittedModule &&
+                    forwardPhase >= RootMountPhase.STAGING_PATCHED_PAYLOAD
+
+            RootMountOperation.RECOVER,
+            RootMountOperation.RECONCILE -> false
+        }
     }
 }

@@ -178,6 +178,117 @@ class RootMountNamespaces(
         ).requireSuccess("Verify patched APK in every Zygote namespace")
     }
 
+    suspend fun verifyProcesses(expected: RootCommittedState, pids: List<Int>) {
+        if (pids.isEmpty()) return
+        require(pids.all { it > 1 }) { "Invalid target process ID" }
+        val pidWords = pids.distinct().joinToString(" ")
+        shell.runIsolatedBounded(
+            namespaceHelpers(expected) +
+                processIdentityHelpers(expected.packageName, expected.userId) + """
+                set -eu
+                for pid in $pidWords; do
+                  if [ ! -r "/proc/${'$'}pid/ns/mnt" ]; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not inspect target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  namespace_id="${'$'}(readlink "/proc/${'$'}pid/ns/mnt" 2>/dev/null)" || {
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not identify target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  }
+                  if ! process_matches_package "${'$'}pid"; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Target process identity changed before namespace verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  if ! namespace_matches "${'$'}pid"; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Patched APK is not visible in target process namespace ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  verified_namespace_id="${'$'}(readlink "/proc/${'$'}pid/ns/mnt" 2>/dev/null)" || {
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not re-inspect target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  }
+                  if [ "${'$'}namespace_id" != "${'$'}verified_namespace_id" ]; then
+                    echo "Target process mount namespace changed during verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  if ! process_matches_package "${'$'}pid"; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Target process identity changed during namespace verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                done
+            """.trimIndent(),
+            VERIFY_TIMEOUT_SECONDS,
+            "target process namespace verification"
+        ).requireSuccess("Verify patched APK in running target processes")
+    }
+
+    suspend fun verifyStockProcesses(
+        packageName: String,
+        userId: Int,
+        stockPath: String,
+        pids: List<Int>
+    ) {
+        if (pids.isEmpty()) return
+        require(pids.all { it > 1 }) { "Invalid target process ID" }
+        val pidWords = pids.distinct().joinToString(" ")
+        shell.runIsolatedBounded(
+            processIdentityHelpers(packageName, userId) + """
+                set -eu
+                stock_path=${shellQuote(stockPath)}
+                stock_inode="${'$'}(stat -c '%d:%i' "${'$'}stock_path")"
+                for pid in $pidWords; do
+                  if [ ! -r "/proc/${'$'}pid/ns/mnt" ]; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not inspect target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  namespace_id="${'$'}(readlink "/proc/${'$'}pid/ns/mnt" 2>/dev/null)" || {
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not identify target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  }
+                  if ! process_matches_package "${'$'}pid"; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Target process identity changed before stock namespace verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}stock_path" 2>/dev/null)" || {
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Stock APK is not visible in target process namespace ${'$'}pid" >&2
+                    exit 1
+                  }
+                  if [ "${'$'}stock_inode" != "${'$'}target_inode" ]; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Target process namespace ${'$'}pid still sees a non-stock APK" >&2
+                    exit 1
+                  fi
+                  verified_namespace_id="${'$'}(readlink "/proc/${'$'}pid/ns/mnt" 2>/dev/null)" || {
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Could not re-inspect target process mount namespace ${'$'}pid" >&2
+                    exit 1
+                  }
+                  if [ "${'$'}namespace_id" != "${'$'}verified_namespace_id" ]; then
+                    echo "Target process mount namespace changed during stock verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                  if ! process_matches_package "${'$'}pid"; then
+                    [ -d "/proc/${'$'}pid" ] || continue
+                    echo "Target process identity changed during stock namespace verification for ${'$'}pid" >&2
+                    exit 1
+                  fi
+                done
+            """.trimIndent(),
+            VERIFY_TIMEOUT_SECONDS,
+            "target process stock namespace verification"
+        ).requireSuccess("Verify stock APK in running target processes")
+    }
+
     suspend fun removeOwned(
         packageName: String,
         targets: Set<String>,
@@ -306,6 +417,41 @@ class RootMountNamespaces(
         }.distinct()
     }
 
+    private fun processIdentityHelpers(packageName: String, userId: Int): String {
+        require(userId >= 0) { "Invalid Android user ID" }
+        val userUidStart = userId * PER_USER_RANGE
+        val userUidEnd = (userId + 1) * PER_USER_RANGE
+        return """
+            package_name=${shellQuote(packageName)}
+            package_uid="${'$'}(
+              pm list packages -U --user $userId "${'$'}package_name" 2>/dev/null |
+                awk -v wanted="package:${'$'}package_name" '
+                  ${'$'}1 == wanted {
+                    for (i=2; i<=NF; i++) {
+                      if (${'$'}i ~ /^uid:[0-9]+${'$'}/) {
+                        sub(/^uid:/, "", ${'$'}i)
+                        print ${'$'}i
+                        exit
+                      }
+                    }
+                  }
+                '
+            )"
+            process_matches_package() {
+              pid="${'$'}1"
+              process_name="${'$'}(tr '\000' '\n' < "/proc/${'$'}pid/cmdline" 2>/dev/null | head -n 1)" || return 1
+              process_uid="${'$'}(awk '/^Uid:/ { print ${'$'}2; exit }' "/proc/${'$'}pid/status" 2>/dev/null)" || return 1
+              case "${'$'}process_uid" in ''|*[!0-9]*) return 1 ;; esac
+              [ "${'$'}process_uid" -ge $userUidStart ] && [ "${'$'}process_uid" -lt $userUidEnd ] || return 1
+              case "${'$'}process_name" in
+                "${'$'}package_name"|"${'$'}package_name":*) return 0 ;;
+              esac
+              [ -n "${'$'}package_uid" ] || return 1
+              [ "${'$'}process_uid" = "${'$'}package_uid" ]
+            }
+        """.trimIndent() + "\n"
+    }
+
     private fun namespaceHelpers(expected: RootCommittedState): String {
         val patchedRoot = mountInfoRootAlias(expected.patchedPath)
         val shadowRoot = mountInfoRootAlias(expected.stockShadowPath.orEmpty())
@@ -403,6 +549,7 @@ class RootMountNamespaces(
         if (path.startsWith("/data/")) path.removePrefix("/data") else path
 
     private companion object {
+        const val PER_USER_RANGE = 100_000
         const val LAZY_UNMOUNT_MARKER = "URV_LAZY_UNMOUNT:"
         const val ZYGOTE_STABILITY_ATTEMPTS = 20
         const val MOUNT_TIMEOUT_SECONDS = 60L

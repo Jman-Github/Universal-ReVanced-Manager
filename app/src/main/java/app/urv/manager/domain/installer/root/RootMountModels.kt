@@ -148,6 +148,12 @@ data class RootMountJournal(
     val reusableCommittedModule: Boolean = false,
     val stockMutationStarted: Boolean = false,
     val registrationGap: Boolean = false,
+    val moduleMutationStarted: Boolean? = null,
+    val moduleRestoreRequired: Boolean? = null,
+    val mountMutationStarted: Boolean? = null,
+    val rollbackFromPhase: RootMountPhase? = null,
+    val completionStateRecorded: Boolean? = null,
+    val completionCommittedState: RootCommittedState? = null,
     val diagnosticId: String? = null,
     val status: String? = null
 )

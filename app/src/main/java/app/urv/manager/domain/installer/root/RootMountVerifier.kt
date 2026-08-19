@@ -177,6 +177,19 @@ class RootMountVerifier(
         return packageState
     }
 
+    override suspend fun verifyProcessMounted(expected: RootCommittedState, pids: List<Int>) {
+        namespaces.verifyProcesses(expected, pids)
+    }
+
+    override suspend fun verifyProcessStock(
+        packageName: String,
+        userId: Int,
+        stockPath: String,
+        pids: List<Int>
+    ) {
+        namespaces.verifyStockProcesses(packageName, userId, stockPath, pids)
+    }
+
     private suspend fun verifyMountedState(
         expected: RootCommittedState,
         verifyShadowHash: Boolean
