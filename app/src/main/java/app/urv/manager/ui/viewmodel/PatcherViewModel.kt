@@ -1019,6 +1019,34 @@ fun proceedAfterMissingPatchWarning() {
         private set
     var rootMountRecoveryMessage by mutableStateOf<String?>(null)
         private set
+    var rootMountDiagnosticsFlowActive by mutableStateOf(
+        savedStateHandle["root_mount_diagnostics_flow_active"]
+            ?: (savedStateHandle.get<String>("root_mount_diagnostics_context") != null)
+    )
+        private set
+    var rootMountDiagnosticsExportInProgress by mutableStateOf(false)
+        private set
+    private var rootMountDiagnosticsContext: String?
+        get() = savedStateHandle["root_mount_diagnostics_context"]
+        set(value) {
+            if (value == null) {
+                savedStateHandle.remove<String>("root_mount_diagnostics_context")
+                updateRootMountDiagnosticsFlowActive(false)
+            } else {
+                savedStateHandle["root_mount_diagnostics_context"] = value
+                updateRootMountDiagnosticsFlowActive(false)
+            }
+        }
+    val hasRootMountDiagnostics get() = rootMountDiagnosticsContext != null
+
+    private fun updateRootMountDiagnosticsFlowActive(active: Boolean) {
+        rootMountDiagnosticsFlowActive = active
+        if (active) {
+            savedStateHandle["root_mount_diagnostics_flow_active"] = true
+        } else {
+            savedStateHandle.remove<Boolean>("root_mount_diagnostics_flow_active")
+        }
+    }
     var fallbackInstallPrompt by mutableStateOf<FallbackInstallPrompt?>(null)
         private set
     private var suppressFailureAfterSuccess = false
@@ -1128,23 +1156,34 @@ fun proceedAfterMissingPatchWarning() {
         pendingInstallFailureMessage = null
         installFailureMessage = null
         installStatus = null
+        rootMountDiagnosticsContext = message
         rootMountRecoveryMessage = message
         cleanupFailedInstall()
     }
 
-    private fun showInstallFailure(message: String, allowFallback: Boolean = true) {
-        val now = System.currentTimeMillis()
-        if (activeInstallType == InstallType.SHIZUKU && suppressFailureAfterSuccess) return
-        if (lastSuccessInstallType == InstallType.SHIZUKU && now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS) return
-        if (lastSuccessInstallType == InstallType.SHIZUKU) return
-        if (installStatus is InstallCompletionStatus.Success || suppressFailureAfterSuccess) return
-        val adjusted = if (activeInstallType == InstallType.MOUNT) {
+    private fun showInstallFailure(
+        message: String,
+        allowFallback: Boolean = true,
+        attemptedInstallType: InstallType? = null
+    ) {
+        val failureInstallType = attemptedInstallType ?: activeInstallType
+        if (attemptedInstallType == null) {
+            val now = System.currentTimeMillis()
+            if (failureInstallType == InstallType.SHIZUKU && suppressFailureAfterSuccess) return
+            if (lastSuccessInstallType == InstallType.SHIZUKU && now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS) return
+            if (lastSuccessInstallType == InstallType.SHIZUKU) return
+            if (installStatus is InstallCompletionStatus.Success || suppressFailureAfterSuccess) return
+        }
+        val adjusted = if (failureInstallType == InstallType.MOUNT) {
             message
                 .replace("Failed to install app:", "Failed to mount app:", ignoreCase = true)
                 .replace("for install", "for mount", ignoreCase = true)
         } else message
-        if (activeInstallType != null) {
-            lastInstallType = activeInstallType
+        if (failureInstallType == InstallType.MOUNT) {
+            rootMountDiagnosticsContext = adjusted
+        }
+        if (failureInstallType != null) {
+            lastInstallType = failureInstallType
         }
         val fallbackPrompt = if (allowFallback) buildFallbackPrompt(adjusted) else null
         if (fallbackPrompt != null) {
@@ -2963,6 +3002,135 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         context.startActivity(shareIntent)
     }
 
+    suspend fun readRootMountDiagnostics(): String? {
+        val report = try {
+            rootMountCoordinator.exportDiagnostics(packageName).trim()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(tag, "Failed to read root mount diagnostics", error)
+            buildString {
+                appendLine("------------")
+                appendLine("Root diagnostic collection failure:")
+                appendLine("------------")
+                appendLine("Package: $packageName")
+                appendLine("Reason: ${error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()}")
+            }.trimEnd()
+        }
+
+        return buildString {
+            appendLine("============================================================")
+            appendLine("Universal ReVanced Manager - Root Mount Diagnostics")
+            appendLine("============================================================")
+            appendLine("URV version: ${BuildConfig.VERSION_NAME}")
+            appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Android: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
+            appendLine("Architecture: ${Build.SUPPORTED_ABIS.joinToString(", ")}")
+            appendLine()
+            rootMountDiagnosticsContext?.takeIf(String::isNotBlank)?.let { context ->
+                appendLine("------------")
+                appendLine("Patcher mount outcome:")
+                appendLine("------------")
+                appendLine(context)
+                appendLine()
+            }
+            appendLine(report)
+        }
+    }
+
+    fun exportRootMountDiagnosticsToPath(
+        target: Path,
+        onResult: (Boolean) -> Unit = {}
+    ): Job {
+        rootMountDiagnosticsExportInProgress = true
+        return viewModelScope.launch {
+            try {
+                val content = readRootMountDiagnostics() ?: run {
+                    onResult(false)
+                    return@launch
+                }
+                val succeeded = try {
+                    withContext(Dispatchers.IO) {
+                        target.parent?.let { Files.createDirectories(it) }
+                        Files.newBufferedWriter(
+                            target,
+                            StandardCharsets.UTF_8,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING
+                        ).use { writer -> writer.write(content) }
+                    }
+                    true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to export root mount diagnostics to $target", error)
+                    false
+                }
+
+                if (succeeded) clearRootMountDiagnosticsContext()
+                app.toast(
+                    app.getString(
+                        if (succeeded) {
+                            R.string.root_mount_diagnostics_export_success
+                        } else {
+                            R.string.root_mount_diagnostics_export_failed
+                        }
+                    )
+                )
+                onResult(succeeded)
+            } finally {
+                rootMountDiagnosticsExportInProgress = false
+            }
+        }
+    }
+
+    fun exportRootMountDiagnosticsToUri(
+        target: Uri?,
+        onResult: (Boolean) -> Unit = {}
+    ): Job {
+        rootMountDiagnosticsExportInProgress = true
+        return viewModelScope.launch {
+            try {
+                if (target == null) {
+                    onResult(false)
+                    return@launch
+                }
+                val content = readRootMountDiagnostics() ?: run {
+                    onResult(false)
+                    return@launch
+                }
+                val succeeded = try {
+                    withContext(Dispatchers.IO) {
+                        app.contentResolver.openOutputStream(target, "wt")
+                            ?.bufferedWriter(StandardCharsets.UTF_8)
+                            ?.use { writer -> writer.write(content) }
+                            ?: throw IOException("Could not open output stream for root mount diagnostics")
+                    }
+                    true
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to export root mount diagnostics to $target", error)
+                    false
+                }
+
+                if (succeeded) clearRootMountDiagnosticsContext()
+                app.toast(
+                    app.getString(
+                        if (succeeded) {
+                            R.string.root_mount_diagnostics_export_success
+                        } else {
+                            R.string.root_mount_diagnostics_export_failed
+                        }
+                    )
+                )
+                onResult(succeeded)
+            } finally {
+                rootMountDiagnosticsExportInProgress = false
+            }
+        }
+    }
+
     fun open() = installedPackageName?.let(pm::launch)
 
     private suspend fun performInstall(
@@ -2973,6 +3141,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         activeInstallJob = operationJob
         try {
             rootMountRecoveryMessage = null
+            if (installType == InstallType.MOUNT) {
+                rootMountDiagnosticsContext = null
+            }
             activeInstallType = installType
             deferInstallProgressToasts = installType != InstallType.MOUNT
             updateInstallingState(true)
@@ -3098,7 +3269,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     R.string.install_app_fail,
                     e.simpleMessage() ?: e.javaClass.simpleName.orEmpty()
                 ),
-                allowFallback = installType != InstallType.MOUNT
+                allowFallback = installType != InstallType.MOUNT,
+                attemptedInstallType = installType.takeIf { it == InstallType.MOUNT }
             )
         } finally {
             if (activeInstallJob === operationJob) activeInstallJob = null
@@ -3216,14 +3388,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             }
             is RootMountResult.RequiresRepatch -> {
-                showInstallFailure(result.reason, allowFallback = false)
+                showInstallFailure(
+                    result.reason,
+                    allowFallback = false,
+                    attemptedInstallType = InstallType.MOUNT
+                )
             }
             is RootMountResult.Busy -> {
                 val detail = result.reason ?: "Persisted phase: " +
                     (result.phase?.name?.lowercase()?.replace('_', ' ') ?: "preparing")
                 showInstallFailure(
                     app.getString(R.string.root_mount_recovery_in_progress, detail),
-                    allowFallback = false
+                    allowFallback = false,
+                    attemptedInstallType = InstallType.MOUNT
                 )
             }
             is RootMountResult.Failure -> throw IllegalStateException(
@@ -3553,6 +3730,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     override fun install() {
         if (isInstalling) return
+        rootMountDiagnosticsContext = null
         if (usingMountInstall) {
             installWithToken(InstallerManager.Token.AutoSaved)
             return
@@ -3664,6 +3842,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         allowModeOverride: Boolean
     ) {
         if (isInstalling) return
+        rootMountDiagnosticsContext = null
+        val requestedMount = token == InstallerManager.Token.AutoSaved
+        val attemptedInstallType = if (requestedMount) InstallType.MOUNT else null
         val tokenAllowed = if (allowModeOverride) {
             isInstallerTokenSelectable(token)
         } else {
@@ -3672,14 +3853,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         if (!tokenAllowed) {
             showInstallFailure(
                 app.getString(R.string.installer_patch_mode_mismatch),
-                allowFallback = false
+                allowFallback = false,
+                attemptedInstallType = attemptedInstallType
             )
             return
         }
         viewModelScope.launch {
             runCatching {
                 val expectedPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
-                val requestedMount = token == InstallerManager.Token.AutoSaved
                 check(!requestedMount || expectedPackage == packageName) {
                     app.getString(R.string.root_mount_renamed_package_not_supported)
                 }
@@ -3715,7 +3896,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     app.getString(
                         R.string.install_app_fail,
                         error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
-                    )
+                    ),
+                    allowFallback = !requestedMount,
+                    attemptedInstallType = attemptedInstallType
                 )
             }
         }
@@ -3877,11 +4060,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS
     }
 
-    fun dismissInstallFailureMessage() {
+    private fun clearInstallFailureUiState() {
         installFailureMessage = null
         packageInstallerStatus = null
         installStatus = null
         pendingInstallFailureMessage = null
+    }
+
+    fun dismissInstallFailureMessage() {
+        clearInstallFailureUiState()
+        rootMountDiagnosticsContext = null
+    }
+
+    fun dismissInstallFailureMessageForRootDiagnostics() {
+        clearInstallFailureUiState()
+        updateRootMountDiagnosticsFlowActive(rootMountDiagnosticsContext != null)
     }
 
     fun shouldSuppressInstallFailureDialog(): Boolean {
@@ -3898,6 +4091,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun clearRootMountRecoveryMessage() {
         rootMountRecoveryMessage = null
+        rootMountDiagnosticsContext = null
+    }
+
+    fun clearRootMountRecoveryMessageForDiagnostics() {
+        rootMountRecoveryMessage = null
+        updateRootMountDiagnosticsFlowActive(rootMountDiagnosticsContext != null)
+    }
+
+    fun clearRootMountDiagnosticsContext() {
+        rootMountDiagnosticsContext = null
     }
 
     fun confirmFallbackInstallPrompt() {

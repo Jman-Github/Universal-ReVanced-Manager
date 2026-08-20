@@ -134,6 +134,7 @@ fun PatcherScreen(
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val patchedApkExportDirectory by prefs.patchedApkExportLastDirectory.getAsState()
     val patcherLogExportDirectory by prefs.patcherLogExportLastDirectory.getAsState()
+    val rootMountDiagnosticsExportDirectory by prefs.rootMountDiagnosticsExportLastDirectory.getAsState()
     val patcherSplitSortMode by prefs.patcherSplitModuleSortMode.getAsState()
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
@@ -190,6 +191,10 @@ fun PatcherScreen(
     var showLogActionsDialog by rememberSaveable { mutableStateOf(false) }
     var showLogExportPicker by rememberSaveable { mutableStateOf(false) }
     var logExportInProgress by rememberSaveable { mutableStateOf(false) }
+    var showRootDiagnosticsActionsDialog by rememberSaveable { mutableStateOf(false) }
+    var showRootDiagnosticsExportPicker by rememberSaveable { mutableStateOf(false) }
+    val rootDiagnosticsExportInProgress = viewModel.rootMountDiagnosticsExportInProgress
+    var pendingRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
     var showInstallDropdown by rememberSaveable { mutableStateOf(false) }
     var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -201,6 +206,42 @@ fun PatcherScreen(
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
     var logExportFileDialogState by remember { mutableStateOf<LogExportDialogState?>(null) }
     var pendingLogExportConfirmation by remember { mutableStateOf<PendingLogExportConfirmation?>(null) }
+    var rootDiagnosticsExportFileDialogState by remember {
+        mutableStateOf<PatcherRootDiagnosticsExportDialogState?>(null)
+    }
+    var pendingRootDiagnosticsExportConfirmation by remember {
+        mutableStateOf<PendingPatcherRootDiagnosticsExportConfirmation?>(null)
+    }
+
+    LaunchedEffect(
+        viewModel.rootMountDiagnosticsFlowActive,
+        rootDiagnosticsExportInProgress,
+        pendingRootDiagnosticsFileName,
+        showRootDiagnosticsExportPicker,
+        rootDiagnosticsExportFileDialogState,
+        pendingRootDiagnosticsExportConfirmation
+    ) {
+        if (!viewModel.rootMountDiagnosticsFlowActive && !viewModel.hasRootMountDiagnostics) {
+            showRootDiagnosticsActionsDialog = false
+            showRootDiagnosticsExportPicker = false
+            rootDiagnosticsExportFileDialogState = null
+            pendingRootDiagnosticsExportConfirmation = null
+            pendingRootDiagnosticsFileName = null
+            return@LaunchedEffect
+        }
+        if (
+            viewModel.rootMountDiagnosticsFlowActive &&
+            viewModel.hasRootMountDiagnostics &&
+            !rootDiagnosticsExportInProgress &&
+            pendingRootDiagnosticsFileName == null &&
+            !showRootDiagnosticsActionsDialog &&
+            !showRootDiagnosticsExportPicker &&
+            rootDiagnosticsExportFileDialogState == null &&
+            pendingRootDiagnosticsExportConfirmation == null
+        ) {
+            showRootDiagnosticsActionsDialog = true
+        }
+    }
 
     viewModel.memoryAdjustmentDialog?.let { state ->
         AlertDialog(
@@ -243,6 +284,15 @@ fun PatcherScreen(
                 showExportPicker = true
             }
         }
+    val rootDiagnosticsPermissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            if (granted) {
+                showRootDiagnosticsExportPicker = true
+            } else {
+                pendingRootDiagnosticsFileName = null
+                showRootDiagnosticsActionsDialog = true
+            }
+        }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
         contract = RememberedCreateDocument("application/vnd.android.package-archive") {
             patchedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
@@ -270,6 +320,29 @@ fun PatcherScreen(
         showLogExportPicker = false
         pendingLogExportFileName = null
     }
+    val rootDiagnosticsDocumentLauncher = rememberLauncherForActivityResult(
+        contract = RememberedCreateDocument("text/plain") {
+            rootMountDiagnosticsExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
+        }
+    ) { uri ->
+        if (uri != null) {
+            pickerScope.launch {
+                prefs.rootMountDiagnosticsExportLastDirectory.update(
+                    uri.toPickerDirectoryUri().toString()
+                )
+            }
+            viewModel.exportRootMountDiagnosticsToUri(uri) { success ->
+                if (success) {
+                    showRootDiagnosticsExportPicker = false
+                } else {
+                    showRootDiagnosticsActionsDialog = true
+                }
+            }
+        } else {
+            showRootDiagnosticsActionsDialog = true
+        }
+        pendingRootDiagnosticsFileName = null
+    }
     fun openExportPicker() {
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
@@ -281,16 +354,33 @@ fun PatcherScreen(
             exportDocumentLauncher.launch(exportFileName)
         }
     }
+    fun openRootDiagnosticsExportPicker() {
+        val fileName = FilenameUtils.timestampedLogFileName("root-mount-${viewModel.packageName}")
+        pendingRootDiagnosticsFileName = fileName
+        if (useCustomFilePicker) {
+            if (fs.hasStoragePermission()) {
+                showRootDiagnosticsExportPicker = true
+            } else {
+                rootDiagnosticsPermissionLauncher.launch(permissionName)
+            }
+        } else {
+            rootDiagnosticsDocumentLauncher.launch(fileName)
+        }
+    }
 
     LaunchedEffect(useCustomFilePicker) {
         if (!useCustomFilePicker) {
             showExportPicker = false
             showLogExportPicker = false
+            showRootDiagnosticsExportPicker = false
             exportFileDialogState = null
             pendingExportConfirmation = null
             logExportFileDialogState = null
             pendingLogExportConfirmation = null
             pendingLogExportFileName = null
+            rootDiagnosticsExportFileDialogState = null
+            pendingRootDiagnosticsExportConfirmation = null
+            pendingRootDiagnosticsFileName = null
         }
     }
 
@@ -449,6 +539,171 @@ fun PatcherScreen(
                 pendingLogExportFileName = FilenameUtils.timestampedLogFileName("patcher")
                 showLogExportPicker = true
             }
+        )
+    }
+
+    if (showRootDiagnosticsActionsDialog) {
+        RootMountDiagnosticsActionsDialog(
+            onDismiss = {
+                showRootDiagnosticsActionsDialog = false
+                viewModel.clearRootMountDiagnosticsContext()
+            },
+            onCopy = {
+                showRootDiagnosticsActionsDialog = false
+                pickerScope.launch {
+                    try {
+                        val content = viewModel.readRootMountDiagnostics()
+                        if (content == null) {
+                            showRootDiagnosticsActionsDialog = true
+                            return@launch
+                        }
+                        val clipboard = context.getSystemService(ClipboardManager::class.java)
+                        if (clipboard == null) {
+                            context.toast(context.getString(R.string.root_mount_diagnostics_copy_failed))
+                            showRootDiagnosticsActionsDialog = true
+                            return@launch
+                        }
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText("Root mount diagnostics", content)
+                        )
+                        context.toast(context.getString(R.string.root_mount_diagnostics_copy_success))
+                        viewModel.clearRootMountDiagnosticsContext()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        context.toast(context.getString(R.string.root_mount_diagnostics_copy_failed))
+                        showRootDiagnosticsActionsDialog = true
+                    }
+                }
+            },
+            onExport = {
+                showRootDiagnosticsActionsDialog = false
+                openRootDiagnosticsExportPicker()
+            }
+        )
+    }
+
+    if (showRootDiagnosticsExportPicker && useCustomFilePicker) {
+        PathSelectorDialog(
+            roots = storageRoots,
+            onSelect = { path ->
+                if (path == null) {
+                    showRootDiagnosticsExportPicker = false
+                    pendingRootDiagnosticsFileName = null
+                    showRootDiagnosticsActionsDialog = true
+                }
+            },
+            fileFilter = { false },
+            allowDirectorySelection = true,
+            fileTypeLabel = ".txt",
+            confirmButtonText = stringResource(R.string.save),
+            onConfirm = { directory ->
+                rootDiagnosticsExportFileDialogState = PatcherRootDiagnosticsExportDialogState(
+                    directory = directory,
+                    fileName = pendingRootDiagnosticsFileName
+                        ?: FilenameUtils.timestampedLogFileName("root-mount-${viewModel.packageName}")
+                )
+            },
+            lastDirectoryPreference = prefs.rootMountDiagnosticsExportLastDirectory
+        )
+    }
+
+    rootDiagnosticsExportFileDialogState?.let { state ->
+        ExportRootDiagnosticsFileNameDialog(
+            initialName = state.fileName,
+            onDismiss = {
+                rootDiagnosticsExportFileDialogState = null
+                pendingRootDiagnosticsFileName = null
+            },
+            onConfirm = { fileName ->
+                val trimmedName = fileName.trim()
+                if (trimmedName.isBlank()) return@ExportRootDiagnosticsFileNameDialog
+                val sanitizedName = FilenameUtils.sanitize(trimmedName).trim('.')
+                if (sanitizedName.isBlank()) return@ExportRootDiagnosticsFileNameDialog
+                val finalName = if (sanitizedName.endsWith(".txt", ignoreCase = true)) {
+                    sanitizedName
+                } else {
+                    "$sanitizedName.txt"
+                }
+                rootDiagnosticsExportFileDialogState = null
+                pendingRootDiagnosticsFileName = null
+                val target = state.directory.resolve(finalName)
+                if (Files.exists(target)) {
+                    pendingRootDiagnosticsExportConfirmation =
+                        PendingPatcherRootDiagnosticsExportConfirmation(state.directory, finalName)
+                } else {
+                    viewModel.exportRootMountDiagnosticsToPath(target) { success ->
+                        if (success) {
+                            showRootDiagnosticsExportPicker = false
+                        }
+                    }
+                }
+            }
+        )
+    }
+
+    pendingRootDiagnosticsExportConfirmation?.let { state ->
+        ConfirmDialog(
+            onDismiss = {
+                pendingRootDiagnosticsExportConfirmation = null
+                rootDiagnosticsExportFileDialogState =
+                    PatcherRootDiagnosticsExportDialogState(state.directory, state.fileName)
+            },
+            onConfirm = {
+                pendingRootDiagnosticsExportConfirmation = null
+                viewModel.exportRootMountDiagnosticsToPath(
+                    state.directory.resolve(state.fileName)
+                ) { success ->
+                    if (success) {
+                        showRootDiagnosticsExportPicker = false
+                    }
+                }
+            },
+            title = stringResource(R.string.export_overwrite_title),
+            description = stringResource(R.string.export_overwrite_description, state.fileName),
+            icon = Icons.Outlined.WarningAmber
+        )
+    }
+
+    if (rootDiagnosticsExportInProgress) {
+        AlertDialog(
+            onDismissRequest = {},
+            icon = {
+                Icon(
+                    Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = {
+                Text(
+                    stringResource(R.string.root_mount_diagnostics_save_title),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        stringResource(R.string.root_mount_diagnostics_exporting),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth(0.7f)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {},
+            shape = RoundedCornerShape(28.dp)
         )
     }
 
@@ -902,6 +1157,16 @@ fun PatcherScreen(
                 TextButton(onClick = viewModel::clearRootMountRecoveryMessage) {
                     Text(stringResource(R.string.ok))
                 }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearRootMountRecoveryMessageForDiagnostics()
+                        showRootDiagnosticsActionsDialog = true
+                    }
+                ) {
+                    Text(stringResource(R.string.root_mount_export_diagnostics))
+                }
             }
         )
     }
@@ -912,7 +1177,7 @@ fun PatcherScreen(
             title = {
                 CenteredDialogTitle(
                     stringResource(
-                        if (viewModel.lastInstallType == InstallType.MOUNT) R.string.mount_app_fail_title else R.string.install_app_fail_title
+                        if (viewModel.hasRootMountDiagnostics) R.string.mount_app_fail_title else R.string.install_app_fail_title
                     )
                 )
             },
@@ -920,6 +1185,18 @@ fun PatcherScreen(
             confirmButton = {
                 TextButton(onClick = viewModel::dismissInstallFailureMessage) {
                     Text(stringResource(R.string.ok))
+                }
+            },
+            dismissButton = {
+                if (viewModel.hasRootMountDiagnostics) {
+                    TextButton(
+                        onClick = {
+                            viewModel.dismissInstallFailureMessageForRootDiagnostics()
+                            showRootDiagnosticsActionsDialog = true
+                        }
+                    ) {
+                        Text(stringResource(R.string.root_mount_export_diagnostics))
+                    }
                 }
             }
         )
@@ -996,7 +1273,7 @@ fun PatcherScreen(
                         title = {
                             CenteredDialogTitle(
                                 stringResource(
-                                    if (viewModel.lastInstallType == InstallType.MOUNT) R.string.mount_app_fail_title else R.string.install_app_fail_title
+                                    if (viewModel.hasRootMountDiagnostics) R.string.mount_app_fail_title else R.string.install_app_fail_title
                                 )
                             )
                         },
@@ -1004,6 +1281,18 @@ fun PatcherScreen(
                         confirmButton = {
                             TextButton(onClick = viewModel::dismissInstallFailureMessage) {
                                 Text(stringResource(R.string.ok))
+                            }
+                        },
+                        dismissButton = {
+                            if (viewModel.hasRootMountDiagnostics) {
+                                TextButton(
+                                    onClick = {
+                                        viewModel.dismissInstallFailureMessageForRootDiagnostics()
+                                        showRootDiagnosticsActionsDialog = true
+                                    }
+                                ) {
+                                    Text(stringResource(R.string.root_mount_export_diagnostics))
+                                }
                             }
                         }
                     )
@@ -1416,6 +1705,16 @@ internal data class LogExportDialogState(
 )
 
 internal data class PendingLogExportConfirmation(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PatcherRootDiagnosticsExportDialogState(
+    val directory: Path,
+    val fileName: String
+)
+
+private data class PendingPatcherRootDiagnosticsExportConfirmation(
     val directory: Path,
     val fileName: String
 )
