@@ -1545,8 +1545,8 @@ fun PatcherScreen(
                 item(key = "patcher-information") {
                     PatcherInformationCard(
                         information = PatcherInformation(
-                            appVersion = viewModel.version,
-                            appVersionCode = viewModel.versionCode,
+                            appVersion = viewModel.informationAppVersion,
+                            appVersionCode = viewModel.informationAppVersionCode,
                             patchCount = viewModel.selectedPatchCount,
                             patchBundles = viewModel.selectedPatchBundleLabels,
                             fallbackApkSizeBytes = viewModel.fallbackInputSizeBytes,

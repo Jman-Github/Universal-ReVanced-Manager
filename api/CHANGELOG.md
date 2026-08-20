@@ -446,6 +446,7 @@
 - Fixed pre-release updates not being detected for some patch bundles imported through GitHub or GitLab URLs
 - Fixed patch bundle tabs showing inaccurate counts by displaying selected and available patches as a selected/total value
 - Fixed Rooted Mount being unavailable in post-patch installer choosers for compatible Standard patches
+- Fixed the Patcher Information widget sometimes showing the wrong app version instead of the version of the APK actually being patched
 
 
 # Refactors

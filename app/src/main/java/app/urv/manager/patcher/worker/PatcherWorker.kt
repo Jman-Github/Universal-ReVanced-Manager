@@ -196,6 +196,7 @@ class PatcherWorker(
         val handleStartActivityRequest: suspend (LoadedDownloaderPlugin, Intent) -> ActivityResult,
         val setInputFile: suspend (File, Boolean, Boolean) -> Unit,
         val onEvent: (PatcherWorkerProgressUpdate) -> Unit,
+        val setInputMetadata: suspend (String?, Long?) -> Unit = { _, _ -> },
         val queuePosition: Int? = null,
         val queueSize: Int? = null,
         val appName: String? = null,
@@ -1603,6 +1604,7 @@ class PatcherWorker(
             val resolvedInputVersionName = sourceInfo?.versionName
                 ?.takeIf(String::isNotBlank)
             val resolvedInputVersionCode = sourceInfo?.let(pm::getVersionCode)
+            args.setInputMetadata(resolvedInputVersionName, resolvedInputVersionCode)
             val inputVersionCode = resolvedInputVersionCode ?: args.input.versionCode
             workerLogger.info("App version code: ${inputVersionCode ?: "unspecified"}")
 

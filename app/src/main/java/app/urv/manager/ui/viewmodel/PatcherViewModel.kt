@@ -356,6 +356,10 @@ class PatcherViewModel(
     val packageName = selectedApp.packageName
     val version = selectedApp.version
     val versionCode = selectedApp.versionCode
+    var informationAppVersion by mutableStateOf(version)
+        private set
+    var informationAppVersionCode by mutableStateOf(versionCode)
+        private set
     val usingMountInstall = input.useMount
     val hasProfileInstallerPreference = input.profileInstallerToken
         ?.let(installerManager::parseToken)
@@ -1968,6 +1972,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         patchedRepatchSourcePath = null
         patchedSourceVersionName = null
         patchedSourceVersionCode = null
+        informationAppVersion = version
+        informationAppVersionCode = versionCode
         patcherMemoryUsageGeneration = -1L
         patcherMemoryUsageSequence = Long.MIN_VALUE
         patcherMemoryUsageSampleTimeMs = Long.MIN_VALUE
@@ -4246,7 +4252,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
             },
             handleStartActivityRequest = ::handleDownloaderActivityRequest,
-            onEvent = ::handleProgressEvent
+            onEvent = ::handleProgressEvent,
+            setInputMetadata = { resolvedVersion, resolvedVersionCode ->
+                withContext(Dispatchers.Main) {
+                    informationAppVersion = resolvedVersion ?: version
+                    informationAppVersionCode = resolvedVersionCode ?: versionCode
+                }
+            }
         )
     }
 
@@ -5786,6 +5798,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     } else {
                         null
                     }
+                    informationAppVersion = patchedSourceVersionName ?: version
+                    informationAppVersionCode = patchedSourceVersionCode ?: versionCode
                     patchedRepatchSourcePath = workInfo.outputData
                         .getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
                         ?.takeIf(String::isNotBlank)
