@@ -1,12 +1,17 @@
+import com.mikepenz.aboutlibraries.plugin.DuplicateMode
+import com.mikepenz.aboutlibraries.plugin.DuplicateRule
+import com.android.build.api.variant.FilterConfiguration
 import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
+import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.Sync
 import org.gradle.jvm.tasks.Jar
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
@@ -16,20 +21,35 @@ plugins {
 }
 
 val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.toString()
-val outputApkFileName = "universal-revanced-manager-v$resolvedProjectVersion-all.apk"
+fun artifactVersionName(versionName: String): String =
+    "v${versionName.removePrefix("v")}"
+
+val outputApkFileName = "universal-revanced-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
-val ampleRuntimeAssetsDir = layout.buildDirectory.dir("generated/ample-runtime")
+val revanced22RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v22")
+val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
+val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
+val devVersionNameSuffix = "-$devVersionSuffix"
+val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")
+fun libraryVersion(alias: String): String =
+    libraryVersions.findVersion(alias).get().requiredVersion
 
 val apkEditorLib by configurations.creating
 
 configurations.all {
     exclude(group = "xmlpull", module = "xmlpull")
     exclude(group = "org.bouncycastle", module = "bcprov-jdk18on")
+    resolutionStrategy.force(
+        "com.android.tools.smali:smali-dexlib2:3.0.9",
+        "com.android.tools.smali:smali-util:3.0.9",
+        "com.android.tools.smali:smali:3.0.9",
+        "com.android.tools.smali:smali-baksmali:3.0.9"
+    )
 }
 val strippedApkEditorLib by tasks.registering(Jar::class) {
     archiveFileName.set("APKEditor-android.jar")
@@ -39,6 +59,7 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
     }
     exclude(
         "android/**",
+        "com/android/tools/smali/**",
         "org/xmlpull/**",
         "antlr/**",
         "org/antlr/**",
@@ -49,7 +70,23 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
     )
 }
 
+val apkEditorMergeJar by tasks.registering(Jar::class) {
+    archiveFileName.set("apkeditor-merge.jar")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn("compileReleaseJavaWithJavac")
+    from(layout.buildDirectory.dir("intermediates/javac/release/classes")) {
+        include("app/urv/manager/patcher/split/ApkEditorMergeProcess*.class")
+    }
+}
+
 dependencies {
+    constraints {
+        implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
+        implementation("com.android.tools.smali:smali-util:3.0.9")
+        implementation("com.android.tools.smali:smali:3.0.9")
+        implementation("com.android.tools.smali:smali-baksmali:3.0.9")
+    }
+
     // AndroidX Core
     implementation(libs.androidx.ktx)
     implementation(libs.runtime.ktx)
@@ -64,7 +101,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.ui.preview)
-    implementation(libs.compose.ui.tooling)
+    debugImplementation(libs.compose.ui.tooling)
     implementation(libs.compose.livedata)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.material3)
@@ -80,7 +117,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.gif)
     implementation(libs.coil.svg)
-    implementation(libs.coil.appiconloader)
+    implementation(libs.coil.network.okhttp)
+    implementation(libs.app.icon.loader)
 
     // KotlinX
     implementation(libs.kotlinx.serialization.json)
@@ -92,18 +130,26 @@ dependencies {
     implementation(libs.room.ktx)
     annotationProcessor(libs.room.compiler)
     ksp(libs.room.compiler)
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
 
     // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
-    implementation(libs.revanced.patcher) {
+    implementation(libs.revanced.patcher.v22) {
+        exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
     }
     implementation(libs.revanced.library) {
         exclude(group = "xpp3", module = "xpp3")
+        exclude(group = "app.revanced", module = "revanced-patcher")
     }
+    implementation("com.android.tools.build:apkzlib:8.5.2")
+    compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation(libs.xpp3)
     apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
     implementation(files(strippedApkEditorLib))
-    implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+    implementation(libs.documentfile)
 
     // Downloader plugins
     implementation(project(":api"))
@@ -166,6 +212,8 @@ dependencies {
     // Ackpine
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
+
+    testImplementation(kotlin("test-junit"))
 }
 
 buildscript {
@@ -180,15 +228,16 @@ buildscript {
 
 android {
     namespace = "app.universal.revanced.manager"
-    compileSdk = 35
-    buildToolsVersion = "35.0.1"
+    compileSdk = 37
+    buildToolsVersion = "36.0.0"
     // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
     ndkVersion = "25.2.9519653"
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
         versionName = versionStr
@@ -199,6 +248,22 @@ android {
                     (preRelease?.substringAfterLast('.')?.toInt() ?: 0)
         }
         vectorDrawables.useSupportLibrary = true
+        buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
+        buildConfigField(
+            "String",
+            "MORPHE_PATCHER_VERSION",
+            "\"${libraryVersion("morphe-patcher")}\""
+        )
+        buildConfigField(
+            "String",
+            "REVANCED_PATCHER_V21_VERSION",
+            "\"${libraryVersion("revanced-patcher")}\""
+        )
+        buildConfigField(
+            "String",
+            "REVANCED_PATCHER_V22_VERSION",
+            "\"${libraryVersion("revanced-patcher-v22")}\""
+        )
         ndk {
             // Include x86 now that the NDK is pinned to a version that still supports it.
             abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
@@ -206,28 +271,42 @@ android {
     }
 
     val keystoreFile = file("keystore.jks")
-    val releaseSigningConfig = if (project.hasProperty("signAsDebug") || !keystoreFile.exists()) {
+    val keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    val keystoreEntryAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
+    val keystoreEntryPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
+    val hasReleaseSigningCredentials = keystoreFile.exists() &&
+        !keystorePassword.isNullOrBlank() &&
+        !keystoreEntryAlias.isNullOrBlank() &&
+        !keystoreEntryPassword.isNullOrBlank()
+    val signAsDebug = project.hasProperty("signAsDebug")
+    if (System.getenv("CI").toBoolean() && !signAsDebug && !hasReleaseSigningCredentials) {
+        throw GradleException(
+            "Release signing credentials are required in CI. Set KEYSTORE_PASSWORD, " +
+                "KEYSTORE_ENTRY_ALIAS, and KEYSTORE_ENTRY_PASSWORD, or pass -PsignAsDebug for debug signing."
+        )
+    }
+    val releaseSigningConfig = if (signAsDebug || !hasReleaseSigningCredentials) {
         signingConfigs.getByName("debug")
     } else {
         signingConfigs.create("release") {
             storeFile = keystoreFile
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEYSTORE_ENTRY_ALIAS")
-            keyPassword = System.getenv("KEYSTORE_ENTRY_PASSWORD")
+            storePassword = keystorePassword
+            keyAlias = keystoreEntryAlias
+            keyPassword = keystoreEntryPassword
         }
     }
 
     buildTypes {
         debug {
             isPseudoLocalesEnabled = true
-            versionNameSuffix = "-$devVersionSuffix"
+            versionNameSuffix = devVersionNameSuffix
             signingConfig = releaseSigningConfig
             buildConfigField("long", "BUILD_ID", "${Random.nextLong()}L")
         }
 
         create("dev") {
             initWith(getByName("release"))
-            versionNameSuffix = "-$devVersionSuffix"
+            versionNameSuffix = devVersionNameSuffix
             signingConfig = releaseSigningConfig
             isMinifyEnabled = true
             isShrinkResources = true
@@ -256,26 +335,6 @@ android {
         }
     }
 
-    applicationVariants.all {
-        val resolvedVersionName = versionName.orEmpty().ifBlank {
-            if (version == "unspecified") "1.8.1" else version.toString()
-        }
-        outputs.all {
-            this as com.android.build.gradle.internal.api.ApkVariantOutputImpl
-
-            val abi = getFilter(com.android.build.OutputFile.ABI)
-            val abiSuffix = when (abi) {
-                "arm64-v8a" -> "arm64_v8"
-                "armeabi-v7a" -> "armeabi_v7a"
-                "x86" -> "x86"
-                "x86_64" -> "x86_64"
-                null -> "all"
-                else -> abi.replace('-', '_')
-            }
-            outputFileName = "universal-revanced-manager-v$resolvedVersionName-$abiSuffix.apk"
-        }
-    }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -289,7 +348,6 @@ android {
     packaging {
         resources.excludes.addAll(
             listOf(
-                "/prebuilt/**",
                 "META-INF/DEPENDENCIES",
                 "META-INF/**.version",
                 "DebugProbesKt.bin",
@@ -307,10 +365,6 @@ android {
         arg("room.schemaLocation", "$projectDir/schemas")
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         aidl = true
@@ -324,8 +378,10 @@ android {
     }
 
     sourceSets {
-        getByName("main").assets.srcDir(morpheRuntimeAssetsDir)
-        getByName("main").assets.srcDir(ampleRuntimeAssetsDir)
+        getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
+        getByName("main").assets.directories.add(revanced22RuntimeAssetsDir.get().asFile.path)
+        getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)
+        getByName("androidTest").assets.directories.add(file("$projectDir/schemas").path)
     }
 
     externalNativeBuild {
@@ -336,8 +392,38 @@ android {
     }
 }
 
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abiSuffix = output.filters
+                .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
+                ?.identifier
+                ?: "universal"
+            output.outputFileName.set(
+                output.versionName.orElse(resolvedProjectVersion).map { resolvedVersionName ->
+                    "universal-revanced-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
+                }
+            )
+        }
+    }
+}
+
+aboutLibraries {
+    collect {
+        configPath = file("aboutlibraries")
+    }
+    library {
+        duplicationMode = DuplicateMode.MERGE
+        duplicationRule = DuplicateRule.EXACT
+    }
+}
+
 kotlin {
     jvmToolchain(17)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
+        freeCompilerArgs.add("-Xskip-metadata-version-check")
+    }
 }
 
 tasks {
@@ -369,30 +455,74 @@ tasks {
         }
     }
 
-    val copyMorpheRuntimeApk by registering(Copy::class) {
-        val runtimeProject = project(":morphe-runtime")
-        val runtimeApk = runtimeProject.layout.buildDirectory.file(
-            "outputs/apk/release/morphe-runtime-release.apk"
-        )
-        dependsOn("${runtimeProject.path}:assembleRelease")
-        from(runtimeApk)
+    val copyMorpheRuntimeApk by registering(Sync::class) {
         into(morpheRuntimeAssetsDir)
-        rename { "morphe-runtime.apk" }
+        if (includedMorpheRuntime) {
+            val runtimeProject = project(":morphe-runtime")
+            val runtimeApk = runtimeProject.layout.buildDirectory.file(
+                "outputs/apk/release/morphe-runtime-release.apk"
+            )
+            dependsOn("${runtimeProject.path}:assembleRelease")
+            from(runtimeApk)
+            rename { "morphe-runtime.apk" }
+        }
     }
 
-    val copyAmpleRuntimeApk by registering(Copy::class) {
-        val runtimeProject = project(":ample-runtime")
-        val runtimeApk = runtimeProject.layout.buildDirectory.file(
-            "outputs/apk/release/ample-runtime-release.apk"
-        )
-        dependsOn("${runtimeProject.path}:assembleRelease")
-        from(runtimeApk)
-        into(ampleRuntimeAssetsDir)
-        rename { "ample-runtime.apk" }
+    val copyRevanced22RuntimeAssets by registering(Sync::class) {
+        dependsOn(apkEditorMergeJar)
+        into(revanced22RuntimeAssetsDir)
+        from(apkEditorLib) {
+            into("apkeditor")
+            rename { "APKEditor-1.4.7.jar" }
+        }
+        from(apkEditorMergeJar) {
+            into("apkeditor")
+        }
+    }
+
+    val copyNoticeFile by registering(Copy::class) {
+        from(rootProject.file("third-party/NOTICE.txt"))
+        into(legalResourcesDir.map { it.dir("raw") })
+        rename { "notice.txt" }
+    }
+
+    val copyAboutLibrariesJson by registering(Copy::class) {
+        dependsOn("prepareLibraryDefinitionsRelease")
+        from(layout.buildDirectory.file("generated/aboutLibraries/release/res/raw/aboutlibraries.json"))
+        into(legalResourcesDir.map { it.dir("raw") })
+        rename { "licenses_index.json" }
     }
 
     named("preBuild") {
-        dependsOn(copyMorpheRuntimeApk, copyAmpleRuntimeApk)
+        dependsOn(copyNoticeFile, copyAboutLibrariesJson)
+        dependsOn(copyMorpheRuntimeApk)
     }
 
+    matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.configureEach {
+        dependsOn(copyRevanced22RuntimeAssets)
+    }
+
+    matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
+        dependsOn(copyRevanced22RuntimeAssets)
+    }
+
+}
+
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Aidl") }.configureEach {
+    doLast {
+        val generatedRoot = layout.buildDirectory.dir("generated/aidl_source_output_dir").get().asFile
+        if (!generatedRoot.exists()) return@doLast
+        generatedRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "java" }
+            .forEach { file ->
+                val original = file.readText()
+                val sanitized = original.lineSequence().joinToString(separator = "\n") { line ->
+                    if (line.startsWith(" * Using: ")) line.replace('\\', '/')
+                    else line
+                }
+                if (sanitized != original) {
+                    file.writeText(sanitized)
+                }
+            }
+    }
 }

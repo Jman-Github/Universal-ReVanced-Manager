@@ -7,8 +7,14 @@
         android:protectionLevel="signature"
         android:label="@string/plugin_host_permission_label"
         android:description="@string/plugin_host_permission_description" />
+    <permission
+        android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST"
+        android:protectionLevel="signature"
+        android:label="@string/downloader_host_permission_label"
+        android:description="@string/downloader_host_permission_description" />
 
     <uses-permission android:name="app.universal.revanced.manager.permission.PLUGIN_HOST" />
+    <uses-permission android:name="app.universal.revanced.manager.permission.DOWNLOADER_HOST" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:ignore="QueryAllPackagesPermission" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -27,7 +33,7 @@
     <uses-permission android:name="android.permission.ENFORCE_UPDATE_OWNERSHIP" />
 
     <application
-        android:name="app.revanced.manager.ManagerApplication"
+        android:name="app.urv.manager.ManagerApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:largeHeap="true"
@@ -49,17 +55,79 @@
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <activity
-            android:name="app.revanced.manager.MainActivity"
+            android:name="app.urv.manager.MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.ReVancedManager">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <intent-filter>
+                <action android:name="app.urv.manager.action.PATCH_APP" />
+                <action android:name="app.urv.manager.action.CHECK_PATCH_UPDATES" />
+                <action android:name="app.urv.manager.action.SHOW_BATCH_RESULT" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="morphe.software"
+                    android:path="/add-source" />
+            </intent-filter>
+
+            <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+            <!-- https://github.com/MorpheApp/morphe-manager/blob/6688aa17ea35b5ab398a3c1922be13626290cbf1/app/src/main/AndroidManifest.xml#L87-L95 -->
+            <intent-filter tools:ignore="AppLinkUrlError">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/vnd.ms-project" />
+                <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/x-java-archive" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
+                <data android:mimeType="application/x-apkm" />
+                <data android:mimeType="application/x-apks" />
+                <data android:mimeType="application/x-xapk" />
+                <data android:mimeType="application/xapk" />
+                <data android:mimeType="application/vnd.android.xapk" />
+                <data android:mimeType="application/vnd.android.apkm" />
+                <data android:mimeType="application/apkm" />
+                <data android:mimeType="application/vnd.android.apks" />
+                <data android:mimeType="application/apks" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.apkm" />
+                <data android:pathPattern=".*\\.apks" />
+                <data android:pathPattern=".*\\.xapk" />
+                <data android:pathPattern=".*\\.zip" />
+            </intent-filter>
         </activity>
 
+        <activity
+            android:name="app.urv.manager.ui.BatchActivityProxyActivity"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
+        <activity android:name="app.urv.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.urv.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
+        <activity android:name="app.revanced.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
@@ -72,8 +140,38 @@
                 />
         </service>
 
+        <service
+            android:name="app.urv.manager.service.PatchingTaskMonitorService"
+            android:exported="false" />
+
+        <service
+            android:name="app.urv.manager.service.BundleUpdateWebSocketService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="bundle_update_websocket" />
+        </service>
+
+        <receiver
+            android:name="app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="app.urv.manager.receiver.PackageChangeReceiver"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_FULLY_REMOVED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <provider
-            android:name="app.revanced.manager.domain.installer.InstallerFileProvider"
+            android:name="app.urv.manager.domain.installer.InstallerFileProvider"
             android:authorities="${applicationId}.installerfileprovider"
             android:exported="true"
             android:grantUriPermissions="true" />
