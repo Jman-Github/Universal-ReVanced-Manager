@@ -897,14 +897,32 @@ class BatchPatcherViewModel(
             logMessages.lastOrNull { it.startsWith(prefix) }
                 ?.removePrefix(prefix)
                 ?.trim()
-        val appVersionCode = findLogValue("App version code:")
-            ?: item.input?.versionCode?.toString()
+        val appPackage = item.patcherSessionInfo.appPackageName
+            ?: findLogValue("App package:")
+            ?: item.packageName
+        val appVersion = item.patcherSessionInfo.appVersionName
+            ?: findLogValue("App version:")
+            ?: item.version
             ?: "unspecified"
-        val includedSplits = findLogValue("Included splits:")
-        val excludedSplits = findLogValue("Excluded splits:")
+        val loggedAppVersionCode = findLogValue("App version code:")
+        val appVersionCode = when {
+            item.patcherSessionInfo.appVersionCodeReported == true ->
+                item.patcherSessionInfo.appVersionCode?.toString() ?: "unspecified"
+            loggedAppVersionCode != null -> loggedAppVersionCode
+            else -> item.versionCode?.toString()
+                ?: item.input?.versionCode?.toString()
+                ?: "unspecified"
+        }
+        val includedSplits = item.patcherSessionInfo.includedSplits
+            ?: findLogValue("Included splits:")
+        val excludedSplits = item.patcherSessionInfo.excludedSplits
+            ?: findLogValue("Excluded splits:")
+        val patchCount = item.patcherSessionInfo.patchCount ?: selectedPatches.size
         val patcherLogLines = item.logLines.filterNot { line ->
             val message = line.substringAfter("]: ", line)
-            message.startsWith("App version code:") ||
+            message.startsWith("App package:") ||
+                message.startsWith("App version:") ||
+                message.startsWith("App version code:") ||
                 message.startsWith("Included splits:") ||
                 message.startsWith("Excluded splits:") ||
                 isVerbosePatcherExportLog(line)
@@ -918,12 +936,12 @@ class BatchPatcherViewModel(
             appendLine("Device model: ${Build.MODEL}")
             appendLine("Android version: ${Build.VERSION.RELEASE} (${Build.VERSION.SDK_INT})")
             appendLine("Batch patch: yes")
-            appendLine("App package: ${item.packageName}")
-            appendLine("App version: ${item.version ?: "unspecified"}")
+            appendLine("App package: $appPackage")
+            appendLine("App version: $appVersion")
             appendLine("App version code: $appVersionCode")
             includedSplits?.let { appendLine("Included splits: $it") }
             excludedSplits?.let { appendLine("Excluded splits: $it") }
-            appendLine("Patches: ${selectedPatches.size}")
+            appendLine("Patches: $patchCount")
             appendLine("Selected patches:")
             if (selectedPatches.isEmpty()) appendLine("None")
             else selectedPatches.forEach { appendLine(it) }

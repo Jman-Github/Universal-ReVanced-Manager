@@ -153,6 +153,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlin.math.roundToInt
 import kotlin.coroutines.resume
 import org.koin.core.component.KoinComponent
@@ -268,6 +272,65 @@ private class PendingPatchedAppReplacement private constructor(
     }
 }
 
+@Serializable
+private data class PatcherRunConfigurationSnapshot(
+    val selectedPatches: Map<Int, List<String>>,
+    val options: Map<Int, Map<String, Map<String, PatcherRunOptionValue>>>
+) {
+    fun selection(): PatchSelection = selectedPatches
+        .mapValues { (_, patches) -> patches.toSet() }
+        .filterValues { patches -> patches.isNotEmpty() }
+}
+
+@Serializable
+private data class PatcherRunOptionValue(
+    val kind: PatcherRunOptionKind,
+    val scalar: String? = null,
+    val items: List<PatcherRunOptionValue> = emptyList()
+) {
+    fun toValue(): Any? = when (kind) {
+        PatcherRunOptionKind.NULL -> null
+        PatcherRunOptionKind.BOOLEAN -> requireNotNull(scalar).toBooleanStrict()
+        PatcherRunOptionKind.INT -> requireNotNull(scalar).toInt()
+        PatcherRunOptionKind.LONG -> requireNotNull(scalar).toLong()
+        PatcherRunOptionKind.FLOAT -> requireNotNull(scalar).toFloat()
+        PatcherRunOptionKind.DOUBLE -> requireNotNull(scalar).toDouble()
+        PatcherRunOptionKind.STRING -> requireNotNull(scalar)
+        PatcherRunOptionKind.LIST -> items.map(PatcherRunOptionValue::toValue)
+    }
+
+    companion object {
+        fun fromValue(value: Any?): PatcherRunOptionValue = when (value) {
+            null -> PatcherRunOptionValue(PatcherRunOptionKind.NULL)
+            is Boolean -> PatcherRunOptionValue(PatcherRunOptionKind.BOOLEAN, value.toString())
+            is Int -> PatcherRunOptionValue(PatcherRunOptionKind.INT, value.toString())
+            is Long -> PatcherRunOptionValue(PatcherRunOptionKind.LONG, value.toString())
+            is Float -> PatcherRunOptionValue(PatcherRunOptionKind.FLOAT, value.toString())
+            is Double -> PatcherRunOptionValue(PatcherRunOptionKind.DOUBLE, value.toString())
+            is String -> PatcherRunOptionValue(PatcherRunOptionKind.STRING, value)
+            is List<*> -> PatcherRunOptionValue(
+                kind = PatcherRunOptionKind.LIST,
+                items = value.map(::fromValue)
+            )
+            else -> throw IllegalArgumentException(
+                "Unsupported patch option value type: ${value::class.qualifiedName}"
+            )
+        }
+    }
+}
+
+@Serializable
+private enum class PatcherRunOptionKind {
+    NULL,
+    BOOLEAN,
+    INT,
+    LONG,
+    FLOAT,
+    DOUBLE,
+    STRING,
+    LIST
+}
+
 @OptIn(SavedStateHandleSaveableApi::class, PluginHostApi::class)
 class PatcherViewModel(
     private val input: Patcher.ViewModelParams
@@ -288,11 +351,12 @@ class PatcherViewModel(
     private val installerManager: InstallerManager by inject()
     private val sessionInstaller: SessionInstaller by inject()
     private val prefs: PreferencesManager by inject()
+    private val json: Json by inject()
     private val skipApkSigning = prefs.skipApkSigning.getBlocking()
     private val savedStateHandle: SavedStateHandle = get()
     private val ackpineUninstaller: PackageUninstaller = get()
     private val selectionBundleType by lazy(LazyThreadSafetyMode.NONE) {
-        runBlocking { patchBundleRepository.selectionBundleType(input.selectedPatches) }
+        runBlocking { patchBundleRepository.selectionBundleType(appliedSelection) }
     }
     private val selectionMorpheBytecodeMode by lazy(LazyThreadSafetyMode.NONE) {
         if (selectionBundleType == PatchBundleType.MORPHE) {
@@ -608,8 +672,13 @@ class PatcherViewModel(
 
     var exportMetadata by mutableStateOf<PatchedAppExportData?>(null)
         private set
-    private var appliedSelection: PatchSelection = input.selectedPatches.mapValues { it.value.toSet() }
-    private var appliedOptions: Options = input.options
+    private val restoredRunConfiguration = restoreRunConfiguration()
+    private var appliedSelection: PatchSelection = restoredRunConfiguration
+        ?.selection()
+        ?: input.selectedPatches.mapValues { (_, patches) -> patches.toSet() }
+    private var appliedOptions: Options = restoredRunConfiguration
+        ?.let(::restoreRunOptions)
+        ?: input.options
     val currentSelectedApp: SelectedApp
         get() = when (val current = selectedApp) {
             is SelectedApp.Local -> inputFile?.let { current.copy(file = it) } ?: current
@@ -623,6 +692,73 @@ class PatcherViewModel(
         appliedOptions.mapValues { (_, bundleOptions) ->
             bundleOptions.mapValues { (_, patchOptions) -> patchOptions.toMap() }.toMap()
         }.toMap()
+
+    private fun restoreRunConfiguration(): PatcherRunConfigurationSnapshot? {
+        val serialized = savedStateHandle.get<String>(PATCHER_RUN_CONFIGURATION_KEY)
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        return runCatching {
+            json.decodeFromString<PatcherRunConfigurationSnapshot>(serialized)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to restore patch run configuration", error)
+            savedStateHandle.remove<String>(PATCHER_RUN_CONFIGURATION_KEY)
+        }.getOrNull()
+    }
+
+    private fun restoreRunOptions(snapshot: PatcherRunConfigurationSnapshot): Options =
+        buildMap {
+            snapshot.options.forEach { (bundleUid, bundleOptions) ->
+                val restoredBundleOptions = buildMap {
+                    bundleOptions.forEach { (patchName, patchOptions) ->
+                        val restoredPatchOptions = buildMap<String, Any?> {
+                            patchOptions.forEach { (key, storedValue) ->
+                                try {
+                                    put(key, storedValue.toValue())
+                                } catch (error: Exception) {
+                                    Log.w(
+                                        TAG,
+                                        "Failed to restore patch option $bundleUid:$patchName:$key",
+                                        error
+                                    )
+                                }
+                            }
+                        }
+                        if (restoredPatchOptions.isNotEmpty()) {
+                            put(patchName, restoredPatchOptions)
+                        }
+                    }
+                }
+                if (restoredBundleOptions.isNotEmpty()) {
+                    put(bundleUid, restoredBundleOptions)
+                }
+            }
+        }
+
+    private fun persistRunConfiguration(
+        selection: PatchSelection,
+        options: Options
+    ) {
+        runCatching {
+            val storedOptions = options.mapValues { (_, bundleOptions) ->
+                bundleOptions.mapValues { (_, patchOptions) ->
+                    patchOptions.mapValues { (_, value) ->
+                        PatcherRunOptionValue.fromValue(value)
+                    }
+                }
+            }
+            json.encodeToString(
+                PatcherRunConfigurationSnapshot(
+                    selectedPatches = selection.mapValues { (_, patches) -> patches.sorted() },
+                    options = storedOptions
+                )
+            )
+        }.onSuccess { serialized ->
+            savedStateHandle[PATCHER_RUN_CONFIGURATION_KEY] = serialized
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to persist patch run configuration", error)
+            savedStateHandle.remove<String>(PATCHER_RUN_CONFIGURATION_KEY)
+        }
+    }
 
     val selectedPatchCount: Int
         get() = appliedSelection.values.sumOf { patches -> patches.size }
@@ -653,13 +789,17 @@ fun proceedAfterMissingPatchWarning() {
 }
 
     fun removeMissingPatchesAndStart() {
-        val warning = missingPatchWarning ?: return
+        if (missingPatchWarning == null) return
         viewModelScope.launch {
             val scopedBundles = gatherScopedBundles()
             val sanitizedSelection = applyCurrentPatchRules(
-                sanitizeSelection(appliedSelection, scopedBundles),
+                filterSelectionToAvailablePatches(appliedSelection, scopedBundles),
                 scopedBundles
             )
+            if (sanitizedSelection.values.none { patches -> patches.isNotEmpty() }) {
+                app.toast(app.getString(R.string.no_patches_selected))
+                return@launch
+            }
             val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
             appliedSelection = sanitizedSelection
             appliedOptions = sanitizedOptions
@@ -1597,10 +1737,29 @@ fun proceedAfterMissingPatchWarning() {
     private val outputFile = tempDir.resolve("output.apk")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
-    var patcherSessionInfo by mutableStateOf(
-        parsePatcherSessionInfo(logs.map { (_, message) -> message })
-    )
+
+    private fun restoredPatcherSessionInfo(): PatcherSessionInfo {
+        savedStateHandle.get<String>(PATCHER_SESSION_INFO_KEY)
+            ?.takeIf(String::isNotBlank)
+            ?.let { serialized ->
+                runCatching {
+                    json.decodeFromString<PatcherSessionInfo>(serialized)
+                }.getOrNull()?.let { return it }
+                savedStateHandle.remove<String>(PATCHER_SESSION_INFO_KEY)
+            }
+        return parsePatcherSessionInfo(logs.map { (_, message) -> message })
+    }
+
+    var patcherSessionInfo by mutableStateOf(restoredPatcherSessionInfo())
         private set
+
+    private fun updatePatcherSessionInfo(value: PatcherSessionInfo) {
+        val changed = value != patcherSessionInfo
+        if (changed) patcherSessionInfo = value
+        if (changed || savedStateHandle.get<String>(PATCHER_SESSION_INFO_KEY).isNullOrBlank()) {
+            savedStateHandle[PATCHER_SESSION_INFO_KEY] = json.encodeToString(value)
+        }
+    }
     var selectedPatchBundleLabels by mutableStateOf<List<String>>(emptyList())
         private set
     var fallbackPatcherEngine by mutableStateOf<String?>(null)
@@ -1664,7 +1823,7 @@ fun proceedAfterMissingPatchWarning() {
             }
 
             viewModelScope.launch {
-                patcherSessionInfo = patcherSessionInfo.updatedFromLog(message)
+                updatePatcherSessionInfo(patcherSessionInfo.updatedFromLog(message))
                 if (!isVerbosePatcherExportLog(level, message)) {
                     appendBoundedLog(level, message)
                 }
@@ -1681,12 +1840,14 @@ fun proceedAfterMissingPatchWarning() {
 var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private set
 
-    private suspend fun gatherScopedBundles(): Map<Int, PatchBundleInfo.Scoped> =
-        patchBundleRepository.scopedBundleInfoFlow(
+    private suspend fun gatherScopedBundles(): Map<Int, PatchBundleInfo.Scoped> {
+        patchBundleRepository.awaitReady()
+        return patchBundleRepository.scopedBundleInfoFlow(
             packageName,
             input.selectedApp.version,
             input.selectedApp.versionCode
         ).first().associateBy { it.uid }
+    }
 
     private suspend fun refreshPatcherInformationMetadata(
         scopedBundles: Map<Int, PatchBundleInfo.Scoped>
@@ -1737,16 +1898,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private suspend fun collectSelectedPatchDescriptions(): List<String> {
+    private suspend fun collectSelectedPatchDescriptions(
+        selection: PatchSelection = appliedSelection
+    ): List<String> {
         val globalBundles = patchBundleRepository.bundleInfoFlow.first()
-        val scopedBundles = gatherScopedBundles()
-        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
         val displayNames = patchBundleRepository.sources.first().associate { it.uid to it.displayTitle }
-        return sanitizedSelection.entries.flatMap { (uid, patchNames) ->
+        return selection.entries.flatMap { (uid, patchNames) ->
             val bundleName = displayNames[uid]
-                ?: scopedBundles[uid]?.name
                 ?: globalBundles[uid]?.name
-                ?: "Unknown bundle"
+                ?: "Unknown bundle ($uid)"
             patchNames.sorted().map { patchName -> "$patchName - $bundleName" }
         }
     }
@@ -1817,7 +1977,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             generateSteps(
                 app,
                 input.selectedApp,
-                input.selectedPatches,
+                appliedSelection,
                 requiresSplitPreparation,
                 skipApkSigning
             ).toMutableStateList()
@@ -1930,28 +2090,47 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun runPreflightCheck() {
         val scopedBundles = gatherScopedBundles()
-        val sanitizedSelection = sanitizeSelection(appliedSelection, scopedBundles)
+        val currentSelection = appliedSelection
+        val sanitizedSelection = filterSelectionToAvailablePatches(currentSelection, scopedBundles)
         val missing = mutableListOf<String>()
-        appliedSelection.forEach { (uid, patches) ->
+        currentSelection.forEach { (uid, patches) ->
             val kept = sanitizedSelection[uid] ?: emptySet()
             patches.filterNot { it in kept }.forEach { missing += it }
         }
-        appliedSelection = applyCurrentPatchRules(sanitizedSelection, scopedBundles)
-        refreshPatcherInformationMetadata(scopedBundles)
         if (missing.isNotEmpty()) {
+            // Keep missing patches for "Continue anyway", while still enforcing installer rules.
+            appliedSelection = applyCurrentPatchRules(currentSelection, scopedBundles)
+            refreshPatcherInformationMetadata(scopedBundles)
             missingPatchWarning = MissingPatchWarningState(
                 patchNames = missing.distinct().sorted()
             )
         } else {
+            appliedSelection = applyCurrentPatchRules(sanitizedSelection, scopedBundles)
+            refreshPatcherInformationMetadata(scopedBundles)
             beginPrePatchFlow()
         }
     }
 
-    private fun logBatteryOptimizationStatus() {
+    private fun batteryOptimizationState(): String {
         val isIgnoring = app.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(app.packageName) == true
-        val state = if (isIgnoring) "disabled" else "enabled"
+        return if (isIgnoring) "disabled" else "enabled"
+    }
+
+    private suspend fun environmentState(): String = withContext(Dispatchers.IO) {
+        when (rootInstaller.peekRootAccess()) {
+            true -> "root"
+            false -> "unrooted"
+            null -> if (rootInstaller.isDeviceRooted()) "rooted" else "unrooted"
+        }
+    }
+
+    private fun logBatteryOptimizationStatus(state: String = batteryOptimizationState()) {
         logger.info("Battery optimization: $state")
+    }
+
+    private fun logEnvironmentStatus(state: String) {
+        logger.info("Environment: $state")
     }
 
     private fun startWorker() {
@@ -1982,11 +2161,58 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             app,
             prefs.processMemoryLimit.get()
         )
-        patcherSessionInfo = PatcherSessionInfo(
-            runtimeProcess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
-            memoryLimitMb = configuredProcessMemoryLimit,
-            nativeLibsStripped = selectedSplitConfiguration?.stripNativeLibs
-                ?: prefs.stripUnusedNativeLibs.get()
+        val runSelection = currentSelectionSnapshot()
+        val runOptions = currentOptionsSnapshot()
+        persistRunConfiguration(runSelection, runOptions)
+        val runSteps = generateSteps(
+            app,
+            input.selectedApp,
+            runSelection,
+            requiresSplitPreparation,
+            skipApkSigning
+        )
+        steps.clear()
+        steps.addAll(runSteps)
+        stepSubSteps.clear()
+        val selectedBundleType = patchBundleRepository.selectionBundleType(runSelection)
+        val hasMixedRevancedPatcherVersions =
+            selectedBundleType == PatchBundleType.REVANCED &&
+                patchBundleRepository.selectionHasMixedRevancedPatcherVersions(runSelection)
+        val usesRevancedPatcher22 = !hasMixedRevancedPatcherVersions &&
+            selectedBundleType == PatchBundleType.REVANCED &&
+            patchBundleRepository.selectionUsesRevancedPatcher22(runSelection)
+        val selectedPatcherEngine = if (hasMixedRevancedPatcherVersions) {
+            null
+        } else {
+            patcherEngineDisplayName(selectedBundleType, usesRevancedPatcher22)
+        }
+        val configuredMorpheBytecodeMode = if (selectedBundleType == PatchBundleType.MORPHE) {
+            prefs.morpheBytecodeMode.get().runtimeValue
+        } else {
+            null
+        }
+        val batteryOptimization = batteryOptimizationState()
+        val environment = environmentState()
+        updatePatcherSessionInfo(
+            PatcherSessionInfo(
+                patchCount = runSelection.values.sumOf { it.size },
+                selectedPatchLines = collectSelectedPatchDescriptions(runSelection),
+                runtimeProcess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+                memoryLimitMb = configuredProcessMemoryLimit,
+                nativeLibsStripped = selectedSplitConfiguration?.stripNativeLibs
+                    ?: prefs.stripUnusedNativeLibs.get(),
+                skipUnusedSplits = prefs.skipUnneededSplitApks.get(),
+                bundleType = selectedBundleType?.name,
+                patcherEngine = selectedPatcherEngine,
+                morpheBytecodeMode = configuredMorpheBytecodeMode,
+                memoryOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+                batteryOptimization = batteryOptimization,
+                environment = environment
+            )
         )
         runtimeReportedMemoryLimitMb = null
         replayWorkerProgressSnapshots = false
@@ -2005,9 +2231,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         markInitialStepRunning()
         _isPatchingActive.value = true
         startPatchingTaskMonitor()
-        logBatteryOptimizationStatus()
+        logBatteryOptimizationStatus(batteryOptimization)
+        logEnvironmentStatus(environment)
         val workId = try {
-            launchWorker()
+            launchWorker(runSelection, runOptions)
         } catch (_: UniqueWorkAlreadyRunningException) {
             stopPatchingTaskMonitor()
             _isPatchingActive.value = false
@@ -2737,85 +2964,110 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 ?.removePrefix(prefix)
                 ?.trim()
 
-        data class LogPrefsSnapshot(
-            val bundleType: String,
+        data class LogFallbackSnapshot(
+            val bundleType: PatchBundleType?,
             val morpheBytecodeMode: String?,
-            val revancedPatcherVersion: String?,
+            val patcherEngine: String?,
             val stripNativeLibs: Boolean,
             val skipUnusedSplits: Boolean,
             val environment: String,
             val selectedPatchLines: List<String>
         )
-        val prefsSnapshot = runBlocking {
-            val bundleType = patchBundleRepository.selectionBundleType(input.selectedPatches)
-            val bundle = bundleType?.name ?: "UNKNOWN"
+        val fallbackSnapshot = runBlocking {
+            val fallbackSelection = currentSelectionSnapshot()
+            val bundleType = patchBundleRepository.selectionBundleType(fallbackSelection)
+            val hasMixedRevancedPatcherVersions =
+                bundleType == PatchBundleType.REVANCED &&
+                    patchBundleRepository.selectionHasMixedRevancedPatcherVersions(fallbackSelection)
+            val usesRevancedPatcher22 = !hasMixedRevancedPatcherVersions &&
+                bundleType == PatchBundleType.REVANCED &&
+                patchBundleRepository.selectionUsesRevancedPatcher22(fallbackSelection)
+            val patcherEngine = if (hasMixedRevancedPatcherVersions) {
+                null
+            } else {
+                patcherEngineDisplayName(bundleType, usesRevancedPatcher22)
+            }
             val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
                 prefs.morpheBytecodeMode.get().runtimeValue
             } else {
                 null
             }
-            val revancedPatcherVersion = when (bundleType) {
-                PatchBundleType.REVANCED ->
-                    if (patchBundleRepository.selectionUsesRevancedPatcher22(input.selectedPatches)) {
-                        "22.0.0"
-                    } else {
-                        "21.0.0"
-                    }
-                else -> null
-            }
-            val stripNative = prefs.stripUnusedNativeLibs.get()
-            val skipSplits = prefs.skipUnneededSplitApks.get()
-            val environment = withContext(Dispatchers.IO) {
-                when (rootInstaller.peekRootAccess()) {
-                    true -> "root"
-                    false -> "unrooted"
-                    null -> if (rootInstaller.isDeviceRooted()) "rooted" else "unrooted"
-                }
-            }
-            val selectedPatchLines = collectSelectedPatchDescriptions()
-            LogPrefsSnapshot(
-                bundle,
-                morpheBytecodeMode,
-                revancedPatcherVersion,
-                stripNative,
-                skipSplits,
-                environment,
-                selectedPatchLines
+            val environment = environmentState()
+            LogFallbackSnapshot(
+                bundleType = bundleType,
+                morpheBytecodeMode = morpheBytecodeMode,
+                patcherEngine = patcherEngine,
+                stripNativeLibs = prefs.stripUnusedNativeLibs.get(),
+                skipUnusedSplits = prefs.skipUnneededSplitApks.get(),
+                environment = environment,
+                selectedPatchLines = collectSelectedPatchDescriptions(fallbackSelection)
             )
         }
-        val bundleType = prefsSnapshot.bundleType
-        val morpheBytecodeMode = prefsSnapshot.morpheBytecodeMode
-        val revancedPatcherVersion = prefsSnapshot.revancedPatcherVersion
-        val stripNativeLibs = prefsSnapshot.stripNativeLibs
-        val skipUnusedSplits = prefsSnapshot.skipUnusedSplits
-        val environment = prefsSnapshot.environment
-        val selectedPatchLines = prefsSnapshot.selectedPatchLines
+        val bundleType = patcherSessionInfo.bundleType
+            ?: fallbackSnapshot.bundleType?.name
+            ?: "UNKNOWN"
+        val morpheBytecodeMode = patcherSessionInfo.morpheBytecodeMode
+            ?: findLogValue("Morphe bytecode mode:")
+            ?: fallbackSnapshot.morpheBytecodeMode
+        val patcherEngine = patcherSessionInfo.patcherEngine
+            ?: findLogValue("Patcher engine:")
+            ?: fallbackSnapshot.patcherEngine
+        val revancedPatcherVersion = patcherEngine
+            ?.takeIf { it.startsWith("ReVanced ") }
+            ?.removePrefix("ReVanced ")
+        val stripNativeLibs = patcherSessionInfo.nativeLibsStripped
+            ?: fallbackSnapshot.stripNativeLibs
+        val skipUnusedSplits = patcherSessionInfo.skipUnusedSplits
+            ?: fallbackSnapshot.skipUnusedSplits
+        val environment = patcherSessionInfo.environment
+            ?: findLogValue("Environment:")
+            ?: fallbackSnapshot.environment
+        val selectedPatchLines = patcherSessionInfo.selectedPatchLines
+            ?: fallbackSnapshot.selectedPatchLines
 
-        val runtimeReportedLimit = runtimeReportedMemoryLimitMb ?: parseMemoryLimitMb(
-            logMessages.lastOrNull { it.startsWith("Memory limit:") }
-                ?.removePrefix("Memory limit:")
-                ?.trim()
-        )
+        val runtimeReportedLimit = runtimeReportedMemoryLimitMb
+            ?: patcherSessionInfo.memoryLimitMb
+            ?: parseMemoryLimitMb(
+                logMessages.lastOrNull { it.startsWith("Memory limit:") }
+                    ?.removePrefix("Memory limit:")
+                    ?.trim()
+            )
         val effectiveLimit = runtimeReportedLimit ?: MemoryLimitConfig.resolveMemoryLimitMb(
             context,
             prefs.processMemoryLimit.getBlocking()
         )
         val processRuntimeEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        val runtimeMode = findLogValue("Runtime mode:")
+        val runtimeMode = patcherSessionInfo.runtimeProcess?.let { if (it) "process" else "in-process" }
+            ?: findLogValue("Runtime mode:")
             ?: if (processRuntimeEnabled) "process" else "in-process"
-        val memoryOverride = findLogValue("Memory override:")
+        val memoryOverride = patcherSessionInfo.memoryOverride
+            ?: findLogValue("Memory override:")
             ?: if (processRuntimeEnabled) "enabled" else "disabled"
-        val aapt2 = findLogValue("AAPT2:") ?: when (bundleType) {
-            PatchBundleType.REVANCED.name -> "Modern"
-            PatchBundleType.MORPHE.name -> "N/A"
-            else -> "N/A"
-        }
-        val aapt2Fallback = findLogValue("AAPT2 fallback:") ?: "false"
-        val appVersionCode = findLogValue("App version code:")
-            ?: input.selectedApp.versionCode?.toString()
+        val aapt2 = patcherSessionInfo.aapt2 ?: findLogValue("AAPT2:")
+        val aapt2Fallback = patcherSessionInfo.aapt2Fallback
+            ?: findLogValue("AAPT2 fallback:")
+                ?.substringBefore(' ')
+                ?.toBooleanStrictOrNull()
+            ?: aapt2?.let { false }
+        val appPackage = patcherSessionInfo.appPackageName
+            ?: findLogValue("App package:")
+            ?: input.selectedApp.packageName
+        val appVersion = patcherSessionInfo.appVersionName
+            ?: findLogValue("App version:")
+            ?: informationAppVersion?.takeIf(String::isNotBlank)
             ?: "unspecified"
-        val includedSplits = findLogValue("Included splits:")
-        val excludedSplits = findLogValue("Excluded splits:")
+        val loggedAppVersionCode = findLogValue("App version code:")
+        val appVersionCode = when {
+            patcherSessionInfo.appVersionCodeReported == true ->
+                patcherSessionInfo.appVersionCode?.toString() ?: "unspecified"
+            loggedAppVersionCode != null -> loggedAppVersionCode
+            informationAppVersionCode != null -> informationAppVersionCode.toString()
+            else -> "unspecified"
+        }
+        val includedSplits = patcherSessionInfo.includedSplits
+            ?: findLogValue("Included splits:")
+        val excludedSplits = patcherSessionInfo.excludedSplits
+            ?: findLogValue("Excluded splits:")
         val patchFailure = lastPatchFailure
         val patchFailureStep = lastPatchFailureStep
         val failureSummaryLog = patchFailure?.let { error ->
@@ -2834,35 +3086,41 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
         val isIgnoring = context.getSystemService<PowerManager>()
             ?.isIgnoringBatteryOptimizations(context.packageName) == true
-        val batteryOptimization = if (isIgnoring) "disabled" else "enabled"
+        val batteryOptimization = patcherSessionInfo.batteryOptimization
+            ?: findLogValue("Battery optimization:")
+            ?: if (isIgnoring) "disabled" else "enabled"
         val deviceName = resolveDeviceName()
 
-        val sizeBytes = inputFile?.length() ?: 0L
+        val sizeBytes = patcherSessionInfo.apkSizeBytes ?: inputFile?.length() ?: 0L
         val sizeMb = if (sizeBytes > 0L) {
             "${(sizeBytes / 1_000_000.0).roundToInt()}MB"
         } else {
             "unknown"
         }
-        val splitCount = inputFile
+        val splitCount = patcherSessionInfo.splitCount ?: inputFile
             ?.takeIf { SplitApkPreparer.isSplitArchive(it) }
             ?.let { file -> SplitApkPreparer.splitApkEntryNames(file).size }
 
-        val appVersion = input.selectedApp.version
-            ?.takeUnless { it.isBlank() }
-            ?: "unspecified"
-        val patchCount = selectedPatchLines.size
+        val patchCount = patcherSessionInfo.patchCount ?: selectedPatchLines.size
         val droppedLines = droppedLogLineCount
 
         val logLines = logSnapshot
             .filterNot { (level, msg) ->
                     msg.startsWith("Battery optimization:") ||
+                    msg.startsWith("Environment:") ||
                     msg.startsWith("Patching started at ") ||
                     msg.startsWith("Patcher runtime:") ||
+                    msg.startsWith("Patcher engine:") ||
+                    msg.startsWith("Morphe bytecode mode:") ||
                     msg.startsWith("Memory limit:") ||
                     msg.startsWith("Runtime mode:") ||
                     msg.startsWith("Memory override:") ||
+                    msg.startsWith("Strip native libs:") ||
+                    msg.startsWith("Skip unused splits:") ||
                     msg.startsWith("AAPT2:") ||
                     msg.startsWith("AAPT2 fallback:") ||
+                    msg.startsWith("App package:") ||
+                    msg.startsWith("App version:") ||
                     msg.startsWith("App version code:") ||
                     msg.startsWith("Included splits:") ||
                     msg.startsWith("Excluded splits:") ||
@@ -2888,17 +3146,18 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             morpheBytecodeMode?.let {
                 appendLine("Morphe bytecode mode: $it")
             }
+            patcherEngine?.let { appendLine("Patcher engine: $it") }
             revancedPatcherVersion?.let {
                 appendLine("ReVanced Patcher version: $it")
             }
             appendLine("Runtime mode: $runtimeMode")
             appendLine("Memory override: $memoryOverride")
-            appendLine("AAPT2: $aapt2")
-            appendLine("AAPT2 fallback: $aapt2Fallback")
+            aapt2?.let { appendLine("AAPT2: $it") }
+            aapt2Fallback?.let { appendLine("AAPT2 fallback: $it") }
             appendLine("Strip native libs: ${if (stripNativeLibs) "on" else "off"}")
             appendLine("Skip unused splits: ${if (skipUnusedSplits) "on" else "off"}")
             appendLine("Battery optimization: $batteryOptimization")
-            appendLine("App package: ${input.selectedApp.packageName}")
+            appendLine("App package: $appPackage")
             appendLine("App version: $appVersion")
             appendLine("App version code: $appVersionCode")
             appendLine("App size: $sizeMb")
@@ -4159,11 +4418,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         data class Failure(val message: String) : InstallCompletionStatus()
     }
 
-    private suspend fun launchWorker(): UUID =
-        workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
-            PatcherWorker.UNIQUE_WORK_NAME,
-            buildWorkerArgs()
-        )
+    private suspend fun launchWorker(
+        selectedPatches: PatchSelection,
+        options: Options
+    ): UUID = workerRepository.launchExpedited<PatcherWorker, PatcherWorker.Args>(
+        PatcherWorker.UNIQUE_WORK_NAME,
+        buildWorkerArgs(selectedPatches, options)
+    )
 
     private suspend fun handleDownloaderActivityRequest(
         plugin: LoadedDownloaderPlugin,
@@ -4206,7 +4467,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    private fun buildWorkerArgs(): PatcherWorker.Args {
+    private fun buildWorkerArgs(
+        selectedPatches: PatchSelection,
+        options: Options
+    ): PatcherWorker.Args {
         val selectedForRun = when (val selected = input.selectedApp) {
             is SelectedApp.Local -> {
                 val reuseFile = inputFile ?: selected.file
@@ -4228,8 +4492,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return PatcherWorker.Args(
             selectedForRun,
             outputFile.path,
-            input.selectedPatches,
-            input.options,
+            selectedPatches,
+            options,
             skipApkSigning,
             logger,
             preparedInput = resolvedPreparedInput,
@@ -4974,11 +5238,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         title.equals("Compiling modified resources", ignoreCase = true) ||
             title.equals("Compiling patched resources", ignoreCase = true)
 
-    private fun isMorpheSelection(): Boolean = selectionBundleType == PatchBundleType.MORPHE
+    private fun isMorpheSelection(): Boolean =
+        patcherSessionInfo.bundleType?.let { it == PatchBundleType.MORPHE.name }
+            ?: (selectionBundleType == PatchBundleType.MORPHE)
 
     private fun currentWriteApkDexGroupTitle(): String {
         if (!isMorpheSelection()) return WRITE_APK_DEX_GROUP_TITLE
-        return if (selectionMorpheBytecodeMode.equals("FULL", ignoreCase = true)) {
+        val bytecodeMode = patcherSessionInfo.morpheBytecodeMode ?: selectionMorpheBytecodeMode
+        return if (bytecodeMode.equals("FULL", ignoreCase = true)) {
             "Compiling DEX files: FULL"
         } else {
             "Compiling DEX files: FAST"
@@ -5942,15 +6209,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     ) {
         if (event.stepId == StepId.PrepareSplitApk && steps.none { it.id == StepId.PrepareSplitApk }) {
             requiresSplitPreparation = true
-            val regeneratedSteps = generateSteps(
-                app,
-                input.selectedApp,
-                input.selectedPatches,
-                splitStepActive = true,
-                skipApkSigning = skipApkSigning
-            ).toMutableStateList()
-            steps.clear()
-            steps.addAll(regeneratedSteps)
+            val loadPatchesIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
+                .takeIf { it >= 0 }
+                ?: 0
+            steps.add(loadPatchesIndex, buildSplitStep(app))
         }
 
         val stepIndex = event.stepId?.let { stepId ->
@@ -6049,7 +6311,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val newSteps = generateSteps(
             app,
             input.selectedApp,
-            input.selectedPatches,
+            appliedSelection,
             requiresSplitPreparation,
             skipApkSigning
         ).toMutableStateList()
@@ -6187,6 +6449,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val index = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
         if (index == -1) return
         steps.removeAt(index)
+    }
+
+    private fun filterSelectionToAvailablePatches(
+        selection: PatchSelection,
+        bundles: Map<Int, PatchBundleInfo>
+    ): PatchSelection = buildMap {
+        selection.forEach { (uid, patches) ->
+            val valid = bundles[uid]?.patches?.mapTo(hashSetOf()) { it.name }.orEmpty()
+            val kept = patches.filterTo(mutableSetOf()) { it in valid }
+            if (kept.isNotEmpty()) put(uid, kept)
+        }
     }
 
     private fun sanitizeSelection(
@@ -6327,6 +6600,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         private const val PATCHER_LOG_ENTRY_SOFT_LIMIT = 9_000
         private const val PATCHER_LOG_ENTRY_HARD_LIMIT = 12_000
         private const val PATCHER_LOG_MESSAGE_CHAR_LIMIT = 12_000
+        private const val PATCHER_SESSION_INFO_KEY = "patcher_session_info"
+        private const val PATCHER_RUN_CONFIGURATION_KEY = "patcher_run_configuration"
         private const val FAILURE_LOG_SUMMARY_CHAR_LIMIT = 1_000
         fun LogLevel.androidLog(msg: String) = when (this) {
             LogLevel.TRACE -> Log.v(TAG, msg)

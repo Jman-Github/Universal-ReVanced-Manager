@@ -272,10 +272,12 @@ class MorpheProcessRuntime(
             }
 
             logAaptChoice(runtimeLogger)
+            val bytecodeMode = prefs.morpheBytecodeMode.get().runtimeValue
+            runtimeLogger.info("Morphe bytecode mode: $bytecodeMode")
             val parameters = MorpheParameters(
                 aaptPath = aaptPath,
                 frameworkDir = frameworkPath,
-                bytecodeMode = prefs.morpheBytecodeMode.get().runtimeValue,
+                bytecodeMode = bytecodeMode,
                 cacheDir = cacheDir,
                 packageName = packageName,
                 inputFile = inputFile,

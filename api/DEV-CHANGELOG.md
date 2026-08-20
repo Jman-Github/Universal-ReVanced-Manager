@@ -15,6 +15,7 @@
 - Fixed patch bundle tabs showing inaccurate counts by displaying selected and available patches as a selected/total value
 - Fixed Rooted Mount being unavailable in post-patch installer choosers for compatible Standard patches
 - Fixed the Patcher Information widget sometimes showing the wrong app version instead of the version of the APK actually being patched
+- Fixed single and batch patching sometimes using or reporting stale patch selections, options, app metadata, and runtime information, especially after missing patches were removed or the patcher screen was restored
 
 
 # CI

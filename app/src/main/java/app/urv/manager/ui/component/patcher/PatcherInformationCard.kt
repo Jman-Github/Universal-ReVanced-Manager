@@ -68,10 +68,16 @@ fun PatcherInformationCard(
     ) {
         readDeviceInformation(context)
     }
+    val appVersion = information.session.appVersionName ?: information.appVersion
+    val appVersionCode = if (information.session.appVersionCodeReported == true) {
+        information.session.appVersionCode
+    } else {
+        information.session.appVersionCode ?: information.appVersionCode
+    }
     val apkSizeBytes = information.session.apkSizeBytes ?: information.fallbackApkSizeBytes
     val splitApk = information.session.splitApk ?: information.fallbackSplitApk
     val patchCount = information.session.patchCount ?: information.patchCount
-    val patcherEngine = information.fallbackPatcherEngine
+    val patcherEngine = information.session.patcherEngine ?: information.fallbackPatcherEngine
     val expandDescription = stringResource(
         if (expanded) R.string.patcher_information_collapse
         else R.string.patcher_information_expand
@@ -122,8 +128,8 @@ fun PatcherInformationCard(
                             first = InformationItem(
                                 R.string.patcher_information_app_version,
                                 appVersionDisplayValue(
-                                    information.appVersion,
-                                    information.appVersionCode
+                                    appVersion,
+                                    appVersionCode
                                 )
                             ),
                             second = InformationItem(

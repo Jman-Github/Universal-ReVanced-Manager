@@ -64,6 +64,7 @@ import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.toRemoteError
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.patcher.patch.patcherEngineDisplayName
 import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.PluginHostApi
 import app.urv.manager.plugin.downloader.UserInteractionException
@@ -1601,11 +1602,18 @@ class PatcherWorker(
                 )
                 null
             }
+            val resolvedInputPackageName = sourceInfo?.packageName
+                ?.takeIf(String::isNotBlank)
             val resolvedInputVersionName = sourceInfo?.versionName
                 ?.takeIf(String::isNotBlank)
             val resolvedInputVersionCode = sourceInfo?.let(pm::getVersionCode)
             args.setInputMetadata(resolvedInputVersionName, resolvedInputVersionCode)
+            val inputPackageName = resolvedInputPackageName ?: args.packageName
+            val inputVersionName = resolvedInputVersionName
+                ?: args.input.version?.takeIf(String::isNotBlank)
             val inputVersionCode = resolvedInputVersionCode ?: args.input.versionCode
+            workerLogger.info("App package: $inputPackageName")
+            workerLogger.info("App version: ${inputVersionName ?: "unspecified"}")
             workerLogger.info("App version code: ${inputVersionCode ?: "unspecified"}")
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
@@ -1633,15 +1641,6 @@ class PatcherWorker(
             val bundleType = patchBundleRepository.selectionBundleType(args.selectedPatches)
                 ?: throw IllegalStateException("Cannot patch with mixed ReVanced or Morphe bundles.")
             activePatchBundleType = bundleType
-            activeMorpheDexGroupTitle = if (bundleType == PatchBundleType.MORPHE) {
-                if (prefs.morpheBytecodeMode.get().runtimeValue.equals("FULL", ignoreCase = true)) {
-                    "Compiling DEX files: FULL"
-                } else {
-                    "Compiling DEX files: FAST"
-                }
-            } else {
-                null
-            }
             if (
                 bundleType == PatchBundleType.REVANCED &&
                 patchBundleRepository.selectionHasMixedRevancedPatcherVersions(args.selectedPatches)
@@ -1650,6 +1649,20 @@ class PatcherWorker(
                     "Cannot patch with mixed ReVanced patcher versions. " +
                         "Select either ReVanced v21 or v22 patches."
                 )
+            }
+            val useRevancedPatcher22 =
+                bundleType == PatchBundleType.REVANCED &&
+                    patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
+            val patcherEngine = patcherEngineDisplayName(bundleType, useRevancedPatcher22)
+            val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
+                prefs.morpheBytecodeMode.get().runtimeValue
+            } else {
+                null
+            }
+            activeMorpheDexGroupTitle = when {
+                morpheBytecodeMode.equals("FULL", ignoreCase = true) -> "Compiling DEX files: FULL"
+                morpheBytecodeMode != null -> "Compiling DEX files: FAST"
+                else -> null
             }
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
@@ -1665,23 +1678,45 @@ class PatcherWorker(
             val selectedCount = totalPatchCount
             val useProcessRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val effectiveLimit = configuredProcessMemoryLimit
+            val manualSplitSelectionRequested = inputIsSplitArchive && args.splitSelection != null
+            val inputSplitCount = if (inputIsSplitArchive) {
+                try {
+                    SplitApkPreparer.splitApkEntryNames(
+                        file = inputFile,
+                        checkCancelled = checkCancelled
+                    ).size
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
             val nativeLibsStripped = if (inputIsSplitArchive) {
                 args.splitSelection?.stripNativeLibs ?: stripNativeLibs
             } else {
                 stripNativeLibs
             }
+            val skipUnusedSplitsForRun =
+                inputIsSplitArchive && skipUnneededSplits && !manualSplitSelectionRequested
+            val splitCountLog = inputSplitCount?.let { " splits=$it" }.orEmpty()
             workerLogger.info(
                 "Patching started at ${System.currentTimeMillis()} " +
-                    "pkg=${args.packageName} version=${args.input.version} " +
+                    "pkg=$inputPackageName version=${inputVersionName ?: "unspecified"} " +
                     "input=${inputFile.absolutePath} size=${inputFile.length()} " +
-                    "split=$inputIsSplitArchive patches=$selectedCount " +
+                    "split=$inputIsSplitArchive$splitCountLog patches=$selectedCount " +
                     "nativeLibsStripped=$nativeLibsStripped"
             )
             workerLogger.info(
                 "Patcher runtime: bundle=$bundleType memoryLimit=${effectiveLimit}MB"
             )
+            patcherEngine?.let { workerLogger.info("Patcher engine: $it") }
+            morpheBytecodeMode?.let { workerLogger.info("Morphe bytecode mode: $it") }
             workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
             workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
+            workerLogger.info("Strip native libs: ${if (nativeLibsStripped) "on" else "off"}")
+            workerLogger.info("Skip unused splits: ${if (skipUnusedSplitsForRun) "on" else "off"}")
 
             var runtimeInputFile = inputFile
             var manualSplitSelectionApplied = false
@@ -1743,9 +1778,6 @@ class PatcherWorker(
                 if (manualSplitSelectionApplied) false else skipUnneededSplits
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/worker/PatcherWorker.kt
-            val useRevancedPatcher22 =
-                bundleType == PatchBundleType.REVANCED &&
-                    patchBundleRepository.selectionUsesRevancedPatcher22(args.selectedPatches)
             val runtimeMemoryUsageDispatcher: (Long, Long) -> Unit = { usedMb, maxMb ->
                 publishPatcherMemoryUsage(
                     PatcherMemoryUsage(

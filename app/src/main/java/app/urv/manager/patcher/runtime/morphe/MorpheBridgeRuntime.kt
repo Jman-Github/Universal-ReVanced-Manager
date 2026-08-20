@@ -63,6 +63,8 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
         }
 
         logAaptChoice(runtimeLogger)
+        val bytecodeMode = prefs.morpheBytecodeMode.get().runtimeValue
+        runtimeLogger.info("Morphe bytecode mode: $bytecodeMode")
         val params = mapOf(
             "aaptPath" to aaptPath,
             "frameworkDir" to frameworkPath,
@@ -74,7 +76,7 @@ class MorpheBridgeRuntime(context: Context) : MorpheRuntime(context) {
             "stripNativeLibs" to stripNativeLibs,
             "skipUnneededSplits" to skipUnneededSplits,
             "continueOnPatchError" to prefs.continueOnPatchError.get(),
-            "bytecodeMode" to prefs.morpheBytecodeMode.get().runtimeValue,
+            "bytecodeMode" to bytecodeMode,
             "configurations" to configs
         )
         val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)

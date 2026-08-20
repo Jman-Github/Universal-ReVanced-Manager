@@ -39,6 +39,7 @@ import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.patcher.updatedFromLog
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
@@ -455,7 +456,18 @@ class BatchPatchCoordinator(
         try {
             indexes.forEachIndexed { queueIndex, itemIndex ->
                 val item = mutableState.value?.items?.getOrNull(itemIndex) ?: return@forEachIndexed
-                updateItem(itemIndex) { it.copy(state = BatchItemState.RUNNING, message = null) }
+                updateItem(itemIndex) {
+                    it.copy(
+                        state = BatchItemState.RUNNING,
+                        message = null,
+                        patcherSessionInfo = PatcherSessionInfo(
+                            patchCount = item.patchCount
+                        ),
+                        progressEvents = emptyList(),
+                        memoryUsageSamples = emptyList(),
+                        logLines = emptyList()
+                    )
+                }
                 mutableState.update {
                     it?.copy(
                         activeIndex = itemIndex,
@@ -1131,7 +1143,14 @@ class BatchPatchCoordinator(
                 else item.copy(
                     selection = normalizedSelection,
                     options = options,
+                    selectionPayload = null,
                     patcherEngine = null,
+                    patcherSessionInfo = PatcherSessionInfo(),
+                    message = null,
+                    hadPatchFailures = false,
+                    progressEvents = emptyList(),
+                    memoryUsageSamples = emptyList(),
+                    logLines = emptyList(),
                     state = if (
                         item.state == BatchItemState.VERSION_MISMATCH &&
                         !item.forceVersionMismatch
