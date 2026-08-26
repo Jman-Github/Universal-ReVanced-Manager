@@ -23,8 +23,13 @@ import app.urv.manager.domain.installer.SessionDeadException
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
+import app.urv.manager.domain.installer.root.RootMountSuspension
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
+import app.urv.manager.domain.installer.root.reinstallMountedStockAsPlayStore
 import app.urv.manager.domain.installer.root.requireSuccess
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
@@ -327,8 +332,21 @@ class DownloadsViewModel(
                 is InstallerManager.InstallPlan.Mount -> installWithRootMount(
                     apk = apk,
                     packageInfo = packageInfo,
-                    label = sourceLabel
+                    label = sourceLabel,
+                    installAsPlayStore = plan.installAsPlayStore
                 )
+                // Code adapted from Morphe, see third-party/NOTICE for more information
+                // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+                is InstallerManager.InstallPlan.RootPlayStore -> {
+                    installAsPlayStoreWithMountRollback(
+                        rootInstaller = rootInstaller,
+                        rootMountCoordinator = rootMountCoordinator,
+                        apkFile = apk,
+                        packageName = packageName,
+                        userId = android.os.Process.myUid() / 100_000
+                    )
+                    showInstallSuccess()
+                }
                 is InstallerManager.InstallPlan.Shizuku -> {
                     shizukuInstaller.install(
                         apk,
@@ -449,7 +467,8 @@ class DownloadsViewModel(
     private suspend fun installWithRootMount(
         apk: File,
         packageInfo: PackageInfo,
-        label: String
+        label: String,
+        installAsPlayStore: Boolean = false
     ) {
         val installed = pm.getPackageInfo(packageInfo.packageName)
             ?: error(appContext.getString(R.string.root_mount_requires_installed_stock))
@@ -485,7 +504,25 @@ class DownloadsViewModel(
                 label = label
             )
         ).requireSuccess()
+        val sourceAttributionError = if (installAsPlayStore) {
+            reinstallMountedStockAsPlayStore(
+                context = appContext,
+                rootInstaller = rootInstaller,
+                rootMountCoordinator = rootMountCoordinator,
+                packageName = packageInfo.packageName,
+                userId = android.os.Process.myUid() / 100_000
+            )
+        } else null
         showInstallSuccess()
+        sourceAttributionError?.let { error ->
+            Log.w(TAG, "Failed to record Play Store as the installation source", error)
+            appContext.toast(
+                appContext.getString(
+                    R.string.installer_play_store_attribution_failed,
+                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                )
+            )
+        }
     }
 
     private fun showInstallSuccess() {
@@ -502,8 +539,64 @@ class DownloadsViewModel(
                 lastUpdateTime = packageInfo.lastUpdateTime
             )
         }
+        var suspendedMount: RootMountSuspension? =
+            if (plan.token == InstallerManager.Token.PlayStore) {
+                suspendRootMountForPackageInstall(
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = plan.expectedPackage,
+                    userId = android.os.Process.myUid() / 100_000,
+                    recoveryContext = appContext
+                )
+            } else {
+                null
+            }
 
+        var cleanupRequired = true
         try {
+            val mount = suspendedMount
+            if (mount != null) {
+                suspendedMount = null
+                cleanupRequired = false
+                val installed = launchExternalInstallerWithMountFinalization(
+                    context = appContext,
+                    targetIntent = plan.intent,
+                    suspendedMount = mount,
+                    installChanged = {
+                        val current = pm.getPackageInfo(plan.expectedPackage)
+                        current != null && (
+                            baseline == null ||
+                                pm.getVersionCode(current) != baseline.versionCode ||
+                                current.lastUpdateTime != baseline.lastUpdateTime
+                            )
+                    },
+                    activityTimeoutMs = EXTERNAL_INSTALL_TIMEOUT_MS,
+                    onLaunched = {
+                        installProgressFlow.value = null
+                        appContext.toast(
+                            appContext.getString(
+                                R.string.installer_external_launched,
+                                plan.installerLabel
+                            )
+                        )
+                    },
+                    cleanupFile = plan.sharedFile,
+                    cleanup = { cleanupExternalInstall(plan) }
+                )
+                if (installed) {
+                    appContext.toast(successMessage)
+                    showPlayStoreAttributionWarning(plan)
+                } else {
+                    appContext.toast(
+                        appContext.getString(
+                            R.string.installer_external_finished_no_change,
+                            plan.installerLabel
+                        )
+                    )
+                }
+                return
+            }
+
             ContextCompat.startActivity(appContext, plan.intent, null)
             installProgressFlow.value = null
             appContext.toast(
@@ -513,6 +606,7 @@ class DownloadsViewModel(
             val installed = waitForExternalInstall(plan.expectedPackage, baseline)
             if (installed) {
                 appContext.toast(successMessage)
+                showPlayStoreAttributionWarning(plan)
             } else {
                 appContext.toast(
                     appContext.getString(
@@ -522,8 +616,21 @@ class DownloadsViewModel(
                 )
             }
         } finally {
-            cleanupExternalInstall(plan)
+            if (cleanupRequired) cleanupExternalInstall(plan)
         }
+    }
+
+    private suspend fun showPlayStoreAttributionWarning(
+        plan: InstallerManager.InstallPlan.External
+    ) {
+        val error = installerManager.tryFinalizePlayStoreAttribution(plan) ?: return
+        Log.w(TAG, "Failed to record Play Store as the installation source", error)
+        appContext.toast(
+            appContext.getString(
+                R.string.installer_play_store_attribution_failed,
+                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+            )
+        )
     }
 
     private suspend fun waitForExternalInstall(
@@ -641,6 +748,9 @@ class DownloadsViewModel(
                     is InstallerManager.InstallPlan.External -> {
                         launchExternalInstaller(plan, successMessage)
                     }
+                    is InstallerManager.InstallPlan.RootPlayStore -> error(
+                        "Root Play Store install is not supported for APK download helper apps"
+                    )
                     is InstallerManager.InstallPlan.Mount -> error(
                         "Root mount is not supported for APK download helper apps"
                     )

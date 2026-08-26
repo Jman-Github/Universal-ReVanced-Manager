@@ -19,18 +19,21 @@ import androidx.annotation.StringRes
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.InstallerPreferenceTokens
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.universal.revanced.manager.R
 import java.io.File
 import java.io.IOException
 import java.util.LinkedHashMap
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 
 internal fun installerTokenMatchesPatchMode(
     token: InstallerManager.Token,
     useMount: Boolean
 ): Boolean = token != InstallerManager.Token.None &&
-    (token == InstallerManager.Token.AutoSaved) == useMount
+    (token == InstallerManager.Token.AutoSaved ||
+        token == InstallerManager.Token.RootPlayStore) == useMount
 
 internal fun packageInfoIsCompleteSingleApk(packageInfo: PackageInfo): Boolean {
     val splitRequiredValue =
@@ -74,12 +77,18 @@ internal fun rootMountStockIdentityUsable(
     }
 }
 
+internal fun rootMountStockReplacementRequired(
+    installedMatchesSourceVersion: Boolean
+): Boolean = !installedMatchesSourceVersion
+
 internal fun installerTokenSelectableForPatchedOutput(
     token: InstallerManager.Token,
     useMount: Boolean,
     supportsRootMount: Boolean
 ): Boolean = installerTokenMatchesPatchMode(token, useMount) ||
-    (!useMount && supportsRootMount && token == InstallerManager.Token.AutoSaved)
+    (!useMount && supportsRootMount &&
+        (token == InstallerManager.Token.AutoSaved ||
+            token == InstallerManager.Token.RootPlayStore))
 
 class InstallerManager(
     private val app: Application,
@@ -117,8 +126,15 @@ class InstallerManager(
         val entries = mutableListOf<Entry>()
 
         entryFor(Token.Internal, target, checkRoot = false)?.let(entries::add)
-        entryFor(Token.AutoSaved, target, checkRoot = true)?.let(entries::add)
-        entryFor(Token.Shizuku, target, checkRoot = true)?.let(entries::add)
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+        if (componentMimeCandidates == listOf(APK_MIME_CANDIDATE)) {
+            entryFor(Token.PlayStore, target, checkRoot = false)?.let(entries::add)
+            entryFor(Token.RootPlayStore, target, checkRoot = false)?.let(entries::add)
+        }
+        entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
+        entryFor(Token.Shizuku, target, checkRoot = false)?.let(entries::add)
+        entryFor(Token.ShizukuGooglePlay, target, checkRoot = false)?.let(entries::add)
 
         val activityEntries = queryInstallerActivities(componentMimeCandidates)
             .filter(::isInstallerCandidate)
@@ -175,8 +191,11 @@ class InstallerManager(
             InstallerPreferenceTokens.AUTO_SAVED,
             InstallerPreferenceTokens.ROOT -> Token.AutoSaved
             InstallerPreferenceTokens.SYSTEM -> Token.Internal
+            InstallerPreferenceTokens.PLAY_STORE -> Token.PlayStore
+            InstallerPreferenceTokens.ROOT_PLAY_STORE -> Token.RootPlayStore
             InstallerPreferenceTokens.NONE -> Token.None
             InstallerPreferenceTokens.SHIZUKU -> Token.Shizuku
+            InstallerPreferenceTokens.SHIZUKU_PLAY_STORE,
             InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY -> Token.ShizukuGooglePlay
             InstallerPreferenceTokens.INTERNAL, null, "" -> Token.Internal
             else -> ComponentName.unflattenFromString(value)?.let { component ->
@@ -189,10 +208,12 @@ class InstallerManager(
 
     fun tokenToPreference(token: Token): String = when (token) {
         Token.Internal -> InstallerPreferenceTokens.INTERNAL
+        Token.PlayStore -> InstallerPreferenceTokens.PLAY_STORE
+        Token.RootPlayStore -> InstallerPreferenceTokens.ROOT_PLAY_STORE
         Token.AutoSaved -> InstallerPreferenceTokens.AUTO_SAVED
         Token.None -> InstallerPreferenceTokens.NONE
         Token.Shizuku -> InstallerPreferenceTokens.SHIZUKU
-        Token.ShizukuGooglePlay -> InstallerPreferenceTokens.SHIZUKU_GOOGLE_PLAY
+        Token.ShizukuGooglePlay -> InstallerPreferenceTokens.SHIZUKU_PLAY_STORE
         is Token.Component -> token.componentName.flattenToString()
     }
 
@@ -206,22 +227,18 @@ class InstallerManager(
 
     suspend fun updatePrimaryToken(token: Token) {
         Log.d(TAG, "updatePrimaryToken -> ${token.describe()}")
-        if (token == Token.ShizukuGooglePlay) {
-            prefs.shizukuInstallAsPlayStore.update(true)
+        if (isShizukuToken(token)) {
+            prefs.shizukuInstallAsPlayStore.update(token == Token.ShizukuGooglePlay)
         }
-        prefs.installerPrimary.update(
-            tokenToPreference(withPlayStoreSource(token, false))
-        )
+        prefs.installerPrimary.update(tokenToPreference(normalizeStoredShizukuToken(token)))
     }
 
     suspend fun updateFallbackToken(token: Token) {
         Log.d(TAG, "updateFallbackToken -> ${token.describe()}")
-        if (token == Token.ShizukuGooglePlay) {
-            prefs.shizukuInstallAsPlayStore.update(true)
+        if (isShizukuToken(token)) {
+            prefs.shizukuInstallAsPlayStore.update(token == Token.ShizukuGooglePlay)
         }
-        prefs.installerFallback.update(
-            tokenToPreference(withPlayStoreSource(token, false))
-        )
+        prefs.installerFallback.update(tokenToPreference(normalizeStoredShizukuToken(token)))
     }
 
     suspend fun updateShizukuPlayStoreMode(enabled: Boolean) {
@@ -239,10 +256,14 @@ class InstallerManager(
     }
 
     private fun configuredShizukuToken(token: Token): Token {
+        if (!isShizukuToken(token)) return token
         val enabled = prefs.shizukuInstallAsPlayStore.getBlocking() ||
             token == Token.ShizukuGooglePlay
         return withPlayStoreSource(token, enabled)
     }
+
+    private fun normalizeStoredShizukuToken(token: Token): Token =
+        if (token == Token.ShizukuGooglePlay) Token.Shizuku else token
 
     fun storedCustomInstallerTokens(): List<Token.Component> = readCustomInstallerTokens()
 
@@ -417,7 +438,7 @@ class InstallerManager(
     ): InstallPlan? {
         // Code adapted from Morphe, see third-party/NOTICE for more information
         // https://github.com/MorpheApp/morphe-manager/pull/779
-        if (!allowMount && token == Token.AutoSaved) {
+        if (!allowMount && baseInstallerToken(token) == Token.AutoSaved) {
             return resolvePlan(
                 target = target,
                 sourceFile = sourceFile,
@@ -436,6 +457,24 @@ class InstallerManager(
         sourceFile: File,
         expectedPackage: String,
         sourceLabel: String?
+    ): InstallPlan.External = createPackageInstallerPlan(
+        target = target,
+        sourceFile = sourceFile,
+        expectedPackage = expectedPackage,
+        sourceLabel = sourceLabel,
+        installerPackageName = app.packageName,
+        installerLabel = app.getString(R.string.installer_internal_name),
+        token = Token.Internal
+    )
+
+    private fun createPackageInstallerPlan(
+        target: InstallTarget,
+        sourceFile: File,
+        expectedPackage: String,
+        sourceLabel: String?,
+        installerPackageName: String,
+        installerLabel: String,
+        token: Token
     ): InstallPlan.External {
         val shared = copyToShareDir(sourceFile)
         val uri = InstallerFileProvider.buildUri(app, shared)
@@ -447,8 +486,8 @@ class InstallerManager(
             )
             clipData = ClipData.newRawUri("APK", uri)
             putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-            putExtra(Intent.EXTRA_RETURN_RESULT, false)
-            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, app.packageName)
+            putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, installerPackageName)
         }
         return InstallPlan.External(
             target = target,
@@ -456,9 +495,9 @@ class InstallerManager(
             sharedFile = shared,
             uri = uri,
             expectedPackage = expectedPackage,
-            installerLabel = app.getString(R.string.installer_internal_name),
+            installerLabel = installerLabel,
             sourceLabel = sourceLabel,
-            token = Token.Internal
+            token = token
         )
     }
 
@@ -468,6 +507,54 @@ class InstallerManager(
         }
         runCatching { plan.sharedFile.delete() }
     }
+
+    @Suppress("DEPRECATION")
+    suspend fun tryFinalizePlayStoreAttribution(plan: InstallPlan.External): Exception? {
+        if (plan.token != Token.PlayStore) return null
+        if (
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R &&
+            isPlayStoreInstallerSource(plan.expectedPackage)
+        ) return null
+
+        val installedApk = plan.sharedFile.takeIf(File::isFile)
+            ?: runCatching {
+                packageManager.getApplicationInfo(plan.expectedPackage, 0)
+                    .sourceDir
+                    ?.let(::File)
+                    ?.takeIf(File::isFile)
+            }.getOrNull()
+            ?: return IllegalStateException("Installed APK is unavailable for Play Store attribution")
+
+        try {
+            // On modern Android, Settings can prefer the system installer's recorded originating
+            // package over the installer of record. Reinstalling the same APK through the root
+            // package-manager path clears that URV origin while preserving the installed app.
+            rootInstaller.installAsPlayStore(
+                apkFile = installedApk,
+                userId = android.os.Process.myUid() / 100_000
+            )
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            return error
+        }
+
+        return if (isPlayStoreInstallerSource(plan.expectedPackage)) {
+            null
+        } else {
+            IllegalStateException("Android did not record Google Play Store as the installation source")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isPlayStoreInstallerSource(packageName: String): Boolean = runCatching {
+        val installerPackageName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            packageManager.getInstallSourceInfo(packageName).installingPackageName
+        } else {
+            packageManager.getInstallerPackageName(packageName)
+        }
+        installerPackageName == PLAY_STORE_INSTALLER_PACKAGE
+    }.getOrDefault(false)
 
     private fun readCustomInstallerTokens(): List<Token.Component> =
         prefs.installerCustomComponents.getBlocking()
@@ -484,6 +571,30 @@ class InstallerManager(
     ): InstallPlan? {
         return when (token) {
             Token.Internal -> InstallPlan.Internal(target)
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+            Token.PlayStore -> if (
+                sourceFile.extension.equals("apk", ignoreCase = true) &&
+                availabilityFor(Token.PlayStore, target).available
+            ) {
+                createPackageInstallerPlan(
+                    target = target,
+                    sourceFile = sourceFile,
+                    expectedPackage = expectedPackage,
+                    sourceLabel = sourceLabel,
+                    installerPackageName = PLAY_STORE_INSTALLER_PACKAGE,
+                    installerLabel = app.getString(R.string.installer_play_store_name),
+                    token = Token.PlayStore
+                )
+            } else null
+
+            Token.RootPlayStore -> if (
+                sourceFile.extension.equals("apk", ignoreCase = true) &&
+                availabilityFor(Token.RootPlayStore, target).available
+            ) {
+                InstallPlan.Mount(target, installAsPlayStore = true)
+            } else null
+
             Token.None -> null
             Token.AutoSaved -> if (availabilityFor(Token.AutoSaved, target).available) {
                 InstallPlan.Mount(target)
@@ -594,6 +705,22 @@ class InstallerManager(
             icon = null
         )
 
+        Token.PlayStore -> Entry(
+            token = Token.PlayStore,
+            label = app.getString(R.string.installer_play_store_name),
+            description = app.getString(R.string.installer_play_store_description),
+            availability = availabilityFor(Token.PlayStore, target, checkRoot),
+            icon = loadInstallerIcon(PLAY_STORE_INSTALLER_PACKAGE)
+        )
+
+        Token.RootPlayStore -> Entry(
+            token = Token.RootPlayStore,
+            label = app.getString(R.string.installer_root_play_store_name),
+            description = app.getString(R.string.installer_root_play_store_description),
+            availability = availabilityFor(Token.RootPlayStore, target, checkRoot),
+            icon = loadInstallerIcon(PLAY_STORE_INSTALLER_PACKAGE)
+        )
+
         Token.AutoSaved -> Entry(
             token = Token.AutoSaved,
             label = app.getString(R.string.installer_auto_saved_name),
@@ -668,7 +795,7 @@ class InstallerManager(
             if (token == Token.None) return
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/779
-            if (!allowMount && token == Token.AutoSaved) return
+            if (!allowMount && baseInstallerToken(token) == Token.AutoSaved) return
             if (token in tokens) return
             if (!availabilityFor(
                     token,
@@ -683,7 +810,8 @@ class InstallerManager(
 
         add(primary)
 
-        val rejectedPrimaryMount = !allowMount && primary == Token.AutoSaved
+        val rejectedPrimaryMount =
+            !allowMount && baseInstallerToken(primary) == Token.AutoSaved
         if (rejectedPrimaryMount && fallback != primary) add(fallback)
 
         if (Token.Internal !in tokens) add(Token.Internal)
@@ -700,13 +828,45 @@ class InstallerManager(
         componentMimeCandidates: List<InstallerMimeCandidate> = listOf(APK_MIME_CANDIDATE)
     ): Availability = when (token) {
         Token.Internal -> Availability(true)
+        Token.PlayStore -> when {
+            target == InstallTarget.MANAGER_UPDATE -> {
+                // Replacing this app terminates its process before the post-install
+                // attribution finalizer can run.
+                Availability(false, R.string.installer_status_not_supported)
+            }
+
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R -> Availability(true)
+
+            checkRoot -> {
+                if (rootInstaller.hasRootAccess()) Availability(true)
+                else Availability(false, R.string.installer_status_requires_root)
+            }
+
+            else -> {
+                if (rootInstaller.isDeviceRooted()) Availability(true)
+                else Availability(false, R.string.installer_status_requires_root)
+            }
+        }
+        Token.RootPlayStore -> if (!target.supportsRoot) {
+            Availability(false, R.string.installer_status_not_supported)
+        } else if (checkRoot) {
+            if (rootInstaller.hasRootAccess()) Availability(true)
+            else Availability(false, R.string.installer_status_requires_root)
+        } else {
+            if (rootInstaller.isDeviceRooted()) Availability(true)
+            else Availability(false, R.string.installer_status_requires_root)
+        }
         Token.None -> Availability(true)
 
         Token.AutoSaved -> if (!target.supportsRoot) {
             Availability(false, R.string.installer_status_not_supported)
-        } else if (checkRoot && !rootInstaller.hasRootAccess()) {
-            Availability(false, R.string.installer_status_requires_root)
-        } else Availability(true)
+        } else if (checkRoot) {
+            if (rootInstaller.hasRootAccess()) Availability(true)
+            else Availability(false, R.string.installer_status_requires_root)
+        } else {
+            if (rootInstaller.isDeviceRooted()) Availability(true)
+            else Availability(false, R.string.installer_status_requires_root)
+        }
 
         Token.Shizuku,
         Token.ShizukuGooglePlay -> {
@@ -883,6 +1043,8 @@ class InstallerManager(
 
     sealed class Token {
         object Internal : Token()
+        object PlayStore : Token()
+        object RootPlayStore : Token()
         object AutoSaved : Token()
         object Shizuku : Token()
         object ShizukuGooglePlay : Token()
@@ -892,7 +1054,11 @@ class InstallerManager(
 
     sealed class InstallPlan {
         data class Internal(val target: InstallTarget) : InstallPlan()
-        data class Mount(val target: InstallTarget) : InstallPlan()
+        data class RootPlayStore(val target: InstallTarget) : InstallPlan()
+        data class Mount(
+            val target: InstallTarget,
+            val installAsPlayStore: Boolean = false
+        ) : InstallPlan()
         data class Shizuku(
             val target: InstallTarget,
             val token: Token = Token.Shizuku,
@@ -969,7 +1135,31 @@ class InstallerManager(
     fun isShizukuToken(token: Token?): Boolean =
         token == Token.Shizuku || token == Token.ShizukuGooglePlay
 
-    fun usesPlayStoreSource(token: Token?): Boolean = token == Token.ShizukuGooglePlay
+    fun usesPlayStoreSource(token: Token?): Boolean =
+        token == Token.PlayStore ||
+            token == Token.RootPlayStore ||
+            token == Token.ShizukuGooglePlay
+
+    fun baseInstallerToken(token: Token): Token = when (token) {
+        Token.PlayStore -> Token.Internal
+        Token.RootPlayStore -> Token.AutoSaved
+        Token.ShizukuGooglePlay -> Token.Shizuku
+        else -> token
+    }
+
+    fun supportsPlayStoreMode(token: Token): Boolean = when (baseInstallerToken(token)) {
+        Token.Internal,
+        Token.AutoSaved,
+        Token.Shizuku -> true
+        else -> false
+    }
+
+    fun withPlayStoreMode(token: Token, enabled: Boolean): Token = when (baseInstallerToken(token)) {
+        Token.Internal -> if (enabled) Token.PlayStore else Token.Internal
+        Token.AutoSaved -> if (enabled) Token.RootPlayStore else Token.AutoSaved
+        Token.Shizuku -> if (enabled) Token.ShizukuGooglePlay else Token.Shizuku
+        else -> token
+    }
 
     fun withPlayStoreSource(token: Token, enabled: Boolean): Token = when (token) {
         Token.Shizuku,
@@ -1060,6 +1250,8 @@ class InstallerManager(
 
 private fun InstallerManager.Token.describe(): String = when (this) {
     InstallerManager.Token.Internal -> "Internal"
+    InstallerManager.Token.PlayStore -> "PlayStore"
+    InstallerManager.Token.RootPlayStore -> "RootPlayStore"
     InstallerManager.Token.AutoSaved -> "AutoSaved"
     InstallerManager.Token.Shizuku -> "Shizuku"
     InstallerManager.Token.ShizukuGooglePlay -> "ShizukuGooglePlay"

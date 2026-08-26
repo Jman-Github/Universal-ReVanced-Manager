@@ -374,6 +374,8 @@ class LsposedViewModel : ViewModel(), KoinComponent {
                 completeInstall(candidate)
             }
             is InstallerManager.InstallPlan.External -> launchExternal(plan, candidate)
+            is InstallerManager.InstallPlan.RootPlayStore ->
+                throw IllegalStateException(app.getString(R.string.lsposed_root_mount_unsupported))
             is InstallerManager.InstallPlan.Mount ->
                 throw IllegalStateException(app.getString(R.string.lsposed_root_mount_unsupported))
         }
@@ -476,7 +478,16 @@ class LsposedViewModel : ViewModel(), KoinComponent {
                 clearExternalInstall(plan)
                 launchTask(app.getString(R.string.lsposed_busy_installing_module)) {
                     try {
+                        val attributionError = installerManager.tryFinalizePlayStoreAttribution(plan)
                         completeInstall(candidate)
+                        attributionError?.let { error ->
+                            app.toast(
+                                app.getString(
+                                    R.string.installer_play_store_attribution_failed,
+                                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                                )
+                            )
+                        }
                     } catch (error: Exception) {
                         pendingModule = candidate
                         throw error

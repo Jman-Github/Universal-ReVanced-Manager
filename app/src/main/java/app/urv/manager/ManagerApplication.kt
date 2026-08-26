@@ -22,6 +22,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.recoverAbandonedRootExternalInstalls
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
@@ -52,6 +53,8 @@ import app.urv.manager.util.savedAppLauncherShortcutCapacity
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import coil3.SingletonImageLoader
 import coil3.ImageLoader
 import coil3.gif.AnimatedImageDecoder
@@ -76,6 +79,7 @@ import java.io.File
 
 class ManagerApplication : Application() {
     private val scope = MainScope()
+    private var rootExternalInstallRecoveryJob: Job? = null
     private val prefs: PreferencesManager by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
     private val patchProfileRepository: PatchProfileRepository by inject()
@@ -305,6 +309,9 @@ class ManagerApplication : Application() {
             override fun onActivityResumed(activity: Activity) {
                 AppForeground.onResumed()
                 bundleUpdateWebSocketCoordinator.onAppForegroundChanged(true)
+                if (activity is MainActivity) {
+                    scheduleAbandonedRootExternalInstallRecovery()
+                }
                 scope.launch {
                     if (prefs.autoPatchEnabled.get()) {
                         reconcileAutoPatchNotificationPermission(
@@ -331,6 +338,26 @@ class ManagerApplication : Application() {
                 }
             }
         })
+    }
+
+    private fun scheduleAbandonedRootExternalInstallRecovery() {
+        if (rootExternalInstallRecoveryJob?.isActive == true) return
+        rootExternalInstallRecoveryJob = scope.launch(Dispatchers.IO) {
+            while (true) {
+                val retryAfterMs = runCatching {
+                    recoverAbandonedRootExternalInstalls(
+                        this@ManagerApplication,
+                        rootInstaller,
+                        rootMountCoordinator,
+                        pm
+                    )
+                }.getOrElse { error ->
+                    Log.e(tag, "Failed to recover an abandoned root installer", error)
+                    return@launch
+                } ?: return@launch
+                delay(retryAfterMs.coerceAtLeast(1L))
+            }
+        }
     }
 
     override fun attachBaseContext(base: Context?) {

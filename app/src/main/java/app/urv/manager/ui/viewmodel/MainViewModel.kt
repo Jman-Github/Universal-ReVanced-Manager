@@ -15,7 +15,6 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.batch.BatchPlanResolver
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
-import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchSelectionRepository
 import app.urv.manager.domain.repository.SerializedSelection
@@ -25,9 +24,6 @@ import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.model.navigation.SelectedApplicationInfo
 import app.urv.manager.ui.theme.Theme
 import app.urv.manager.util.PatchSelection
-import app.urv.manager.util.PM
-import app.urv.manager.patcher.split.SplitApkInspector
-import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.AnnouncementDeepLinkIntent
 import app.urv.manager.util.BatchPatchIntents
 import app.urv.manager.util.BundleDeepLink
@@ -40,12 +36,10 @@ import app.urv.manager.util.SplitArchiveIntent
 import app.urv.manager.util.SplitArchiveIntentParser
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
@@ -64,8 +58,6 @@ class MainViewModel(
     private val patchSelectionRepository: PatchSelectionRepository,
     private val downloadedAppRepository: DownloadedAppRepository,
     private val installedAppRepository: InstalledAppRepository,
-    private val fs: Filesystem,
-    private val pm: PM,
     private val keystoreManager: KeystoreManager,
     private val batchPlanResolver: BatchPlanResolver,
     private val app: Application,
@@ -133,32 +125,12 @@ class MainViewModel(
             ?.takeIf(String::isNotBlank)
             ?: return null
         val file = File(sourcePath).takeIf(File::isFile) ?: return null
-        val packageInfo = runCatching {
-            withContext(Dispatchers.IO) {
-                if (SplitApkPreparer.isSplitArchive(file)) {
-                    val extracted = SplitApkInspector.extractRepresentativeApk(file, fs.tempDir)
-                    try {
-                        extracted?.file?.let(pm::getPackageInfo)
-                    } finally {
-                        extracted?.cleanup?.invoke()
-                    }
-                } else {
-                    pm.getPackageInfo(file)
-                }
-            }
-        }.onFailure { error ->
-            Log.w(tag, "Remembered repatch source is unusable: $sourcePath", error)
-        }.getOrNull() ?: return null
-        if (packageInfo.packageName != packageName) return null
         return SelectedApp.Local(
             packageName = packageName,
-            version = packageInfo.versionName
-                ?.takeIf(String::isNotBlank)
-                ?: sourceRecord.version,
+            version = sourceRecord.version,
             file = file,
             temporary = false,
-            resolved = true,
-            versionCode = pm.getVersionCode(packageInfo)
+            resolved = false
         )
     }
 

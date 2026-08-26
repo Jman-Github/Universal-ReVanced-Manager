@@ -131,7 +131,11 @@ class AdvancedSettingsViewModel(
     }
 
     fun setPrimaryInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
-        if (token == InstallerManager.Token.AutoSaved) {
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+        if (token == InstallerManager.Token.AutoSaved ||
+            token == InstallerManager.Token.RootPlayStore
+        ) {
             // Request/verify root in background when user explicitly selects the rooted mount installer.
             runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
         }
@@ -143,7 +147,9 @@ class AdvancedSettingsViewModel(
     }
 
     fun setFallbackInstaller(token: InstallerManager.Token) = viewModelScope.launch(Dispatchers.Default) {
-        if (token == InstallerManager.Token.AutoSaved) {
+        if (token == InstallerManager.Token.AutoSaved ||
+            token == InstallerManager.Token.RootPlayStore
+        ) {
             runCatching { withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() } }
         }
         val primary = installerManager.getPrimaryToken()
@@ -454,9 +460,13 @@ private fun tokensEqual(a: InstallerManager.Token, b: InstallerManager.Token): B
     a === b -> true
     a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
         a.componentName == b.componentName
-    a.isShizukuVariant() && b.isShizukuVariant() -> true
+    a.baseInstallerVariant() == b.baseInstallerVariant() -> true
     else -> false
 }
 
-private fun InstallerManager.Token.isShizukuVariant(): Boolean =
-    this == InstallerManager.Token.Shizuku || this == InstallerManager.Token.ShizukuGooglePlay
+private fun InstallerManager.Token.baseInstallerVariant(): InstallerManager.Token = when (this) {
+    InstallerManager.Token.PlayStore -> InstallerManager.Token.Internal
+    InstallerManager.Token.RootPlayStore -> InstallerManager.Token.AutoSaved
+    InstallerManager.Token.ShizukuGooglePlay -> InstallerManager.Token.Shizuku
+    else -> this
+}

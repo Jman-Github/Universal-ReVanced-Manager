@@ -9,9 +9,11 @@ class MountInstallerRoutingContractTest {
     @Test
     fun `installer tokens must match the patch mode`() {
         assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.AutoSaved, true))
+        assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.RootPlayStore, true))
         assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.Internal, true))
         assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.Shizuku, true))
         assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.AutoSaved, false))
+        assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.RootPlayStore, false))
         assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Internal, false))
         assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Shizuku, false))
     }
@@ -127,8 +129,26 @@ class MountInstallerRoutingContractTest {
     fun `renamed packages cannot resolve to mount`() {
         val manager = source("domain/installer/InstallerManager.kt")
         assertTrue(manager.contains("buildSequence(target, sourceFile, allowMount)"))
-        assertTrue(manager.contains("if (!allowMount && token == Token.AutoSaved)"))
+        assertTrue(
+            manager.contains(
+                "if (!allowMount && baseInstallerToken(token) == Token.AutoSaved)"
+            )
+        )
         assertTrue(manager.contains("allowMount = false"))
+    }
+
+    @Test
+    fun `matching stock identity avoids replacement`() {
+        assertFalse(
+            rootMountStockReplacementRequired(
+                installedMatchesSourceVersion = true
+            )
+        )
+        assertTrue(
+            rootMountStockReplacementRequired(
+                installedMatchesSourceVersion = false
+            )
+        )
     }
 
     @Test
@@ -136,8 +156,10 @@ class MountInstallerRoutingContractTest {
         val manager = source("domain/installer/InstallerManager.kt")
         val sequence = manager.substringAfter("private fun buildSequence(")
             .substringBefore("private fun availabilityFor(")
+            .replace(Regex("\\s+"), " ")
         val rejectedPrimary = sequence.indexOf(
-            "val rejectedPrimaryMount = !allowMount && primary == Token.AutoSaved"
+            "val rejectedPrimaryMount = " +
+                "!allowMount && baseInstallerToken(primary) == Token.AutoSaved"
         )
         val earlyFallback = sequence.indexOf(
             "if (rejectedPrimaryMount && fallback != primary) add(fallback)"
@@ -155,9 +177,12 @@ class MountInstallerRoutingContractTest {
         val rootMount = patcher.substringAfter("private suspend fun performRootMount(")
             .substringBefore("fun confirmRootDowngrade()")
 
-        assertTrue(rootMount.contains("else if (rootInstaller.isAppMounted(packageName))"))
+        assertTrue(rootMount.contains("val appMounted ="))
+        assertTrue(rootMount.contains("rootMountStockReplacementRequired("))
+        assertTrue(rootMount.contains("appMounted ->"))
         assertTrue(rootMount.contains("emptyList()"))
         assertTrue(rootMount.contains("applicationInfo.sourceDir resolves through the active bind mount"))
+        assertTrue(rootMount.contains("withContext(Dispatchers.IO)"))
     }
 
     @Test
@@ -176,7 +201,8 @@ class MountInstallerRoutingContractTest {
         assertTrue(rootMount.contains("Patched APK source version code is unavailable"))
         assertTrue(rootMount.contains("input.selectedApp.version?.takeIf(String::isNotBlank)"))
         assertTrue(rootMount.contains("input.selectedApp.versionCode"))
-        assertTrue(rootMount.contains("installedBaseInfo.versionName != sourceVersionName"))
+        assertTrue(rootMount.contains("val installedMatchesSourceVersion ="))
+        assertTrue(rootMount.contains("installedBaseInfo.versionName == sourceVersionName"))
         assertTrue(rootMount.contains("?.takeUnless { originalInputIsSplit }"))
         assertFalse(rootMount.contains("throw IllegalArgumentException(app.getString(R.string.mount_split_not_supported))"))
     }
@@ -261,6 +287,15 @@ class MountInstallerRoutingContractTest {
         val batchCoordinator = source("domain/batch/BatchPatchCoordinator.kt")
         val batchModels = source("domain/batch/BatchPatchModels.kt")
         val installerManager = source("domain/installer/InstallerManager.kt")
+        val rootInstaller = source("domain/installer/RootInstaller.kt")
+        val rootPlayStoreInstall = source("domain/installer/root/RootPlayStoreInstall.kt")
+        val rootExternalInstallRecovery = source(
+            "domain/installer/root/RootExternalInstallRecovery.kt"
+        )
+        val installerPicker = source("ui/component/patcher/InstallPickerDialog.kt")
+        val installerConfiguration = source(
+            "ui/component/patcher/ShizukuConfigurationDialog.kt"
+        )
         val patchAvailability = source("patcher/patch/PatchAvailability.kt")
         val filesystem = source("data/platform/Filesystem.kt")
         val appInfoScreen = source("ui/screen/InstalledAppInfoScreen.kt")
@@ -325,7 +360,8 @@ class MountInstallerRoutingContractTest {
         assertTrue(patcher.contains("hasUsableStockIdentity = hasUsableStockIdentity"))
         assertTrue(patcher.contains("patchedVersionMatchesSource = patched.versionName == sourceVersionName"))
         assertTrue(patcher.contains("supportsRootMount = patchedPackageInfo?.packageName == packageName"))
-        assertTrue(patcher.contains("val verifiedStockSource = verifiedStandaloneStockCandidates("))
+        assertTrue(patcher.contains("stockNeedsReplacement -> {"))
+        assertTrue(patcher.contains("val stock = verifiedStandaloneStockCandidates("))
         assertTrue(patcher.contains("installedSignerMatchesStockSource(installedBaseInfo, candidate)"))
         assertTrue(patcher.contains("private fun refreshRootMountModeOverrideAsync()"))
         assertTrue(patcher.contains("rootMountModeOverrideRefreshJob?.cancel()"))
@@ -339,7 +375,11 @@ class MountInstallerRoutingContractTest {
         assertTrue(selectedInstall.contains("withContext(Dispatchers.IO)"))
         assertTrue(selectedInstall.contains("canSelectRootMountForPatchedOutput()"))
         assertTrue(patcher.contains("allowModeOverride = true"))
-        assertTrue(patcher.contains("val requestedMount = token == InstallerManager.Token.AutoSaved"))
+        assertTrue(
+            patcher.contains(
+                "installerManager.baseInstallerToken(token) == InstallerManager.Token.AutoSaved"
+            )
+        )
         assertTrue(patcher.contains("allowMount = requestedMount && expectedPackage == packageName"))
         assertTrue(batchActions.contains("installerTokenSelectableForPatchedOutput("))
         assertTrue(batchActions.contains("withContext(Dispatchers.IO)"))
@@ -397,6 +437,16 @@ class MountInstallerRoutingContractTest {
         assertTrue(installerManager.contains("com.android.vending.splits.required"))
         assertTrue(installerManager.contains("packageInfo.splitNames.isNullOrEmpty()"))
         assertTrue(installerManager.contains("packageInfo.applicationInfo?.splitSourceDirs.isNullOrEmpty()"))
+        assertTrue(installerManager.contains("InstallPlan.Mount(target, installAsPlayStore = true)"))
+        assertFalse(rootInstaller.contains("pm set-installer"))
+        assertTrue(rootInstaller.contains("stageInstalledBaseApk"))
+        assertTrue(rootInstaller.contains("installAsPlayStore"))
+        assertTrue(rootPlayStoreInstall.contains("reinstallMountedStockAsPlayStore"))
+        assertTrue(rootPlayStoreInstall.contains("restoreMountAfterPackageChange = true"))
+        assertTrue(rootExternalInstallRecovery.contains("record.restoreMountAfterPackageChange"))
+        assertTrue(installerPicker.contains("PlayStoreSourceConfigurationDialog("))
+        assertFalse(installerPicker.contains("val showPlayStoreToggle"))
+        assertTrue(installerConfiguration.contains("fun PlayStoreSourceConfigurationDialog("))
         assertTrue(batchCoordinator.contains("R.string.mount_split_not_supported"))
         assertTrue(batchCoordinator.contains("R.string.root_mount_incompatible_output"))
         assertTrue(batchCoordinator.contains("val crossModeMountRequested = installerToken != null && !item.useMount && requestedMount"))

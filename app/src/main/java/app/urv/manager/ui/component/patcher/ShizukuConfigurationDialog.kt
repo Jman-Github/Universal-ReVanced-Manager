@@ -20,6 +20,53 @@ import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.util.transparentListItemColors
 
 // Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+@Composable
+fun PlayStoreSourceConfigurationDialog(
+    installerName: String,
+    installAsPlayStore: Boolean,
+    onInstallAsPlayStoreChange: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showPlayStoreWarning by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            CenteredDialogTitle(
+                stringResource(R.string.installer_configure_title, installerName)
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.done))
+            }
+        },
+        text = {
+            ConfigurationToggle(
+                title = stringResource(R.string.installer_play_store_mode),
+                description = stringResource(R.string.installer_play_store_mode_description),
+                checked = installAsPlayStore,
+                onCheckedChange = { enabled ->
+                    if (enabled) showPlayStoreWarning = true
+                    else onInstallAsPlayStoreChange(false)
+                }
+            )
+        }
+    )
+
+    if (showPlayStoreWarning) {
+        PlayStoreInstallerWarningDialog(
+            onConfirm = {
+                onInstallAsPlayStoreChange(true)
+                showPlayStoreWarning = false
+            },
+            onDismiss = { showPlayStoreWarning = false }
+        )
+    }
+}
+
+// Code adapted from Morphe, see third-party/NOTICE for more information
 // https://github.com/MorpheApp/morphe-manager/pull/734
 @Composable
 fun ShizukuConfigurationDialog(
@@ -85,35 +132,12 @@ fun ShizukuConfigurationDialog(
     )
 
     if (showPlayStoreWarning) {
-        AlertDialog(
-            onDismissRequest = { showPlayStoreWarning = false },
-            title = {
-                CenteredDialogTitle(
-                    stringResource(R.string.installer_play_store_warning_title)
-                )
+        PlayStoreInstallerWarningDialog(
+            onConfirm = {
+                onInstallAsPlayStoreChange(true)
+                showPlayStoreWarning = false
             },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.installer_play_store_warning_message))
-                    Text(
-                        stringResource(R.string.installer_play_store_warning_risk),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPlayStoreWarning = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    onInstallAsPlayStoreChange(true)
-                    showPlayStoreWarning = false
-                }) {
-                    Text(stringResource(R.string.installer_play_store_warning_continue))
-                }
-            }
+            onDismiss = { showPlayStoreWarning = false }
         )
     }
 
@@ -149,6 +173,42 @@ fun ShizukuConfigurationDialog(
             }
         )
     }
+}
+
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+@Composable
+fun PlayStoreInstallerWarningDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            CenteredDialogTitle(
+                stringResource(R.string.installer_play_store_warning_title)
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.installer_play_store_warning_message))
+                Text(
+                    stringResource(R.string.installer_play_store_warning_risk),
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.installer_play_store_warning_continue))
+            }
+        }
+    )
 }
 
 @Composable

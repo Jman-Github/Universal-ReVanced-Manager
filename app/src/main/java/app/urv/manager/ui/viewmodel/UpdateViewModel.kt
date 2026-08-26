@@ -244,6 +244,13 @@ class UpdateViewModel(
                 state = State.FAILED
             }
 
+            is InstallerManager.InstallPlan.RootPlayStore -> {
+                val hint = app.getString(R.string.installer_status_not_supported)
+                app.toast(app.getString(R.string.install_app_fail, hint))
+                installError = hint
+                state = State.FAILED
+            }
+
             is InstallerManager.InstallPlan.Shizuku -> {
                 state = State.INSTALLING
                 try {
@@ -310,9 +317,20 @@ class UpdateViewModel(
         externalInstallTimeoutJob = null
         installerManager.cleanup(plan)
 
-        installError = ""
-        app.toast(app.getString(R.string.installer_external_success, plan.installerLabel))
-        state = State.SUCCESS
+        viewModelScope.launch {
+            val attributionError = installerManager.tryFinalizePlayStoreAttribution(plan)
+            installError = ""
+            app.toast(app.getString(R.string.installer_external_success, plan.installerLabel))
+            state = State.SUCCESS
+            attributionError?.let { error ->
+                app.toast(
+                    app.getString(
+                        R.string.installer_play_store_attribution_failed,
+                        error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                    )
+                )
+            }
+        }
     }
 
     private fun readPersistedDownloadVersion(): String? =

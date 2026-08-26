@@ -27,9 +27,17 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.installer.InstallCancelledException
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionDeadException
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.root.RootMountSuspension
+import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
+import app.urv.manager.domain.installer.root.restore
+import app.urv.manager.domain.installer.root.retire
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.AnnouncementRepository
@@ -128,6 +136,8 @@ class DashboardViewModel(
     val prefs: PreferencesManager,
     private val keystoreManager: KeystoreManager,
     private val installerManager: InstallerManager,
+    private val rootInstaller: RootInstaller,
+    private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
     private val sessionInstaller: SessionInstaller,
     private val pm: PM,
@@ -1180,7 +1190,9 @@ class DashboardViewModel(
                 val label = with(pm) { packageInfo.label() }
                 val plan = withContext(Dispatchers.IO) {
                     installerToken?.let { token ->
-                        require(token != InstallerManager.Token.AutoSaved) {
+                        require(
+                            token != InstallerManager.Token.AutoSaved
+                        ) {
                             app.getString(R.string.installer_status_not_supported)
                         }
                         installerManager.resolvePlanForToken(
@@ -1205,6 +1217,18 @@ class DashboardViewModel(
                         installMergedApkInternally(merged, packageName, label)
                     is InstallerManager.InstallPlan.Mount ->
                         throw IOException(app.getString(R.string.installer_status_not_supported))
+                    // Code adapted from Morphe, see third-party/NOTICE for more information
+                    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+                    is InstallerManager.InstallPlan.RootPlayStore -> {
+                        installAsPlayStoreWithMountRollback(
+                            rootInstaller = rootInstaller,
+                            rootMountCoordinator = rootMountCoordinator,
+                            apkFile = merged,
+                            packageName = packageName,
+                            userId = android.os.Process.myUid() / 100_000
+                        )
+                        true
+                    }
                     is InstallerManager.InstallPlan.Shizuku -> {
                         val result = shizukuInstaller.install(
                             merged,
@@ -2096,7 +2120,7 @@ class DashboardViewModel(
         fun resolve(token: InstallerManager.Token): InstallerManager.InstallPlan? {
             if (
                 token == InstallerManager.Token.None ||
-                token == InstallerManager.Token.AutoSaved
+                installerManager.baseInstallerToken(token) == InstallerManager.Token.AutoSaved
             ) {
                 return null
             }
@@ -2173,9 +2197,62 @@ class DashboardViewModel(
                 pm.getVersionCode(info) to info.lastUpdateTime
             }
         }
+        var suspendedMount: RootMountSuspension? =
+            if (plan.token == InstallerManager.Token.PlayStore) {
+                suspendRootMountForPackageInstall(
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = plan.expectedPackage,
+                    userId = android.os.Process.myUid() / 100_000,
+                    recoveryContext = app
+                )
+            } else {
+                null
+            }
+        suspendedMount?.let { mount ->
+            suspendedMount = null
+            val installed = launchExternalInstallerWithMountFinalization(
+                context = app,
+                targetIntent = plan.intent,
+                suspendedMount = mount,
+                installChanged = {
+                    val current = pm.getPackageInfo(plan.expectedPackage)
+                    if (baseline == null) {
+                        current != null
+                    } else {
+                        current != null &&
+                            (pm.getVersionCode(current) != baseline.first ||
+                        current.lastUpdateTime != baseline.second)
+                    }
+                },
+                activityTimeoutMs = SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS,
+                onLaunched = {
+                    val message = app.getString(
+                        R.string.installer_external_launched,
+                        plan.installerLabel
+                    )
+                    splitMergeStateFlow.update { it.copy(installStatus = message) }
+                    appendSplitMergeLog(message)
+                    app.toast(message)
+                },
+                onRecoveryOwnershipTransferred = {
+                    if (splitMergeExternalInstall === plan) {
+                        splitMergeExternalInstall = null
+                    }
+                },
+                cleanupFile = plan.sharedFile,
+                cleanup = { installerManager.cleanup(plan) }
+            )
+            if (installed) finalizePlayStoreAttribution(plan)
+            return installed
+        }
         try {
             ContextCompat.startActivity(app, plan.intent, null)
         } catch (error: ActivityNotFoundException) {
+            val restoreError = withContext(NonCancellable) {
+                suspendedMount?.let { runCatching { it.restore() }.exceptionOrNull() }
+            }
+            restoreError?.let(error::addSuppressed)
             throw IOException(error.simpleMessage(), error)
         }
         val launchedMessage = app.getString(
@@ -2186,26 +2263,54 @@ class DashboardViewModel(
         appendSplitMergeLog(launchedMessage)
         app.toast(launchedMessage)
 
-        return withTimeoutOrNull(SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS) {
-            do {
-                val current = withContext(Dispatchers.IO) {
-                    pm.getPackageInfo(plan.expectedPackage)
+        try {
+            val installed = withTimeoutOrNull(SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS) {
+                do {
+                    val current = withContext(Dispatchers.IO) {
+                        pm.getPackageInfo(plan.expectedPackage)
+                    }
+                    val changed = if (baseline == null) {
+                        current != null
+                    } else {
+                        current != null &&
+                            (pm.getVersionCode(current) != baseline.first ||
+                                current.lastUpdateTime != baseline.second)
+                    }
+                    if (!changed) {
+                        delay(SPLIT_MERGE_INSTALL_POLL_INTERVAL_MS)
+                    }
+                } while (!changed)
+                true
+            } ?: throw IOException(
+                app.getString(R.string.installer_external_timeout, plan.installerLabel)
+            )
+            val mount = suspendedMount
+            suspendedMount = null
+            mount?.retire()
+            if (installed) finalizePlayStoreAttribution(plan)
+            return installed
+        } catch (error: Throwable) {
+            val mount = suspendedMount
+            if (mount != null) {
+                val restoreError = withContext(NonCancellable) {
+                    runCatching { mount.restore() }.exceptionOrNull()
                 }
-                val changed = if (baseline == null) {
-                    current != null
-                } else {
-                    current != null &&
-                        (pm.getVersionCode(current) != baseline.first ||
-                            current.lastUpdateTime != baseline.second)
-                }
-                if (!changed) {
-                    delay(SPLIT_MERGE_INSTALL_POLL_INTERVAL_MS)
-                }
-            } while (!changed)
-            true
-        } ?: throw IOException(
-            app.getString(R.string.installer_external_timeout, plan.installerLabel)
+                restoreError?.let(error::addSuppressed)
+            }
+            throw error
+        }
+    }
+
+    private suspend fun finalizePlayStoreAttribution(
+        plan: InstallerManager.InstallPlan.External
+    ) {
+        val error = installerManager.tryFinalizePlayStoreAttribution(plan) ?: return
+        val warning = app.getString(
+            R.string.installer_play_store_attribution_failed,
+            error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
         )
+        appendSplitMergeLog(warning)
+        app.toast(warning)
     }
 
     private fun completeSplitMergeInstall(packageName: String) {

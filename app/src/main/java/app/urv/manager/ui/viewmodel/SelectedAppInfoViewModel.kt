@@ -312,7 +312,8 @@ class SelectedAppInfoViewModel(
     val hasRoot = rootInstaller.hasRootAccess()
     var usingMountInstall by savedStateHandle.saveable {
         val configuredMount = !prefs.chooseInstallerPerInstall.getBlocking() &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved
         mutableStateOf(hasRoot && (input.useMount ?: configuredMount))
     }
         private set
@@ -1086,11 +1087,14 @@ class SelectedAppInfoViewModel(
 
     private suspend fun resolveLocalPackageInfo(file: File): PackageInfoResolution {
         if (!file.exists()) return PackageInfoResolution(null)
-        if (file.extension.lowercase(Locale.ROOT) == "apk") {
-            return PackageInfoResolution(pm.getPackageInfo(file))
+        val hasApkExtension = file.extension.equals("apk", ignoreCase = true)
+        if (hasApkExtension) {
+            pm.getPackageInfo(file)?.let { return PackageInfoResolution(it) }
         }
         if (!SplitApkPreparer.isSplitArchive(file)) {
-            return PackageInfoResolution(pm.getPackageInfo(file))
+            return PackageInfoResolution(
+                if (hasApkExtension) null else pm.getPackageInfo(file)
+            )
         }
 
         val resolved = runCatching {
@@ -1319,7 +1323,11 @@ class SelectedAppInfoViewModel(
             installedRecord?.installType == InstallType.MOUNT && !hasRoot ->
                 error(app.getString(R.string.app_source_dialog_option_installed_no_root))
             installedRecord?.installType == InstallType.DEFAULT ||
-                installedRecord?.installType == InstallType.CUSTOM ->
+                installedRecord?.installType == InstallType.PLAY_STORE ||
+                installedRecord?.installType == InstallType.ROOT_PLAY_STORE ||
+                installedRecord?.installType == InstallType.CUSTOM ||
+                installedRecord?.installType == InstallType.SHIZUKU ||
+                installedRecord?.installType == InstallType.SHIZUKU_PLAY_STORE ->
                 error(app.getString(R.string.already_patched))
         }
 
@@ -1548,6 +1556,26 @@ class SelectedAppInfoViewModel(
             else -> PackageInfoResolution(null)
         }
 
+        val unresolvedLocal = selectedApp as? SelectedApp.Local
+        if (
+            unresolvedLocal?.resolved == false &&
+            resolution.packageInfo?.packageName != unresolvedLocal.packageName
+        ) {
+            Log.w(
+                TAG,
+                "Remembered repatch source does not match ${unresolvedLocal.packageName}: " +
+                    (resolution.packageInfo?.packageName ?: "unreadable")
+            )
+            previousCleanup?.invoke()
+            val suggestedVersion = runCatching {
+                bundleRepository.awaitReady()
+                bundleRepository.suggestedVersions.first()[unresolvedLocal.packageName]
+            }.getOrNull()
+            app.toast(app.getString(R.string.repatch_source_missing_description))
+            selectedApp = SelectedApp.Search(unresolvedLocal.packageName, suggestedVersion)
+            return@launch
+        }
+
         selectedAppInfo = resolution.packageInfo
         selectedAppInfoLabelOverride = resolution.labelOverride
         selectedAppInfoIconOverride = resolution.iconOverride
@@ -1721,7 +1749,8 @@ class SelectedAppInfoViewModel(
 
     private fun shouldRemoveGmsCore(useMount: Boolean): Boolean =
         useMount && removeGmsCoreForPrimaryMountEnabled &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved
 
 
     fun updateConfiguration(

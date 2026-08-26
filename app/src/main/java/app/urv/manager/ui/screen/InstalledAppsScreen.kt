@@ -236,6 +236,8 @@ fun InstalledAppsScreen(
                                 hasSavedCopy = hasSavedCopy,
                                 savedApkAbiLabel = savedApkAbiLabel,
                                 isMounted = isMounted,
+                                isPlayStoreInstallerSource =
+                                    viewModel.playStoreInstallerSourceMap[packageName] == true,
                                 supportsRootMount = supportsRootMount,
                                 bundleSummaries = bundleSummaries,
                                 showBundleUpdateBadges = showSavedAppBundleUpdateBadges,
@@ -266,6 +268,7 @@ fun InstalledAppsScreen(
             apps = installedApps.orEmpty(),
             appInfoMap = viewModel.packageInfoMap,
             appLabelMap = viewModel.appLabelMap,
+            playStoreInstallerSourceMap = viewModel.playStoreInstallerSourceMap,
             onDismissRequest = onDismissOrderDialog,
             onConfirm = { ordered ->
                 viewModel.reorderApps(ordered.map { it.currentPackageName })
@@ -290,6 +293,7 @@ private fun InstalledAppCard(
     hasSavedCopy: Boolean,
     savedApkAbiLabel: String?,
     isMounted: Boolean,
+    isPlayStoreInstallerSource: Boolean,
     supportsRootMount: Boolean,
     bundleSummaries: List<InstalledAppsViewModel.AppBundleSummary>,
     showBundleUpdateBadges: Boolean,
@@ -303,10 +307,11 @@ private fun InstalledAppCard(
     val context = LocalContext.current
     val isSaved = installedApp.installType == InstallType.SAVED ||
         (installedApp.installType == InstallType.MOUNT && !supportsRootMount)
-    val displayInstallType = if (isSaved && installedApp.installType == InstallType.MOUNT) {
-        InstallType.SAVED
-    } else {
-        installedApp.installType
+    val displayInstallType = when {
+        isSaved && installedApp.installType == InstallType.MOUNT -> InstallType.SAVED
+        installedApp.installType == InstallType.MOUNT && isPlayStoreInstallerSource ->
+            InstallType.ROOT_PLAY_STORE
+        else -> installedApp.installType
     }
     val displayPackageName = if (isSaved) {
         installedApp.originalPackageName.takeIf { it.isNotBlank() }
@@ -729,6 +734,7 @@ private fun AppsOrderDialog(
     apps: List<InstalledApp>,
     appInfoMap: Map<String, PackageInfo?>,
     appLabelMap: Map<String, String>,
+    playStoreInstallerSourceMap: Map<String, Boolean>,
     onDismissRequest: () -> Unit,
     onConfirm: (List<InstalledApp>) -> Unit
 ) {
@@ -772,6 +778,8 @@ private fun AppsOrderDialog(
                                 app = app,
                                 packageInfo = appInfoMap[app.currentPackageName],
                                 appLabel = appLabelMap[app.currentPackageName],
+                                isPlayStoreInstallerSource =
+                                    playStoreInstallerSourceMap[app.currentPackageName] == true,
                                 interactionSource = interactionSource
                             )
                         }
@@ -788,6 +796,7 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
     app: InstalledApp,
     packageInfo: PackageInfo?,
     appLabel: String?,
+    isPlayStoreInstallerSource: Boolean,
     interactionSource: MutableInteractionSource
 ) {
     val displayPackageName = if (app.installType == InstallType.SAVED) {
@@ -815,7 +824,14 @@ private fun ReorderableCollectionItemScope.AppsOrderRow(
                 style = MaterialTheme.typography.bodyLarge,
                 defaultText = displayPackageName
             )
-            val installTypeLabel = stringResource(app.installType.stringResource)
+            val displayInstallType = if (
+                app.installType == InstallType.MOUNT && isPlayStoreInstallerSource
+            ) {
+                InstallType.ROOT_PLAY_STORE
+            } else {
+                app.installType
+            }
+            val installTypeLabel = stringResource(displayInstallType.stringResource)
             Text(
                 text = installTypeLabel,
                 style = MaterialTheme.typography.bodySmall,

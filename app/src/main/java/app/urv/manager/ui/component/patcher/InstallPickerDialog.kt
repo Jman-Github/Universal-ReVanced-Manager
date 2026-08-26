@@ -66,27 +66,54 @@ fun InstallerPickerDialog(
     val installerManager: InstallerManager = koinInject()
     val prefs: PreferencesManager = koinInject()
     val scope = rememberCoroutineScope()
-    val installAsPlayStore by prefs.shizukuInstallAsPlayStore.getAsState()
+    val shizukuInstallAsPlayStore by prefs.shizukuInstallAsPlayStore.getAsState()
     val autoInstallWithShizuku by prefs.autoInstallWithShizuku.getAsState()
     val autoUninstallWithShizuku by prefs.autoUninstallWithShizuku.getAsState()
     // Code adapted from Morphe, see third-party/NOTICE for more information
-    // https://github.com/MorpheApp/morphe-manager/pull/734
+    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
     val visibleOptions = remember(options) {
-        options.filterNot { it.token == InstallerManager.Token.ShizukuGooglePlay }
+        options.filterNot { option -> installerManager.usesPlayStoreSource(option.token) }
+    }
+    fun playStoreModeAvailable(token: InstallerManager.Token): Boolean {
+        val configuredToken = installerManager.withPlayStoreMode(token, true)
+        return options.any { option ->
+            option.token == configuredToken && option.availability.available
+        }
     }
     var showShizukuConfiguration by remember { mutableStateOf(false) }
+    var playStoreConfigurationToken by remember {
+        mutableStateOf<InstallerManager.Token?>(null)
+    }
     var selectedToken by remember(initialSelection) {
         mutableStateOf(
             initialSelection
-                ?.let { installerManager.withPlayStoreSource(it, false) }
+                ?.let { token ->
+                    val baseToken = installerManager.baseInstallerToken(token)
+                    baseToken.takeIf { candidate ->
+                        visibleOptions.any { it.token == candidate }
+                    } ?: token
+                }
                 ?: visibleOptions.firstOrNull { it.availability.available }?.token
                 ?: visibleOptions.firstOrNull()?.token
                 ?: InstallerManager.Token.Internal
         )
     }
+    var installAsPlayStore by remember(initialSelection) {
+        mutableStateOf(
+            initialSelection?.let(::playStoreModeAvailable) == true &&
+                (installerManager.usesPlayStoreSource(initialSelection) ||
+                    (installerManager.isShizukuToken(initialSelection) &&
+                        shizukuInstallAsPlayStore))
+        )
+    }
 
     LaunchedEffect(visibleOptions, initialSelection) {
-        val normalizedInitial = initialSelection?.let { installerManager.withPlayStoreSource(it, false) }
+        val normalizedInitial = initialSelection?.let { token ->
+            val baseToken = installerManager.baseInstallerToken(token)
+            baseToken.takeIf { candidate ->
+                visibleOptions.any { it.token == candidate }
+            } ?: token
+        }
         val fallback = normalizedInitial
             ?.takeIf { selection -> visibleOptions.any { it.token == selection } }
             ?: visibleOptions.firstOrNull { it.availability.available }?.token
@@ -97,8 +124,19 @@ fun InstallerPickerDialog(
         }
     }
 
+    LaunchedEffect(selectedToken) {
+        if (!installerManager.supportsPlayStoreMode(selectedToken) ||
+            !playStoreModeAvailable(selectedToken)
+        ) {
+            installAsPlayStore = false
+        }
+    }
+
+    val effectiveToken = installerManager.withPlayStoreMode(selectedToken, installAsPlayStore)
     val confirmEnabled =
-        visibleOptions.find { it.token == selectedToken }?.availability?.available == true
+        (options.find { it.token == effectiveToken }
+            ?: visibleOptions.find { it.token == selectedToken})
+            ?.availability?.available == true
     val scrollState = rememberScrollState()
 
     AlertDialog(
@@ -111,7 +149,7 @@ fun InstallerPickerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    onConfirm(installerManager.withPlayStoreSource(selectedToken, installAsPlayStore))
+                    onConfirm(effectiveToken)
                     onDismiss()
                 },
                 enabled = confirmEnabled
@@ -130,6 +168,10 @@ fun InstallerPickerDialog(
                     val selected = option.token == selectedToken
                     val isShizukuOption = option.token == InstallerManager.Token.Shizuku ||
                         option.token == InstallerManager.Token.ShizukuGooglePlay
+                    val hasPlayStoreConfiguration =
+                        (option.token == InstallerManager.Token.Internal ||
+                            option.token == InstallerManager.Token.AutoSaved) &&
+                            playStoreModeAvailable(option.token)
                     val desc = option.description?.takeIf { it.isNotBlank() }
                     val statusBadges = buildList {
                         option.availability.reason?.let { add(context.getString(it)) }
@@ -137,12 +179,20 @@ fun InstallerPickerDialog(
 
                     ListItem(
                         modifier = Modifier.clickable(enabled = enabled) {
-                            if (enabled) selectedToken = option.token
+                            if (enabled) {
+                                selectedToken = option.token
+                                installAsPlayStore =
+                                    installerManager.usesPlayStoreSource(option.token) ||
+                                        (installerManager.isShizukuToken(option.token) &&
+                                            shizukuInstallAsPlayStore)
+                            }
                         },
                         colors = transparentListItemColors,
                         leadingContent = {
                             val iconDrawable = option.icon
                             val useInstallerIcon = iconDrawable != null && when (option.token) {
+                                InstallerManager.Token.PlayStore -> true
+                                InstallerManager.Token.RootPlayStore -> true
                                 InstallerManager.Token.Shizuku -> true
                                 InstallerManager.Token.ShizukuGooglePlay -> true
                                 is InstallerManager.Token.Component -> true
@@ -230,6 +280,22 @@ fun InstallerPickerDialog(
                                 Text(stringResource(R.string.configure))
                             }
                         }
+                    } else if (hasPlayStoreConfiguration) {
+                        FilledTonalButton(
+                            onClick = {
+                                if (selectedToken != option.token) {
+                                    installAsPlayStore = false
+                                }
+                                selectedToken = option.token
+                                playStoreConfigurationToken = option.token
+                            },
+                            enabled = enabled,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text(stringResource(R.string.configure))
+                        }
                     }
                 }
             }
@@ -238,10 +304,13 @@ fun InstallerPickerDialog(
 
     if (showShizukuConfiguration) {
         ShizukuConfigurationDialog(
-            installAsPlayStore = installAsPlayStore,
+            installAsPlayStore = shizukuInstallAsPlayStore,
             autoInstall = autoInstallWithShizuku,
             autoUninstallOnConflict = autoUninstallWithShizuku,
             onInstallAsPlayStoreChange = { enabled ->
+                if (installerManager.isShizukuToken(selectedToken)) {
+                    installAsPlayStore = enabled
+                }
                 scope.launch { installerManager.updateShizukuPlayStoreMode(enabled) }
             },
             onAutoInstallChange = { enabled ->
@@ -251,6 +320,21 @@ fun InstallerPickerDialog(
                 scope.launch { prefs.autoUninstallWithShizuku.update(enabled) }
             },
             onDismiss = { showShizukuConfiguration = false }
+        )
+    }
+
+    playStoreConfigurationToken?.let { configurationToken ->
+        PlayStoreSourceConfigurationDialog(
+            installerName = visibleOptions
+                .firstOrNull { it.token == configurationToken }
+                ?.label
+                .orEmpty(),
+            installAsPlayStore = selectedToken == configurationToken && installAsPlayStore,
+            onInstallAsPlayStoreChange = { enabled ->
+                selectedToken = configurationToken
+                installAsPlayStore = enabled
+            },
+            onDismiss = { playStoreConfigurationToken = null }
         )
     }
 }

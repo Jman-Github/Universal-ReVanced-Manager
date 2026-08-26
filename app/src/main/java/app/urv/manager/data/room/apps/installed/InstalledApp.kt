@@ -8,10 +8,15 @@ import app.universal.revanced.manager.R
 
 enum class InstallType(val stringResource: Int) {
     DEFAULT(R.string.install_type_system_installer),
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+    PLAY_STORE(R.string.install_type_play_store),
+    ROOT_PLAY_STORE(R.string.install_type_root_play_store),
     CUSTOM(R.string.install_type_custom_installer),
     MOUNT(R.string.mount_install),
     SAVED(R.string.saved_install),
-    SHIZUKU(R.string.install_type_shizuku_label)
+    SHIZUKU(R.string.install_type_shizuku_label),
+    SHIZUKU_PLAY_STORE(R.string.install_type_shizuku_play_store)
 }
 
 @Entity(tableName = "installed_app")

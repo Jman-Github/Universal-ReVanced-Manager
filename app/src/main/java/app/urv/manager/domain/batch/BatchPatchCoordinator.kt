@@ -24,15 +24,24 @@ import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
 import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
 import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
 import app.urv.manager.domain.installer.rootMountStockIdentityUsable
+import app.urv.manager.domain.installer.rootMountStockReplacementRequired
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountSuspension
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.RootRecoveryState
 import app.urv.manager.domain.installer.root.describeOutcome
+import app.urv.manager.domain.installer.root.enableProcessDeathRecovery
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.reinstallMountedStockAsPlayStore
+import app.urv.manager.domain.installer.root.restore
+import app.urv.manager.domain.installer.root.retire
+import app.urv.manager.domain.installer.root.requireSuccess
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
@@ -53,6 +62,7 @@ import app.urv.manager.util.PM
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
+import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toastHandle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -86,7 +96,9 @@ import java.util.concurrent.atomic.AtomicReference
 internal data class BatchActivityRequest(
     val requestId: String,
     val intent: Intent,
-    val completion: CompletableDeferred<ActivityResult>
+    val completion: CompletableDeferred<ActivityResult>,
+    val rootRecoveryRequestId: String? = null,
+    val callerWillFinalize: CompletableDeferred<Boolean>? = null
 )
 
 internal data class BatchRootDowngradeRequest(
@@ -103,7 +115,9 @@ internal data class BatchFallbackInstallRequest(
 
 private data class BatchInstallAttempt(
     val failure: String? = null,
-    val allowFallback: Boolean = true
+    val allowFallback: Boolean = true,
+    val warning: String? = null,
+    val playStoreAttributionFailed: Boolean = false
 ) {
     val succeeded: Boolean get() = failure == null
 }
@@ -150,7 +164,12 @@ internal fun batchInstallPlanToken(
     plan: InstallerManager.InstallPlan
 ): InstallerManager.Token = when (plan) {
     is InstallerManager.InstallPlan.Internal -> InstallerManager.Token.Internal
-    is InstallerManager.InstallPlan.Mount -> InstallerManager.Token.AutoSaved
+    is InstallerManager.InstallPlan.RootPlayStore -> InstallerManager.Token.RootPlayStore
+    is InstallerManager.InstallPlan.Mount -> if (plan.installAsPlayStore) {
+        InstallerManager.Token.RootPlayStore
+    } else {
+        InstallerManager.Token.AutoSaved
+    }
     is InstallerManager.InstallPlan.Shizuku -> plan.token
     is InstallerManager.InstallPlan.External -> plan.token
 }
@@ -1402,7 +1421,9 @@ class BatchPatchCoordinator(
     ): Boolean {
         if (item.hadPatchFailures) return false
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
-        val removeGmsCore = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+        val removeGmsCore = installerManager.baseInstallerToken(
+            installerManager.getPrimaryToken()
+        ) == InstallerManager.Token.AutoSaved &&
             prefs.removeGmsCoreForPrimaryMount.get()
         if (!availabilityEnabled && !removeGmsCore) return true
 
@@ -1538,7 +1559,8 @@ class BatchPatchCoordinator(
         val resolvedToken = explicitToken
             ?: InstallerManager.Token.AutoSaved.takeIf { item.useMount }
         val supportsRootMount = targetPackage == item.packageName
-        val requestedMount = resolvedToken == InstallerManager.Token.AutoSaved
+        val requestedMount = resolvedToken?.let(installerManager::baseInstallerToken) ==
+            InstallerManager.Token.AutoSaved
         val crossModeMountRequested = installerToken != null && !item.useMount && requestedMount
         val installedPackageInfo = if (crossModeMountRequested) {
             pm.getPackageInfo(item.packageName)
@@ -1713,7 +1735,14 @@ class BatchPatchCoordinator(
                             }
                         }
                         if (operation.status == PackageInstaller.STATUS_SUCCESS) {
-                            successfulInstallType = InstallType.SHIZUKU
+                            successfulInstallType = if (
+                                plan.installerPackageNameOverride ==
+                                ShizukuInstaller.GOOGLE_PLAY_PACKAGE
+                            ) {
+                                InstallType.SHIZUKU_PLAY_STORE
+                            } else {
+                                InstallType.SHIZUKU
+                            }
                             BatchInstallAttempt()
                         } else {
                             BatchInstallAttempt(
@@ -1726,11 +1755,26 @@ class BatchPatchCoordinator(
                         }
                     }
 
+                    // Code adapted from Morphe, see third-party/NOTICE for more information
+                    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+                    is InstallerManager.InstallPlan.RootPlayStore -> {
+                        installAsPlayStoreWithMountRollback(
+                            rootInstaller = rootInstaller,
+                            rootMountCoordinator = rootMountCoordinator,
+                            apkFile = file,
+                            packageName = targetPackage,
+                            userId = android.os.Process.myUid() / 100_000
+                        )
+                        successfulInstallType = InstallType.ROOT_PLAY_STORE
+                        BatchInstallAttempt()
+                    }
+
                     is InstallerManager.InstallPlan.Mount -> {
                         installWithRootMount(
                             item = item,
                             patchedFile = file,
-                            targetPackage = targetPackage
+                            targetPackage = targetPackage,
+                            installAsPlayStore = plan.installAsPlayStore
                         ).also { mountAttempt ->
                             if (mountAttempt.succeeded) {
                                 successfulInstallType = InstallType.MOUNT
@@ -1744,7 +1788,9 @@ class BatchPatchCoordinator(
                             targetPackage = targetPackage
                         ).also { externalAttempt ->
                             if (externalAttempt.succeeded) {
-                                successfulInstallType = InstallType.CUSTOM
+                                successfulInstallType = if (
+                                    plan.token == InstallerManager.Token.PlayStore
+                                ) InstallType.PLAY_STORE else InstallType.CUSTOM
                                 successfulCustomInstallerPackageName =
                                     (plan.token as? InstallerManager.Token.Component)
                                         ?.componentName
@@ -1762,6 +1808,13 @@ class BatchPatchCoordinator(
 
         installed = attempt.succeeded
         result = attempt.failure
+        val installWarning = attempt.warning
+        if (
+            successfulInstallType == InstallType.PLAY_STORE &&
+            attempt.playStoreAttributionFailed
+        ) {
+            successfulInstallType = InstallType.DEFAULT
+        }
         if (!installed && attempt.allowFallback) {
             val primaryToken = installerManager.getPrimaryToken()
             val fallbackToken = installerManager.getFallbackToken()
@@ -1776,7 +1829,8 @@ class BatchPatchCoordinator(
                 fallbackToken,
                 item.useMount
             ) && !(
-                fallbackToken == InstallerManager.Token.AutoSaved &&
+                installerManager.baseInstallerToken(fallbackToken) ==
+                    InstallerManager.Token.AutoSaved &&
                     targetPackage != item.packageName
                 )
             val fallbackEntry = fallbackToken
@@ -1808,7 +1862,8 @@ class BatchPatchCoordinator(
 
         if (installed) {
             withContext(NonCancellable) {
-                var metadataWarning: String? = null
+                var installMessage = installWarning
+                var metadataSaved = true
                 val persistedInstalledItem = try {
                     persistInstalledPatchedItem(
                         item = item,
@@ -1823,23 +1878,26 @@ class BatchPatchCoordinator(
                         "Installed ${item.packageName}, but failed to update its saved app metadata",
                         error
                     )
-                    metadataWarning = app.getString(
+                    metadataSaved = false
+                    val metadataWarning = app.getString(
                         R.string.batch_patch_metadata_save_failed,
                         error.message ?: error.javaClass.simpleName
                     )
+                    installMessage = listOfNotNull(installMessage, metadataWarning)
+                        .joinToString("\n")
                     PersistedBatchPatchedItem(
                         file = file,
                         repatchSourcePath = item.repatchSourcePath,
                         sourceEntryKey = item.sourceEntryKey
                     )
                 }
-                if (metadataWarning == null) {
+                if (metadataSaved) {
                     fs.deleteRepatchInputStagingFile(item.repatchSourcePath)
                 }
                 updateItem(index) {
                     it.copy(
                         installOutcome = BatchInstallOutcome.INSTALLED,
-                        installMessage = metadataWarning,
+                        installMessage = installMessage,
                         installedPackageName = targetPackage,
                         repatchSourcePath = persistedInstalledItem.repatchSourcePath,
                         sourceEntryKey = persistedInstalledItem.sourceEntryKey,
@@ -1864,7 +1922,8 @@ class BatchPatchCoordinator(
     private suspend fun installWithRootMount(
         item: BatchPatchItem,
         patchedFile: File,
-        targetPackage: String
+        targetPackage: String,
+        installAsPlayStore: Boolean = false
     ): BatchInstallAttempt {
         if (targetPackage != item.packageName) {
             return BatchInstallAttempt(
@@ -1883,21 +1942,30 @@ class BatchPatchCoordinator(
         val stockVersionCode = item.versionCode
             ?: return BatchInstallAttempt("Patched APK source version code is unavailable")
         val installedInfo = pm.getPackageInfo(targetPackage)
-        val verifiedRetainedStock = verifiedStandaloneStockCandidates(item, targetPackage)
-            .firstOrNull { candidate ->
-                installedSignerMatchesStockSource(installedInfo, candidate)
-            }
-        val stockNeedsReplacement = installedInfo == null ||
-            installedInfo.versionName != stockVersionName ||
-            pm.getVersionCode(installedInfo) != stockVersionCode
-        val appMounted = rootInstaller.isAppMounted(targetPackage)
+        val appMounted = installedInfo != null && rootInstaller.isAppMounted(targetPackage)
+        val installedMatchesSourceVersion = installedInfo != null &&
+            installedInfo.versionName == stockVersionName &&
+            pm.getVersionCode(installedInfo) == stockVersionCode
+        val stockNeedsReplacement = rootMountStockReplacementRequired(
+            installedMatchesSourceVersion = installedMatchesSourceVersion
+        )
+        val installedStock = if (!stockNeedsReplacement && !appMounted) {
+            installedInfo?.applicationInfo?.sourceDir
+                ?.let(::File)
+                ?.takeIf(File::isFile)
+        } else null
+        val verifiedRetainedStock = if (
+            stockNeedsReplacement || installedStock == null && !appMounted
+        ) {
+            verifiedStandaloneStockCandidates(item, targetPackage)
+                .firstOrNull { candidate ->
+                    installedSignerMatchesStockSource(installedInfo, candidate)
+                }
+        } else null
         val stockFile = when {
             stockNeedsReplacement -> verifiedRetainedStock
             appMounted -> null
-            else -> installedInfo.applicationInfo?.sourceDir
-                ?.let(::File)
-                ?.takeIf(File::isFile)
-                ?: verifiedRetainedStock
+            else -> installedStock ?: verifiedRetainedStock
         }
         if (stockFile == null && (stockNeedsReplacement || !appMounted)) {
             return BatchInstallAttempt(app.getString(R.string.install_app_fail_missing_stock))
@@ -1949,10 +2017,31 @@ class BatchPatchCoordinator(
                 item
             )
         }
-        return BatchInstallAttempt(
+        val attempt = BatchInstallAttempt(
             failure = rootMountFailureMessage(mountResult),
             allowFallback = rootMountAllowsBatchFallback(mountResult)
         )
+        if (attempt.succeeded && installAsPlayStore) {
+            val attributionError = reinstallMountedStockAsPlayStore(
+                context = app,
+                rootInstaller = rootInstaller,
+                rootMountCoordinator = rootMountCoordinator,
+                packageName = targetPackage,
+                userId = android.os.Process.myUid() / 100_000
+            )
+            if (attributionError != null) {
+                Log.w(TAG, "Failed to record Play Store as the installation source", attributionError)
+                return attempt.copy(
+                    warning = app.getString(
+                        R.string.installer_play_store_attribution_failed,
+                        attributionError.simpleMessage()
+                            ?: attributionError.javaClass.simpleName.orEmpty()
+                    ),
+                    playStoreAttributionFailed = true
+                )
+            }
+        }
+        return attempt
     }
 
     private suspend fun executeRootMount(
@@ -2028,26 +2117,82 @@ class BatchPatchCoordinator(
         }
 
         var timedOut = false
+        var installerRequestQueued = false
+        var suspendedMount: RootMountSuspension? = null
         return try {
-            withTimeout(EXTERNAL_INSTALL_ACTIVITY_TIMEOUT_MS) {
-                activityRequestChannel.send(
-                    BatchActivityRequest(
-                        requestId = requestId,
-                        intent = plan.intent,
-                        completion = completion
-                    )
+            suspendedMount = if (plan.token == InstallerManager.Token.PlayStore) {
+                suspendRootMountForPackageInstall(
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = targetPackage,
+                    userId = android.os.Process.myUid() / 100_000,
+                    recoveryContext = app
                 )
-                completion.await()
-            }
-            if (waitForExternalInstall(targetPackage, baseline)) {
-                BatchInstallAttempt()
             } else {
-                BatchInstallAttempt(
-                    app.getString(
-                        R.string.installer_external_finished_no_change,
-                        plan.installerLabel
-                    )
+                null
+            }
+            val launchAndAwaitResult: suspend () -> Unit = {
+                val recoveryRequestId = suspendedMount?.enableProcessDeathRecovery(
+                    context = app,
+                    cleanupFile = plan.sharedFile,
+                    grantedUri = plan.uri
                 )
+                val callerWillFinalize = recoveryRequestId?.let {
+                    CompletableDeferred<Boolean>()
+                }
+                try {
+                    activityRequestChannel.send(
+                        BatchActivityRequest(
+                            requestId = requestId,
+                            intent = plan.intent,
+                            completion = completion,
+                            rootRecoveryRequestId = recoveryRequestId,
+                            callerWillFinalize = callerWillFinalize
+                        )
+                    )
+                    installerRequestQueued = true
+                    completion.await()
+                    callerWillFinalize?.complete(true)
+                } catch (error: Throwable) {
+                    callerWillFinalize?.complete(false)
+                    throw error
+                }
+            }
+            val rootMount = suspendedMount
+            if (rootMount != null) {
+                withTimeout(EXTERNAL_INSTALL_ACTIVITY_TIMEOUT_MS) {
+                    launchAndAwaitResult()
+                }
+                withContext(NonCancellable) {
+                    val installed = waitForExternalInstall(targetPackage, baseline)
+                    suspendedMount = null
+                    if (installed) {
+                        rootMount.retire()
+                        playStoreAttributionAttempt(plan)
+                    } else {
+                        rootMount.restore()
+                        BatchInstallAttempt(
+                            app.getString(
+                                R.string.installer_external_finished_no_change,
+                                plan.installerLabel
+                            )
+                        )
+                    }
+                }
+            } else {
+                withTimeout(EXTERNAL_INSTALL_ACTIVITY_TIMEOUT_MS) {
+                    launchAndAwaitResult()
+                }
+                if (waitForExternalInstall(targetPackage, baseline)) {
+                    playStoreAttributionAttempt(plan)
+                } else {
+                    BatchInstallAttempt(
+                        app.getString(
+                            R.string.installer_external_finished_no_change,
+                            plan.installerLabel
+                        )
+                    )
+                }
             }
         } catch (_: TimeoutCancellationException) {
             timedOut = true
@@ -2055,19 +2200,43 @@ class BatchPatchCoordinator(
             completion.invokeOnCompletion {
                 releaseExternalInstallerLease(lease)
             }
-            scope.launch {
-                delay(EXTERNAL_INSTALL_PENDING_GRACE_MS)
-                releaseExternalInstallerLease(
-                    lease,
-                    "External installer response grace period expired"
-                )
-            }
+            scheduleExternalInstallerLeaseRelease(
+                lease = lease,
+                cleanupPlan = suspendedMount == null
+            )
+            suspendedMount = null
             BatchInstallAttempt(
                 failure = app.getString(
                     R.string.installer_external_timeout,
                     plan.installerLabel
                 )
             )
+        } catch (error: Throwable) {
+            if (
+                error is CancellationException &&
+                installerRequestQueued &&
+                suspendedMount != null
+            ) {
+                timedOut = true
+                lease.timedOut.set(true)
+                completion.invokeOnCompletion {
+                    releaseExternalInstallerLease(lease)
+                }
+                scheduleExternalInstallerLeaseRelease(
+                    lease = lease,
+                    cleanupPlan = false
+                )
+                suspendedMount = null
+                throw error
+            }
+            val mount = suspendedMount
+            if (mount != null) {
+                val restoreError = withContext(NonCancellable) {
+                    runCatching { mount.restore() }.exceptionOrNull()
+                }
+                restoreError?.let(error::addSuppressed)
+            }
+            throw error
         } finally {
             if (!timedOut) {
                 releaseExternalInstallerLease(
@@ -2078,20 +2247,50 @@ class BatchPatchCoordinator(
         }
     }
 
+    private suspend fun playStoreAttributionAttempt(
+        plan: InstallerManager.InstallPlan.External
+    ): BatchInstallAttempt {
+        val error = installerManager.tryFinalizePlayStoreAttribution(plan)
+            ?: return BatchInstallAttempt()
+        Log.w(TAG, "Failed to record Play Store as the installation source", error)
+        return BatchInstallAttempt(
+            warning = app.getString(
+                R.string.installer_play_store_attribution_failed,
+                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+            ),
+            playStoreAttributionFailed = true
+        )
+    }
+
     private fun releaseExternalInstallerLease(
         lease: PendingExternalInstallerLease,
-        cancellationMessage: String? = null
+        cancellationMessage: String? = null,
+        cleanupPlan: Boolean = true
     ): Boolean {
         if (!pendingExternalInstaller.compareAndSet(lease, null)) return false
         try {
             if (cancellationMessage != null && !lease.completion.isCompleted) {
                 lease.completion.cancel(CancellationException(cancellationMessage))
             }
-            installerManager.cleanup(lease.plan)
+            if (cleanupPlan) installerManager.cleanup(lease.plan)
         } finally {
             lease.released.complete(Unit)
         }
         return true
+    }
+
+    private fun scheduleExternalInstallerLeaseRelease(
+        lease: PendingExternalInstallerLease,
+        cleanupPlan: Boolean
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(EXTERNAL_INSTALL_PENDING_GRACE_MS)
+            releaseExternalInstallerLease(
+                lease = lease,
+                cancellationMessage = "External installer response grace period expired",
+                cleanupPlan = cleanupPlan
+            )
+        }
     }
 
     private suspend fun waitForExternalInstall(
@@ -2813,10 +3012,12 @@ class BatchPatchCoordinator(
             }
         } finally {
             pendingExternalInstaller.get()?.let { lease ->
-                releaseExternalInstallerLease(
-                    lease,
-                    "Batch patch coordinator shut down"
-                )
+                if (!lease.timedOut.get()) {
+                    releaseExternalInstallerLease(
+                        lease,
+                        "Batch patch coordinator shut down"
+                    )
+                }
             }
             activityRequestChannel.close()
             rootDowngradeRequestChannel.close()

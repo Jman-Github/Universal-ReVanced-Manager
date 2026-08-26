@@ -3,6 +3,7 @@ package app.urv.manager.domain.installer
 import android.app.Application
 import android.os.SystemClock
 import app.urv.manager.util.PM
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -252,6 +253,56 @@ class RootInstaller(
         throw Exception(failure)
     }
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+    suspend fun installAsPlayStore(apkFile: File, userId: Int) = withContext(Dispatchers.IO) {
+        require(apkFile.isFile) { "APK file is missing" }
+        val rootProbe = executeBounded(
+            command = "id",
+            timeoutSeconds = ROOT_PROBE_TIMEOUT_SECONDS,
+            operation = "root shell probe"
+        )
+        if (!rootProbe.hasRootUid()) throw RootServiceException()
+        val command =
+            "pm install --user $userId -t -i ${shellQuote(PLAY_STORE_INSTALLER_PACKAGE)} -r " +
+                shellQuote(apkFile.absolutePath)
+        val result = executeBounded(
+            command = command,
+            timeoutSeconds = installTimeoutSeconds(apkFile.length()),
+            operation = "Play Store source install"
+        )
+        val output = result.combinedOutput()
+        if (!result.isSuccess || output.contains("Failure", ignoreCase = true)) {
+            throw Exception(output.ifBlank { "Failed to install APK as Play Store" })
+        }
+    }
+
+    internal suspend fun stageInstalledBaseApk(packageName: String): File =
+        withContext(Dispatchers.IO) {
+            require(packageName.isNotBlank()) { "Package name is missing" }
+            val sourcePath = resolveStockApkPathForMount(packageName)
+                ?: throw IllegalStateException("Installed stock APK is unavailable")
+            val source = File(sourcePath).takeIf(File::isFile)
+                ?: throw IllegalStateException("Installed stock APK is missing")
+            val stagingDirectory = File(app.cacheDir, PLAY_STORE_STAGING_DIRECTORY)
+            check(stagingDirectory.isDirectory || stagingDirectory.mkdirs()) {
+                "Failed to create Play Store staging directory"
+            }
+            val staged = File.createTempFile("stock-", ".apk", stagingDirectory)
+            try {
+                source.inputStream().use { input ->
+                    staged.outputStream().use { output -> input.copyTo(output) }
+                }
+                check(staged.isFile && staged.length() == source.length()) {
+                    "Failed to stage the installed stock APK"
+                }
+                staged
+            } catch (error: Throwable) {
+                staged.delete()
+                throw error
+            }
+        }
+
     suspend fun installPackageFiles(
         apkFiles: List<File>,
         userId: Int = 0,
@@ -456,6 +507,7 @@ class RootInstaller(
         private const val DIRECT_INSTALL_BASE_TIMEOUT_SECONDS = 60L
         private const val DIRECT_INSTALL_MAX_TIMEOUT_SECONDS = 240L
         private const val BYTES_PER_TIMEOUT_SECOND = 4L * 1024L * 1024L
+        private const val PLAY_STORE_STAGING_DIRECTORY = "root-play-store-stock"
     }
 }
 

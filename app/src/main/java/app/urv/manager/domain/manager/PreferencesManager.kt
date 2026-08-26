@@ -1209,7 +1209,12 @@ object InstallerPreferenceTokens {
     const val SYSTEM = ":system:"
     const val ROOT = ":root:" // Legacy value, mapped to AUTO_SAVED.
     const val AUTO_SAVED = ":auto_saved:"
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+    const val PLAY_STORE = ":play_store:"
+    const val ROOT_PLAY_STORE = ":root_play_store:"
     const val SHIZUKU = ":shizuku:"
+    const val SHIZUKU_PLAY_STORE = ":shizuku_play_store:"
     const val SHIZUKU_GOOGLE_PLAY = ":shizuku_google_play:"
     const val NONE = ":none:"
 }

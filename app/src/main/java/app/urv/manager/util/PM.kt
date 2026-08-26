@@ -204,6 +204,16 @@ class PM(
             ?: installerPackageName
     }
 
+    @Suppress("DEPRECATION")
+    fun isPlayStoreInstallerSource(packageName: String): Boolean = runCatching {
+        val installerPackageName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            app.packageManager.getInstallSourceInfo(packageName).installingPackageName
+        } else {
+            app.packageManager.getInstallerPackageName(packageName)
+        }
+        installerPackageName == PLAY_STORE_INSTALLER_PACKAGE
+    }.getOrDefault(false)
+
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/pull/598
     @Suppress("DEPRECATION")

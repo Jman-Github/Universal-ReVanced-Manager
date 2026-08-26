@@ -266,16 +266,51 @@ class BatchPatcherViewModel(
         request.completion.invokeOnCompletion {
             pendingActivityRequests.remove(request.requestId, request.completion)
         }
+        val callerWillFinalize = request.callerWillFinalize
+        val callerRegistered = callerWillFinalize != null &&
+            BatchActivityProxyActivity.registerCaller(
+                request.requestId,
+                callerWillFinalize
+            )
+        if (request.rootRecoveryRequestId != null && !callerRegistered) {
+            callerWillFinalize?.complete(false)
+            pendingActivityRequests.fail(
+                request.requestId,
+                IllegalStateException("Duplicate batch activity caller")
+            )
+            return
+        }
         try {
             launchActivityChannel.send(
                 BatchActivityProxyActivity.createIntent(
                     app,
                     request.requestId,
-                    request.intent
+                    request.intent,
+                    request.rootRecoveryRequestId
                 )
             )
         } catch (error: Throwable) {
+            if (callerRegistered) {
+                BatchActivityProxyActivity.failCaller(request.requestId, error)
+            }
             pendingActivityRequests.fail(request.requestId, error)
+            return
+        }
+        if (callerRegistered) {
+            viewModelScope.launch {
+                try {
+                    val result = BatchActivityProxyActivity.awaitCallerResult(request.requestId)
+                    if (!pendingActivityRequests.complete(request.requestId, result)) {
+                        callerWillFinalize.complete(false)
+                    }
+                } catch (error: CancellationException) {
+                    callerWillFinalize.complete(false)
+                    throw error
+                } catch (error: Throwable) {
+                    callerWillFinalize.complete(false)
+                    pendingActivityRequests.fail(request.requestId, error)
+                }
+            }
         }
     }
 
@@ -754,6 +789,7 @@ class BatchPatcherViewModel(
 
     fun handleActivityLaunchFailure(intent: Intent, error: Throwable) {
         val requestId = BatchActivityProxyActivity.requestId(intent) ?: return
+        BatchActivityProxyActivity.failCaller(requestId, error)
         pendingActivityRequests.fail(requestId, error)
     }
 

@@ -6,6 +6,7 @@
 - Added Repatch APK source retention so URV automatically reuses the original APK or split archive when repatching, with support for saved apps, batch patching, missing-source fallback, and Storage Management cleanup
 - Added a delete action to individual saved unpatched app cards in Downloads, with a confirmation prompt before removing the stored APK
 - Bumped Morphe Patcher to `1.9.0`
+- Added configurable Play Store installation source modes for the system and rooted mount installers, adapted from https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
 
 
 # Bug fixes
@@ -16,6 +17,8 @@
 - Fixed Rooted Mount being unavailable in post-patch installer choosers for compatible Standard patches
 - Fixed the Patcher Information widget sometimes showing the wrong app version instead of the version of the APK actually being patched
 - Fixed single and batch patching sometimes using or reporting stale patch selections, options, app metadata, and runtime information, especially after missing patches were removed or the patcher screen was restored
+- Fixed system Play Store installs still appearing as installed by URV Manager in Android settings
+- Fixed some Morphe patch bundles failing to load in process mode with an incorrect corrupted or incomplete error
 
 
 # CI

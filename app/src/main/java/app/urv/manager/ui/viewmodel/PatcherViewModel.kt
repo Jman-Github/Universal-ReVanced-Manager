@@ -54,6 +54,7 @@ import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
 import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
 import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
 import app.urv.manager.domain.installer.rootMountStockIdentityUsable
+import app.urv.manager.domain.installer.rootMountStockReplacementRequired
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.SessionDeadException
@@ -63,9 +64,16 @@ import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountSuspension
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.describeOutcome
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
+import app.urv.manager.domain.installer.root.reinstallMountedStockAsPlayStore
+import app.urv.manager.domain.installer.root.restore
+import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadResult
 import app.urv.manager.domain.repository.DownloadedAppRepository
@@ -136,9 +144,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -153,6 +163,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.time.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -367,6 +378,9 @@ class PatcherViewModel(
     }
 
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var pendingExternalMountSuspension: RootMountSuspension? = null
+    private var pendingExternalMountRestoreJob: Job? = null
+    private var pendingExternalMountRestored = false
     private var externalInstallBaseline: Pair<Long?, Long?>? = null
     private var externalInstallStartTime: Long? = null
     private var externalPackageWasPresentAtStart: Boolean = false
@@ -395,6 +409,7 @@ class PatcherViewModel(
         private set
     var rootDowngradeConfirmationPending by mutableStateOf(false)
         private set
+    private var rootDowngradePlayStoreSourcePending = false
     var rootMountPhase by mutableStateOf<RootMountPhase?>(null)
         private set
     var supportsRootMount by mutableStateOf(true)
@@ -445,7 +460,9 @@ class PatcherViewModel(
     ): Boolean {
         if (completedPatchHadFailures) return false
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
-        val removeGmsCore = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+        val removeGmsCore = installerManager.baseInstallerToken(
+            installerManager.getPrimaryToken()
+        ) == InstallerManager.Token.AutoSaved &&
             prefs.removeGmsCoreForPrimaryMount.get()
         if (!availabilityEnabled && !removeGmsCore) return true
 
@@ -776,21 +793,19 @@ class PatcherViewModel(
             else -> null
         }
 
-fun dismissMissingPatchWarning() {
-    missingPatchWarning = null
-}
+    fun dismissMissingPatchWarning() {
+        missingPatchWarning = null
+    }
 
-fun proceedAfterMissingPatchWarning() {
-    if (missingPatchWarning == null) return
-    viewModelScope.launch {
+    fun proceedAfterMissingPatchWarning() {
+        if (missingPatchWarning == null) return
         missingPatchWarning = null
         beginPrePatchFlow()
     }
-}
 
     fun removeMissingPatchesAndStart() {
         if (missingPatchWarning == null) return
-        viewModelScope.launch {
+        launchPrePatchPreparation { chooseSplitApks ->
             val scopedBundles = gatherScopedBundles()
             val sanitizedSelection = applyCurrentPatchRules(
                 filterSelectionToAvailablePatches(appliedSelection, scopedBundles),
@@ -798,14 +813,14 @@ fun proceedAfterMissingPatchWarning() {
             )
             if (sanitizedSelection.values.none { patches -> patches.isNotEmpty() }) {
                 app.toast(app.getString(R.string.no_patches_selected))
-                return@launch
+                return@launchPrePatchPreparation
             }
             val sanitizedOptions = sanitizeOptions(appliedOptions, scopedBundles)
             appliedSelection = sanitizedSelection
             appliedOptions = sanitizedOptions
             refreshPatcherInformationMetadata(scopedBundles)
             missingPatchWarning = null
-            beginPrePatchFlow()
+            prepareSplitSelectionOrStartWorker(chooseSplitApks)
         }
     }
 
@@ -869,86 +884,30 @@ fun proceedAfterMissingPatchWarning() {
     }
 
     private fun beginPrePatchFlow() {
-        if (!prefs.chooseSplitApksBeforePatching.getBlocking()) {
-            startWorker()
-            return
-        }
+        launchPrePatchPreparation(::prepareSplitSelectionOrStartWorker)
+    }
+
+    private fun launchPrePatchPreparation(
+        block: suspend (chooseSplitApks: Boolean) -> Unit
+    ) {
         prePatchPreparationJob?.cancel()
         prePatchPreparationJob = viewModelScope.launch {
-            isPreparingSplitSelection = true
-            prePatchDownloadProgress = when (input.selectedApp) {
-                is SelectedApp.Download,
-                is SelectedApp.Search -> PrePatchDownloadProgress(0L, null)
-                else -> null
-            }
+            val preparationJob = currentCoroutineContext()[Job]
             splitSelectionPreparationError = null
             try {
-                val localInput = input.selectedApp as? SelectedApp.Local
-                val localSplitEntryNames = localInput?.let { selected ->
-                    withContext(Dispatchers.IO) {
-                        SplitApkPreparer.splitApkEntryNames(selected.file)
+                val chooseSplitApks = prefs.chooseSplitApksBeforePatching.get()
+                if (chooseSplitApks) {
+                    isPreparingSplitSelection = true
+                    prePatchDownloadProgress = when (input.selectedApp) {
+                        is SelectedApp.Download,
+                        is SelectedApp.Search -> PrePatchDownloadProgress(0L, null)
+                        else -> null
                     }
                 }
-                if (localSplitEntryNames != null && localSplitEntryNames.size <= 1) {
-                    isPreparingSplitSelection = false
-                    startWorker()
-                    return@launch
-                }
-
-                val resolvedInput = localInput?.let { selected ->
-                    DownloadResult(selected.file, needsSplit = true)
-                } ?: resolveInputBeforePatching()
-                prePatchDownloadProgress = null
-                preparedInput = resolvedInput
-                preparedInputIncludesDownload =
-                    input.selectedApp is SelectedApp.Download || input.selectedApp is SelectedApp.Search
-                inputFile = resolvedInput.file
-                updateSplitStepRequirement(
-                    file = resolvedInput.file,
-                    needsSplitOverride = resolvedInput.needsSplit,
-                    merged = resolvedInput.merged
-                )
-
-                val resolvedSplitEntryNames = if (
-                    localInput != null &&
-                    resolvedInput.file.absoluteFile == localInput.file.absoluteFile
-                ) {
-                    localSplitEntryNames.orEmpty()
-                } else if (resolvedInput.needsSplit) {
-                    withContext(Dispatchers.IO) {
-                        SplitApkPreparer.splitApkEntryNames(resolvedInput.file)
-                    }
-                } else {
-                    emptySet()
-                }
-                val hasSelectableSplits =
-                    resolvedInput.needsSplit && resolvedSplitEntryNames.size > 1
-                if (!hasSelectableSplits) {
-                    isPreparingSplitSelection = false
-                    startWorker()
-                    return@launch
-                }
-
-                val inspection = withContext(Dispatchers.IO) {
-                    SplitApkPreparer.inspect(resolvedInput.file)
-                }
-                val initialStripNativeLibs = prefs.stripUnusedNativeLibs.get()
-                val skipUnneededSplitApks = prefs.skipUnneededSplitApks.get()
-                val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
-                var initialModules: Set<String> = allModules
-                if (skipUnneededSplitApks) {
-                    initialModules = initialModules intersect inspection.languageTrimmedModules
-                    initialModules = initialModules intersect inspection.densityTrimmedModules
-                }
-                if (initialStripNativeLibs) {
-                    initialModules = initialModules intersect inspection.abiTrimmedModules
-                }
-
-                pendingSplitSelectionDialog = SplitSelectionDialogState(
-                    inspection = inspection,
-                    initialModules = initialModules,
-                    initialStripNativeLibs = initialStripNativeLibs
-                )
+                // Let Compose render the preparation state before cached repository flows and
+                // patch-selection checks can resume synchronously on the main dispatcher.
+                yield()
+                block(chooseSplitApks)
             } catch (error: CancellationException) {
                 cleanupPreparedInput()
                 throw error
@@ -957,11 +916,85 @@ fun proceedAfterMissingPatchWarning() {
                 splitSelectionPreparationError =
                     error.simpleMessage() ?: error.javaClass.simpleName
             } finally {
-                isPreparingSplitSelection = false
-                prePatchDownloadProgress = null
-                prePatchPreparationJob = null
+                if (prePatchPreparationJob === preparationJob) {
+                    isPreparingSplitSelection = false
+                    prePatchDownloadProgress = null
+                    prePatchPreparationJob = null
+                }
             }
         }
+    }
+
+    private suspend fun prepareSplitSelectionOrStartWorker(chooseSplitApks: Boolean) {
+        if (!chooseSplitApks) {
+            startWorker()
+            return
+        }
+
+        val localInput = input.selectedApp as? SelectedApp.Local
+        val localSplitEntryNames = localInput?.let { selected ->
+            withContext(Dispatchers.IO) {
+                SplitApkPreparer.splitApkEntryNames(selected.file)
+            }
+        }
+        if (localSplitEntryNames != null && localSplitEntryNames.size <= 1) {
+            startWorker()
+            return
+        }
+
+        val resolvedInput = localInput?.let { selected ->
+            DownloadResult(selected.file, needsSplit = true)
+        } ?: resolveInputBeforePatching()
+        prePatchDownloadProgress = null
+        preparedInput = resolvedInput
+        preparedInputIncludesDownload =
+            input.selectedApp is SelectedApp.Download || input.selectedApp is SelectedApp.Search
+        inputFile = resolvedInput.file
+        updateSplitStepRequirement(
+            file = resolvedInput.file,
+            needsSplitOverride = resolvedInput.needsSplit,
+            merged = resolvedInput.merged
+        )
+
+        val resolvedSplitEntryNames = if (
+            localInput != null &&
+            resolvedInput.file.absoluteFile == localInput.file.absoluteFile
+        ) {
+            localSplitEntryNames.orEmpty()
+        } else if (resolvedInput.needsSplit) {
+            withContext(Dispatchers.IO) {
+                SplitApkPreparer.splitApkEntryNames(resolvedInput.file)
+            }
+        } else {
+            emptySet()
+        }
+        val hasSelectableSplits =
+            resolvedInput.needsSplit && resolvedSplitEntryNames.size > 1
+        if (!hasSelectableSplits) {
+            startWorker()
+            return
+        }
+
+        val inspection = withContext(Dispatchers.IO) {
+            SplitApkPreparer.inspect(resolvedInput.file)
+        }
+        val initialStripNativeLibs = prefs.stripUnusedNativeLibs.get()
+        val skipUnneededSplitApks = prefs.skipUnneededSplitApks.get()
+        val allModules = inspection.modules.mapTo(linkedSetOf()) { it.name }
+        var initialModules: Set<String> = allModules
+        if (skipUnneededSplitApks) {
+            initialModules = initialModules intersect inspection.languageTrimmedModules
+            initialModules = initialModules intersect inspection.densityTrimmedModules
+        }
+        if (initialStripNativeLibs) {
+            initialModules = initialModules intersect inspection.abiTrimmedModules
+        }
+
+        pendingSplitSelectionDialog = SplitSelectionDialogState(
+            inspection = inspection,
+            initialModules = initialModules,
+            initialStripNativeLibs = initialStripNativeLibs
+        )
     }
 
     private suspend fun resolveInputBeforePatching(): DownloadResult {
@@ -1223,12 +1256,18 @@ fun proceedAfterMissingPatchWarning() {
     ) {
         val token = when (plan) {
             is InstallerManager.InstallPlan.Internal -> InstallerManager.Token.Internal
-            is InstallerManager.InstallPlan.Mount -> InstallerManager.Token.AutoSaved
+            is InstallerManager.InstallPlan.RootPlayStore -> InstallerManager.Token.RootPlayStore
+            is InstallerManager.InstallPlan.Mount -> if (plan.installAsPlayStore) {
+                InstallerManager.Token.RootPlayStore
+            } else {
+                InstallerManager.Token.AutoSaved
+            }
             is InstallerManager.InstallPlan.Shizuku -> plan.token
             is InstallerManager.InstallPlan.External -> plan.token
         }
         val target = when (plan) {
             is InstallerManager.InstallPlan.Internal -> plan.target
+            is InstallerManager.InstallPlan.RootPlayStore -> plan.target
             is InstallerManager.InstallPlan.Mount -> plan.target
             is InstallerManager.InstallPlan.Shizuku -> plan.target
             is InstallerManager.InstallPlan.External -> plan.target
@@ -1253,7 +1292,9 @@ fun proceedAfterMissingPatchWarning() {
         val fallbackEntry = installerManager.describeEntry(fallbackToken, target) ?: return null
         if (!fallbackEntry.availability.available) return null
         val expectedPackage = lastInstallExpectedPackage ?: packageName
-        if (fallbackToken == InstallerManager.Token.AutoSaved && expectedPackage != packageName) {
+        if (installerManager.baseInstallerToken(fallbackToken) ==
+            InstallerManager.Token.AutoSaved && expectedPackage != packageName
+        ) {
             return null
         }
         val plan = installerManager.resolvePlanForToken(
@@ -1280,12 +1321,97 @@ fun proceedAfterMissingPatchWarning() {
         stopInstallProgressToasts()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
+        restorePendingExternalMountAsync()
         externalInstallBaseline = null
         externalInstallStartTime = null
         externalPackageWasPresentAtStart = false
         expectedInstallSignature = null
         baselineInstallSignature = null
         packageInstallerStatus = null
+    }
+
+    private suspend fun restorePendingExternalMount() {
+        val restoreJob = pendingExternalMountRestoreJob
+        if (restoreJob != null) {
+            restoreJob.join()
+            if (pendingExternalMountRestoreJob === restoreJob) {
+                pendingExternalMountRestoreJob = null
+            }
+        }
+
+        val suspension = pendingExternalMountSuspension ?: return
+        if (pendingExternalMountRestored) {
+            pendingExternalMountSuspension = null
+            pendingExternalMountRestored = false
+            return
+        }
+        suspension.restore()
+        if (pendingExternalMountSuspension === suspension) {
+            pendingExternalMountSuspension = null
+            pendingExternalMountRestored = false
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun restorePendingExternalMountAsync() {
+        val suspension = pendingExternalMountSuspension ?: return
+        if (pendingExternalMountRestored) return
+        if (pendingExternalMountRestoreJob?.isActive == true) return
+
+        pendingExternalMountRestoreJob = GlobalScope.launch(Dispatchers.Main) {
+            runCatching { suspension.restore() }
+                .onSuccess {
+                    if (pendingExternalMountSuspension === suspension) {
+                        pendingExternalMountRestored = true
+                    }
+                }
+                .onFailure { error ->
+                    Log.e(TAG, "Failed to restore root mount after external install", error)
+                }
+        }
+    }
+
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun retirePendingExternalMount(): Deferred<Throwable?>? {
+        val suspension = pendingExternalMountSuspension ?: return null
+        val restoreJob = pendingExternalMountRestoreJob
+        pendingExternalMountSuspension = null
+        pendingExternalMountRestoreJob = null
+        pendingExternalMountRestored = false
+
+        return GlobalScope.async(Dispatchers.Main) {
+            restoreJob?.join()
+            try {
+                suspension.retire()
+                null
+            } catch (error: Throwable) {
+                val restoreError = withContext(NonCancellable) {
+                    runCatching { suspension.restore() }.exceptionOrNull()
+                }
+                restoreError?.let(error::addSuppressed)
+                if (restoreError != null && pendingExternalMountSuspension == null) {
+                    pendingExternalMountSuspension = suspension
+                }
+                Log.e(TAG, "Failed to retire root mount after external install", error)
+                error
+            }
+        }
+    }
+
+    private suspend fun awaitExternalMountRetirement(
+        retirement: Deferred<Throwable?>?
+    ): Boolean {
+        val error = retirement?.await() ?: return true
+        suppressFailureAfterSuccess = false
+        showInstallFailure(
+            app.getString(
+                R.string.failed_to_unmount,
+                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+            ),
+            allowFallback = false,
+            attemptedInstallType = InstallType.MOUNT
+        )
+        return false
     }
 
     private fun applyInstallFailure(message: String) {
@@ -1313,9 +1439,9 @@ fun proceedAfterMissingPatchWarning() {
         val failureInstallType = attemptedInstallType ?: activeInstallType
         if (attemptedInstallType == null) {
             val now = System.currentTimeMillis()
-            if (failureInstallType == InstallType.SHIZUKU && suppressFailureAfterSuccess) return
-            if (lastSuccessInstallType == InstallType.SHIZUKU && now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS) return
-            if (lastSuccessInstallType == InstallType.SHIZUKU) return
+            if (failureInstallType.isShizukuInstall() && suppressFailureAfterSuccess) return
+            if (lastSuccessInstallType.isShizukuInstall() && now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS) return
+            if (lastSuccessInstallType.isShizukuInstall()) return
             if (installStatus is InstallCompletionStatus.Success || suppressFailureAfterSuccess) return
         }
         val adjusted = if (failureInstallType == InstallType.MOUNT) {
@@ -1375,9 +1501,7 @@ fun proceedAfterMissingPatchWarning() {
                 val packageWasPresentAtStartSnapshot = externalPackageWasPresentAtStart
                 val installTypeSnapshot = pendingExternalInstall
                     ?.takeIf { it.expectedPackage == packageName }
-                    ?.let { plan ->
-                        if (plan.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
-                    }
+                    ?.let { plan -> installTypeForExternalToken(plan.token) }
                     ?: activeInstallType
                     ?: InstallType.DEFAULT
                 val customInstallerPackageNameSnapshot = pendingExternalInstall
@@ -1505,6 +1629,7 @@ fun proceedAfterMissingPatchWarning() {
         suppressFailureAfterSuccess = true
         postTimeoutGraceJob?.cancel()
         postTimeoutGraceJob = null
+        val mountRetirement = retirePendingExternalMount()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -1515,15 +1640,16 @@ fun proceedAfterMissingPatchWarning() {
         expectedInstallSignature = null
         baselineInstallSignature = null
         internalInstallBaseline = null
-        installedPackageName = packageName
         installFailureMessage = null
         packageInstallerStatus = null
-        markInstallSuccess(packageName)
         updateInstallingState(false)
         stopInstallProgressToasts()
-        lastSuccessInstallType = installType
-        lastSuccessAtMs = System.currentTimeMillis()
         viewModelScope.launch {
+            if (!awaitExternalMountRetirement(mountRetirement)) return@launch
+            installedPackageName = packageName
+            markInstallSuccess(packageName)
+            lastSuccessInstallType = installType
+            lastSuccessAtMs = System.currentTimeMillis()
             val persisted = persistPatchedApp(
                 packageName,
                 installType,
@@ -1555,13 +1681,16 @@ fun proceedAfterMissingPatchWarning() {
 
         val installType = pendingExternalInstall
             ?.takeIf { it.expectedPackage == packageName }
-            ?.let { plan ->
-                if (plan.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
-            }
+            ?.let { plan -> installTypeForExternalToken(plan.token) }
             ?: activeInstallType
             ?: InstallType.DEFAULT
 
-        forceMarkInstallSuccess(packageName, installType)
+        val customInstallerPackageName = externalPlan
+            ?.token
+            ?.let { it as? InstallerManager.Token.Component }
+            ?.componentName
+            ?.packageName
+        forceMarkInstallSuccess(packageName, installType, customInstallerPackageName)
         return true
     }
 
@@ -2082,13 +2211,11 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             startPatchingTaskMonitor()
             observeWorker(existingId)
         } else {
-            viewModelScope.launch {
-                runPreflightCheck()
-            }
+            launchPrePatchPreparation(::runPreflightCheck)
         }
     }
 
-    private suspend fun runPreflightCheck() {
+    private suspend fun runPreflightCheck(chooseSplitApks: Boolean) {
         val scopedBundles = gatherScopedBundles()
         val currentSelection = appliedSelection
         val sanitizedSelection = filterSelectionToAvailablePatches(currentSelection, scopedBundles)
@@ -2107,7 +2234,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else {
             appliedSelection = applyCurrentPatchRules(sanitizedSelection, scopedBundles)
             refreshPatcherInformationMetadata(scopedBundles)
-            beginPrePatchFlow()
+            prepareSplitSelectionOrStartWorker(chooseSplitApks)
         }
     }
 
@@ -2804,14 +2931,21 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     override fun onCleared() {
         super.onCleared()
         app.unregisterReceiver(packageChangeReceiver)
-        pendingExternalInstall?.let(installerManager::cleanup)
-        pendingExternalInstall = null
+        val rootInstallerStillOpen =
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+                pendingExternalMountSuspension != null
+        if (!rootInstallerStillOpen) {
+            pendingExternalInstall?.let(installerManager::cleanup)
+            pendingExternalInstall = null
+            restorePendingExternalMountAsync()
+        }
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         externalInstallStartTime = null
 
         if (input.selectedApp is SelectedApp.Installed &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved
         ) {
             GlobalScope.launch(Dispatchers.Main) {
                 val shouldRemount = withContext(Dispatchers.IO) {
@@ -3400,7 +3534,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun performInstall(
         installType: InstallType,
-        downgradeFallbackConfirmed: Boolean = false
+        downgradeFallbackConfirmed: Boolean = false,
+        installAsPlayStore: Boolean = false
     ) {
         val operationJob = currentCoroutineContext()[Job]
         activeInstallJob = operationJob
@@ -3518,7 +3653,16 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     }
                 }
 
-                InstallType.MOUNT -> performRootMount(currentPackageInfo, downgradeFallbackConfirmed)
+                InstallType.MOUNT -> performRootMount(
+                    currentPackageInfo,
+                    downgradeFallbackConfirmed,
+                    installAsPlayStore
+                )
+                InstallType.PLAY_STORE,
+                InstallType.ROOT_PLAY_STORE,
+                InstallType.SHIZUKU_PLAY_STORE -> error(
+                    "Play Store source installs use their dedicated installer plan"
+                )
             }
         } catch (cancelled: CancellationException) {
             packageInstallerStatus = null
@@ -3544,83 +3688,97 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     private suspend fun performRootMount(
         packageInfo: PackageInfo,
-        downgradeFallbackConfirmed: Boolean
+        downgradeFallbackConfirmed: Boolean,
+        installAsPlayStore: Boolean
     ) {
         check(packageInfo.packageName == packageName) {
             app.getString(R.string.root_mount_renamed_package_not_supported)
         }
-        if (!withContext(Dispatchers.IO) { rootInstaller.hasRootAccess() }) throw RootServiceException()
-        val installedBaseInfo = pm.getPackageInfo(packageName)
-        basePackageInstalled = installedBaseInfo != null
         val originalInput = inputFile
-        val originalInputIsSplit = originalInput?.let(SplitApkPreparer::isSplitArchive) == true
-        val sourcePackageInfo = originalInput
-            ?.takeUnless { originalInputIsSplit }
-            ?.let(pm::getPackageInfo)
-        val sourceVersionName = patchedSourceVersionName
-            ?: sourcePackageInfo?.versionName?.takeIf(String::isNotBlank)
-            ?: input.selectedApp.version?.takeIf(String::isNotBlank)
-            ?: throw IllegalStateException("Patched APK source version name is unavailable")
-        val targetVersionCode = patchedSourceVersionCode
-            ?: sourcePackageInfo?.let(pm::getVersionCode)
-            ?: input.selectedApp.versionCode
-            ?: throw IllegalStateException("Patched APK source version code is unavailable")
-        val sourcePackageName = sourcePackageInfo?.packageName ?: input.selectedApp.packageName
-        check(
-            sourcePackageName == packageInfo.packageName &&
-                sourceVersionName == packageInfo.versionName
-        ) {
-            "Patched APK does not match its stock source"
+        val selectedApp = input.selectedApp
+        val sourceVersionNameHint = patchedSourceVersionName
+        val sourceVersionCodeHint = patchedSourceVersionCode
+        val (installed, request) = withContext(Dispatchers.IO) {
+            if (!rootInstaller.hasRootAccess()) throw RootServiceException()
+            val installedBaseInfo = pm.getPackageInfo(packageName)
+            val appMounted = installedBaseInfo != null && rootInstaller.isAppMounted(packageName)
+            val originalInputIsSplit =
+                originalInput?.let(SplitApkPreparer::isSplitArchive) == true
+            val sourcePackageInfo = originalInput
+                ?.takeUnless { originalInputIsSplit }
+                ?.let(pm::getPackageInfo)
+            val sourceVersionName = sourceVersionNameHint
+                ?: sourcePackageInfo?.versionName?.takeIf(String::isNotBlank)
+                ?: selectedApp.version?.takeIf(String::isNotBlank)
+                ?: throw IllegalStateException("Patched APK source version name is unavailable")
+            val targetVersionCode = sourceVersionCodeHint
+                ?: sourcePackageInfo?.let(pm::getVersionCode)
+                ?: selectedApp.versionCode
+                ?: throw IllegalStateException("Patched APK source version code is unavailable")
+            val sourcePackageName = sourcePackageInfo?.packageName ?: selectedApp.packageName
+            check(
+                sourcePackageName == packageInfo.packageName &&
+                    sourceVersionName == packageInfo.versionName
+            ) {
+                "Patched APK does not match its stock source"
+            }
+            val installedMatchesSourceVersion = installedBaseInfo != null &&
+                pm.getVersionCode(installedBaseInfo) == targetVersionCode &&
+                installedBaseInfo.versionName == sourceVersionName
+            val stockNeedsReplacement = rootMountStockReplacementRequired(
+                installedMatchesSourceVersion = installedMatchesSourceVersion
+            )
+            val stockApks = when {
+                stockNeedsReplacement -> {
+                    val stock = verifiedStandaloneStockCandidates(
+                        sourceVersionName,
+                        targetVersionCode
+                    ).firstOrNull { candidate ->
+                        installedSignerMatchesStockSource(installedBaseInfo, candidate)
+                    } ?: throw IllegalStateException(
+                        app.getString(R.string.install_app_fail_missing_stock)
+                    )
+                    listOf(stock)
+                }
+                appMounted -> {
+                    // applicationInfo.sourceDir resolves through the active bind mount. It is
+                    // the patched payload, while the committed mount owns the stock identity.
+                    emptyList()
+                }
+                else -> {
+                    // The installed package already has the stock version we need. Use its
+                    // registered base APK instead of the patch input, which can have a
+                    // different signing certificate.
+                    val installedStock = installedBaseInfo?.applicationInfo?.sourceDir
+                        ?.let(::File)
+                        ?.takeIf(File::isFile)
+                        ?: throw IllegalStateException(
+                            app.getString(R.string.install_app_fail_missing_stock)
+                        )
+                    listOf(installedStock)
+                }
+            }
+            (installedBaseInfo != null) to RootMountRequest(
+                packageName = packageInfo.packageName,
+                userId = android.os.Process.myUid() / 100_000,
+                operation = if (stockNeedsReplacement) {
+                    RootMountOperation.REPLACE_STOCK_AND_MOUNT
+                } else {
+                    RootMountOperation.SWITCH_PATCHED_BUILD
+                },
+                patchedApk = outputFile,
+                stockApks = stockApks,
+                expectedVersionName = packageInfo.versionName,
+                expectedVersionCode = pm.getVersionCode(packageInfo),
+                expectedStockVersionCode = targetVersionCode,
+                label = with(pm) { packageInfo.label() },
+                downgradeFallbackConfirmed = downgradeFallbackConfirmed
+            )
         }
-        val verifiedStockSource = verifiedStandaloneStockCandidates(
-            sourceVersionName,
-            targetVersionCode
-        ).firstOrNull { candidate ->
-            installedSignerMatchesStockSource(installedBaseInfo, candidate)
-        }
-        val stockNeedsReplacement = installedBaseInfo == null ||
-            pm.getVersionCode(installedBaseInfo) != targetVersionCode ||
-            installedBaseInfo.versionName != sourceVersionName
-        val stockApks = if (stockNeedsReplacement) {
-            val stock = verifiedStockSource
-                ?: throw IllegalStateException(
-                    app.getString(R.string.install_app_fail_missing_stock)
-                )
-            listOf(stock)
-        } else if (rootInstaller.isAppMounted(packageName)) {
-            // applicationInfo.sourceDir resolves through the active bind mount. It is the
-            // patched payload, not independent proof of the raw stock APK.
-            emptyList()
-        } else {
-            // The installed package already has the stock version we need. Use its actual
-            // registered base APK as the stock identity instead of the patch input, which can
-            // legitimately have the same package/version but a different signing certificate.
-            val installedStock = installedBaseInfo.applicationInfo?.sourceDir
-                ?.let(::File)
-                ?: throw IllegalStateException(
-                    app.getString(R.string.install_app_fail_missing_stock)
-                )
-            listOf(installedStock)
-        }
-        val label = with(pm) { packageInfo.label() }
+        basePackageInstalled = installed
         val result = try {
             rootMountCoordinator.execute(
-                RootMountRequest(
-                    packageName = packageInfo.packageName,
-                    userId = android.os.Process.myUid() / 100_000,
-                    operation = if (stockNeedsReplacement) {
-                        RootMountOperation.REPLACE_STOCK_AND_MOUNT
-                    } else {
-                        RootMountOperation.SWITCH_PATCHED_BUILD
-                    },
-                    patchedApk = outputFile,
-                    stockApks = stockApks,
-                    expectedVersionName = packageInfo.versionName,
-                    expectedVersionCode = pm.getVersionCode(packageInfo),
-                    expectedStockVersionCode = targetVersionCode,
-                    label = label,
-                    downgradeFallbackConfirmed = downgradeFallbackConfirmed
-                )
+                request
             ) { phase -> rootMountPhase = phase }
         } finally {
             rootMountPhase = null
@@ -3628,16 +3786,45 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         when (result) {
             is RootMountResult.Success -> {
                 rootDowngradeConfirmationPending = false
+                rootDowngradePlayStoreSourcePending = false
+                val sourceAttributionError = if (installAsPlayStore) {
+                    reinstallMountedStockAsPlayStore(
+                        context = app,
+                        rootInstaller = rootInstaller,
+                        rootMountCoordinator = rootMountCoordinator,
+                        packageName = packageInfo.packageName,
+                        userId = android.os.Process.myUid() / 100_000
+                    )
+                } else null
+                val displayInstallType = if (
+                    installAsPlayStore && sourceAttributionError == null
+                ) {
+                    InstallType.ROOT_PLAY_STORE
+                } else {
+                    InstallType.MOUNT
+                }
                 if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
                     Log.w(TAG, "Failed to persist mounted patched app metadata")
                 }
                 installedPackageName = packageInfo.packageName
                 markInstallSuccess(packageInfo.packageName)
+                lastSuccessInstallType = displayInstallType
+                lastSuccessAtMs = System.currentTimeMillis()
+                sourceAttributionError?.let { error ->
+                    Log.w(TAG, "Failed to record Play Store as the installation source", error)
+                    app.toast(
+                        app.getString(
+                            R.string.installer_play_store_attribution_failed,
+                            error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                        )
+                    )
+                }
                 updateInstallingState(false)
             }
 
             is RootMountResult.RequiresDowngradeConfirmation -> {
                 rootDowngradeConfirmationPending = true
+                rootDowngradePlayStoreSourcePending = installAsPlayStore
                 installStatus = null
                 updateInstallingState(false)
             }
@@ -3676,15 +3863,84 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun confirmRootDowngrade() {
+        val installAsPlayStore = rootDowngradePlayStoreSourcePending
         rootDowngradeConfirmationPending = false
-        viewModelScope.launch { performInstall(InstallType.MOUNT, downgradeFallbackConfirmed = true) }
+        rootDowngradePlayStoreSourcePending = false
+        viewModelScope.launch {
+            performInstall(
+                InstallType.MOUNT,
+                downgradeFallbackConfirmed = true,
+                installAsPlayStore = installAsPlayStore
+            )
+        }
     }
 
     fun dismissRootDowngradeConfirmation() {
         rootDowngradeConfirmationPending = false
+        rootDowngradePlayStoreSourcePending = false
         installStatus = null
         activeInstallType = null
         updateInstallingState(false)
+    }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+    private suspend fun performRootPlayStoreInstall(
+        retryMountSuspension: RootMountSuspension? = null
+    ) {
+        val operationJob = currentCoroutineContext()[Job]
+        activeInstallJob = operationJob
+        activeInstallType = InstallType.ROOT_PLAY_STORE
+        updateInstallingState(true)
+        installStatus = InstallCompletionStatus.InProgress
+        packageInstallerStatus = null
+        try {
+            val packageInfo = pm.getPackageInfo(outputFile)
+                ?: throw Exception("Failed to load application info")
+            val targetPackage = packageInfo.packageName
+            installAsPlayStoreWithMountRollback(
+                rootInstaller = rootInstaller,
+                rootMountCoordinator = rootMountCoordinator,
+                apkFile = outputFile,
+                packageName = targetPackage,
+                userId = android.os.Process.myUid() / 100_000
+            )
+            runCatching { retryMountSuspension?.retire() }
+                .onFailure { error ->
+                    Log.w(TAG, "Failed to retire the previous root mount after reinstall", error)
+                }
+            if (!persistPatchedApp(targetPackage, InstallType.ROOT_PLAY_STORE)) {
+                Log.w(TAG, "Failed to persist root Play Store install metadata")
+            }
+            installedPackageName = targetPackage
+            markInstallSuccess(targetPackage)
+            lastSuccessInstallType = InstallType.ROOT_PLAY_STORE
+            lastSuccessAtMs = System.currentTimeMillis()
+        } catch (cancelled: CancellationException) {
+            installStatus = null
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(tag, "Failed to install as Play Store with root", error)
+            val targetPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
+            if (installerManager.isSignatureMismatch(error.message)) {
+                showSignatureMismatchPrompt(
+                    targetPackage,
+                    InstallerManager.InstallPlan.RootPlayStore(
+                        InstallerManager.InstallTarget.PATCHER
+                    )
+                )
+                return
+            }
+            showInstallFailure(
+                app.getString(
+                    R.string.install_app_fail,
+                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                )
+            )
+        } finally {
+            updateInstallingState(false)
+            if (activeInstallJob === operationJob) activeInstallJob = null
+        }
     }
 
     private suspend fun performShizukuInstall(
@@ -3693,7 +3949,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     ) {
         val operationJob = currentCoroutineContext()[Job]
         activeInstallJob = operationJob
-        activeInstallType = InstallType.SHIZUKU
+        val shizukuInstallType = if (
+            installerPackageNameOverride == ShizukuInstaller.GOOGLE_PLAY_PACKAGE
+        ) InstallType.SHIZUKU_PLAY_STORE else InstallType.SHIZUKU
+        activeInstallType = shizukuInstallType
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
         packageInstallerStatus = null
@@ -3730,7 +3989,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 throw ShizukuInstaller.InstallerOperationException(result.status, result.message)
             }
 
-            val persisted = persistPatchedApp(currentPackageInfo.packageName, InstallType.SHIZUKU)
+            val persisted = persistPatchedApp(currentPackageInfo.packageName, shizukuInstallType)
             if (!persisted) {
                 Log.w(TAG, "Failed to persist installed patched app metadata")
             }
@@ -3741,7 +4000,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             installStatus = InstallCompletionStatus.Success(currentPackageInfo.packageName)
             updateInstallingState(false)
             suppressFailureAfterSuccess = true
-            lastSuccessInstallType = InstallType.SHIZUKU
+            lastSuccessInstallType = shizukuInstallType
             lastSuccessAtMs = System.currentTimeMillis()
         } catch (cancelled: CancellationException) {
             packageInstallerStatus = null
@@ -3791,6 +4050,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         automatic: Boolean = false
     ) {
         Log.d(TAG, "executeInstallPlan(plan=${plan::class.java.simpleName})")
+        restorePendingExternalMount()
         recordInstallPlan(plan, lastInstallExpectedPackage ?: packageName, lastInstallSourceLabel)
         when (plan) {
             is InstallerManager.InstallPlan.Internal -> {
@@ -3801,12 +4061,23 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 performInstall(installTypeFor(plan.target))
             }
 
+            is InstallerManager.InstallPlan.RootPlayStore -> {
+                pendingExternalInstall?.let(installerManager::cleanup)
+                pendingExternalInstall = null
+                externalInstallTimeoutJob?.cancel()
+                externalInstallTimeoutJob = null
+                performRootPlayStoreInstall()
+            }
+
             is InstallerManager.InstallPlan.Mount -> {
                 pendingExternalInstall?.let(installerManager::cleanup)
                 pendingExternalInstall = null
                 externalInstallTimeoutJob?.cancel()
                 externalInstallTimeoutJob = null
-                performInstall(InstallType.MOUNT)
+                performInstall(
+                    InstallType.MOUNT,
+                    installAsPlayStore = plan.installAsPlayStore
+                )
             }
 
             is InstallerManager.InstallPlan.Shizuku -> {
@@ -3832,7 +4103,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         InstallerManager.InstallTarget.DOWNLOADER_HELPER -> InstallType.DEFAULT
     }
 
+    private fun installTypeForExternalToken(token: InstallerManager.Token): InstallType = when (token) {
+        InstallerManager.Token.PlayStore -> InstallType.PLAY_STORE
+        is InstallerManager.Token.Component -> InstallType.CUSTOM
+        else -> InstallType.DEFAULT
+    }
+
     private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+        restorePendingExternalMount()
         pendingExternalInstall?.let { installerManager.cleanup(it) }
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
@@ -3847,9 +4125,80 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         baselineInstallSignature = readInstalledSignatureBytes(plan.expectedPackage)
         expectedInstallSignature = readArchiveSignatureBytes(plan.sharedFile)
         internalInstallBaseline = null
-        activeInstallType = InstallType.DEFAULT
+        pendingExternalMountSuspension =
+            if (plan.token == InstallerManager.Token.PlayStore) {
+                suspendRootMountForPackageInstall(
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = plan.expectedPackage,
+                    userId = android.os.Process.myUid() / 100_000,
+                    recoveryContext = app
+                )
+            } else {
+                null
+            }
+        pendingExternalMountRestored = false
+        activeInstallType = if (plan.token == InstallerManager.Token.PlayStore) {
+            InstallType.PLAY_STORE
+        } else {
+            InstallType.DEFAULT
+        }
         updateInstallingState(true)
         installStatus = InstallCompletionStatus.InProgress
+        pendingExternalMountSuspension?.let { suspension ->
+            val installed = try {
+                launchExternalInstallerWithMountFinalization(
+                    context = app,
+                    targetIntent = plan.intent,
+                    suspendedMount = suspension,
+                    installChanged = {
+                        val info = pm.getPackageInfo(plan.expectedPackage)
+                        info != null &&
+                            (isUpdatedSinceExternalBaseline(
+                                info,
+                                externalInstallBaseline,
+                                externalInstallStartTime
+                            ) || shouldTreatAsInstalledBySignature(
+                                plan.expectedPackage,
+                                externalPackageWasPresentAtStart
+                            ))
+                    },
+                    activityTimeoutMs = EXTERNAL_INSTALL_TIMEOUT_MS,
+                    onRecoveryOwnershipTransferred = {
+                        if (pendingExternalInstall === plan) {
+                            pendingExternalInstall = null
+                        }
+                    },
+                    cleanupFile = plan.sharedFile,
+                    cleanup = {}
+                )
+            } catch (error: Throwable) {
+                pendingExternalMountSuspension = null
+                showInstallFailure(
+                    app.getString(
+                        R.string.install_app_fail,
+                        error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                    )
+                )
+                return
+            }
+            if (pendingExternalInstall != plan) return
+            pendingExternalMountSuspension = null
+            if (installed) {
+                handleExternalInstallSuccess(plan.expectedPackage)
+            } else {
+                showInstallFailure(
+                    app.getString(
+                        R.string.install_app_fail,
+                        app.getString(
+                            R.string.installer_external_finished_no_change,
+                            plan.installerLabel
+                        )
+                    )
+                )
+            }
+            return
+        }
         scheduleInstallTimeout(
             packageName = plan.expectedPackage,
             durationMs = EXTERNAL_INSTALL_TIMEOUT_MS,
@@ -3918,6 +4267,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val plan = pendingExternalInstall ?: return false
         if (plan.expectedPackage != packageName) return false
 
+        val mountRetirement = retirePendingExternalMount()
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
@@ -3926,52 +4276,89 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         externalPackageWasPresentAtStart = false
         expectedInstallSignature = null
         baselineInstallSignature = null
-        installerManager.cleanup(plan)
-        updateInstallingState(false)
         stopInstallProgressToasts()
-        val installType = if (plan?.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
         val customInstallerPackageName =
             (plan.token as? InstallerManager.Token.Component)
                 ?.componentName
                 ?.packageName
-        markInstallSuccess(packageName)
         suppressFailureAfterSuccess = true
 
-        when (plan.target) {
-            InstallerManager.InstallTarget.PATCHER -> {
-                installedPackageName = packageName
-                viewModelScope.launch {
-                    val persisted = persistPatchedApp(
-                        packageName,
-                        installType,
-                        customInstallerPackageName = customInstallerPackageName
-                    )
-                    if (!persisted) {
-                        Log.w(TAG, "Failed to persist installed patched app metadata (external installer)")
+        viewModelScope.launch {
+            val finalizationJob = currentCoroutineContext()[Job]
+            activeInstallJob = finalizationJob
+            try {
+                withContext(NonCancellable) {
+                    if (!awaitExternalMountRetirement(mountRetirement)) return@withContext
+                    val attributionError =
+                        installerManager.tryFinalizePlayStoreAttribution(plan)
+                    val installType = when (plan.token) {
+                        InstallerManager.Token.PlayStore -> if (attributionError == null) {
+                            InstallType.PLAY_STORE
+                        } else {
+                            InstallType.DEFAULT
+                        }
+                        is InstallerManager.Token.Component -> InstallType.CUSTOM
+                        else -> InstallType.DEFAULT
+                    }
+                    markInstallSuccess(packageName)
+                    lastSuccessInstallType = installType
+                    lastSuccessAtMs = System.currentTimeMillis()
+                    when (plan.target) {
+                        InstallerManager.InstallTarget.PATCHER -> {
+                            installedPackageName = packageName
+                            val persisted = persistPatchedApp(
+                                packageName,
+                                installType,
+                                customInstallerPackageName = customInstallerPackageName
+                            )
+                            if (!persisted) {
+                                Log.w(
+                                    TAG,
+                                    "Failed to persist installed patched app metadata (external installer)"
+                                )
+                            }
+                        }
+
+                        InstallerManager.InstallTarget.SAVED_APP,
+                        InstallerManager.InstallTarget.MANAGER_UPDATE,
+                        InstallerManager.InstallTarget.LSPOSED_MODULE,
+                        InstallerManager.InstallTarget.DOWNLOADER_HELPER -> Unit
+                    }
+
+                    attributionError?.let { error ->
+                        Log.w(TAG, "Failed to record Play Store as the installation source", error)
+                        app.toast(
+                            app.getString(
+                                R.string.installer_play_store_attribution_failed,
+                                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                            )
+                        )
                     }
                 }
-            }
-
-            InstallerManager.InstallTarget.SAVED_APP,
-            InstallerManager.InstallTarget.MANAGER_UPDATE,
-            InstallerManager.InstallTarget.LSPOSED_MODULE,
-            InstallerManager.InstallTarget.DOWNLOADER_HELPER -> {
+            } finally {
+                installerManager.cleanup(plan)
+                updateInstallingState(false)
+                if (activeInstallJob === finalizationJob) activeInstallJob = null
             }
         }
-        suppressFailureAfterSuccess = true
-        lastSuccessInstallType = installType
-        lastSuccessAtMs = System.currentTimeMillis()
         return true
     }
 
     fun cancelInstall() {
         if (!isInstalling) return
+        if (
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+            pendingExternalMountSuspension != null
+        ) {
+            return
+        }
 
         val cancellation = CancellationException("Installation cancelled")
         val hadActiveJob = activeInstallJob != null
 
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
+        restorePendingExternalMountAsync()
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
         externalInstallPresenceJob?.cancel()
@@ -4072,7 +4459,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun installWithSelectedToken(token: InstallerManager.Token) {
         val crossModeMountRequested =
-            token == InstallerManager.Token.AutoSaved && !usingMountInstall
+            installerManager.baseInstallerToken(token) == InstallerManager.Token.AutoSaved &&
+                !usingMountInstall
         if (!crossModeMountRequested) {
             installWithTokenInternal(
                 token = token,
@@ -4108,7 +4496,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     ) {
         if (isInstalling) return
         rootMountDiagnosticsContext = null
-        val requestedMount = token == InstallerManager.Token.AutoSaved
+        val requestedMount =
+            installerManager.baseInstallerToken(token) == InstallerManager.Token.AutoSaved
         val attemptedInstallType = if (requestedMount) InstallType.MOUNT else null
         val tokenAllowed = if (allowModeOverride) {
             isInstallerTokenSelectable(token)
@@ -4247,12 +4636,22 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         app.toast(app.getString(R.string.reinstall_app_fail, e.simpleMessage()))
                     }
                 }
+                is InstallerManager.InstallPlan.RootPlayStore -> {
+                    pendingExternalInstall?.let(installerManager::cleanup)
+                    pendingExternalInstall = null
+                    externalInstallTimeoutJob?.cancel()
+                    externalInstallTimeoutJob = null
+                    performRootPlayStoreInstall()
+                }
                 is InstallerManager.InstallPlan.Mount -> {
                     pendingExternalInstall?.let(installerManager::cleanup)
                     pendingExternalInstall = null
                     externalInstallTimeoutJob?.cancel()
                     externalInstallTimeoutJob = null
-                    performInstall(InstallType.MOUNT)
+                    performInstall(
+                        InstallType.MOUNT,
+                        installAsPlayStore = plan.installAsPlayStore
+                    )
                 }
                 is InstallerManager.InstallPlan.Shizuku -> {
                     pendingExternalInstall?.let(installerManager::cleanup)
@@ -4286,41 +4685,80 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         deferUninstallProgressToasts = true
         startUninstallProgressToasts()
         viewModelScope.launch {
-            val session = ackpineUninstaller.createSession(targetPackage) {
-                confirmation = Confirmation.IMMEDIATE
-            }
-            val toastJob = launchUninstallConfirmationToast(session)
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    session.await()
-                }
-            } finally {
-                toastJob.cancel()
-            }
-            when (result) {
-                is Session.State.Failed<UninstallFailure> -> {
-                    stopUninstallProgressToasts()
-                    if (result.failure is UninstallFailure.Aborted) {
-                        updateInstallingState(false)
-                        return@launch
-                    }
-                    val message = result.failure.message.orEmpty()
-                    handleUninstallFailure(app.getString(R.string.uninstall_app_fail, message))
+            var suspendedMount: RootMountSuspension? = null
+            try {
+                if (plan is InstallerManager.InstallPlan.RootPlayStore) {
+                    suspendedMount = suspendRootMountForPackageInstall(
+                        rootInstaller = rootInstaller,
+                        rootMountCoordinator = rootMountCoordinator,
+                        packageName = targetPackage,
+                        userId = android.os.Process.myUid() / 100_000
+                    )
                 }
 
-                Session.State.Succeeded -> {
-                    stopUninstallProgressToasts()
-                    recordInstallPlan(plan, targetPackage, null)
-                    executeInstallPlan(plan)
+                val session = ackpineUninstaller.createSession(targetPackage) {
+                    confirmation = Confirmation.IMMEDIATE
                 }
+                val toastJob = launchUninstallConfirmationToast(session)
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        session.await()
+                    }
+                } finally {
+                    toastJob.cancel()
+                }
+                when (result) {
+                    is Session.State.Failed<UninstallFailure> -> {
+                        val mount = suspendedMount
+                        suspendedMount = null
+                        if (mount != null) {
+                            withContext(NonCancellable) { mount.restore() }
+                        }
+                        stopUninstallProgressToasts()
+                        if (result.failure is UninstallFailure.Aborted) {
+                            updateInstallingState(false)
+                            return@launch
+                        }
+                        val message = result.failure.message.orEmpty()
+                        handleUninstallFailure(app.getString(R.string.uninstall_app_fail, message))
+                    }
+
+                    Session.State.Succeeded -> {
+                        val retryMountSuspension = suspendedMount
+                        suspendedMount = null
+                        stopUninstallProgressToasts()
+                        recordInstallPlan(plan, targetPackage, null)
+                        if (plan is InstallerManager.InstallPlan.RootPlayStore) {
+                            performRootPlayStoreInstall(retryMountSuspension)
+                        } else {
+                            executeInstallPlan(plan)
+                        }
+                    }
+                }
+            } catch (error: Throwable) {
+                val mount = suspendedMount
+                if (mount != null) {
+                    val restoreError = withContext(NonCancellable) {
+                        runCatching { mount.restore() }.exceptionOrNull()
+                    }
+                    restoreError?.let(error::addSuppressed)
+                }
+                stopUninstallProgressToasts()
+                handleUninstallFailure(
+                    app.getString(R.string.uninstall_app_fail, error.simpleMessage().orEmpty())
+                )
             }
         }
     }
 
     fun shouldSuppressPackageInstallerDialog(): Boolean {
-        if (activeInstallType == InstallType.SHIZUKU) return true
+        if (activeInstallType == InstallType.SHIZUKU ||
+            activeInstallType == InstallType.SHIZUKU_PLAY_STORE
+        ) return true
         val lastType = lastSuccessInstallType
-        if (lastType != InstallType.SHIZUKU) return false
+        if (lastType != InstallType.SHIZUKU &&
+            lastType != InstallType.SHIZUKU_PLAY_STORE
+        ) return false
         val now = System.currentTimeMillis()
         return now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS
     }
@@ -4343,9 +4781,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     fun shouldSuppressInstallFailureDialog(): Boolean {
-        if (activeInstallType == InstallType.SHIZUKU) return true
+        if (activeInstallType == InstallType.SHIZUKU ||
+            activeInstallType == InstallType.SHIZUKU_PLAY_STORE
+        ) return true
         val lastType = lastSuccessInstallType
-        if (lastType != InstallType.SHIZUKU) return false
+        if (lastType != InstallType.SHIZUKU &&
+            lastType != InstallType.SHIZUKU_PLAY_STORE
+        ) return false
         val now = System.currentTimeMillis()
         return now - lastSuccessAtMs < SUPPRESS_FAILURE_AFTER_SUCCESS_MS
     }
@@ -6497,7 +6939,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
         val removeGmsCore = usingMountInstall &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved &&
             prefs.removeGmsCoreForPrimaryMount.get()
 
         return selection.applyAvailability(
@@ -6686,6 +7129,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     }
 }
+
+private fun InstallType?.isShizukuInstall(): Boolean =
+    this == InstallType.SHIZUKU || this == InstallType.SHIZUKU_PLAY_STORE
 
 private fun buildSplitStep(
     context: Context,

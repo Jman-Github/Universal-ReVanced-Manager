@@ -124,6 +124,11 @@
             android:excludeFromRecents="true"
             android:exported="false" />
 
+        <activity
+            android:name="app.urv.manager.domain.installer.InstallerActivityProxyActivity"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
         <activity android:name="app.urv.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
         <activity android:name="app.revanced.manager.plugin.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />
         <activity android:name="app.urv.manager.downloader.webview.WebViewActivity" android:exported="false" android:theme="@style/Theme.WebViewActivity" />

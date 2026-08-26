@@ -1,14 +1,14 @@
-package app.urv.manager.ui
+package app.urv.manager.domain.installer
 
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.lifecycleScope
-import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.root.RootExternalInstallActivityRegistry
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.recoverPendingRootExternalInstall
@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
-class BatchActivityProxyActivity : ComponentActivity(), KoinComponent {
+class InstallerActivityProxyActivity : ComponentActivity(), KoinComponent {
     private var requestId: String? = null
     private var recoveryRequestId: String? = null
     private var processChanged = false
@@ -35,9 +35,7 @@ class BatchActivityProxyActivity : ComponentActivity(), KoinComponent {
 
     private val launcher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        finishWithResult(result)
-    }
+    ) { result -> finishWithResult(result) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,7 +58,12 @@ class BatchActivityProxyActivity : ComponentActivity(), KoinComponent {
             return
         }
 
-        val targetIntent = intent.extras?.get(EXTRA_TARGET_INTENT) as? Intent
+        val targetIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            intent.getParcelableExtra(EXTRA_TARGET_INTENT, Intent::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(EXTRA_TARGET_INTENT)
+        }
         if (requestId == null || targetIntent == null) {
             finishWithResult(ActivityResult(Activity.RESULT_CANCELED, null))
             return
@@ -127,14 +130,14 @@ class BatchActivityProxyActivity : ComponentActivity(), KoinComponent {
     }
 
     private fun deliverResult(result: ActivityResult) {
-        setResult(Activity.RESULT_OK, resultIntent(result))
+        requestId?.let { pendingResults[it]?.result?.complete(result) }
         finishActivity()
     }
 
     private fun finishActivity() {
         if (resultDelivered) return
         resultDelivered = true
-        requestId?.let(::unregisterCaller)
+        requestId?.let(pendingResults::remove)
         unregisterRecoveryActivity()
         super.finish()
     }
@@ -177,93 +180,67 @@ class BatchActivityProxyActivity : ComponentActivity(), KoinComponent {
     }
 
     private fun savedResultData(state: Bundle): Intent? =
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             state.getParcelable(STATE_RESULT_DATA, Intent::class.java)
         } else {
             @Suppress("DEPRECATION")
             state.getParcelable(STATE_RESULT_DATA)
         }
 
-    private fun resultIntent(result: ActivityResult) = Intent().apply {
-        putExtra(EXTRA_REQUEST_ID, requestId)
-        putExtra(EXTRA_RESULT_CODE, result.resultCode)
-        putExtra(EXTRA_RESULT_DATA, result.data)
-    }
-
     companion object {
         private const val EXTRA_REQUEST_ID =
-            "app.urv.manager.extra.BATCH_ACTIVITY_REQUEST_ID"
+            "app.urv.manager.extra.INSTALLER_ACTIVITY_REQUEST_ID"
         private const val EXTRA_TARGET_INTENT =
-            "app.urv.manager.extra.BATCH_ACTIVITY_TARGET_INTENT"
-        private const val EXTRA_RESULT_CODE =
-            "app.urv.manager.extra.BATCH_ACTIVITY_RESULT_CODE"
-        private const val EXTRA_RESULT_DATA =
-            "app.urv.manager.extra.BATCH_ACTIVITY_RESULT_DATA"
+            "app.urv.manager.extra.INSTALLER_ACTIVITY_TARGET_INTENT"
         private const val EXTRA_RECOVERY_REQUEST_ID =
-            "app.urv.manager.extra.BATCH_ACTIVITY_RECOVERY_REQUEST_ID"
+            "app.urv.manager.extra.INSTALLER_ACTIVITY_RECOVERY_REQUEST_ID"
         private const val EXTRA_PROCESS_INSTANCE_ID =
-            "app.urv.manager.extra.BATCH_ACTIVITY_PROCESS_INSTANCE_ID"
+            "app.urv.manager.extra.INSTALLER_ACTIVITY_PROCESS_INSTANCE_ID"
         private const val STATE_RESULT_FINALIZATION_STARTED =
-            "batch_activity_result_finalization_started"
-        private const val STATE_RESULT_CODE = "batch_activity_result_code"
-        private const val STATE_RESULT_DATA = "batch_activity_result_data"
+            "installer_activity_result_finalization_started"
+        private const val STATE_RESULT_CODE = "installer_activity_result_code"
+        private const val STATE_RESULT_DATA = "installer_activity_result_data"
 
-        private class PendingResult(
-            val callerWillFinalize: CompletableDeferred<Boolean>
-        ) {
+        private class PendingResult {
             val result = CompletableDeferred<ActivityResult>()
+            val callerWillFinalize = CompletableDeferred<Boolean>()
         }
 
         private val pendingResults = ConcurrentHashMap<String, PendingResult>()
         private val processInstanceId = UUID.randomUUID().toString()
 
-        internal fun registerCaller(
-            requestId: String,
-            callerWillFinalize: CompletableDeferred<Boolean>
-        ): Boolean = pendingResults.putIfAbsent(
-            requestId,
-            PendingResult(callerWillFinalize)
-        ) == null
-
-        internal suspend fun awaitCallerResult(requestId: String): ActivityResult =
-            checkNotNull(pendingResults[requestId]) {
-                "Batch activity caller is no longer registered"
-            }.result.await()
-
-        internal fun unregisterCaller(requestId: String) {
-            pendingResults.remove(requestId)
-        }
-
-        internal fun failCaller(requestId: String, error: Throwable) {
-            pendingResults.remove(requestId)?.let { pending ->
-                pending.callerWillFinalize.complete(false)
-                pending.result.completeExceptionally(error)
-            }
-        }
-
-        fun createIntent(
+        suspend fun launch(
             context: Context,
-            requestId: String,
             target: Intent,
+            onLaunched: () -> Unit = {},
+            onResultReceived: () -> Unit = {},
             recoveryRequestId: String? = null
-        ) =
-            Intent(context, BatchActivityProxyActivity::class.java).apply {
-                putExtra(EXTRA_REQUEST_ID, requestId)
-                putExtra(EXTRA_TARGET_INTENT, target)
-                putExtra(EXTRA_RECOVERY_REQUEST_ID, recoveryRequestId)
-                putExtra(EXTRA_PROCESS_INSTANCE_ID, processInstanceId)
+        ): ActivityResult {
+            val requestId = UUID.randomUUID().toString()
+            val pending = PendingResult()
+            pendingResults[requestId] = pending
+            var proxyStarted = false
+            try {
+                context.startActivity(
+                    Intent(context, InstallerActivityProxyActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        putExtra(EXTRA_REQUEST_ID, requestId)
+                        putExtra(EXTRA_TARGET_INTENT, target)
+                        putExtra(EXTRA_RECOVERY_REQUEST_ID, recoveryRequestId)
+                        putExtra(EXTRA_PROCESS_INSTANCE_ID, processInstanceId)
+                    }
+                )
+                proxyStarted = true
+                onLaunched()
+                val result = pending.result.await()
+                onResultReceived()
+                pending.callerWillFinalize.complete(true)
+                return result
+            } catch (error: Throwable) {
+                pending.callerWillFinalize.complete(false)
+                if (!proxyStarted) pendingResults.remove(requestId, pending)
+                throw error
             }
-
-        fun requestId(intent: Intent): String? =
-            intent.getStringExtra(EXTRA_REQUEST_ID)
-
-        fun decodeResult(result: ActivityResult): Pair<String, ActivityResult>? {
-            if (result.resultCode != Activity.RESULT_OK) return null
-            val data = result.data ?: return null
-            val requestId = data.getStringExtra(EXTRA_REQUEST_ID) ?: return null
-            val resultCode = data.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
-            val resultData = data.extras?.get(EXTRA_RESULT_DATA) as? Intent
-            return requestId to ActivityResult(resultCode, resultData)
         }
     }
 }

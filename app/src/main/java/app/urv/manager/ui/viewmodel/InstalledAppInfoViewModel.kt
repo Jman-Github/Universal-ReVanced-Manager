@@ -37,8 +37,15 @@ import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountSuspension
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
+import app.urv.manager.domain.installer.root.reinstallMountedStockAsPlayStore
+import app.urv.manager.domain.installer.root.restore
+import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
@@ -66,8 +73,13 @@ import app.urv.manager.util.toast
 import app.urv.manager.util.toastHandle
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -115,6 +127,9 @@ class InstalledAppInfoViewModel(
     private var expectedInstallSignature: ByteArray? = null
     private var baselineInstallSignature: ByteArray? = null
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var pendingExternalMountSuspension: RootMountSuspension? = null
+    private var pendingExternalMountFinalizationJob: Job? = null
+    private var externalInstallFinalizationJob: Job? = null
     private var externalInstallTimeoutJob: Job? = null
     private var internalInstallTimeoutJob: Job? = null
     private var externalInstallBaseline: Pair<Long?, Long?>? = null
@@ -145,6 +160,8 @@ class InstalledAppInfoViewModel(
     var appliedPatches: PatchSelection? by mutableStateOf(null)
     var isMounted by mutableStateOf(false)
         private set
+    var isPlayStoreInstallerSource by mutableStateOf(false)
+        private set
     var isInstalledOnDevice by mutableStateOf(false)
         private set
     var hasSavedCopy by mutableStateOf(false)
@@ -163,7 +180,8 @@ class InstalledAppInfoViewModel(
         private set
 
     val primaryInstallerIsMount: Boolean
-        get() = installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+        get() = installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+            InstallerManager.Token.AutoSaved
     val supportsRootMount: Boolean
         get() {
             val app = installedApp ?: return false
@@ -193,6 +211,14 @@ class InstalledAppInfoViewModel(
     }
 
     fun cancelOngoingInstall() {
+        if (externalInstallFinalizationJob != null) return
+        if (
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+            pendingExternalMountSuspension != null
+        ) {
+            return
+        }
+        finalizePendingExternalMount(installed = false)
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         pendingInstallToken = null
@@ -645,6 +671,8 @@ class InstalledAppInfoViewModel(
         }
         pendingInstallToken = token
 
+        finalizePendingExternalMount(installed = false)
+        awaitPendingExternalMountFinalization()
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -776,21 +804,70 @@ class InstalledAppInfoViewModel(
                             label = label
                         )
                     ).requireSuccess()
-
+                    val sourceAttributionError = if (plan.installAsPlayStore) {
+                        reinstallMountedStockAsPlayStore(
+                            context = context,
+                            rootInstaller = rootInstaller,
+                            rootMountCoordinator = rootMountCoordinator,
+                            packageName = packageInfo.packageName,
+                            userId = android.os.Process.myUid() / 100_000
+                        )
+                    } else null
                     val refreshedVersion = packageInfo.versionName ?: app.version
-                    persistInstallMetadata(InstallType.MOUNT, refreshedVersion, packageInfo.packageName)
+                    persistInstallMetadata(
+                        InstallType.MOUNT,
+                        refreshedVersion,
+                        packageInfo.packageName
+                    )
                     isMounted = rootInstaller.isAppMounted(packageInfo.packageName)
+                    isPlayStoreInstallerSource = withContext(Dispatchers.IO) {
+                        pm.isPlayStoreInstallerSource(packageInfo.packageName)
+                    }
                     markInstallSuccess(context.getString(R.string.saved_app_install_success))
+                    sourceAttributionError?.let { error ->
+                        Log.w(tag, "Failed to record Play Store as the installation source", error)
+                        context.toast(
+                            context.getString(
+                                R.string.installer_play_store_attribution_failed,
+                                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                            )
+                        )
+                    }
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to install saved app with root", e)
                     markInstallFailure(context.getString(R.string.saved_app_install_failed))
                 }
             }
 
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+            is InstallerManager.InstallPlan.RootPlayStore -> {
+                try {
+                    installAsPlayStoreWithMountRollback(
+                        rootInstaller = rootInstaller,
+                        rootMountCoordinator = rootMountCoordinator,
+                        apkFile = apk,
+                        packageName = targetPackage,
+                        userId = android.os.Process.myUid() / 100_000
+                    )
+                    persistInstallMetadata(InstallType.ROOT_PLAY_STORE, app.version)
+                    isMounted = false
+                    markInstallSuccess(context.getString(R.string.saved_app_install_success))
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to install saved app as Play Store with root", error)
+                    markInstallFailure(
+                        context.getString(R.string.install_app_fail, error.simpleMessage().orEmpty())
+                    )
+                }
+            }
+
             is InstallerManager.InstallPlan.Shizuku -> {
                 try {
                     shizukuInstaller.install(apk, targetPackage, plan.installerPackageNameOverride)
-                    persistInstallMetadata(InstallType.SHIZUKU, app.version)
+                    val installType = if (
+                        plan.installerPackageNameOverride == ShizukuInstaller.GOOGLE_PLAY_PACKAGE
+                    ) InstallType.SHIZUKU_PLAY_STORE else InstallType.SHIZUKU
+                    persistInstallMetadata(installType, app.version)
                     isMounted = false
                     markInstallSuccess(context.getString(R.string.saved_app_install_success))
                 } catch (error: ShizukuInstaller.InstallerOperationException) {
@@ -808,6 +885,8 @@ class InstalledAppInfoViewModel(
     }
 
     private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+        finalizePendingExternalMount(installed = false)
+        awaitPendingExternalMountFinalization()
         pendingExternalInstall?.let(installerManager::cleanup)
         externalInstallTimeoutJob?.cancel()
         internalInstallTimeoutJob?.cancel()
@@ -829,7 +908,73 @@ class InstalledAppInfoViewModel(
             markInstallFailure(context.getString(R.string.install_app_fail, context.getString(R.string.saved_app_install_missing)))
             return
         }
+        pendingExternalMountSuspension =
+            if (plan.token == InstallerManager.Token.PlayStore) {
+                suspendRootMountForPackageInstall(
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = plan.expectedPackage,
+                    userId = android.os.Process.myUid() / 100_000,
+                    recoveryContext = context
+                )
+            } else {
+                null
+            }
         startInstallProgressToasts()
+        pendingExternalMountSuspension?.let { suspension ->
+            var recoveryOwnsCleanup = false
+            val installed = try {
+                launchExternalInstallerWithMountFinalization(
+                    context = context,
+                    targetIntent = plan.intent,
+                    suspendedMount = suspension,
+                    installChanged = {
+                        val info = pm.getPackageInfo(plan.expectedPackage)
+                        val updated = info?.let {
+                            isUpdatedSinceBaseline(
+                                it,
+                                externalInstallBaseline,
+                                externalInstallStartTime
+                            )
+                        } ?: false
+                        val signatureChanged = shouldTreatAsInstalledBySignature(
+                            plan.expectedPackage,
+                            externalPackageWasPresentAtStart
+                        )
+                        info != null && (updated || signatureChanged)
+                    },
+                    activityTimeoutMs = EXTERNAL_INSTALL_TIMEOUT_MS,
+                    onRecoveryOwnershipTransferred = { recoveryOwnsCleanup = true },
+                    cleanupFile = plan.sharedFile,
+                    cleanup = {}
+                )
+            } catch (error: Throwable) {
+                pendingExternalMountSuspension = null
+                finishExternalInstallFailure(
+                    plan,
+                    context.getString(
+                        R.string.install_app_fail,
+                        error.simpleMessage().orEmpty()
+                    ),
+                    cleanupPlan = !recoveryOwnsCleanup
+                )
+                return
+            }
+            if (pendingExternalInstall != plan) return
+            pendingExternalMountSuspension = null
+            if (installed) {
+                handleExternalInstallSuccess(plan.expectedPackage)
+            } else {
+                finishExternalInstallFailure(
+                    plan,
+                    context.getString(
+                        R.string.installer_external_finished_no_change,
+                        plan.installerLabel
+                    )
+                )
+            }
+            return
+        }
         if (isInstallerX(plan) && launchedActivity == null) {
             val activityDeferred = CompletableDeferred<ActivityResult>()
             launchedActivity = activityDeferred
@@ -861,6 +1006,7 @@ class InstalledAppInfoViewModel(
         try {
             ContextCompat.startActivity(context, plan.intent, null)
         } catch (error: ActivityNotFoundException) {
+            finalizePendingExternalMount(installed = false)
             installerManager.cleanup(plan)
             pendingExternalInstall = null
             externalInstallTimeoutJob = null
@@ -877,9 +1023,14 @@ class InstalledAppInfoViewModel(
         monitorExternalInstall(plan)
     }
 
-    private fun finishExternalInstallFailure(plan: InstallerManager.InstallPlan.External, message: String) {
+    private fun finishExternalInstallFailure(
+        plan: InstallerManager.InstallPlan.External,
+        message: String,
+        cleanupPlan: Boolean = true
+    ) {
         if (pendingExternalInstall != plan) return
-        installerManager.cleanup(plan)
+        finalizePendingExternalMount(installed = false)
+        if (cleanupPlan) installerManager.cleanup(plan)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob = null
@@ -987,18 +1138,18 @@ class InstalledAppInfoViewModel(
                 val signatureChangedToExpected =
                     shouldTreatAsInstalledBySignature(plan.expectedPackage, externalPackageWasPresentAtStart)
 
-                installerManager.cleanup(plan)
-                pendingExternalInstall = null
-                externalInstallBaseline = null
-                externalInstallStartTime = null
-                internalInstallTimeoutJob = null
-                externalPackageWasPresentAtStart = false
-                expectedInstallSignature = null
-                baselineInstallSignature = null
-
                 if (info != null && (updatedSinceStart || signatureChangedToExpected)) {
                     handleExternalInstallSuccess(plan.expectedPackage)
                 } else {
+                    finalizePendingExternalMount(installed = false)
+                    installerManager.cleanup(plan)
+                    pendingExternalInstall = null
+                    externalInstallBaseline = null
+                    externalInstallStartTime = null
+                    internalInstallTimeoutJob = null
+                    externalPackageWasPresentAtStart = false
+                    expectedInstallSignature = null
+                    baselineInstallSignature = null
                     markInstallFailure(context.getString(R.string.installer_external_timeout, plan.installerLabel))
                 }
                 externalInstallTimeoutJob = null
@@ -1010,6 +1161,7 @@ class InstalledAppInfoViewModel(
         val plan = pendingExternalInstall ?: return
         if (plan.expectedPackage != packageName) return
 
+        val mountRetirement = retirePendingExternalMount()
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
         internalInstallTimeoutJob?.cancel()
@@ -1019,28 +1171,148 @@ class InstalledAppInfoViewModel(
         externalPackageWasPresentAtStart = false
         expectedInstallSignature = null
         baselineInstallSignature = null
-        installerManager.cleanup(plan)
 
         when (plan.target) {
             InstallerManager.InstallTarget.SAVED_APP -> {
-                val app = installedApp ?: return
-                val installType = if (plan.token is InstallerManager.Token.Component) InstallType.CUSTOM else InstallType.DEFAULT
+                if (installedApp == null) {
+                    installerManager.cleanup(plan)
+                    isInstalling = false
+                    return
+                }
                 val customInstallerPackageName =
                     (plan.token as? InstallerManager.Token.Component)
                         ?.componentName
                         ?.packageName
-                viewModelScope.launch {
-                    persistInstallMetadata(
-                        installType,
-                        customInstallerPackageName = customInstallerPackageName
-                    )
-                    markInstallSuccess(context.getString(R.string.installer_external_success, plan.installerLabel))
+                val finalizationJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+                    try {
+                        withContext(NonCancellable) {
+                            if (!awaitExternalMountRetirement(mountRetirement)) {
+                                return@withContext
+                            }
+                            val attributionError =
+                                installerManager.tryFinalizePlayStoreAttribution(plan)
+                            val installType = when (plan.token) {
+                                InstallerManager.Token.PlayStore -> if (
+                                    attributionError == null
+                                ) {
+                                    InstallType.PLAY_STORE
+                                } else {
+                                    InstallType.DEFAULT
+                                }
+                                is InstallerManager.Token.Component -> InstallType.CUSTOM
+                                else -> InstallType.DEFAULT
+                            }
+                            persistInstallMetadata(
+                                installType,
+                                customInstallerPackageName = customInstallerPackageName
+                            )
+                            isPlayStoreInstallerSource = withContext(Dispatchers.IO) {
+                                installType == InstallType.PLAY_STORE &&
+                                    pm.isPlayStoreInstallerSource(packageName)
+                            }
+                            markInstallSuccess(
+                                context.getString(
+                                    R.string.installer_external_success,
+                                    plan.installerLabel
+                                )
+                            )
+                            attributionError?.let { error ->
+                                Log.w(
+                                    tag,
+                                    "Failed to record Play Store as the installation source",
+                                    error
+                                )
+                                context.toast(
+                                    context.getString(
+                                        R.string.installer_play_store_attribution_failed,
+                                        error.simpleMessage()
+                                            ?: error.javaClass.simpleName.orEmpty()
+                                    )
+                                )
+                            }
+                        }
+                    } finally {
+                        installerManager.cleanup(plan)
+                        if (externalInstallFinalizationJob === this.coroutineContext[Job]) {
+                            externalInstallFinalizationJob = null
+                        }
+                        isInstalling = false
+                    }
                 }
+                externalInstallFinalizationJob = finalizationJob
+                finalizationJob.start()
             }
 
-            else -> Unit
+            else -> {
+                installerManager.cleanup(plan)
+                isInstalling = false
+            }
         }
-        isInstalling = false
+    }
+
+    private fun retirePendingExternalMount(): Deferred<Throwable?>? {
+        val suspension = pendingExternalMountSuspension ?: return null
+        val previousFinalization = pendingExternalMountFinalizationJob
+        pendingExternalMountSuspension = null
+
+        val retirement = CoroutineScope(Dispatchers.Main).async {
+            previousFinalization?.join()
+            try {
+                suspension.retire()
+                null
+            } catch (error: Throwable) {
+                val restoreError = withContext(NonCancellable) {
+                    runCatching { suspension.restore() }.exceptionOrNull()
+                }
+                restoreError?.let(error::addSuppressed)
+                if (restoreError != null && pendingExternalMountSuspension == null) {
+                    pendingExternalMountSuspension = suspension
+                }
+                Log.e(tag, "Failed to retire root mount after external install", error)
+                error
+            }
+        }
+        pendingExternalMountFinalizationJob = retirement
+        return retirement
+    }
+
+    private suspend fun awaitExternalMountRetirement(
+        retirement: Deferred<Throwable?>?
+    ): Boolean {
+        val error = retirement?.await()
+        if (pendingExternalMountFinalizationJob === retirement) {
+            pendingExternalMountFinalizationJob = null
+        }
+        if (error == null) return true
+        markInstallFailure(
+            context.getString(
+                R.string.failed_to_unmount,
+                error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+            )
+        )
+        return false
+    }
+
+    private suspend fun awaitPendingExternalMountFinalization() {
+        val job = pendingExternalMountFinalizationJob ?: return
+        job.join()
+        if (pendingExternalMountFinalizationJob === job) {
+            pendingExternalMountFinalizationJob = null
+        }
+    }
+
+    private fun finalizePendingExternalMount(installed: Boolean) {
+        val suspension = pendingExternalMountSuspension ?: return
+        pendingExternalMountSuspension = null
+        pendingExternalMountFinalizationJob = CoroutineScope(Dispatchers.IO).launch {
+            runCatching {
+                withContext(NonCancellable) {
+                    if (installed) suspension.retire() else suspension.restore()
+                }
+            }.onFailure { error ->
+                Log.e(tag, "Failed to finalize suspended root mount", error)
+            }
+        }
     }
 
     private fun isUpdatedSinceBaseline(
@@ -1425,8 +1697,11 @@ class InstalledAppInfoViewModel(
         val app = installedApp ?: return
         when (app.installType) {
             InstallType.DEFAULT,
+            InstallType.PLAY_STORE,
+            InstallType.ROOT_PLAY_STORE,
             InstallType.CUSTOM,
-            InstallType.SHIZUKU -> viewModelScope.launch {
+            InstallType.SHIZUKU,
+            InstallType.SHIZUKU_PLAY_STORE -> viewModelScope.launch {
                 deferUninstallProgressToasts = true
                 startUninstallProgressToasts()
                 when (val result = runAckpineUninstall(app.currentPackageName)) {
@@ -1653,6 +1928,12 @@ class InstalledAppInfoViewModel(
         } else {
             null
         }
+        isPlayStoreInstallerSource =
+            app.installType == InstallType.MOUNT &&
+                installedInfo != null &&
+                withContext(Dispatchers.IO) {
+                    pm.isPlayStoreInstallerSource(devicePackageName)
+                }
         val mountedNow = if (app.installType == InstallType.MOUNT) {
             runCatching { rootInstaller.isAppMounted(devicePackageName) }.getOrDefault(isMounted)
         } else {
@@ -1739,8 +2020,14 @@ class InstalledAppInfoViewModel(
     override fun onCleared() {
         super.onCleared()
         context.unregisterReceiver(packageChangeReceiver)
-        pendingExternalInstall?.let(installerManager::cleanup)
-        pendingExternalInstall = null
+        val rootInstallerStillOpen =
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+                pendingExternalMountSuspension != null
+        if (!rootInstallerStillOpen) {
+            pendingExternalInstall?.let(installerManager::cleanup)
+            pendingExternalInstall = null
+            finalizePendingExternalMount(installed = false)
+        }
         launchedActivity = null
         internalInstallTimeoutJob?.cancel()
         externalInstallTimeoutJob?.cancel()

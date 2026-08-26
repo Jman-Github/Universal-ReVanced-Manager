@@ -41,6 +41,20 @@ private data class DurableCompletion(
     val committedState: RootCommittedState?
 )
 
+internal data class RootMountStateIdentity(
+    val transactionId: String,
+    val packageName: String,
+    val userId: Int,
+    val stockSha256: String,
+    val patchedSha256: String,
+    val committedAtEpochMs: Long
+)
+
+internal data class ConditionalRootMountExecution(
+    val matched: Boolean,
+    val stateIdentity: RootMountStateIdentity?
+)
+
 class RootMountTransactionCoordinator(
     private val shell: RootShellGateway,
     private val packageStateReader: PackageStateReader,
@@ -51,13 +65,71 @@ class RootMountTransactionCoordinator(
     private val packageLock: RootPackageLocking,
     private val reconciliationScheduler: RootReconciliationScheduling
 ) {
+    suspend fun hasActiveMountState(packageName: String): Boolean =
+        withContext(Dispatchers.IO) {
+            mutexFor(packageName).withLock {
+                transactionStore.initialize()
+                val committed = transactionStore.readCommitted(packageName)
+                val moduleState = moduleStore.readCommittedState(packageName)
+                val interruptedPrevious = transactionStore.readActive(packageName)
+                    ?.previousCommitted
+                listOfNotNull(committed, moduleState, interruptedPrevious).any { state ->
+                    isValidCommittedState(packageName, state) && state.active
+                }
+            }
+        }
+
     suspend fun execute(
         request: RootMountRequest,
         onPhase: (RootMountPhase) -> Unit = {}
     ): RootMountResult = withContext(Dispatchers.IO) {
         mutexFor(request.packageName).withLock {
-            val first = executeLocked(request, onPhase)
-            when (first) {
+            executeWithLockHeld(request, onPhase)
+        }
+    }
+
+    internal suspend fun suspendForExternalInstall(
+        request: RootMountRequest
+    ): RootMountStateIdentity = withContext(Dispatchers.IO) {
+        mutexFor(request.packageName).withLock {
+            check(request.operation == RootMountOperation.UNMOUNT) {
+                "External install suspension must unmount the package"
+            }
+            executeWithLockHeld(request, {}).requireSuccess()
+            val committed = transactionStore.readCommitted(request.packageName)
+                ?: error("Root mount suspension state was not committed")
+            check(isValidCommittedState(request.packageName, committed) && !committed.active) {
+                "Root mount suspension state is invalid"
+            }
+            committed.identity()
+        }
+    }
+
+    internal suspend fun executeIfStateMatches(
+        expected: RootMountStateIdentity,
+        request: RootMountRequest
+    ): ConditionalRootMountExecution = withContext(Dispatchers.IO) {
+        mutexFor(request.packageName).withLock {
+            transactionStore.initialize()
+            val current = transactionStore.readCommitted(request.packageName)
+            if (current?.identity() != expected) {
+                return@withLock ConditionalRootMountExecution(false, null)
+            }
+
+            executeWithLockHeld(request, {}).requireSuccess()
+            ConditionalRootMountExecution(
+                matched = true,
+                stateIdentity = transactionStore.readCommitted(request.packageName)?.identity()
+            )
+        }
+    }
+
+    private suspend fun executeWithLockHeld(
+        request: RootMountRequest,
+        onPhase: (RootMountPhase) -> Unit
+    ): RootMountResult {
+        val first = executeLocked(request, onPhase)
+        return when (first) {
                 is RootMountResult.RecoveredToPreviousMount ->
                     if (request.operation in RESUMABLE_AFTER_RECOVERY_OPERATIONS) {
                         executeAfterRecovery(
@@ -100,8 +172,16 @@ class RootMountTransactionCoordinator(
 
                 else -> first
             }
-        }
     }
+
+    private fun RootCommittedState.identity() = RootMountStateIdentity(
+        transactionId = transactionId,
+        packageName = packageName,
+        userId = userId,
+        stockSha256 = stockSha256,
+        patchedSha256 = patchedSha256,
+        committedAtEpochMs = committedAtEpochMs
+    )
 
     private suspend fun requestMatchesRecoveredStock(request: RootMountRequest): Boolean {
         if (request.operation != RootMountOperation.SWITCH_PATCHED_BUILD &&

@@ -122,7 +122,8 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     private val installerType = installerTypeFor(input.useMount)
     private val patchAvailabilityEnabled = prefs.patchAvailabilityEnabled.getBlocking()
     private val removeGmsCoreForMount = input.useMount &&
-        installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+        installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+            InstallerManager.Token.AutoSaved &&
         prefs.removeGmsCoreForPrimaryMount.getBlocking()
 
     var selectionWarningEnabled by mutableStateOf(true)

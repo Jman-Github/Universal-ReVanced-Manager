@@ -13,13 +13,21 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.installer.InstallCancelledException
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
+import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionDeadException
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
+import app.urv.manager.domain.installer.root.RootMountSuspension
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
+import app.urv.manager.domain.installer.root.installAsPlayStoreWithMountRollback
+import app.urv.manager.domain.installer.root.launchExternalInstallerWithMountFinalization
+import app.urv.manager.domain.installer.root.reinstallMountedStockAsPlayStore
+import app.urv.manager.domain.installer.root.restore
+import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
+import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.SignatureMetadataApkInfo
 import app.urv.manager.domain.manager.SignatureMetadataInjectorProgress
@@ -59,6 +67,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,6 +75,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 enum class SignatureMetadataInputRole {
     SIGNATURE_SOURCE,
@@ -144,6 +154,7 @@ class SignatureMetadataInjectorViewModel(
     private val app: Application,
     private val manager: SignatureMetadataInjectorManager,
     private val installerManager: InstallerManager,
+    private val rootInstaller: RootInstaller,
     private val rootMountCoordinator: RootMountTransactionCoordinator,
     private val shizukuInstaller: ShizukuInstaller,
     private val sessionInstaller: SessionInstaller,
@@ -166,6 +177,7 @@ class SignatureMetadataInjectorViewModel(
     private var splitSelectionJob: Job? = null
     private var installJob: Job? = null
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
+    private var pendingExternalMountSuspension: RootMountSuspension? = null
     private var pendingRootMountInstallerToken: InstallerManager.Token? = null
     private var workspaceCacheGuard: AutoCloseable? = null
     private var metadataGeneration = 0L
@@ -638,6 +650,7 @@ class SignatureMetadataInjectorViewModel(
 
         installJob = viewModelScope.launch {
             try {
+                restorePendingExternalMount()
                 CacheCleanupGuard.withCacheInUse {
                     val installFiles = if (splitOutput) {
                         appendLog("Extracting split APKs for installation")
@@ -721,7 +734,27 @@ class SignatureMetadataInjectorViewModel(
                                 )
                             )
                             when (mountResult) {
-                                is RootMountResult.Success -> installationSucceeded()
+                                is RootMountResult.Success -> {
+                                    val sourceAttributionError = if (plan.installAsPlayStore) {
+                                        reinstallMountedStockAsPlayStore(
+                                            context = app,
+                                            rootInstaller = rootInstaller,
+                                            rootMountCoordinator = rootMountCoordinator,
+                                            packageName = packageName,
+                                            userId = android.os.Process.myUid() / 100_000
+                                        )
+                                    } else null
+                                    installationSucceeded()
+                                    sourceAttributionError?.let { error ->
+                                        val warning = app.getString(
+                                            R.string.installer_play_store_attribution_failed,
+                                            error.simpleMessage()
+                                                ?: error.javaClass.simpleName.orEmpty()
+                                        )
+                                        appendLog(warning)
+                                        app.toast(warning)
+                                    }
+                                }
                                 is RootMountResult.RequiresDowngradeConfirmation -> {
                                     pendingRootMountInstallerToken = installerToken
                                     stateFlow.update {
@@ -730,6 +763,21 @@ class SignatureMetadataInjectorViewModel(
                                 }
                                 else -> mountResult.requireSuccess()
                             }
+                        }
+                        // Code adapted from Morphe, see third-party/NOTICE for more information
+                        // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+                        is InstallerManager.InstallPlan.RootPlayStore -> {
+                            check(!splitOutput) {
+                                app.getString(R.string.installer_status_not_supported)
+                            }
+                            installAsPlayStoreWithMountRollback(
+                                rootInstaller = rootInstaller,
+                                rootMountCoordinator = rootMountCoordinator,
+                                apkFile = result.outputFile,
+                                packageName = packageName,
+                                userId = android.os.Process.myUid() / 100_000
+                            )
+                            installationSucceeded()
                         }
                         is InstallerManager.InstallPlan.Shizuku -> {
                             if (splitOutput) {
@@ -754,17 +802,7 @@ class SignatureMetadataInjectorViewModel(
                             installationSucceeded()
                         }
                         is InstallerManager.InstallPlan.External -> {
-                            pendingExternalInstall = plan
-                            ContextCompat.startActivity(app, plan.intent, null)
-                            val message = app.getString(
-                                R.string.installer_external_launched,
-                                plan.installerLabel
-                            )
-                            appendLog(message)
-                            app.toast(message)
-                            stateFlow.update {
-                                it.copy(installStatus = message)
-                            }
+                            launchExternalInstaller(plan)
                         }
                     }
                 }
@@ -801,6 +839,12 @@ class SignatureMetadataInjectorViewModel(
     }
 
     fun cancelInstall() {
+        if (
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+            pendingExternalMountSuspension != null
+        ) {
+            return
+        }
         installJob?.cancel(CancellationException("User cancelled installation"))
     }
 
@@ -828,15 +872,7 @@ class SignatureMetadataInjectorViewModel(
                 expectedPackage = packageName,
                 sourceLabel = label
             )
-            pendingExternalInstall = fallbackPlan
-            ContextCompat.startActivity(app, fallbackPlan.intent, null)
-            val message = app.getString(
-                R.string.installer_external_launched,
-                fallbackPlan.installerLabel
-            )
-            appendLog(message)
-            app.toast(message)
-            stateFlow.update { it.copy(installStatus = message) }
+            launchExternalInstaller(fallbackPlan)
             return
         }
         when (installResult) {
@@ -1037,6 +1073,111 @@ class SignatureMetadataInjectorViewModel(
         stateFlow.update { it.copy(installStatus = message) }
     }
 
+    private suspend fun launchExternalInstaller(plan: InstallerManager.InstallPlan.External) {
+        val baseline = withContext(Dispatchers.IO) {
+            pm.installedPackageSnapshot(plan.expectedPackage, includeHashes = false)
+        }
+        val suspendedMount = if (plan.token == InstallerManager.Token.PlayStore) {
+            suspendRootMountForPackageInstall(
+                rootInstaller = rootInstaller,
+                rootMountCoordinator = rootMountCoordinator,
+                packageName = plan.expectedPackage,
+                userId = android.os.Process.myUid() / 100_000,
+                recoveryContext = app
+            )
+        } else {
+            null
+        }
+
+        pendingExternalInstall = plan
+        pendingExternalMountSuspension = suspendedMount
+        var recoveryOwnsCleanup = false
+        fun showLaunched() {
+            val message = app.getString(
+                R.string.installer_external_launched,
+                plan.installerLabel
+            )
+            appendLog(message)
+            app.toast(message)
+            stateFlow.update { it.copy(installStatus = message) }
+        }
+
+        val installed = try {
+            if (suspendedMount != null) {
+                launchExternalInstallerWithMountFinalization(
+                    context = app,
+                    targetIntent = plan.intent,
+                    suspendedMount = suspendedMount,
+                    installChanged = {
+                        val current = pm.installedPackageSnapshot(
+                            plan.expectedPackage,
+                            includeHashes = false
+                        )
+                        current != null && current.changedSince(baseline)
+                    },
+                    activityTimeoutMs = EXTERNAL_INSTALL_TIMEOUT_MS,
+                    onLaunched = ::showLaunched,
+                    onRecoveryOwnershipTransferred = {
+                        recoveryOwnsCleanup = true
+                        if (pendingExternalInstall === plan) {
+                            pendingExternalInstall = null
+                        }
+                    },
+                    cleanupFile = plan.sharedFile,
+                    cleanup = { installerManager.cleanup(plan) }
+                )
+            } else {
+                ContextCompat.startActivity(app, plan.intent, null)
+                showLaunched()
+                withTimeoutOrNull(EXTERNAL_INSTALL_TIMEOUT_MS) {
+                    while (true) {
+                        delay(EXTERNAL_INSTALL_POLL_INTERVAL_MS)
+                        val current = withContext(Dispatchers.IO) {
+                            pm.installedPackageSnapshot(
+                                plan.expectedPackage,
+                                includeHashes = false
+                            )
+                        }
+                        if (current != null && current.changedSince(baseline)) break
+                    }
+                    true
+                } ?: false
+            }
+        } finally {
+            pendingExternalInstall = null
+            pendingExternalMountSuspension = null
+            if (!recoveryOwnsCleanup) installerManager.cleanup(plan)
+        }
+
+        if (installed) {
+            val attributionError = installerManager.tryFinalizePlayStoreAttribution(plan)
+            installationSucceeded()
+            attributionError?.let { error ->
+                val warning = app.getString(
+                    R.string.installer_play_store_attribution_failed,
+                    error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
+                )
+                appendLog(warning)
+                app.toast(warning)
+            }
+        } else {
+            val timeoutMessage = app.getString(
+                R.string.installer_external_timeout,
+                plan.installerLabel
+            )
+            appendLog(timeoutMessage)
+            stateFlow.update { it.copy(installStatus = null, error = timeoutMessage) }
+        }
+    }
+
+    private suspend fun restorePendingExternalMount() {
+        val suspension = pendingExternalMountSuspension ?: return
+        withContext(NonCancellable) { suspension.restore() }
+        if (pendingExternalMountSuspension === suspension) {
+            pendingExternalMountSuspension = null
+        }
+    }
+
     override fun onCleared() {
         val jobsToAwait = listOfNotNull(
             metadataAnalysisJob,
@@ -1051,8 +1192,17 @@ class SignatureMetadataInjectorViewModel(
         splitSelectionJob?.cancel()
         manager.cancelActiveExecution()
         installJob?.cancel()
-        pendingExternalInstall?.let(installerManager::cleanup)
-        pendingExternalInstall = null
+        val rootInstallerStillOpen =
+            pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&
+                pendingExternalMountSuspension != null
+        if (!rootInstallerStillOpen) {
+            pendingExternalInstall?.let(installerManager::cleanup)
+            pendingExternalInstall = null
+        }
+        val suspendedMount = pendingExternalMountSuspension.takeUnless {
+            rootInstallerStillOpen
+        }
+        if (!rootInstallerStillOpen) pendingExternalMountSuspension = null
         synchronized(fullLogLock) {
             fullLogStoreClosed = true
             closeFullLogWriterLocked()
@@ -1065,6 +1215,7 @@ class SignatureMetadataInjectorViewModel(
             }
             runCatching { workspace.deleteRecursively() }
             runCatching { cacheGuard?.close() }
+            runCatching { suspendedMount?.restore() }
         }
         super.onCleared()
     }
@@ -1316,5 +1467,7 @@ class SignatureMetadataInjectorViewModel(
         const val MAX_VISIBLE_LOG_LINES = 2_000
         const val FULL_LOG_FILE_NAME = "injector.log"
         const val SPLIT_INSTALL_TIMEOUT_MS = 5L * 60L * 1000L
+        const val EXTERNAL_INSTALL_TIMEOUT_MS = 5L * 60L * 1000L
+        const val EXTERNAL_INSTALL_POLL_INTERVAL_MS = 500L
     }
 }

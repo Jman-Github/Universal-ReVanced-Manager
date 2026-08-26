@@ -4,6 +4,9 @@ const val tag = "Universal ReVanced Manager"
 
 const val JAR_MIMETYPE = "application/java-archive"
 const val APK_MIMETYPE = "application/vnd.android.package-archive"
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+const val PLAY_STORE_INSTALLER_PACKAGE = "com.android.vending"
 const val APK_SIGNER_CACHE_DIR = "apk-signer"
 const val APK_SIGNATURE_METADATA_INJECTOR_CACHE_DIR = "apk-signature-metadata-injector"
 val APK_FILE_MIME_TYPES = arrayOf(

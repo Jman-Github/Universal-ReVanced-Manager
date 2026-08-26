@@ -718,6 +718,8 @@ fun AdvancedSettingsScreen(
                 }
                 val ensured = if (
                     token == InstallerManager.Token.Internal ||
+                    token == InstallerManager.Token.PlayStore ||
+                    token == InstallerManager.Token.RootPlayStore ||
                     token == InstallerManager.Token.AutoSaved ||
                     (token == InstallerManager.Token.None && includeNone) ||
                     normalized.any { tokensEqual(it.token, token) }
@@ -804,6 +806,8 @@ fun AdvancedSettingsScreen(
                 InstallerManager.Token.Internal,
                 InstallerManager.Token.None,
                 InstallerManager.Token.AutoSaved -> null
+                InstallerManager.Token.PlayStore,
+                InstallerManager.Token.RootPlayStore,
                 InstallerManager.Token.Shizuku,
                 InstallerManager.Token.ShizukuGooglePlay,
                 is InstallerManager.Token.Component -> entry.icon?.let { drawable ->
@@ -4970,12 +4974,18 @@ private fun tokensEqual(a: InstallerManager.Token?, b: InstallerManager.Token?):
     a == null || b == null -> false
     a is InstallerManager.Token.Component && b is InstallerManager.Token.Component ->
         a.componentName == b.componentName
-    a.isShizukuVariant() && b.isShizukuVariant() -> true
+    a.baseInstallerVariant() == b.baseInstallerVariant() -> true
     else -> false
 }
 
-private fun InstallerManager.Token.isShizukuVariant(): Boolean =
-    this == InstallerManager.Token.Shizuku || this == InstallerManager.Token.ShizukuGooglePlay
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+private fun InstallerManager.Token.baseInstallerVariant(): InstallerManager.Token = when (this) {
+    InstallerManager.Token.PlayStore -> InstallerManager.Token.Internal
+    InstallerManager.Token.RootPlayStore -> InstallerManager.Token.AutoSaved
+    InstallerManager.Token.ShizukuGooglePlay -> InstallerManager.Token.Shizuku
+    else -> this
+}
 
 @Composable
 private fun PatcherLogModeDialog(

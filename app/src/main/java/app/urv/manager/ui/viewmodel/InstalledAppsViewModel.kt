@@ -77,6 +77,7 @@ class InstalledAppsViewModel(
     val packageInfoMap = mutableStateMapOf<String, PackageInfo?>()
     val installedOnDeviceMap = mutableStateMapOf<String, Boolean>()
     val mountedOnDeviceMap = mutableStateMapOf<String, Boolean>()
+    val playStoreInstallerSourceMap = mutableStateMapOf<String, Boolean>()
     val savedCopyMap = mutableStateMapOf<String, Boolean>()
     val savedApkAbiLabelMap = mutableStateMapOf<String, String>()
     val appLabelMap = mutableStateMapOf<String, String>()
@@ -114,6 +115,7 @@ class InstalledAppsViewModel(
                     packageInfoMap.remove(packageName)
                     installedOnDeviceMap.remove(packageName)
                     mountedOnDeviceMap.remove(packageName)
+                    playStoreInstallerSourceMap.remove(packageName)
                     savedCopyMap.remove(packageName)
                     savedApkAbiLabelMap.remove(packageName)
                     appLabelMap.remove(packageName)
@@ -471,6 +473,17 @@ class InstalledAppsViewModel(
             } else {
                 mountedOnDeviceMap.remove(packageName)
                 false
+            }
+
+            if (
+                installedApp.installType == InstallType.MOUNT &&
+                supportsRootMount &&
+                pm.getPackageInfo(packageName) != null
+            ) {
+                playStoreInstallerSourceMap[packageName] =
+                    pm.isPlayStoreInstallerSource(packageName)
+            } else {
+                playStoreInstallerSourceMap.remove(packageName)
             }
 
             var resolvedLabel = savedArchiveLabel

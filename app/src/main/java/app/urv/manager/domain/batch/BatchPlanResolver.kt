@@ -432,7 +432,8 @@ class BatchPlanResolver(
         }
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
         val removeGmsCore = useMount &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved &&
             prefs.removeGmsCoreForPrimaryMount.get()
         val selection = (validSavedConfiguration?.first
             ?: bundles.associate { bundle ->
@@ -626,9 +627,13 @@ class BatchPlanResolver(
         chooseInstallerPerInstall: Boolean,
     ): Boolean {
         forcedUseMount?.let { return it }
-        installerToken?.let { return installerManager.parseToken(it) == InstallerManager.Token.AutoSaved }
+        installerToken?.let {
+            return installerManager.baseInstallerToken(installerManager.parseToken(it)) ==
+                InstallerManager.Token.AutoSaved
+        }
         if (chooseInstallerPerInstall) return false
-        return installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved
+        return installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+            InstallerManager.Token.AutoSaved
     }
 
     private suspend fun applyBatchAvailability(
@@ -644,7 +649,8 @@ class BatchPlanResolver(
         val selectableByBundle = item.bundles.associate { it.uid to it.patchNames }
         val availabilityEnabled = prefs.patchAvailabilityEnabled.get()
         val removeGmsCore = item.useMount &&
-            installerManager.getPrimaryToken() == InstallerManager.Token.AutoSaved &&
+            installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
+                InstallerManager.Token.AutoSaved &&
             prefs.removeGmsCoreForPrimaryMount.get()
         return selection.applyAvailability(
             installerTypeFor(item.useMount),

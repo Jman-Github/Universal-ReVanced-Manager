@@ -10,7 +10,9 @@ object MorphePatchBundleLoader {
         validateDexEntries(bundlePath)
         val optimizedDexDirectory = optimizedDexDirectory(bundlePath)
         val patchFiles = runCatching {
-            loadPatchesFromDex(setOf(File(bundlePath)), optimizedDexDirectory).byPatchesFile
+            withRuntimeContextClassLoader {
+                loadPatchesFromDex(setOf(File(bundlePath)), optimizedDexDirectory).byPatchesFile
+            }
         }.getOrElse { error ->
             throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
         }
@@ -57,4 +59,19 @@ object MorphePatchBundleLoader {
     private fun optimizedDexDirectory(bundlePath: String): File? = runCatching {
         File(bundlePath).absoluteFile.parentFile?.resolve("oat")?.apply { mkdirs() }
     }.getOrNull()
+
+    private inline fun <T> withRuntimeContextClassLoader(block: () -> T): T {
+        val thread = Thread.currentThread()
+        val runtimeClassLoader = MorphePatchBundleLoader::class.java.classLoader
+            ?: return block()
+        val previousClassLoader = thread.contextClassLoader
+        if (previousClassLoader === runtimeClassLoader) return block()
+
+        thread.contextClassLoader = runtimeClassLoader
+        return try {
+            block()
+        } finally {
+            thread.contextClassLoader = previousClassLoader
+        }
+    }
 }

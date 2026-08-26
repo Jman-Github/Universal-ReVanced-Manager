@@ -1067,6 +1067,14 @@ fun InstalledAppInfoScreen(
             } else {
                 installedApp.installType
             }
+            val installerLabelType = if (
+                displayInstallType == InstallType.MOUNT &&
+                viewModel.isPlayStoreInstallerSource
+            ) {
+                InstallType.ROOT_PLAY_STORE
+            } else {
+                displayInstallType
+            }
             val displayPackageName = if (displayInstallType == InstallType.SAVED) {
                 installedApp.originalPackageName.takeIf { it.isNotBlank() }
                     ?: savedAppBasePackage(installedApp.currentPackageName)
@@ -1462,8 +1470,11 @@ fun InstalledAppInfoScreen(
 
         when (installType) {
             InstallType.DEFAULT,
+            InstallType.PLAY_STORE,
+            InstallType.ROOT_PLAY_STORE,
             InstallType.CUSTOM,
-            InstallType.SHIZUKU -> {
+            InstallType.SHIZUKU,
+            InstallType.SHIZUKU_PLAY_STORE -> {
                 if (viewModel.hasSavedCopy) {
                     val installAction: () -> Unit = ::triggerSavedAppInstall
 
@@ -1762,11 +1773,11 @@ fun InstalledAppInfoScreen(
 
                 SettingsListItem(
                     headlineContent = stringResource(R.string.install_type),
-                    supportingContent = if (displayInstallType == InstallType.CUSTOM) {
+                    supportingContent = if (installerLabelType == InstallType.CUSTOM) {
                         viewModel.customInstallerLabel
-                            ?: stringResource(displayInstallType.stringResource)
+                            ?: stringResource(installerLabelType.stringResource)
                     } else {
-                        stringResource(displayInstallType.stringResource)
+                        stringResource(installerLabelType.stringResource)
                     }
                 )
 
