@@ -1,4 +1,4 @@
-# v1.8.1-dev.23 (TBD)
+# v1.9.0-dev.1
 
 # Features
 
@@ -25,6 +25,7 @@
 
 - Added a manual debug build workflow that uploads dev APK artifacts with a `-debug` version suffix without publishing a release
 - Updated GitHub Actions dependencies to current Node 24-compatible versions, resolving Node.js 20 and deprecated action warnings
+- Converted repository to semantic release based system instead of the manual mess I had before
 
 
 # v1.8.1-dev.22 (2026-08-11)

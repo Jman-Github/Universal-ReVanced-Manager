@@ -1,7 +1,6 @@
 import com.mikepenz.aboutlibraries.plugin.DuplicateMode
 import com.mikepenz.aboutlibraries.plugin.DuplicateRule
 import com.android.build.api.variant.FilterConfiguration
-import io.github.z4kn4fein.semver.toVersion
 import kotlin.random.Random
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.artifacts.VersionCatalogsExtension
@@ -24,6 +23,43 @@ val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.
 fun artifactVersionName(versionName: String): String =
     "v${versionName.removePrefix("v")}"
 
+fun androidVersionCode(versionName: String, developmentBuild: Boolean = false): Int {
+    val normalizedVersion = versionName.removePrefix("v")
+    val versionParts = normalizedVersion.substringBefore('-').split('.')
+    require(versionParts.size == 3) { "Invalid version: $versionName" }
+
+    val majorVersion = versionParts[0].toInt()
+    val minorVersion = versionParts[1].toInt()
+    val patchVersion = versionParts[2].toInt()
+    require(majorVersion in 0..209) { "Major version must be in 0..209: $versionName" }
+    require(minorVersion in 0..99) { "Minor version must be in 0..99: $versionName" }
+    require(patchVersion in 0..99) { "Patch version must be in 0..99: $versionName" }
+
+    val isExplicitPrerelease = normalizedVersion.contains('-')
+    val prereleaseNumber = normalizedVersion
+        .substringAfter('-', "")
+        .split('.', '-')
+        .mapNotNull { it.toIntOrNull() }
+        .lastOrNull()
+    val releaseOrdinal = when {
+        isExplicitPrerelease -> prereleaseNumber ?: 0
+        developmentBuild -> 0
+        else -> 999
+    }
+    require(!isExplicitPrerelease || releaseOrdinal in 0..998) {
+        "Prerelease number must be in 0..998; 999 is reserved for stable releases: $versionName"
+    }
+
+    val computedVersionCode = majorVersion.toLong() * 10_000_000L +
+        minorVersion.toLong() * 100_000L +
+        patchVersion.toLong() * 1_000L +
+        releaseOrdinal
+    require(computedVersionCode in 1..2_100_000_000L) {
+        "Android versionCode is outside the supported range: $versionName -> $computedVersionCode"
+    }
+    return computedVersionCode.toInt()
+}
+
 val outputApkFileName = "universal-revanced-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val revanced22RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v22")
@@ -34,7 +70,7 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
-val devVersionNameSuffix = "-$devVersionSuffix"
+val devVersionNameSuffix = if (resolvedProjectVersion.contains('-')) "" else "-$devVersionSuffix"
 val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")
 fun libraryVersion(alias: String): String =
     libraryVersions.findVersion(alias).get().requiredVersion
@@ -239,14 +275,9 @@ android {
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val versionStr = if (version == "unspecified") "1.8.1" else version.toString()
+        val versionStr = resolvedProjectVersion
         versionName = versionStr
-        versionCode = with(versionStr.toVersion()) {
-            major * 10_000_000 +
-                    minor * 10_000 +
-                    patch * 100 +
-                    (preRelease?.substringAfterLast('.')?.toInt() ?: 0)
-        }
+        versionCode = androidVersionCode(versionStr)
         vectorDrawables.useSupportLibrary = true
         buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
         buildConfigField(
@@ -394,7 +425,13 @@ android {
 
 androidComponents {
     onVariants { variant ->
+        val developmentBuild = variant.buildType == "debug" || variant.buildType == "dev"
         variant.outputs.forEach { output ->
+            if (developmentBuild && !resolvedProjectVersion.contains('-')) {
+                output.versionCode.set(
+                    androidVersionCode(resolvedProjectVersion, developmentBuild = true)
+                )
+            }
             val abiSuffix = output.filters
                 .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
                 ?.identifier

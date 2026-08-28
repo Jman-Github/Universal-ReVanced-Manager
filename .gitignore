@@ -125,3 +125,4 @@ app/keystore.jks
 .android/
 .cxx
 to-do.txt
+/release-assets/
