@@ -71,19 +71,9 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
             )
         )
         if (committed != null) writeCommitted(committed)
-        // The completed marker and committed result are already durable at this point. Journal
-        // deletion is cleanup only: if the root-shell transport fails before or after the unlink,
-        // either the recovery-safe COMPLETED marker remains or the journal is already gone.
-        // Never turn that ambiguous cleanup result into a rollback of the durable transaction.
-        try {
-            runStoreCommand(
-                "set -eu; rm -f ${shellQuote(RootPaths.active(journal.packageName))}; " +
-                    "sync -f ${shellQuote(RootPaths.transaction(journal.packageName))} 2>/dev/null || sync || true"
-            )
-        } catch (_: Exception) {
-            // Cleanup failures, including cancellation, are ambiguous but harmless after
-            // durable completion. The caller can observe cancellation at its next boundary.
-        }
+        // Keep the durable COMPLETED marker until the coordinator has also removed the
+        // transient module snapshot. Startup recovery can then retry either cleanup step
+        // after process death without rolling back the recorded result.
     }
 
     override suspend fun appendDiagnostic(packageName: String, diagnosticId: String, message: String) {

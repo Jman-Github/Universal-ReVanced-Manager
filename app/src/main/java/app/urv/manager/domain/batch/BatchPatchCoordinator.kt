@@ -25,6 +25,7 @@ import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
 import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
 import app.urv.manager.domain.installer.rootMountStockIdentityUsable
 import app.urv.manager.domain.installer.rootMountStockReplacementRequired
+import app.urv.manager.domain.installer.shouldUseConfiguredInstallerWithoutPrompt
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
@@ -59,6 +60,7 @@ import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.util.PM
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
@@ -569,7 +571,12 @@ class BatchPatchCoordinator(
             }
 
             val afterPatch = mutableState.value ?: return
-            if (afterPatch.policy == BatchInstallPolicy.INSTALL_AFTER) {
+            if (
+                afterPatch.policy == BatchInstallPolicy.INSTALL_AFTER &&
+                shouldUseConfiguredInstallerWithoutPrompt(
+                    prefs.chooseInstallerPerInstall.get()
+                )
+            ) {
                 installAllItems(afterPatch)
             } else {
                 finish(
@@ -1230,6 +1237,12 @@ class BatchPatchCoordinator(
     fun installAll(forceShizuku: Boolean = false) {
         val snapshot = mutableState.value ?: return
         if (snapshot.phase != BatchPhase.FINISHED || installJob?.isActive == true) return
+        if (
+            !forceShizuku &&
+            !shouldUseConfiguredInstallerWithoutPrompt(
+                prefs.chooseInstallerPerInstall.getBlocking()
+            )
+        ) return
         val packages = snapshot.patchedItems
             .filter { it.installOutcome != BatchInstallOutcome.INSTALLED }
             .map { it.packageName }
@@ -1778,6 +1791,11 @@ class BatchPatchCoordinator(
                         ).also { mountAttempt ->
                             if (mountAttempt.succeeded) {
                                 successfulInstallType = InstallType.MOUNT
+                                successfulCustomInstallerPackageName =
+                                    PLAY_STORE_INSTALLER_PACKAGE.takeIf {
+                                        plan.installAsPlayStore &&
+                                            !mountAttempt.playStoreAttributionFailed
+                                    }
                             }
                         }
                     }

@@ -101,9 +101,7 @@ fun InstallerPickerDialog(
     var installAsPlayStore by remember(initialSelection) {
         mutableStateOf(
             initialSelection?.let(::playStoreModeAvailable) == true &&
-                (installerManager.usesPlayStoreSource(initialSelection) ||
-                    (installerManager.isShizukuToken(initialSelection) &&
-                        shizukuInstallAsPlayStore))
+                installerManager.usesPlayStoreSource(initialSelection)
         )
     }
 
@@ -182,9 +180,7 @@ fun InstallerPickerDialog(
                             if (enabled) {
                                 selectedToken = option.token
                                 installAsPlayStore =
-                                    installerManager.usesPlayStoreSource(option.token) ||
-                                        (installerManager.isShizukuToken(option.token) &&
-                                            shizukuInstallAsPlayStore)
+                                    installerManager.usesPlayStoreSource(option.token)
                             }
                         },
                         colors = transparentListItemColors,
@@ -304,7 +300,11 @@ fun InstallerPickerDialog(
 
     if (showShizukuConfiguration) {
         ShizukuConfigurationDialog(
-            installAsPlayStore = shizukuInstallAsPlayStore,
+            installAsPlayStore = if (installerManager.isShizukuToken(selectedToken)) {
+                installAsPlayStore
+            } else {
+                shizukuInstallAsPlayStore
+            },
             autoInstall = autoInstallWithShizuku,
             autoUninstallOnConflict = autoUninstallWithShizuku,
             onInstallAsPlayStoreChange = { enabled ->

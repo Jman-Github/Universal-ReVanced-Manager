@@ -154,6 +154,23 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `failed normal unmount is accepted when the owned layer disappears during recheck`() = runBlocking {
+        val target = "/data/app/com.example.app/base.apk"
+        val shell = MountShell(
+            target,
+            failNormalUnmount = true,
+            dropUrvMountOnFailedNormalUnmount = true
+        )
+        val verifier = verifier(shell)
+
+        val lazy = verifier.removeAllUrvMounts(PACKAGE, setOf(target), allowLazyRecovery = false)
+
+        assertEquals(emptyList(), lazy)
+        assertFalse(shell.mounted)
+        assertFalse(shell.commands.any { it.startsWith("umount -l") })
+    }
+
+    @Test
     fun `lazy unmount is available when the caller has quiesced the package`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(target, failNormalUnmount = true)
@@ -409,6 +426,7 @@ class RootMountVerifierTest {
         private val includeForeignLayer: Boolean = false,
         private val exposeSourcePath: Boolean = true,
         private val foreignLayerOnMountTableRead: Int? = null,
+        private val dropUrvMountOnFailedNormalUnmount: Boolean = false,
         mountLayerSources: List<String>? = null
     ) : RootShellGateway {
         val commands = mutableListOf<String>()
@@ -486,8 +504,12 @@ class RootMountVerifierTest {
                     }
                     RootCommandResult(0, emptyList(), emptyList())
                 }
-                command.startsWith("umount ") && failNormalUnmount ->
+                command.startsWith("umount ") && failNormalUnmount -> {
+                    if (dropUrvMountOnFailedNormalUnmount && remainingUrvSources.isNotEmpty()) {
+                        remainingUrvSources.removeAt(remainingUrvSources.lastIndex)
+                    }
                     RootCommandResult(1, emptyList(), listOf("busy"))
+                }
                 command.startsWith("umount ") -> {
                     if (foreignLayerMounted) {
                         foreignLayerMounted = false

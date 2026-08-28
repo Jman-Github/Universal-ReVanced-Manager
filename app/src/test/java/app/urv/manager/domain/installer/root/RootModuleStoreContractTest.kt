@@ -2,6 +2,7 @@ package app.urv.manager.domain.installer.root
 
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class RootModuleStoreContractTest {
@@ -82,6 +83,16 @@ class RootModuleStoreContractTest {
 
         assertTrue(commit.contains("RootPaths.rollbackModule(packageName)"))
         assertTrue(commit.contains("payload.previous"))
+    }
+
+    @Test
+    fun `durable completion removes only the transient module snapshot`() {
+        val source = source().readText()
+        val cleanup = source.substringAfter("override suspend fun cleanupCommittedSnapshot(")
+            .substringBefore("override suspend fun stageAndActivate(")
+
+        assertTrue(cleanup.contains("\"${'$'}backupRoot/module\""))
+        assertFalse(cleanup.contains("payload"))
     }
 
     private fun source(): File = sequenceOf(

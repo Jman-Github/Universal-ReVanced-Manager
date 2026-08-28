@@ -22,6 +22,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
+import app.urv.manager.domain.installer.usesPersistedPlayStoreMountMode
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
@@ -481,7 +482,10 @@ class InstalledAppsViewModel(
                 pm.getPackageInfo(packageName) != null
             ) {
                 playStoreInstallerSourceMap[packageName] =
-                    pm.isPlayStoreInstallerSource(packageName)
+                    usesPersistedPlayStoreMountMode(
+                        installedApp.installType,
+                        installedApp.customInstallerPackageName
+                    )
             } else {
                 playStoreInstallerSourceMap.remove(packageName)
             }

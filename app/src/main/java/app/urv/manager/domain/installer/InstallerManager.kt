@@ -17,6 +17,7 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.StringRes
 import app.universal.revanced.manager.BuildConfig
+import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.InstallerPreferenceTokens
 import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
@@ -34,6 +35,35 @@ internal fun installerTokenMatchesPatchMode(
 ): Boolean = token != InstallerManager.Token.None &&
     (token == InstallerManager.Token.AutoSaved ||
         token == InstallerManager.Token.RootPlayStore) == useMount
+
+internal fun shouldApplyProfileInstallerPreference(
+    chooseInstallerPerInstall: Boolean,
+    installerMatchesPatchMode: Boolean
+): Boolean = !chooseInstallerPerInstall && installerMatchesPatchMode
+
+internal fun shouldUseConfiguredInstallerWithoutPrompt(
+    chooseInstallerPerInstall: Boolean
+): Boolean = !chooseInstallerPerInstall
+
+internal fun persistedInstallerPackageName(
+    installType: InstallType,
+    selectedInstallerPackageName: String?,
+    existingInstallType: InstallType?,
+    existingInstallerPackageName: String?
+): String? = when (installType) {
+    InstallType.CUSTOM -> selectedInstallerPackageName
+        ?: existingInstallerPackageName.takeIf { existingInstallType == InstallType.CUSTOM }
+    InstallType.MOUNT -> selectedInstallerPackageName
+    else -> null
+}
+
+// Root mounts stay InstallType.MOUNT for mount lifecycle handling. Keep the explicitly
+// selected Play Store attribution in the existing installer-package metadata field.
+internal fun usesPersistedPlayStoreMountMode(
+    installType: InstallType,
+    installerPackageName: String?
+): Boolean = installType == InstallType.MOUNT &&
+    installerPackageName == PLAY_STORE_INSTALLER_PACKAGE
 
 internal fun packageInfoIsCompleteSingleApk(packageInfo: PackageInfo): Boolean {
     val splitRequiredValue =

@@ -1,6 +1,5 @@
 package app.urv.manager.domain.installer.root
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -73,27 +72,13 @@ class RootTransactionStoreTest {
     }
 
     @Test
-    fun `completed journal cleanup failure does not fail a durable transaction`() = runBlocking {
-        val shell = RecordingStoreShell(
-            completionCleanupFailure = IllegalStateException("cleanup transport failed")
-        )
+    fun `completed journal remains until snapshot cleanup is confirmed`() = runBlocking {
+        val shell = RecordingStoreShell()
         val store = RootTransactionStore(shell)
 
         store.complete(journal(), null)
 
-        assertTrue(shell.commands.any { it.startsWith("set -eu; rm -f") && it.contains("active.json") })
-    }
-
-    @Test
-    fun `completed journal cleanup cancellation does not undo durable completion`() = runBlocking {
-        val shell = RecordingStoreShell(
-            completionCleanupFailure = CancellationException("cleanup cancelled after unlink")
-        )
-        val store = RootTransactionStore(shell)
-
-        store.complete(journal(), null)
-
-        assertTrue(shell.commands.any { it.startsWith("set -eu; rm -f") && it.contains("active.json") })
+        assertTrue(shell.commands.none { it.startsWith("set -eu; rm -f") && it.contains("active.json") })
     }
 
     @Test
@@ -118,8 +103,7 @@ class RootTransactionStoreTest {
         private val truncatedActive: Boolean = false,
         private val failExistenceCheck: Boolean = false,
         private val failRead: Boolean = false,
-        private val failList: Boolean = false,
-        private val completionCleanupFailure: Throwable? = null
+        private val failList: Boolean = false
     ) : RootShellGateway {
         val commands = mutableListOf<String>()
 
@@ -138,8 +122,6 @@ class RootTransactionStoreTest {
                 command.startsWith("if [ -f") -> success("0")
                 command.startsWith("set -eu; for f in ") && failList ->
                     RootCommandResult(-1, emptyList(), emptyList())
-                command.startsWith("set -eu; rm -f") && completionCleanupFailure != null ->
-                    throw completionCleanupFailure
                 else -> success()
             }
         }

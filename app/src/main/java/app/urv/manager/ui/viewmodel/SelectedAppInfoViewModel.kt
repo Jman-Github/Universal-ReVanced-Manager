@@ -30,6 +30,7 @@ import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.shouldApplyProfileInstallerPreference
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -1708,10 +1709,14 @@ class SelectedAppInfoViewModel(
         val allowIncompatible = prefs.disablePatchVersionCompatCheck.get()
         val bundles = bundleInfoFlow.first()
         val profile = profileId?.let { patchProfileRepository.getProfile(it) }
+        val chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.get()
         val profileInstallerToken = profile?.installerToken?.takeIf { storedToken ->
-            installerTokenMatchesPatchMode(
-                installerManager.parseToken(storedToken),
-                usingMountInstall
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = chooseInstallerPerInstall,
+                installerMatchesPatchMode = installerTokenMatchesPatchMode(
+                    installerManager.parseToken(storedToken),
+                    usingMountInstall
+                )
             )
         }
         return Patcher.ViewModelParams(

@@ -50,6 +50,7 @@ import app.urv.manager.domain.installer.InstallCancelledException
 import app.urv.manager.domain.installer.InstallResult
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.shouldApplyProfileInstallerPreference
 import app.urv.manager.domain.installer.installerTokenSelectableForPatchedOutput
 import app.urv.manager.domain.installer.packageInfoIsCompleteSingleApk
 import app.urv.manager.domain.installer.patchedOutputSupportsRootMount
@@ -117,6 +118,7 @@ import app.urv.manager.ui.model.navigation.Patcher
 import app.urv.manager.service.PatchingTaskMonitorService
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.util.PM
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.Options
@@ -3803,7 +3805,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 } else {
                     InstallType.MOUNT
                 }
-                if (!persistPatchedApp(packageInfo.packageName, InstallType.MOUNT)) {
+                val persistedInstallerPackageName = PLAY_STORE_INSTALLER_PACKAGE.takeIf {
+                    installAsPlayStore && sourceAttributionError == null
+                }
+                val persisted = persistPatchedApp(
+                    packageInfo.packageName,
+                    InstallType.MOUNT,
+                    customInstallerPackageName = persistedInstallerPackageName
+                )
+                if (!persisted) {
                     Log.w(TAG, "Failed to persist mounted patched app metadata")
                 }
                 installedPackageName = packageInfo.packageName
@@ -4387,7 +4397,12 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             installWithToken(InstallerManager.Token.AutoSaved)
             return
         }
-        input.profileInstallerToken?.let { storedToken ->
+        input.profileInstallerToken?.takeIf {
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.getBlocking(),
+                installerMatchesPatchMode = hasProfileInstallerPreference
+            )
+        }?.let { storedToken ->
             installWithToken(
                 installerManager.withPlayStoreSource(
                     installerManager.parseToken(storedToken),
@@ -4432,10 +4447,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun maybeAutoInstall() {
         if (autoInstallTriggered) return
+        val chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.getBlocking()
+        val profileInstallerToken = input.profileInstallerToken
         val token = when {
-            input.autoInstall && input.profileInstallerToken != null ->
+            input.autoInstall &&
+                profileInstallerToken != null &&
+                shouldApplyProfileInstallerPreference(
+                    chooseInstallerPerInstall = chooseInstallerPerInstall,
+                    installerMatchesPatchMode = hasProfileInstallerPreference
+                ) ->
                 installerManager.withPlayStoreSource(
-                    installerManager.parseToken(input.profileInstallerToken),
+                    installerManager.parseToken(profileInstallerToken),
                     prefs.shizukuInstallAsPlayStore.getBlocking()
                 )
             !usingMountInstall && prefs.autoInstallWithShizuku.getBlocking() -> {

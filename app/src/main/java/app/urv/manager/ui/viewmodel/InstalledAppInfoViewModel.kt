@@ -34,6 +34,7 @@ import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionDeadException
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.usesPersistedPlayStoreMountMode
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
@@ -57,6 +58,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.batch.batchOriginalPackageName
 import app.urv.manager.domain.batch.hasBatchShortcutTarget
 import app.urv.manager.util.PM
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
@@ -814,15 +816,21 @@ class InstalledAppInfoViewModel(
                         )
                     } else null
                     val refreshedVersion = packageInfo.versionName ?: app.version
+                    val persistedInstallerPackageName =
+                        PLAY_STORE_INSTALLER_PACKAGE.takeIf {
+                            plan.installAsPlayStore && sourceAttributionError == null
+                        }
                     persistInstallMetadata(
                         InstallType.MOUNT,
                         refreshedVersion,
-                        packageInfo.packageName
+                        packageInfo.packageName,
+                        customInstallerPackageName = persistedInstallerPackageName
                     )
                     isMounted = rootInstaller.isAppMounted(packageInfo.packageName)
-                    isPlayStoreInstallerSource = withContext(Dispatchers.IO) {
-                        pm.isPlayStoreInstallerSource(packageInfo.packageName)
-                    }
+                    isPlayStoreInstallerSource = usesPersistedPlayStoreMountMode(
+                        InstallType.MOUNT,
+                        persistedInstallerPackageName
+                    )
                     markInstallSuccess(context.getString(R.string.saved_app_install_success))
                     sourceAttributionError?.let { error ->
                         Log.w(tag, "Failed to record Play Store as the installation source", error)
@@ -1928,12 +1936,10 @@ class InstalledAppInfoViewModel(
         } else {
             null
         }
-        isPlayStoreInstallerSource =
-            app.installType == InstallType.MOUNT &&
-                installedInfo != null &&
-                withContext(Dispatchers.IO) {
-                    pm.isPlayStoreInstallerSource(devicePackageName)
-                }
+        isPlayStoreInstallerSource = usesPersistedPlayStoreMountMode(
+            app.installType,
+            app.customInstallerPackageName
+        )
         val mountedNow = if (app.installType == InstallType.MOUNT) {
             runCatching { rootInstaller.isAppMounted(devicePackageName) }.getOrDefault(isMounted)
         } else {

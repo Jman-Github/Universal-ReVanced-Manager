@@ -14,6 +14,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.installerTokenMatchesPatchMode
+import app.urv.manager.domain.installer.shouldApplyProfileInstallerPreference
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchOptionsRepository
@@ -416,14 +417,21 @@ class BatchPlanResolver(
             }
         }.firstOrNull()
         val savedProfileInstallerToken = validSavedConfiguration?.third
+        val chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.get()
         val mountRequested = mountRequestedFor(
             forcedUseMount = forcedUseMount,
             installerToken = savedProfileInstallerToken,
-            chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.get(),
+            chooseInstallerPerInstall = chooseInstallerPerInstall,
         )
         val useMount = mountRequested && rootInstaller.hasRootAccess()
         val profileInstallerToken = savedProfileInstallerToken?.takeIf { token ->
-            installerTokenMatchesPatchMode(installerManager.parseToken(token), useMount)
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = chooseInstallerPerInstall,
+                installerMatchesPatchMode = installerTokenMatchesPatchMode(
+                    installerManager.parseToken(token),
+                    useMount
+                )
+            )
         }
         val installerType = installerTypeFor(useMount)
         val patchesByBundle = bundles.associate { bundle ->
@@ -627,11 +635,11 @@ class BatchPlanResolver(
         chooseInstallerPerInstall: Boolean,
     ): Boolean {
         forcedUseMount?.let { return it }
+        if (chooseInstallerPerInstall) return false
         installerToken?.let {
             return installerManager.baseInstallerToken(installerManager.parseToken(it)) ==
                 InstallerManager.Token.AutoSaved
         }
-        if (chooseInstallerPerInstall) return false
         return installerManager.baseInstallerToken(installerManager.getPrimaryToken()) ==
             InstallerManager.Token.AutoSaved
     }

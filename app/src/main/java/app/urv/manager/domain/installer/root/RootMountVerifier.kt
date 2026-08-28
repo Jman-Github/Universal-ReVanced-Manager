@@ -90,7 +90,7 @@ class RootMountVerifier(
     ): List<String> {
         val lazyUnmounts = mutableListOf<String>()
         var sourceInodes: Set<String>? = null
-        suspend fun revalidateBeforeLazyUnmount(target: String): Boolean {
+        suspend fun revalidateOwnedMountRemains(target: String): Boolean {
             val latestMountTable = mountTableReader.read()
             val allAtTarget = latestMountTable.filter { it.mountPoint == target }
             val urvAtTarget = findUrvMounts(packageName, latestMountTable)
@@ -139,12 +139,14 @@ class RootMountVerifier(
                     "root mount unmount"
                 )
                 if (!normal.isSuccess) {
+                    // A failed umount can race with namespace teardown. Re-read the mount
+                    // table before treating the failure as fatal or using lazy detach.
+                    // If the owned layer already disappeared, the requested cleanup won.
+                    if (!revalidateOwnedMountRemains(target)) break
                     if (!allowLazyRecovery) normal.requireSuccess("Unmount $target")
 
-                    // A failed umount can race with namespace teardown. Re-read ownership
-                    // before using lazy detach so a newly exposed foreign layer is never
-                    // detached just because the previous visible layer belonged to URV.
-                    if (!revalidateBeforeLazyUnmount(target)) break
+                    // Ownership is still revalidated before lazy detach so a newly exposed
+                    // foreign layer is never detached because the previous layer was URV's.
                     check(lazyAttempts < MAX_LAZY_UNMOUNTS) { "Too many mount layers remained at $target" }
                     shell.runIsolatedBounded(
                         "umount -l ${shellQuote(target)}",

@@ -29,6 +29,7 @@ interface RootModuleStorage {
     suspend fun readCommittedState(packageName: String): RootCommittedState?
     suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact>
     suspend fun commitSnapshot(packageName: String)
+    suspend fun cleanupCommittedSnapshot(packageName: String)
     suspend fun stageAndActivate(
         transactionId: String,
         packageName: String,

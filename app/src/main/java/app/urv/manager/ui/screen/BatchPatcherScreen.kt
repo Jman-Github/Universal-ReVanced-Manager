@@ -89,6 +89,7 @@ import app.urv.manager.domain.batch.BatchPatchItem
 import app.urv.manager.domain.batch.BatchPhase
 import app.urv.manager.domain.batch.BatchRunState
 import app.urv.manager.domain.batch.canStartBatchPatch
+import app.urv.manager.domain.installer.shouldUseConfiguredInstallerWithoutPrompt
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppLabel
@@ -211,6 +212,7 @@ fun BatchPatcherScreen(
     val selectedAppApkInputDirectory by prefs.selectedAppApkInputLastDirectory.getAsState()
     val batchResultActionOrderPref by prefs.batchResultActionOrder.getAsState()
     val batchResultHiddenActions by prefs.batchResultHiddenActions.getAsState()
+    val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val batchResultActionOrder = remember(batchResultActionOrderPref) {
         val parsed = batchResultActionOrderPref
             .split(',')
@@ -356,6 +358,9 @@ fun BatchPatcherScreen(
                 item {
                     BatchHeader(
                         state = current,
+                        allowBulkInstall = shouldUseConfiguredInstallerWithoutPrompt(
+                            chooseInstallerPerInstall
+                        ),
                         onPolicyChange = viewModel::setPolicy,
                         onStart = viewModel::start,
                         onCancel = { showCancelConfirmation = true },
@@ -609,6 +614,7 @@ private fun ReorderableCollectionItemScope.BatchOrderRow(
 @Composable
 private fun BatchHeader(
     state: BatchRunState,
+    allowBulkInstall: Boolean,
     onPolicyChange: (BatchInstallPolicy) -> Unit,
     onStart: () -> Unit,
     onCancel: () -> Unit,
@@ -629,6 +635,7 @@ private fun BatchHeader(
             when (state.phase) {
                 BatchPhase.PREFLIGHT -> PreflightHeader(
                     state = state,
+                    allowBulkInstall = allowBulkInstall,
                     onPolicyChange = onPolicyChange,
                     onStart = onStart
                 )
@@ -669,6 +676,7 @@ private fun BatchHeader(
 
                 BatchPhase.FINISHED -> FinishedHeader(
                     state = state,
+                    allowBulkInstall = allowBulkInstall,
                     onInstallAll = onInstallAll,
                     onRetry = onRetry
                 )
@@ -682,6 +690,7 @@ private fun BatchHeader(
 @Composable
 private fun PreflightHeader(
     state: BatchRunState,
+    allowBulkInstall: Boolean,
     onPolicyChange: (BatchInstallPolicy) -> Unit,
     onStart: () -> Unit
 ) {
@@ -704,7 +713,8 @@ private fun PreflightHeader(
             )
         }
         Switch(
-            checked = state.policy == BatchInstallPolicy.INSTALL_AFTER,
+            checked = allowBulkInstall && state.policy == BatchInstallPolicy.INSTALL_AFTER,
+            enabled = allowBulkInstall,
             onCheckedChange = {
                 onPolicyChange(
                     if (it) BatchInstallPolicy.INSTALL_AFTER
@@ -731,6 +741,7 @@ private fun PreflightHeader(
 @Composable
 private fun FinishedHeader(
     state: BatchRunState,
+    allowBulkInstall: Boolean,
     onInstallAll: () -> Unit,
     onRetry: () -> Unit
 ) {
@@ -743,7 +754,10 @@ private fun FinishedHeader(
         ),
         style = MaterialTheme.typography.titleMedium
     )
-    if (state.patchedItems.any { it.installOutcome != BatchInstallOutcome.INSTALLED }) {
+    if (
+        allowBulkInstall &&
+        state.patchedItems.any { it.installOutcome != BatchInstallOutcome.INSTALLED }
+    ) {
         Button(onClick = onInstallAll, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.batch_patch_install_all))
         }

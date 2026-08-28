@@ -1,8 +1,12 @@
 package app.urv.manager.domain.installer
 
+import app.urv.manager.data.room.apps.installed.InstallType
+import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class MountInstallerRoutingContractTest {
@@ -16,6 +20,142 @@ class MountInstallerRoutingContractTest {
         assertFalse(installerTokenMatchesPatchMode(InstallerManager.Token.RootPlayStore, false))
         assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Internal, false))
         assertTrue(installerTokenMatchesPatchMode(InstallerManager.Token.Shizuku, false))
+    }
+
+    @Test
+    fun `choose per install ignores saved profiles but keeps explicit automation`() {
+        assertFalse(shouldUseConfiguredInstallerWithoutPrompt(true))
+        assertTrue(shouldUseConfiguredInstallerWithoutPrompt(false))
+        assertFalse(
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = true,
+                installerMatchesPatchMode = true
+            )
+        )
+        assertTrue(
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = false,
+                installerMatchesPatchMode = true
+            )
+        )
+        assertFalse(
+            shouldApplyProfileInstallerPreference(
+                chooseInstallerPerInstall = false,
+                installerMatchesPatchMode = false
+            )
+        )
+
+        val patcher = source("ui/viewmodel/PatcherViewModel.kt")
+        val patcherScreen = source("ui/screen/PatcherScreen.kt")
+        val selectedApp = source("ui/viewmodel/SelectedAppInfoViewModel.kt")
+        val batchResolver = source("domain/batch/BatchPlanResolver.kt")
+        val batchCoordinator = source("domain/batch/BatchPatchCoordinator.kt")
+        val batchScreen = source("ui/screen/BatchPatcherScreen.kt")
+        val maybeAutoInstall = patcher
+            .substringAfter("fun maybeAutoInstall()")
+            .substringBefore("fun installWithToken(")
+        val batchRunCompletion = batchCoordinator
+            .substringAfter("val afterPatch = mutableState.value ?: return")
+            .substringBefore("} catch (cancelled: CancellationException)")
+        val batchInstallAll = batchCoordinator
+            .substringAfter("fun installAll(forceShizuku: Boolean = false)")
+            .substringBefore("private suspend fun installAllItems(")
+        val installClick = patcherScreen
+            .substringAfter("viewModel.isInstalling -> viewModel.cancelInstall()")
+            .substringBefore("else -> viewModel.install()")
+        val mountRequestedFor = batchResolver
+            .substringAfter("private fun mountRequestedFor(")
+            .substringBefore("private suspend fun applyBatchAvailability(")
+
+        assertTrue(
+            installClick.indexOf("chooseInstallerPerInstall ->") <
+                installClick.indexOf("viewModel.hasProfileInstallerPreference ->")
+        )
+        assertTrue(patcher.contains("profileInstallerToken != null &&"))
+        assertTrue(patcher.contains("installerMatchesPatchMode = hasProfileInstallerPreference"))
+        val automaticShizukuBranch =
+            "!usingMountInstall && prefs.autoInstallWithShizuku.getBlocking()"
+        assertFalse(
+            maybeAutoInstall.substringBefore("val token = when")
+                .contains("shouldUseConfiguredInstallerWithoutPrompt")
+        )
+        assertTrue(maybeAutoInstall.contains(automaticShizukuBranch))
+        assertTrue(
+            maybeAutoInstall.indexOf("shouldApplyProfileInstallerPreference(") <
+                maybeAutoInstall.indexOf(automaticShizukuBranch)
+        )
+        assertTrue(selectedApp.contains("shouldApplyProfileInstallerPreference("))
+        assertTrue(batchResolver.contains("shouldApplyProfileInstallerPreference("))
+        assertTrue(batchRunCompletion.contains("shouldUseConfiguredInstallerWithoutPrompt("))
+        assertTrue(batchInstallAll.contains("!forceShizuku &&"))
+        assertTrue(batchInstallAll.contains("shouldUseConfiguredInstallerWithoutPrompt("))
+        assertTrue(batchScreen.contains("enabled = allowBulkInstall"))
+        assertTrue(batchScreen.contains("allowBulkInstall &&"))
+        assertTrue(
+            mountRequestedFor.indexOf("if (chooseInstallerPerInstall) return false") <
+                mountRequestedFor.indexOf("installerToken?.let")
+        )
+    }
+
+    @Test
+    fun `choose per install only uses Play Store mode when explicitly selected`() {
+        assertEquals(
+            PLAY_STORE_INSTALLER_PACKAGE,
+            persistedInstallerPackageName(
+                installType = InstallType.MOUNT,
+                selectedInstallerPackageName = PLAY_STORE_INSTALLER_PACKAGE,
+                existingInstallType = null,
+                existingInstallerPackageName = null
+            )
+        )
+        assertTrue(
+            usesPersistedPlayStoreMountMode(
+                InstallType.MOUNT,
+                PLAY_STORE_INSTALLER_PACKAGE
+            )
+        )
+        assertNull(
+            persistedInstallerPackageName(
+                installType = InstallType.MOUNT,
+                selectedInstallerPackageName = null,
+                existingInstallType = InstallType.MOUNT,
+                existingInstallerPackageName = PLAY_STORE_INSTALLER_PACKAGE
+            )
+        )
+        assertFalse(usesPersistedPlayStoreMountMode(InstallType.MOUNT, null))
+        assertNull(
+            persistedInstallerPackageName(
+                installType = InstallType.CUSTOM,
+                selectedInstallerPackageName = null,
+                existingInstallType = InstallType.MOUNT,
+                existingInstallerPackageName = PLAY_STORE_INSTALLER_PACKAGE
+            )
+        )
+        assertEquals(
+            "com.example.installer",
+            persistedInstallerPackageName(
+                installType = InstallType.CUSTOM,
+                selectedInstallerPackageName = null,
+                existingInstallType = InstallType.CUSTOM,
+                existingInstallerPackageName = "com.example.installer"
+            )
+        )
+
+        val picker = source("ui/component/patcher/InstallPickerDialog.kt")
+        val initialPlayStoreState = picker
+            .substringAfter("var installAsPlayStore by remember(initialSelection)")
+            .substringBefore("LaunchedEffect(visibleOptions, initialSelection)")
+        val optionSelection = picker
+            .substringAfter("selectedToken = option.token")
+            .substringBefore("leadingContent =")
+
+        assertFalse(initialPlayStoreState.contains("shizukuInstallAsPlayStore"))
+        assertFalse(optionSelection.contains("shizukuInstallAsPlayStore"))
+        assertTrue(
+            picker.contains(
+                "installAsPlayStore = if (installerManager.isShizukuToken(selectedToken))"
+            )
+        )
     }
 
     @Test
@@ -196,11 +336,13 @@ class MountInstallerRoutingContractTest {
         assertTrue(worker.contains("INPUT_VERSION_NAME_KEY"))
         assertTrue(worker.contains("INPUT_VERSION_CODE_KEY"))
         assertTrue(rootMount.contains("val originalInputIsSplit"))
-        assertTrue(rootMount.contains("val sourceVersionName = patchedSourceVersionName"))
-        assertTrue(rootMount.contains("val targetVersionCode = patchedSourceVersionCode"))
+        assertTrue(rootMount.contains("val sourceVersionNameHint = patchedSourceVersionName"))
+        assertTrue(rootMount.contains("val sourceVersionCodeHint = patchedSourceVersionCode"))
+        assertTrue(rootMount.contains("val sourceVersionName = sourceVersionNameHint"))
+        assertTrue(rootMount.contains("val targetVersionCode = sourceVersionCodeHint"))
         assertTrue(rootMount.contains("Patched APK source version code is unavailable"))
-        assertTrue(rootMount.contains("input.selectedApp.version?.takeIf(String::isNotBlank)"))
-        assertTrue(rootMount.contains("input.selectedApp.versionCode"))
+        assertTrue(rootMount.contains("selectedApp.version?.takeIf(String::isNotBlank)"))
+        assertTrue(rootMount.contains("selectedApp.versionCode"))
         assertTrue(rootMount.contains("val installedMatchesSourceVersion ="))
         assertTrue(rootMount.contains("installedBaseInfo.versionName == sourceVersionName"))
         assertTrue(rootMount.contains("?.takeUnless { originalInputIsSplit }"))

@@ -1452,8 +1452,8 @@ fun PatcherScreen(
                                             when {
                                                 viewModel.isInstalling -> viewModel.cancelInstall()
                                                 viewModel.installedPackageName != null -> viewModel.open()
-                                                viewModel.hasProfileInstallerPreference -> viewModel.install()
                                                 chooseInstallerPerInstall -> showInstallerPicker = true
+                                                viewModel.hasProfileInstallerPreference -> viewModel.install()
                                                 else -> viewModel.install()
                                             }
                                         },

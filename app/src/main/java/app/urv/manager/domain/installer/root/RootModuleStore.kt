@@ -185,6 +185,15 @@ class RootModuleStore(
         ).requireSuccess("Finalize verified rollback snapshot")
     }
 
+    override suspend fun cleanupCommittedSnapshot(packageName: String) {
+        val backupRoot = RootPaths.backup(packageName)
+        runModuleCommand(
+            "set -eu; rm -rf ${shellQuote("$backupRoot/module")} " +
+                "${shellQuote("$backupRoot/module.previous")} ${shellQuote("$backupRoot/module.next")}; " +
+                "sync -f ${shellQuote(backupRoot)} 2>/dev/null || sync"
+        ).requireSuccess("Remove committed root module snapshot")
+    }
+
     override suspend fun stageAndActivate(
         transactionId: String,
         packageName: String,

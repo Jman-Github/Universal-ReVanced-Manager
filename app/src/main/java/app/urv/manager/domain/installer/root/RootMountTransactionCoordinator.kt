@@ -41,6 +41,11 @@ private data class DurableCompletion(
     val committedState: RootCommittedState?
 )
 
+private data class DurableCompletionCleanup(
+    val snapshotCleaned: Boolean,
+    val failure: Throwable?
+)
+
 internal data class RootMountStateIdentity(
     val transactionId: String,
     val packageName: String,
@@ -567,6 +572,11 @@ class RootMountTransactionCoordinator(
                             if (pendingCompletion.isSuccess) {
                                 transactionStore.writeCommitted(committed.copy(status = "MOUNTED"))
                                 moduleStore.enable(packageName, repairPayloads = false)
+                                cleanupCommittedModuleSnapshot(
+                                    packageName,
+                                    committed.transactionId,
+                                    preserveCancellation = true
+                                )
                                 true to RootMountResult.Success(committed.transactionId)
                             } else {
                                 transactionStore.appendDiagnostic(
@@ -587,6 +597,11 @@ class RootMountTransactionCoordinator(
                             }
                             if (initialVerification.isSuccess) {
                                 moduleStore.enable(packageName, repairPayloads = false)
+                                cleanupCommittedModuleSnapshot(
+                                    packageName,
+                                    committed.transactionId,
+                                    preserveCancellation = true
+                                )
                                 true to RootMountResult.Success(committed.transactionId)
                             } else {
                                 // A package or Zygote namespace can lose a propagated bind while
@@ -616,6 +631,11 @@ class RootMountTransactionCoordinator(
                                         "repair-${scanId.take(8)}",
                                         "Repaired committed mount namespaces in place after verification failed: " +
                                             (initialVerification.exceptionOrNull()?.message ?: "unknown verification failure")
+                                    )
+                                    cleanupCommittedModuleSnapshot(
+                                        packageName,
+                                        committed.transactionId,
+                                        preserveCancellation = true
                                     )
                                     true to RootMountResult.Success(committed.transactionId)
                                 } else {
@@ -992,7 +1012,7 @@ class RootMountTransactionCoordinator(
                 }
                 withContext(NonCancellable) {
                     if (inactive == null) transactionStore.clearCommitted(request.packageName)
-                    transactionStore.complete(requireNotNull(journal), inactive)
+                    completeTransaction(requireNotNull(journal), inactive)
                     transactionCompleted = true
                     if (request.removeModuleAfterUnmount) {
                         val cleanupFailure = runCatching {
@@ -1279,7 +1299,7 @@ class RootMountTransactionCoordinator(
             persist()
             withContext(NonCancellable) {
                 moduleStore.commitSnapshot(request.packageName)
-                transactionStore.complete(
+                completeTransaction(
                     requireNotNull(journal),
                     committed.copy(status = "MOUNTED")
                 )
@@ -1594,10 +1614,12 @@ class RootMountTransactionCoordinator(
         )
         if (durableCompletion != null) {
             val recordedCompletionState = durableCompletion.committedState
-            val cleanupFailure = runCatchingPreservingCancellation {
-                if (recordedCompletionState == null) transactionStore.clearCommitted(request.packageName)
-                transactionStore.clearActive(request.packageName)
-            }.exceptionOrNull()
+            val completionCleanup = cleanupDurableCompletion(
+                request.packageName,
+                transactionId,
+                recordedCompletionState
+            )
+            val cleanupFailure = completionCleanup.failure
             if (cleanupFailure != null) {
                 val diagnosticId = "complete-${transactionId.take(8)}"
                 runCatchingPreservingCancellation {
@@ -1617,6 +1639,20 @@ class RootMountTransactionCoordinator(
                         diagnosticId,
                         "Completed root transaction journal cleanup failed",
                         "The completed transaction result was preserved; only stale journal cleanup failed."
+                    ),
+                    previousCommitted = recordedCompletionState,
+                    recoveredModuleState = if (recordedCompletionState == null) null else recoveredModuleState,
+                    corruptCommitted = false
+                )
+            }
+            if (!completionCleanup.snapshotCleaned) {
+                return InterruptedJournalResolution(
+                    result = RootMountResult.Failure(
+                        RootMountPhase.COMPLETED,
+                        RootRecoveryState.NONE,
+                        "cleanup-${transactionId.take(8)}",
+                        "Completed root transaction snapshot cleanup is pending",
+                        "The completed transaction result was preserved and cleanup will be retried."
                     ),
                     previousCommitted = recordedCompletionState,
                     recoveredModuleState = if (recordedCompletionState == null) null else recoveredModuleState,
@@ -1940,6 +1976,102 @@ class RootMountTransactionCoordinator(
         ).requireSuccess("Wait for PackageManager post-install work")
     }
 
+    private suspend fun completeTransaction(
+        journal: RootMountJournal,
+        committed: RootCommittedState?
+    ) = withContext(NonCancellable) {
+        transactionStore.complete(journal, committed)
+        if (
+            cleanupCommittedModuleSnapshot(
+                journal.packageName,
+                journal.transactionId,
+                preserveCancellation = false
+            )
+        ) {
+            clearCompletedJournal(
+                journal.packageName,
+                journal.transactionId,
+                preserveCancellation = false
+            )
+        }
+    }
+
+    private suspend fun cleanupCommittedModuleSnapshot(
+        packageName: String,
+        transactionId: String,
+        preserveCancellation: Boolean
+    ): Boolean {
+        val cleanupFailure = runCleanupCatching(preserveCancellation) {
+            moduleStore.cleanupCommittedSnapshot(packageName)
+        }.exceptionOrNull()
+        if (cleanupFailure != null) {
+            runCleanupCatching(preserveCancellation) {
+                transactionStore.appendDiagnostic(
+                    packageName,
+                    "cleanup-${transactionId.take(8)}",
+                    "Root transaction committed, but transient module snapshot cleanup failed: " +
+                        (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                )
+            }
+            return false
+        }
+        return true
+    }
+
+    private suspend fun clearCompletedJournal(
+        packageName: String,
+        transactionId: String,
+        preserveCancellation: Boolean
+    ): Throwable? {
+        val cleanupFailure = runCleanupCatching(preserveCancellation) {
+            transactionStore.clearActive(packageName)
+        }.exceptionOrNull()
+        if (cleanupFailure != null) {
+            runCleanupCatching(preserveCancellation) {
+                transactionStore.appendDiagnostic(
+                    packageName,
+                    "complete-${transactionId.take(8)}",
+                    "Root transaction committed, but its completed cleanup marker could not be cleared: " +
+                        (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
+                )
+            }
+        }
+        return cleanupFailure
+    }
+
+    private suspend fun cleanupDurableCompletion(
+        packageName: String,
+        transactionId: String,
+        committedState: RootCommittedState?
+    ): DurableCompletionCleanup {
+        val committedStateCleanupFailure = runCatchingPreservingCancellation {
+            if (committedState == null) transactionStore.clearCommitted(packageName)
+        }.exceptionOrNull()
+        val snapshotCleaned = cleanupCommittedModuleSnapshot(
+            packageName,
+            transactionId,
+            preserveCancellation = true
+        )
+        val journalCleanupFailure = if (committedStateCleanupFailure == null && snapshotCleaned) {
+            clearCompletedJournal(packageName, transactionId, preserveCancellation = true)
+        } else {
+            null
+        }
+        return DurableCompletionCleanup(
+            snapshotCleaned = snapshotCleaned,
+            failure = committedStateCleanupFailure ?: journalCleanupFailure
+        )
+    }
+
+    private suspend fun <T> runCleanupCatching(
+        preserveCancellation: Boolean,
+        block: suspend () -> T
+    ): Result<T> = if (preserveCancellation) {
+        runCatchingPreservingCancellation(block)
+    } else {
+        runCatching { block() }
+    }
+
     private suspend fun reconcile(
         request: RootMountRequest,
         committed: RootCommittedState,
@@ -1954,7 +2086,7 @@ class RootMountTransactionCoordinator(
             state: RootCommittedState?
         ) {
             withContext(NonCancellable) {
-                transactionStore.complete(completionJournal, state)
+                completeTransaction(completionJournal, state)
                 onTransactionCompleted()
             }
         }
@@ -2210,7 +2342,7 @@ class RootMountTransactionCoordinator(
                 mountVerifier.mountEverywhere(restoredPrevious)
                 mountVerifier.verifyMounted(restoredPrevious)
                 finalizeMountedProcessState(restoredPrevious)
-                transactionStore.complete(journal, restoredPrevious.copy(status = "MOUNTED"))
+                completeTransaction(journal, restoredPrevious.copy(status = "MOUNTED"))
                 RootMountResult.RecoveredToPreviousMount(journal.transactionId, diagnosticId, reason)
             } else {
                 moduleStore.disable(packageName)
@@ -2224,7 +2356,7 @@ class RootMountTransactionCoordinator(
                         repatchRequired = externalStockUpdate
                     )
                     if (stockState == null) transactionStore.clearCommitted(packageName)
-                    transactionStore.complete(journal, stockState)
+                    completeTransaction(journal, stockState)
                     stopReconciliation(packageName, journal.userId, diagnosticId)
                     RootMountResult.RecoveredToStock(journal.transactionId, diagnosticId, reason)
                 } else {
@@ -2256,12 +2388,11 @@ class RootMountTransactionCoordinator(
                 }
             }.getOrNull()
             if (durableCompletedRecovery != null) {
-                runCatchingPreservingCancellation {
-                    if (durableCompletedRecovery.committedState == null) {
-                        transactionStore.clearCommitted(packageName)
-                    }
-                    transactionStore.clearActive(packageName)
-                }.onFailure { cleanupFailure ->
+                cleanupDurableCompletion(
+                    packageName,
+                    journal.transactionId,
+                    durableCompletedRecovery.committedState
+                ).failure?.let { cleanupFailure ->
                     runCatchingPreservingCancellation {
                         transactionStore.appendDiagnostic(
                             packageName,
@@ -2334,7 +2465,7 @@ class RootMountTransactionCoordinator(
                     repatchRequired = externalStockUpdate
                 )
                 if (inactive == null) transactionStore.clearCommitted(packageName)
-                transactionStore.complete(journal, inactive)
+                completeTransaction(journal, inactive)
                 stopReconciliation(packageName, journal.userId, diagnosticId)
             }.isSuccess
             if (!stockFallback) {
@@ -2346,12 +2477,11 @@ class RootMountTransactionCoordinator(
                     }
                 }.getOrNull()
                 if (durableStockFallback != null) {
-                    runCatchingPreservingCancellation {
-                        if (durableStockFallback.committedState == null) {
-                            transactionStore.clearCommitted(packageName)
-                        }
-                        transactionStore.clearActive(packageName)
-                    }.onFailure { cleanupFailure ->
+                    cleanupDurableCompletion(
+                        packageName,
+                        journal.transactionId,
+                        durableStockFallback.committedState
+                    ).failure?.let { cleanupFailure ->
                         runCatchingPreservingCancellation {
                             transactionStore.appendDiagnostic(
                                 packageName,
@@ -2886,23 +3016,16 @@ class RootMountTransactionCoordinator(
         activeJournal: RootMountJournal,
         transactionId: String
     ): Boolean = withContext(NonCancellable) {
-        val durableCompletion = runCatching { readDurableCompletion(activeJournal) }.getOrNull()
-            ?: return@withContext false
+        if (runCatching { readDurableCompletion(activeJournal) }.getOrNull() == null) {
+            return@withContext false
+        }
         runCatching {
-            if (durableCompletion.committedState == null) {
-                transactionStore.clearCommitted(request.packageName)
-            }
-            transactionStore.clearActive(request.packageName)
-        }.onFailure { cleanupFailure ->
-            runCatching {
-                transactionStore.appendDiagnostic(
-                    request.packageName,
-                    "cancel-${transactionId.take(8)}",
-                    "Cancellation occurred after the completed transaction result was already durable; " +
-                        "no rollback was attempted. Stale journal cleanup also failed: " +
-                        (cleanupFailure.message ?: cleanupFailure.javaClass.simpleName)
-                )
-            }
+            transactionStore.appendDiagnostic(
+                request.packageName,
+                "cancel-${transactionId.take(8)}",
+                "Cancellation occurred after the completed transaction result was already durable; " +
+                    "no rollback was attempted. The completed journal was retained so cleanup can be retried."
+            )
         }
         true
     }
@@ -2914,25 +3037,16 @@ class RootMountTransactionCoordinator(
         failureMessage: String
     ): RootMountResult.Failure? {
         activeJournal ?: return null
-        val durableCompletion = runCatchingPreservingCancellation {
+        if (runCatchingPreservingCancellation {
             readDurableCompletion(activeJournal)
-        }.getOrNull() ?: return null
-        val cleanupFailure = runCatchingPreservingCancellation {
-            if (durableCompletion.committedState == null) {
-                transactionStore.clearCommitted(request.packageName)
-            }
-            transactionStore.clearActive(request.packageName)
-        }.exceptionOrNull()
-        val cleanupNote = cleanupFailure?.let {
-            " Stale completed-journal cleanup also failed: " +
-                (it.message ?: it.javaClass.simpleName)
-        }.orEmpty()
+        }.getOrNull() == null) return null
         runCatchingPreservingCancellation {
             transactionStore.appendDiagnostic(
                 request.packageName,
                 diagnosticId,
                 "The transaction result was already durably completed before this failure, so no rollback " +
-                    "was attempted. Original failure: $failureMessage$cleanupNote"
+                    "was attempted. The completed journal was retained so cleanup can be retried. " +
+                    "Original failure: $failureMessage"
             )
         }
         return RootMountResult.Failure(

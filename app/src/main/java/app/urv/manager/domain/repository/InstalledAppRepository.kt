@@ -8,6 +8,7 @@ import app.urv.manager.data.room.apps.installed.AppliedPatch
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.domain.installer.persistedInstallerPackageName
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
@@ -273,11 +274,12 @@ class InstalledAppRepository(
                     resetCreatedAt -> System.currentTimeMillis()
                     else -> existingApp.createdAt
                 }
-                val persistedCustomInstallerPackageName = if (installType == InstallType.CUSTOM) {
-                    customInstallerPackageName ?: existingApp?.customInstallerPackageName
-                } else {
-                    null
-                }
+                val persistedCustomInstallerPackageName = persistedInstallerPackageName(
+                    installType = installType,
+                    selectedInstallerPackageName = customInstallerPackageName,
+                    existingInstallType = existingApp?.installType,
+                    existingInstallerPackageName = existingApp?.customInstallerPackageName
+                )
                 val persistedRepatchSourcePath = if (updateRepatchSource) {
                     repatchSourcePath
                         ?.takeIf(String::isNotBlank)
