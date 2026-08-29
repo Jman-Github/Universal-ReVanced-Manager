@@ -7,13 +7,15 @@ jobs:
   prepare:
     name: Prepare debug metadata
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
-      version: ${{ steps.changelog.outputs.version }}
-      base_version: ${{ steps.changelog.outputs.base_version }}
-      dev_suffix: ${{ steps.changelog.outputs.dev_suffix }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -21,25 +23,14 @@ jobs:
           node-version: "lts/*"
           cache: npm
 
-      - name: Extract debug build version
-        id: changelog
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const p = 'api/DEV-CHANGELOG.md';
-          if (!fs.existsSync(p)) throw new Error(`Changelog not found at ${p}`);
-          const lines = fs.readFileSync(p, 'utf8').split(/\r?\n/);
-          const header = lines.find((line) => /^#\s*v/i.test(line));
-          if (!header) throw new Error('Failed to locate version header in dev changelog.');
-          const m = header.match(/^#\s*(v([0-9]+\.[0-9]+\.[0-9]+)-dev\.([0-9]{2,}))/i);
-          if (!m) throw new Error(`Unable to parse dev version from changelog header: "${header}"`);
-          const version = `${m[1]}-debug`;
-          const baseVersion = m[2];
-          const devSuffix = `dev.${m[3]}-debug`;
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `base_version=${baseVersion}\n`);
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `dev_suffix=${devSuffix}\n`);
-          NODE
+      - name: Install release dependencies
+        run: npm ci
+
+      - name: Resolve debug version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/resolve-debug-version.mjs
 
   build:
     name: Build signed debug APKs
@@ -67,8 +58,7 @@ jobs:
         uses: burrunan/gradle-cache-action@v3.0.3
 
       - name: Setup keystore
-        run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
+        run: echo "${{ secrets.KEYSTORE }}" | base64 --decode > app/keystore.jks
 
       - name: Run JVM unit tests
         env:
@@ -77,6 +67,7 @@ jobs:
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             -PsignAsDebug \
+            -Pversion="${{ needs.prepare.outputs.version }}" \
             :app:testDebugUnitTest
 
       - name: Build debug artifacts
@@ -88,36 +79,27 @@ jobs:
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
         run: |
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
-            -Pversion="${{ needs.prepare.outputs.base_version }}" \
-            -PdevVersionSuffix="${{ needs.prepare.outputs.dev_suffix }}" \
+            -Pversion="${{ needs.prepare.outputs.version }}" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease
 
       - name: Locate debug artifacts
-        id: artifact
+        shell: bash
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          APK_DIR="app/build/outputs/apk/dev"
-          REVANCED_V21_PLUGIN="revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
-          EXPECTED=(
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-universal.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-arm64-v8a.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-armeabi-v7a.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86_64.apk"
-            "${REVANCED_V21_PLUGIN}"
+          apk_dir="app/build/outputs/apk/dev"
+          expected=(
+            "${apk_dir}/universal-revanced-manager-v${VERSION}-universal.apk"
+            "${apk_dir}/universal-revanced-manager-v${VERSION}-arm64-v8a.apk"
+            "${apk_dir}/universal-revanced-manager-v${VERSION}-armeabi-v7a.apk"
+            "${apk_dir}/universal-revanced-manager-v${VERSION}-x86.apk"
+            "${apk_dir}/universal-revanced-manager-v${VERSION}-x86_64.apk"
+            "revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
           )
-          for name in "${EXPECTED[@]}"; do
-            if [ ! -f "$name" ]; then
-              echo "Missing expected debug APK artifact: $name"
-              ls -la "$APK_DIR" || true
-              ls -la "$(dirname "$REVANCED_V21_PLUGIN")" || true
-              exit 1
-            fi
-            echo "Found $name"
+          for artifact in "${expected[@]}"; do
+            [[ -f "$artifact" ]] || { echo "Missing expected debug artifact: $artifact" >&2; exit 1; }
           done
-          echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
 
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v7
@@ -126,10 +108,6 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-universal.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-arm64-v8a.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-armeabi-v7a.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86_64.apk
+            app/build/outputs/apk/dev/*.apk
             revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
             app/build/outputs/apk/dev/output-metadata.json

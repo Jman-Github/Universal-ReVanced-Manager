@@ -1,0 +1,66 @@
+name: Build pull request
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - dev
+
+concurrency:
+  group: pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: Test and validate build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Java
+        id: setup-java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set Gradle Java Home
+        run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
+
+      - name: Cache Gradle
+        uses: burrunan/gradle-cache-action@v3.0.3
+
+      - name: Run JVM unit tests
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
+            -PsignAsDebug \
+            :app:testDebugUnitTest
+
+      - name: Validate dev APK builds
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
+            -PsignAsDebug \
+            :app:assembleDev \
+            :revanced.v21-runtime-plugin:assembleRelease
+
+      - name: Upload validation APKs
+        uses: actions/upload-artifact@v7
+        with:
+          name: urv-pr-validation
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/dev/*.apk
+            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk

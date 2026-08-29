@@ -1,11 +1,13 @@
 {
+  "name": "universal-revanced-manager",
   "private": true,
-  "workspaces": [
-    "api",
-    "app"
-  ],
   "devDependencies": {
-    "@anolilab/multi-semantic-release": "^2.0.3",
-    "semantic-release": "^24.2.7"
+    "@cleyrop-org/semantic-release-backmerge": "^6.2.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/github": "^12.0.9",
+    "@semantic-release/release-notes-generator": "^14.1.1",
+    "semantic-release": "25.0.9"
   }
 }
