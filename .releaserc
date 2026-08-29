@@ -77,14 +77,13 @@
       }
     ],
     [
-      "@semantic-release/git",
+      "./.github/scripts/release-git.mjs",
       {
         "assets": [
           "CHANGELOG.md",
           "gradle.properties",
           "api/gradle.properties"
-        ],
-        "message": "chore: release v${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+        ]
       }
     ],
     [

@@ -15,10 +15,12 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       packages: read
       issues: write
       pull-requests: write
+      statuses: write
       id-token: write
       attestations: write
 
@@ -34,6 +36,51 @@ jobs:
             echo "Automatic releases are only allowed from main." >&2
             exit 1
           fi
+
+      - name: Require Crowdin download for stable promotion
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dev_head=""
+          commit_message="$(gh api "repos/${GH_REPO}/commits/${MAIN_SHA}" --jq '.commit.message')"
+          trailer_regex='^Crowdin-Dev-Head: ([0-9a-fA-F]{40})$'
+          while IFS= read -r line; do
+            if [[ "${line}" =~ ${trailer_regex} ]]; then
+              dev_head="${BASH_REMATCH[1]}"
+            fi
+          done <<< "${commit_message}"
+
+          if [[ -z "${dev_head}" ]]; then
+            for attempt in 1 2 3 4 5; do
+              dev_head="$(gh api "repos/${GH_REPO}/commits/${MAIN_SHA}/pulls" | \
+                jq -r '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null)] | sort_by(.merged_at) | .[-1].head.sha // empty')"
+              [[ -n "${dev_head}" ]] && break
+              sleep 2
+            done
+          fi
+
+          if [[ -z "${dev_head}" ]]; then
+            echo "Stable releases must come from a merged dev -> main pull request or a generated release commit that records its verified dev head." >&2
+            exit 1
+          fi
+
+          crowdin_state="$(gh api "repos/${GH_REPO}/commits/${dev_head}/statuses" \
+            --jq '[.[] | select(.context == "Crowdin download completed")][0].state // empty')"
+
+          if [[ "${crowdin_state}" != "success" ]]; then
+            echo "Crowdin Download Translations must complete successfully on dev commit ${dev_head} before merging to main." >&2
+            echo "Current Crowdin status: ${crowdin_state:-missing}" >&2
+            exit 1
+          fi
+
+          echo "CROWDIN_VERIFIED_DEV_SHA=${dev_head}" >> "${GITHUB_ENV}"
+          echo "Crowdin download verified for dev commit ${dev_head}."
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -96,3 +143,10 @@ jobs:
         with:
           subject-name: Universal ReVanced Manager ${{ steps.semantic-release.outputs.new_release_git_tag }}
           subject-path: release-assets/*.apk
+
+      - name: Ensure next dev to main pull request exists
+        if: github.ref_name == 'main' && steps.semantic-release.outputs.new_release_published == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run open_pull_request.yml --ref dev
