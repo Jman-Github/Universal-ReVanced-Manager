@@ -1,0 +1,60 @@
+name: Open a PR to main
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dev-to-main-pr
+  cancel-in-progress: true
+
+env:
+  PR_TITLE: 'chore: Merge branch `dev` to `main`'
+
+jobs:
+  pull-request:
+    name: Open or update pull request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open or update draft pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          body_file="$(mktemp)"
+          cat >"${body_file}" <<'EOF'
+          This pull request will merge `dev` into `main`.
+
+          Before merging, run the **Crowdin Download Translations** workflow. It commits any downloaded translations directly to `dev`. The **Crowdin download completed** status must be successful for the current PR head.
+
+          Merge this PR when `dev` is ready for a stable release. Merging to `main` automatically runs the stable Release workflow.
+          EOF
+
+          pr_number="$(gh pr list \
+            --base main \
+            --head dev \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')"
+
+          if [[ -z "${pr_number}" ]]; then
+            gh pr create \
+              --base main \
+              --head dev \
+              --title "${PR_TITLE}" \
+              --body-file "${body_file}" \
+              --draft
+            exit 0
+          fi
+
+          gh pr edit "${pr_number}" \
+            --title "${PR_TITLE}"

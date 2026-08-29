@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
-  pull-requests: write
+  statuses: write
 
 jobs:
   download:
@@ -21,19 +22,90 @@ jobs:
           java-version: "17"
           cache: gradle
 
+      - name: Mark Crowdin synchronization pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          gh api --method POST "repos/${GH_REPO}/statuses/$(git rev-parse HEAD)" \
+            -f state=pending \
+            -f context='Crowdin download completed' \
+            -f description='Crowdin download is running' \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
       - uses: crowdin/github-action@v2
         with:
           upload_sources: false
           upload_translations: false
           download_translations: true
-          create_pull_request: true
-          pull_request_title: "chore: update translations"
-          pull_request_body: "Sync translations from Crowdin."
-          pull_request_base_branch_name: "dev"
-          localization_branch_name: "l10n_crowdin_translations"
+          push_translations: false
+          create_pull_request: false
           config: "crowdin.yml"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      - name: Commit and certify synchronized translations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base_sha="$(git rev-parse HEAD)"
+          git fetch origin dev --quiet
+          remote_before="$(git rev-parse origin/dev)"
+
+          if [[ "${base_sha}" != "${remote_before}" ]]; then
+            echo "dev changed while Crowdin was downloading translations." >&2
+            echo "Crowdin started from: ${base_sha}" >&2
+            echo "Current dev head:     ${remote_before}" >&2
+            echo "Run Crowdin Download Translations again for the new dev head." >&2
+            exit 1
+          fi
+
+          git config user.name "Crowdin Bot"
+          git config user.email "support+bot@crowdin.com"
+          git add -A -- ':(glob)app/src/main/res/values-*/*.xml'
+
+          if git diff --cached --quiet; then
+            synchronized_sha="${base_sha}"
+          else
+            git commit --no-verify -m "chore: sync translations from Crowdin"
+            synchronized_sha="$(git rev-parse HEAD)"
+            git push origin HEAD:dev
+          fi
+
+          git fetch origin dev --quiet
+          remote_after="$(git rev-parse origin/dev)"
+          if [[ "${synchronized_sha}" != "${remote_after}" ]]; then
+            echo "dev changed before the Crowdin synchronization could be certified." >&2
+            echo "Synchronized commit: ${synchronized_sha}" >&2
+            echo "Current dev head:     ${remote_after}" >&2
+            echo "Run Crowdin Download Translations again for the new dev head." >&2
+            exit 1
+          fi
+
+          gh api --method POST "repos/${GH_REPO}/statuses/${synchronized_sha}" \
+            -f state=success \
+            -f context='Crowdin download completed' \
+            -f description='Crowdin download completed successfully' \
+            -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+      - name: Ensure dev to main pull request workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          default_branch="$(gh api "repos/${GH_REPO}" --jq '.default_branch')"
+          if gh api "repos/${GH_REPO}/contents/.github/workflows/open_pull_request.yml?ref=${default_branch}" >/dev/null 2>&1; then
+            gh workflow run open_pull_request.yml --ref dev
+          else
+            echo "open_pull_request.yml is not on ${default_branch} yet; skipping dispatch during bootstrap."
+          fi
 

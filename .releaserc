@@ -1,0 +1,115 @@
+{
+  "branches": [
+    "main",
+    {
+      "name": "dev",
+      "prerelease": "dev"
+    }
+  ],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "angular",
+        "releaseRules": [
+          {
+            "breaking": true,
+            "release": "major"
+          },
+          {
+            "type": "feat",
+            "release": "minor"
+          },
+          {
+            "type": "fix",
+            "release": "patch"
+          },
+          {
+            "type": "perf",
+            "release": "patch"
+          },
+          {
+            "type": "revert",
+            "release": "patch"
+          },
+          {
+            "type": "build",
+            "scope": "Needs bump",
+            "release": "patch"
+          }
+        ]
+      }
+    ],
+    [
+      "./.github/scripts/release-notes.mjs",
+      {
+        "preset": "angular",
+        "migration": {
+          "branch": "dev",
+          "version": "1.9.0-dev.1",
+          "changelogFile": "api/DEV-CHANGELOG.md",
+          "heading": "# v1.9.0-dev.1"
+        },
+        "stableMigration": {
+          "branch": "main",
+          "version": "1.9.0",
+          "changelogFile": "api/DEV-CHANGELOG.md",
+          "includeVersions": [
+            "^1\\.9\\.0-dev\\.1$",
+            "^1\\.8\\.1-dev\\.\\d+$"
+          ],
+          "automaticSinceTag": "v1.9.0-dev.1"
+        }
+      }
+    ],
+    [
+      "@semantic-release/changelog",
+      {
+        "changelogFile": "CHANGELOG.md",
+        "changelogTitle": "# Changelog\n\nRelease notes from the Semantic Release migration onward are generated automatically from Conventional Commits.\n\nHistorical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`."
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "bash .github/scripts/prepare-release.sh ${nextRelease.version} ${branch.name}"
+      }
+    ],
+    [
+      "./.github/scripts/release-git.mjs",
+      {
+        "assets": [
+          "CHANGELOG.md",
+          "gradle.properties",
+          "api/gradle.properties"
+        ]
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "assets": [
+          {
+            "path": "release-assets/*.apk"
+          }
+        ],
+        "successComment": false
+      }
+    ],
+    [
+      "@cleyrop-org/semantic-release-backmerge",
+      {
+        "backmergeBranches": [
+          {
+            "from": "main",
+            "to": "dev"
+          }
+        ],
+        "backmergeStrategy": "merge",
+        "clearWorkspace": true,
+        "message": "chore: backmerge v${nextRelease.version} into dev [skip ci]"
+      }
+    ]
+  ]
+}

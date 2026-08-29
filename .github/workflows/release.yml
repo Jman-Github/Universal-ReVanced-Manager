@@ -2,69 +2,86 @@ name: Release
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  prepare:
-    name: Prepare release metadata
+  release:
+    name: Release
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.changelog.outputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: "lts/*"
-          cache: npm
-
-      - name: Extract release notes
-        id: changelog
-        run: |
-          node - <<'NODE'
-          const fs = require('fs');
-          const p = 'api/CHANGELOG.md';
-          if (!fs.existsSync(p)) throw new Error(`Changelog not found at ${p}`);
-          const lines = fs.readFileSync(p, 'utf8').split(/\r?\n/);
-          const section = [];
-          for (let i = 0; i < lines.length; i += 1) {
-            const line = lines[i];
-            if (i > 0 && /^#\s*v/i.test(line)) break;
-            section.push(line);
-          }
-          const content = section.join('\n').replace(/\s+$/, '');
-          if (!content.trim()) throw new Error('No release notes content extracted from changelog.');
-          const header = section.find((l) => /^#\s*v/i.test(l));
-          if (!header) throw new Error('Failed to locate version header in changelog.');
-          const m = header.match(/^#\s*(v[0-9]+\.[0-9]+\.[0-9]+)/i);
-          if (!m) throw new Error(`Unable to parse version from changelog header: "${header}"`);
-          const version = m[1];
-          fs.writeFileSync('release_notes.md', `${content}\n`, 'utf8');
-          fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
-          NODE
-
-      - name: Upload release notes
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-notes
-          retention-days: 1
-          if-no-files-found: error
-          path: release_notes.md
-
-  build:
-    name: Build release APKs
-    runs-on: ubuntu-latest
-    needs: prepare
     permissions:
+      actions: write
       contents: write
-      packages: write
+      packages: read
+      issues: write
+      pull-requests: write
+      statuses: write
       id-token: write
       attestations: write
 
     steps:
+      - name: Validate release branch
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_NAME}" != "dev" && "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Release may only run from dev or main, got ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF_NAME}" != "main" ]]; then
+            echo "Automatic releases are only allowed from main." >&2
+            exit 1
+          fi
+
+      - name: Require Crowdin download for stable promotion
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          dev_head=""
+          commit_message="$(gh api "repos/${GH_REPO}/commits/${MAIN_SHA}" --jq '.commit.message')"
+          trailer_regex='^Crowdin-Dev-Head: ([0-9a-fA-F]{40})$'
+          while IFS= read -r line; do
+            if [[ "${line}" =~ ${trailer_regex} ]]; then
+              dev_head="${BASH_REMATCH[1]}"
+            fi
+          done <<< "${commit_message}"
+
+          if [[ -z "${dev_head}" ]]; then
+            for attempt in 1 2 3 4 5; do
+              dev_head="$(gh api "repos/${GH_REPO}/commits/${MAIN_SHA}/pulls" | \
+                jq -r '[.[] | select(.base.ref == "main" and .head.ref == "dev" and .merged_at != null)] | sort_by(.merged_at) | .[-1].head.sha // empty')"
+              [[ -n "${dev_head}" ]] && break
+              sleep 2
+            done
+          fi
+
+          if [[ -z "${dev_head}" ]]; then
+            echo "Stable releases must come from a merged dev -> main pull request or a generated release commit that records its verified dev head." >&2
+            exit 1
+          fi
+
+          crowdin_state="$(gh api "repos/${GH_REPO}/commits/${dev_head}/statuses" \
+            --jq '[.[] | select(.context == "Crowdin download completed")][0].state // empty')"
+
+          if [[ "${crowdin_state}" != "success" ]]; then
+            echo "Crowdin Download Translations must complete successfully on dev commit ${dev_head} before merging to main." >&2
+            echo "Current Crowdin status: ${crowdin_state:-missing}" >&2
+            exit 1
+          fi
+
+          echo "CROWDIN_VERIFIED_DEV_SHA=${dev_head}" >> "${GITHUB_ENV}"
+          echo "Crowdin download verified for dev commit ${dev_head}."
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
@@ -83,143 +100,53 @@ jobs:
       - name: Cache Gradle
         uses: burrunan/gradle-cache-action@v3.0.3
 
-      - name: Setup keystore
-        run: |
-          echo "${{ secrets.KEYSTORE }}" | base64 --decode > "app/keystore.jks"
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "lts/*"
+          cache: npm
 
-      - name: Run JVM unit tests
-        env:
-          GITHUB_ACTOR: ${{ secrets.GPR_USER }}
-          GITHUB_TOKEN: ${{ secrets.GPR_READ_PACKAGES_TOKEN }}
-        run: |
-          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
-            -PsignAsDebug \
-            :app:testDebugUnitTest
+      - name: Install release dependencies
+        run: npm ci
 
-      - name: Build release
+      - name: Setup release keystore
+        run: echo "${{ secrets.KEYSTORE }}" | base64 --decode > app/keystore.jks
+
+      - name: Semantic Release
+        id: semantic-release
+        uses: cycjimmy/semantic-release-action@v5
+        with:
+          semantic_version: 25.0.9
         env:
-          GITHUB_ACTOR: ${{ secrets.GPR_USER }}
-          GITHUB_TOKEN: ${{ secrets.GPR_READ_PACKAGES_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GPR_USER: ${{ secrets.GPR_USER }}
+          GPR_READ_PACKAGES_TOKEN: ${{ secrets.GPR_READ_PACKAGES_TOKEN }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
-        run: |
-          ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
-            assembleRelease
+          ORG_GRADLE_JAVA_HOME: ${{ steps.setup-java.outputs.path }}
 
-      - name: Locate release artifacts
-        id: artifact
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          APK_DIR="app/build/outputs/apk/release"
-          REVANCED_V21_PLUGIN="revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
-          EXPECTED=(
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-universal.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-arm64-v8a.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-armeabi-v7a.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86.apk"
-            "${APK_DIR}/universal-revanced-manager-${VERSION}-x86_64.apk"
-            "${REVANCED_V21_PLUGIN}"
-          )
-          for name in "${EXPECTED[@]}"; do
-            if [ ! -f "$name" ]; then
-              echo "Missing expected release APK artifact: $name"
-              ls -la "$APK_DIR" || true
-              ls -la "$(dirname "$REVANCED_V21_PLUGIN")" || true
-              exit 1
-            fi
-            echo "Found $name"
-          done
-          echo "apk_dir=$APK_DIR" >> "$GITHUB_OUTPUT"
-
-      - name: Upload release artifacts
+      - name: Upload release workflow artifacts
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: urv-release
+          name: urv-${{ steps.semantic-release.outputs.new_release_git_tag }}
           retention-days: 14
           if-no-files-found: error
           path: |
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-universal.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-arm64-v8a.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-armeabi-v7a.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86.apk
-            ${{ steps.artifact.outputs.apk_dir }}/universal-revanced-manager-${{ needs.prepare.outputs.version }}-x86_64.apk
-            revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
-            app/build/outputs/apk/release/output-metadata.json
+            release-assets/*.apk
+            app/build/outputs/apk/**/output-metadata.json
 
-  publish:
-    name: Publish release
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    needs: [prepare, build]
-    permissions:
-      contents: write
-      packages: write
-      id-token: write
-      attestations: write
-    env:
-      GH_REPO: ${{ github.repository }}
-    steps:
-      - name: Download release APK artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: urv-release
-          path: release-artifacts
-
-      - name: Download release notes
-        uses: actions/download-artifact@v8
-        with:
-          name: release-notes
-          path: .
-
-      - name: Prepare release tag
-        id: release
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-        run: |
-          if [ -z "${VERSION}" ]; then
-            echo "Version extracted from changelog is empty."
-            exit 1
-          fi
-          echo "NEW_TAG=${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Collect APK assets
-        if: steps.release.outputs.NEW_TAG != ''
-        run: |
-          mkdir -p release-assets
-          find release-artifacts -type f -name '*.apk' -exec cp '{}' release-assets/ \;
-          APK_COUNT="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l)"
-          if [ "$APK_COUNT" -eq 0 ]; then
-            echo "No APK assets were found in downloaded artifacts."
-            find release-artifacts -type f -print
-            exit 1
-          fi
-          ls -la release-assets
-
-      - name: Name GitHub Release
-        if: steps.release.outputs.NEW_TAG != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.NEW_TAG }}
-        run: |
-          if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "Universal ReVanced Manager $TAG" --notes-file release_notes.md
-          else
-            gh release edit "$TAG" --title "Universal ReVanced Manager $TAG" --notes-file release_notes.md
-          fi
-
-      - name: Upload APK assets
-        if: steps.release.outputs.NEW_TAG != ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.NEW_TAG }}
-        run: |
-          gh release upload "$TAG" release-assets/*.apk --clobber
-
-      - name: Attest
-        if: steps.release.outputs.NEW_TAG != ''
+      - name: Attest release APKs
+        if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: Universal ReVanced Manager ${{ steps.release.outputs.NEW_TAG }}
+          subject-name: Universal ReVanced Manager ${{ steps.semantic-release.outputs.new_release_git_tag }}
           subject-path: release-assets/*.apk
+
+      - name: Ensure next dev to main pull request exists
+        if: github.ref_name == 'main' && steps.semantic-release.outputs.new_release_published == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run open_pull_request.yml --ref dev
