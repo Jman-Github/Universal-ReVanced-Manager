@@ -700,7 +700,10 @@ class PatcherViewModel(
         ?: input.options
     val currentSelectedApp: SelectedApp
         get() = when (val current = selectedApp) {
-            is SelectedApp.Local -> inputFile?.let { current.copy(file = it) } ?: current
+            is SelectedApp.Local -> inputFile
+                ?.takeIf { it.isFile }
+                ?.let { current.copy(file = it) }
+                ?: current
             else -> current
         }
 
@@ -5186,10 +5189,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 is ProgressEvent.Completed -> {
-                    if (step.state == State.FAILED) {
+                    val recoveredPatch = step.state == State.FAILED && eventStepId is StepId.ExecutePatch
+                    if (step.state == State.FAILED && !recoveredPatch) {
                         null
                     } else {
-                        step.withState(State.COMPLETED, progress = null)
+                        step.withState(
+                            State.COMPLETED,
+                            message = if (recoveredPatch) null else step.message,
+                            progress = null
+                        )
                     }
                 }
 
@@ -6547,7 +6555,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         ?.toSet()
                         .orEmpty()
                     completedPatchHadFailures = failedPatchIndexes.isNotEmpty()
-                    applyFailedPatchIndexes(failedPatchIndexes)
+                    reconcileFailedPatchIndexes(failedPatchIndexes)
                     reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     // Code adapted from Morphe, see third-party/NOTICE for more information
@@ -6690,20 +6698,27 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 steps[index] = step.withState(state = State.COMPLETED, progress = null)
             }
         }
-        applyFailedPatchIndexes(failedPatchIndexes)
+        reconcileFailedPatchIndexes(failedPatchIndexes)
     }
 
-    private fun applyFailedPatchIndexes(failedPatchIndexes: Set<Int>) {
-        failedPatchIndexes.forEach { patchIndex ->
-            val stepIndex = steps.indexOfFirst { it.id == StepId.ExecutePatch(patchIndex) }
-            if (stepIndex == -1) return@forEach
-            val step = steps[stepIndex]
-            if (step.state == State.FAILED) return@forEach
-            steps[stepIndex] = step.withState(
-                state = State.FAILED,
-                message = step.message,
-                progress = null
-            )
+    private fun reconcileFailedPatchIndexes(failedPatchIndexes: Set<Int>) {
+        steps.forEachIndexed { index, step ->
+            val patchStep = step.id as? StepId.ExecutePatch ?: return@forEachIndexed
+            when {
+                patchStep.index in failedPatchIndexes && step.state != State.FAILED -> {
+                    steps[index] = step.withState(
+                        state = State.FAILED,
+                        progress = null
+                    )
+                }
+                patchStep.index !in failedPatchIndexes && step.state == State.FAILED -> {
+                    steps[index] = step.withState(
+                        state = State.COMPLETED,
+                        message = null,
+                        progress = null
+                    )
+                }
+            }
         }
     }
 

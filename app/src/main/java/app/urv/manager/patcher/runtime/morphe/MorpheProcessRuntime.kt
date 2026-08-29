@@ -11,6 +11,8 @@ import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
+import app.urv.manager.patcher.failureDetail
+import app.urv.manager.patcher.fatalFailureOrNull
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.split.SplitApkPreparer
@@ -93,6 +95,7 @@ class MorpheProcessRuntime(
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         val logMode = prefs.patcherLogMode.get()
+        val continueOnPatchError = prefs.continueOnPatchError.get()
         val runtimeLogger = logger.filtered(logMode)
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             cancellationRequested.set(true)
@@ -237,7 +240,14 @@ class MorpheProcessRuntime(
                 }
 
                 override fun event(event: ProgressEventParcel?) {
-                    event?.let { eventQueue.trySend(it.toEvent()) }
+                    event?.let {
+                        val progressEvent = it.toEvent()
+                        eventQueue.trySend(progressEvent)
+                        progressEvent.fatalFailureOrNull()?.let { failure ->
+                            completeFailure(RemoteFailureException(failure.failureDetail()))
+                            runCatching { binder.exit() }
+                        }
+                    }
                 }
 
                 override fun memory(usedMb: Long, maxMb: Long) {
@@ -291,7 +301,7 @@ class MorpheProcessRuntime(
                 },
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
-                continueOnPatchError = prefs.continueOnPatchError.get(),
+                continueOnPatchError = continueOnPatchError,
                 patcherLogMode = logMode.name
             )
 

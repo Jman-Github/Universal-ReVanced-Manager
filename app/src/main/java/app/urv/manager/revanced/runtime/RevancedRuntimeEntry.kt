@@ -349,8 +349,19 @@ object RevancedRuntimeEntry {
                     }
 
                     fun hiddenFallbackOnEvent(event: ProgressEvent) {
-                        if (event is ProgressEvent.Failed) {
-                            onEvent(ProgressEvent.Failed(StepId.WriteAPK, event.error))
+                        when (event) {
+                            // Reconcile final patch outcomes without replaying duplicate start/progress noise.
+                            is ProgressEvent.Failed -> if (event.stepId is StepId.ExecutePatch) {
+                                onEvent(event)
+                            } else {
+                                onEvent(ProgressEvent.Failed(StepId.WriteAPK, event.error))
+                            }
+                            is ProgressEvent.Completed -> {
+                                if (event.stepId is StepId.ExecutePatch) {
+                                    onEvent(event)
+                                }
+                            }
+                            else -> Unit
                         }
                     }
 
