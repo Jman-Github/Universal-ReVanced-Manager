@@ -7,6 +7,7 @@
 - Added a delete action to individual saved unpatched app cards in Downloads, with a confirmation prompt before removing the stored APK
 - Bumped Morphe Patcher to `1.9.0`
 - Added configurable Play Store installation source modes for the system and rooted mount installers, adapted from https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+- Bumped Morphe Patcher to `1.12.0`
 
 
 # Bug fixes
@@ -20,6 +21,9 @@
 - Fixed single and batch patching sometimes using or reporting stale patch selections, options, app metadata, and runtime information, especially after missing patches were removed or the patcher screen was restored
 - Fixed system Play Store installs still appearing as installed by URV Manager in Android settings
 - Fixed some Morphe patch bundles failing to load in process mode with an incorrect corrupted or incomplete error
+- Fixed patcher runtimes not consistently honoring `Continue after patch errors`, including process runtimes continuing after fatal patch errors when it is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/685
+- Fixed the Split APK Merger progress notification being able to reappear after cancellation when concurrent merge state or progress updates raced with cancellation cleanup https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/669
+- Fixed returning from a cancelled local APK patch leaving the app name and icon blank when the patcher's temporary input had already been deleted https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/665
 
 
 # CI
