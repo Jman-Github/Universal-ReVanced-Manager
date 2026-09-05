@@ -52,4 +52,38 @@ class ExternalBundlesEndpointsTest {
         assertNull(ExternalBundlesEndpoints.alternateHost("unknown.example.com"))
         assertNull(ExternalBundlesEndpoints.alternateHost(null))
     }
+
+    @Test
+    fun selectsHostWithNewestApiRelease() {
+        assertEquals(
+            ExternalBundlesEndpoints.DEV_HOST,
+            ExternalBundlesEndpoints.preferredHost(
+                stableVersion = "1.2.0",
+                devVersion = "1.3.0-dev.3"
+            )
+        )
+        assertEquals(
+            ExternalBundlesEndpoints.STABLE_HOST,
+            ExternalBundlesEndpoints.preferredHost(
+                stableVersion = "1.3.0",
+                devVersion = "1.3.0-dev.3"
+            )
+        )
+    }
+
+    @Test
+    fun selectsWorkingHostWhenVersionMetadataIsUnavailable() {
+        assertEquals(
+            ExternalBundlesEndpoints.DEV_HOST,
+            ExternalBundlesEndpoints.preferredHost(stableVersion = null, devVersion = "1.3.0-dev.3")
+        )
+        assertEquals(
+            ExternalBundlesEndpoints.STABLE_HOST,
+            ExternalBundlesEndpoints.preferredHost(stableVersion = "1.2.0", devVersion = null)
+        )
+        assertEquals(
+            ExternalBundlesEndpoints.DEV_HOST,
+            ExternalBundlesEndpoints.preferredHost(stableVersion = null, devVersion = null)
+        )
+    }
 }

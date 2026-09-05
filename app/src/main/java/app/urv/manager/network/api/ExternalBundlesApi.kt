@@ -22,11 +22,9 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.Instant
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
@@ -43,6 +41,10 @@ data class ExternalBundlesPage(
 class ExternalBundlesApi(
     private val client: HttpService,
 ) {
+    private val endpointSelectionMutex = Mutex()
+    @Volatile
+    private var cachedEndpointSelection: CachedEndpointSelection? = null
+
     suspend fun getBundles(
         packageNameQuery: String? = null,
         limit: Int = DEFAULT_PAGE_SIZE,
@@ -57,15 +59,10 @@ class ExternalBundlesApi(
                 variables
             ).transform { data -> data.toDiscoveryPage(endpoint) }
         }
-        val responses = queryBoth<BundlesQueryData>(BUNDLES_QUERY, variables)
-        return selectFreshestResponse(
-            responses = responses,
-            timestamp = { data -> data.bundle.firstOrNull()?.createdAt },
-            transform = { data, endpoint ->
-                data.toDiscoveryPage(endpoint)
-            },
-            preferDev = ::isDevDiscoveryResponseFresher
-        )
+        return queryPreferred<BundlesQueryData, ExternalBundlesPage>(
+            BUNDLES_QUERY,
+            variables
+        ) { data, endpoint -> data.toDiscoveryPage(endpoint) }
     }
 
     suspend fun getBundleById(
@@ -100,14 +97,12 @@ class ExternalBundlesApi(
             put("repo", JsonPrimitive(trimmedRepo))
             put("prerelease", JsonPrimitive(prerelease))
         }
-        val responses = queryBoth<BundlesQueryData>(BUNDLE_LATEST_QUERY, variables)
-        return selectFreshestResponse(
-            responses = responses,
-            timestamp = { data -> data.bundle.firstOrNull()?.createdAt },
-            transform = { data, endpoint ->
-                data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
-            }
-        )
+        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+            BUNDLE_LATEST_QUERY,
+            variables
+        ) { data, endpoint ->
+            data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
+        }
     }
 
     suspend fun getLatestBundleAny(
@@ -123,14 +118,12 @@ class ExternalBundlesApi(
             put("owner", JsonPrimitive(trimmedOwner))
             put("repo", JsonPrimitive(trimmedRepo))
         }
-        val responses = queryBoth<BundlesQueryData>(BUNDLE_LATEST_ANY_QUERY, variables)
-        return selectFreshestResponse(
-            responses = responses,
-            timestamp = { data -> data.bundle.firstOrNull()?.createdAt },
-            transform = { data, endpoint ->
-                data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
-            }
-        )
+        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+            BUNDLE_LATEST_ANY_QUERY,
+            variables
+        ) { data, endpoint ->
+            data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
+        }
     }
 
     suspend fun getBundleHistory(
@@ -146,42 +139,25 @@ class ExternalBundlesApi(
         }
 
         val targetLimit = limit.coerceAtLeast(1)
-        val responses = coroutineScope {
-            val stable = async {
-                getBundleHistory(STABLE_ENDPOINT, trimmedOwner, trimmedRepo, prerelease, targetLimit)
-            }
-            val dev = async {
-                getBundleHistory(DEV_ENDPOINT, trimmedOwner, trimmedRepo, prerelease, targetLimit)
-            }
-            EndpointResponses(stable.await(), dev.await())
-        }
-        val stable = responses.stable
-        val dev = responses.dev
-        return when {
-            stable is APIResponse.Success && dev is APIResponse.Success -> {
-                val history = (stable.data + dev.data)
-                    .sortedWith { left, right ->
-                        when {
-                            isNewer(left.createdAt, right.createdAt) -> -1
-                            isNewer(right.createdAt, left.createdAt) -> 1
-                            else -> 0
-                        }
-                    }
-                    .distinctBy { snapshot ->
-                        listOf(
-                            snapshot.sourceUrl.trim().lowercase(),
-                            snapshot.version.trim().lowercase(),
-                            snapshot.isPrerelease.toString()
-                        ).joinToString("|")
-                    }
-                    .take(targetLimit)
-                APIResponse.Success(history)
-            }
-            stable is APIResponse.Success -> stable
-            dev is APIResponse.Success -> dev
-            dev is APIResponse.Error -> APIResponse.Error(dev.error)
-            dev is APIResponse.Failure -> APIResponse.Failure(dev.error)
-            else -> APIResponse.Success(emptyList())
+        val preferredEndpoint = preferredEndpoint()
+        val preferredResponse = getBundleHistory(
+            preferredEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit
+        )
+        if (preferredResponse is APIResponse.Success) return preferredResponse
+
+        val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
+        return getBundleHistory(
+            fallbackEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit
+        ).also { response ->
+            if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
         }
     }
 
@@ -477,77 +453,124 @@ class ExternalBundlesApi(
 
     private data class Endpoint(
         val host: String,
-        val graphqlUrl: String
+        val graphqlUrl: String,
+        val apiDocumentUrl: String
     )
 
-    private data class EndpointResponses<T>(
-        val stable: APIResponse<T>,
-        val dev: APIResponse<T>
-    )
-
-    private data class EndpointSuccess<T>(
+    private data class ResolvedEndpointSelection(
         val endpoint: Endpoint,
-        val data: T
+        val cacheDurationMillis: Long
     )
 
-    private suspend inline fun <reified T> queryBoth(
+    private data class CachedEndpointSelection(
+        val endpoint: Endpoint,
+        val resolvedAtMillis: Long,
+        val cacheDurationMillis: Long
+    )
+
+    @Serializable
+    private data class ApiDocument(
+        val info: ApiInfo
+    )
+
+    @Serializable
+    private data class ApiInfo(
+        val version: String
+    )
+
+    private suspend inline fun <reified T, R> queryPreferred(
         query: String,
-        variables: JsonObject?
-    ): EndpointResponses<T> = coroutineScope {
-        val stable = async { graphqlWithDeadline<T>(STABLE_ENDPOINT.graphqlUrl, query, variables) }
-        val dev = async { graphqlWithDeadline<T>(DEV_ENDPOINT.graphqlUrl, query, variables) }
-        EndpointResponses(stable.await(), dev.await())
-    }
-
-    private fun <T, R> selectFreshestResponse(
-        responses: EndpointResponses<T>,
-        timestamp: (T) -> String?,
-        transform: (T, Endpoint) -> R,
-        preferDev: ((dev: T, stable: T) -> Boolean)? = null
+        variables: JsonObject?,
+        crossinline transform: (T, Endpoint) -> R
     ): APIResponse<R> {
-        val stable = responses.stable
-        val dev = responses.dev
-        val selected = when {
-            stable is APIResponse.Success && dev is APIResponse.Success -> {
-                val devIsFresher = preferDev?.invoke(dev.data, stable.data)
-                    ?: isNewer(timestamp(dev.data), timestamp(stable.data))
-                if (devIsFresher) {
-                    EndpointSuccess(DEV_ENDPOINT, dev.data)
-                } else {
-                    EndpointSuccess(STABLE_ENDPOINT, stable.data)
-                }
-            }
-            stable is APIResponse.Success -> EndpointSuccess(STABLE_ENDPOINT, stable.data)
-            dev is APIResponse.Success -> EndpointSuccess(DEV_ENDPOINT, dev.data)
-            else -> return when (dev) {
-                is APIResponse.Error -> APIResponse.Error(dev.error)
-                is APIResponse.Failure -> APIResponse.Failure(dev.error)
-                is APIResponse.Success -> APIResponse.Success(transform(dev.data, DEV_ENDPOINT))
-            }
+        val preferredEndpoint = preferredEndpoint()
+        val preferredResponse = graphqlWithDeadline<T>(
+            preferredEndpoint.graphqlUrl,
+            query,
+            variables
+        )
+        if (preferredResponse is APIResponse.Success) {
+            return APIResponse.Success(transform(preferredResponse.data, preferredEndpoint))
         }
-        return APIResponse.Success(transform(selected.data, selected.endpoint))
+
+        val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
+        return graphqlWithDeadline<T>(fallbackEndpoint.graphqlUrl, query, variables)
+            .transform { data -> transform(data, fallbackEndpoint) }
+            .also { response ->
+                if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
+            }
     }
 
-    private fun isDevDiscoveryResponseFresher(
-        dev: BundlesQueryData,
-        stable: BundlesQueryData
-    ): Boolean {
-        val devBundle = dev.bundle.firstOrNull()
-        val stableBundle = stable.bundle.firstOrNull()
-        when {
-            devBundle != null && stableBundle == null -> return true
-            devBundle == null -> return false
-            isNewer(devBundle.createdAt, stableBundle?.createdAt) -> return true
-            isNewer(stableBundle?.createdAt, devBundle.createdAt) -> return false
+    private suspend fun preferredEndpoint(): Endpoint {
+        cachedEndpoint()?.let { return it }
+        endpointSelectionMutex.lock()
+        return try {
+            cachedEndpoint() ?: resolvePreferredEndpoint().let { selection ->
+                cachedEndpointSelection = CachedEndpointSelection(
+                    endpoint = selection.endpoint,
+                    resolvedAtMillis = monotonicMillis(),
+                    cacheDurationMillis = selection.cacheDurationMillis
+                )
+                selection.endpoint
+            }
+        } finally {
+            endpointSelectionMutex.unlock()
         }
+    }
 
-        val devRefresh = dev.refreshJobs.firstOrNull()
-        val stableRefresh = stable.refreshJobs.firstOrNull()
-        return isNewer(
-            newestTimestamp(devRefresh?.completedAt, devRefresh?.startedAt),
-            newestTimestamp(stableRefresh?.completedAt, stableRefresh?.startedAt)
+    private fun cachedEndpoint(): Endpoint? {
+        val selection = cachedEndpointSelection ?: return null
+        val ageMillis = monotonicMillis() - selection.resolvedAtMillis
+        return selection.endpoint.takeIf { ageMillis < selection.cacheDurationMillis }
+    }
+
+    private suspend fun cacheDegradedEndpoint(endpoint: Endpoint) {
+        endpointSelectionMutex.lock()
+        try {
+            cachedEndpointSelection = CachedEndpointSelection(
+                endpoint = endpoint,
+                resolvedAtMillis = monotonicMillis(),
+                cacheDurationMillis = DEGRADED_ENDPOINT_SELECTION_TTL_MS
+            )
+        } finally {
+            endpointSelectionMutex.unlock()
+        }
+    }
+
+    private suspend fun resolvePreferredEndpoint(): ResolvedEndpointSelection = coroutineScope {
+        val stableVersion = async { apiVersion(STABLE_ENDPOINT) }
+        val devVersion = async { apiVersion(DEV_ENDPOINT) }
+        val stableVersionValue = stableVersion.await()
+        val devVersionValue = devVersion.await()
+        val endpoint = endpointForHost(
+            ExternalBundlesEndpoints.preferredHost(stableVersionValue, devVersionValue)
+        ) ?: DEV_ENDPOINT
+        ResolvedEndpointSelection(
+            endpoint = endpoint,
+            cacheDurationMillis = if (stableVersionValue != null && devVersionValue != null) {
+                ENDPOINT_SELECTION_TTL_MS
+            } else {
+                DEGRADED_ENDPOINT_SELECTION_TTL_MS
+            }
         )
     }
+
+    private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
+
+    private suspend fun apiVersion(endpoint: Endpoint): String? =
+        withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
+            when (val response = client.request<ApiDocument> {
+                method = HttpMethod.Get
+                url(endpoint.apiDocumentUrl)
+            }) {
+                is APIResponse.Success -> response.data.info.version.trim().takeIf(String::isNotBlank)
+                is APIResponse.Error,
+                is APIResponse.Failure -> null
+            }
+        }
+
+    private fun alternateEndpoint(endpoint: Endpoint): Endpoint =
+        if (endpoint == STABLE_ENDPOINT) DEV_ENDPOINT else STABLE_ENDPOINT
 
     private fun endpointForHost(host: String): Endpoint? = when {
         host.equals(STABLE_ENDPOINT.host, ignoreCase = true) -> STABLE_ENDPOINT
@@ -555,37 +578,19 @@ class ExternalBundlesApi(
         else -> null
     }
 
-    private fun isNewer(candidate: String?, baseline: String?): Boolean {
-        val candidateValue = candidate?.trim().takeIf { !it.isNullOrBlank() } ?: return false
-        val baselineValue = baseline?.trim().takeIf { !it.isNullOrBlank() } ?: return true
-        val candidateInstant = parseTimestamp(candidateValue)
-        val baselineInstant = parseTimestamp(baselineValue)
-        return if (candidateInstant != null && baselineInstant != null) {
-            candidateInstant > baselineInstant
-        } else {
-            candidateValue > baselineValue
-        }
-    }
-
-    private fun newestTimestamp(vararg values: String?): String? =
-        values.mapNotNull { it?.trim()?.takeIf(String::isNotBlank) }
-            .reduceOrNull { newest, candidate ->
-                if (isNewer(candidate, newest)) candidate else newest
-            }
-
-    private fun parseTimestamp(raw: String): Instant? =
-        runCatching { Instant.parse(raw) }.getOrNull()
-            ?: runCatching { LocalDateTime.parse(raw).toInstant(TimeZone.UTC) }.getOrNull()
-
     companion object {
         private val STABLE_ENDPOINT = Endpoint(
             host = ExternalBundlesEndpoints.STABLE_HOST,
-            graphqlUrl = "https://${ExternalBundlesEndpoints.STABLE_HOST}/hasura/v1/graphql"
+            graphqlUrl = "https://${ExternalBundlesEndpoints.STABLE_HOST}/hasura/v1/graphql",
+            apiDocumentUrl = "https://${ExternalBundlesEndpoints.STABLE_HOST}/api.json"
         )
         private val DEV_ENDPOINT = Endpoint(
             host = ExternalBundlesEndpoints.DEV_HOST,
-            graphqlUrl = "https://${ExternalBundlesEndpoints.DEV_HOST}/hasura/v1/graphql"
+            graphqlUrl = "https://${ExternalBundlesEndpoints.DEV_HOST}/hasura/v1/graphql",
+            apiDocumentUrl = "https://${ExternalBundlesEndpoints.DEV_HOST}/api.json"
         )
+        private const val ENDPOINT_SELECTION_TTL_MS = 15 * 60 * 1_000L
+        private const val DEGRADED_ENDPOINT_SELECTION_TTL_MS = 30 * 1_000L
         private const val BUNDLES_QUERY = """
             query BundleDiscovery(${"$"}where: bundle_bool_exp, ${"$"}limit: Int, ${"$"}offset: Int) {
               refresh_jobs(

@@ -38,6 +38,18 @@ object ExternalBundlesEndpoints {
         else -> null
     }
 
+    fun preferredHost(stableVersion: String?, devVersion: String?): String {
+        val stable = ApiVersion.parse(stableVersion)
+        val dev = ApiVersion.parse(devVersion)
+        return when {
+            stable == null && dev == null -> DEV_HOST
+            stable == null -> DEV_HOST
+            dev == null -> STABLE_HOST
+            dev > stable -> DEV_HOST
+            else -> STABLE_HOST
+        }
+    }
+
     fun siteUrl(host: String?): String {
         val normalizedHost = host
             ?.trim()
@@ -52,4 +64,56 @@ object ExternalBundlesEndpoints {
             path.startsWith("/api/v2/bundle/") ||
             path.equals(V3_BUNDLE_PATH, ignoreCase = true) ||
             path.startsWith("/bundles/id")
+
+    private data class ApiVersion(
+        val core: List<Long>,
+        val prerelease: List<String>
+    ) : Comparable<ApiVersion> {
+        override fun compareTo(other: ApiVersion): Int {
+            val coreSize = maxOf(core.size, other.core.size)
+            for (index in 0 until coreSize) {
+                val comparison = core.getOrElse(index) { 0 }
+                    .compareTo(other.core.getOrElse(index) { 0 })
+                if (comparison != 0) return comparison
+            }
+
+            if (prerelease.isEmpty() && other.prerelease.isEmpty()) return 0
+            if (prerelease.isEmpty()) return 1
+            if (other.prerelease.isEmpty()) return -1
+
+            val prereleaseSize = maxOf(prerelease.size, other.prerelease.size)
+            for (index in 0 until prereleaseSize) {
+                val left = prerelease.getOrNull(index) ?: return -1
+                val right = other.prerelease.getOrNull(index) ?: return 1
+                val leftNumber = left.toLongOrNull()
+                val rightNumber = right.toLongOrNull()
+                val comparison = when {
+                    leftNumber != null && rightNumber != null -> leftNumber.compareTo(rightNumber)
+                    leftNumber != null -> -1
+                    rightNumber != null -> 1
+                    else -> left.compareTo(right, ignoreCase = true)
+                }
+                if (comparison != 0) return comparison
+            }
+            return 0
+        }
+
+        companion object {
+            private val pattern = Regex(
+                "^[vV]?(\\d+(?:\\.\\d+)*)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?$"
+            )
+
+            fun parse(value: String?): ApiVersion? {
+                val match = value?.trim()?.let(pattern::matchEntire) ?: return null
+                val core = match.groupValues[1]
+                    .split('.')
+                    .map { it.toLongOrNull() ?: return null }
+                val prerelease = match.groupValues[2]
+                    .takeIf(String::isNotBlank)
+                    ?.split('.')
+                    .orEmpty()
+                return ApiVersion(core, prerelease)
+            }
+        }
+    }
 }
