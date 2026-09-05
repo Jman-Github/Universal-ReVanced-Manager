@@ -45,17 +45,44 @@ jobs:
             -PsignAsDebug \
             :app:testDebugUnitTest
 
+      - name: Setup release keystore
+        id: signing
+        shell: bash
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
+          KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE" || -z "$KEYSTORE_PASSWORD" || -z "$KEYSTORE_ENTRY_ALIAS" || -z "$KEYSTORE_ENTRY_PASSWORD" ]]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release signing secrets are unavailable. Validating with debug signing; APKs will not be uploaded."
+          else
+            printf '%s' "$KEYSTORE" | base64 --decode > app/keystore.jks
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Validate dev APK builds
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
+          KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
+          RELEASE_SIGNING_AVAILABLE: ${{ steps.signing.outputs.available }}
+        shell: bash
         run: |
+          signing_args=()
+          if [[ "$RELEASE_SIGNING_AVAILABLE" != "true" ]]; then
+            signing_args+=(-PsignAsDebug)
+          fi
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
-            -PsignAsDebug \
+            "${signing_args[@]}" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease
 
-      - name: Upload validation APKs
+      - name: Upload release-signed validation APKs
+        if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: urv-pr-validation
