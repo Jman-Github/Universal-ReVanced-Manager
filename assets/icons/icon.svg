@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048" role="img" aria-label="Universal ReVanced icon">
+  <defs>
+    <linearGradient id="backgroundGradient" x1="0" y1="0" x2="2048" y2="2048" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#173597" />
+      <stop offset="0.45" stop-color="#9e175f" />
+      <stop offset="0.72" stop-color="#c82232" />
+      <stop offset="1" stop-color="#ff4a00" />
+    </linearGradient>
+    <radialGradient id="backgroundGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1120 1200) rotate(135) scale(1450)">
+      <stop offset="0" stop-color="#b21a62" stop-opacity="0.45" />
+      <stop offset="0.48" stop-color="#70208f" stop-opacity="0.35" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="triangleGradient" x1="1024" y1="728" x2="1024" y2="1322" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff6518" />
+      <stop offset="0.36" stop-color="#d5415b" />
+      <stop offset="0.72" stop-color="#7132b7" />
+      <stop offset="1" stop-color="#1437d1" />
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.28" />
+    </filter>
+  </defs>
+
+  <rect width="2048" height="2048" fill="url(#backgroundGradient)" />
+  <rect width="2048" height="2048" fill="url(#backgroundGlow)" />
+
+  <path filter="url(#softShadow)" fill="#ffffff" d="M724 665C648 665 600 748 640 814L934 1302C974 1368 1074 1368 1114 1302L1408 814C1448 748 1400 665 1324 665H724Z" />
+  <path fill="url(#triangleGradient)" d="M714 728C686 728 668 759 683 783L981 1280C1000 1311 1048 1311 1067 1280L1365 783C1380 759 1362 728 1334 728H714Z" />
+</svg>
