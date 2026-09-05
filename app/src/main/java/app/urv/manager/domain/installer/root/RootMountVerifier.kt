@@ -13,7 +13,11 @@ class RootMountVerifier(
         require(targets.all(::isSafeApkPath)) { "Unsafe APK mount target" }
         val occupied = mountTableReader.mountsAt(targets)
         check(occupied.isEmpty()) {
-            "APK mount target is occupied by another mount: ${occupied.joinToString { it.mountPoint }}"
+            "APK mount target is occupied by another mount: " +
+                occupied.joinToString { entry ->
+                    "${entry.mountPoint} (mountId=${entry.mountId}, " +
+                        "root=${entry.root}, source=${entry.source})"
+                }
         }
     }
 
