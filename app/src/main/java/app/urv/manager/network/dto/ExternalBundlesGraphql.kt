@@ -24,10 +24,6 @@ data class GraphqlError(
 @Serializable
 data class BundlesQueryData(
     val bundle: List<BundleNode> = emptyList(),
-)
-
-@Serializable
-data class RefreshJobsQueryData(
     @SerialName("refresh_jobs")
     val refreshJobs: List<RefreshJobNode> = emptyList(),
 )
@@ -57,6 +53,8 @@ data class BundleNode(
 data class RefreshJobNode(
     @SerialName("started_at")
     val startedAt: String? = null,
+    @SerialName("completed_at")
+    val completedAt: String? = null,
     val status: String? = null,
 )
 

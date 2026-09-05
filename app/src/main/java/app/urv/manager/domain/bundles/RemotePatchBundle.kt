@@ -2,6 +2,7 @@ package app.urv.manager.domain.bundles
 
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.network.api.ExternalBundlesApi
+import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.network.dto.GitHubAsset
@@ -23,9 +24,12 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
 import io.ktor.http.Url
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
@@ -861,7 +865,7 @@ class ExternalGraphqlPatchBundle(
         val repo: String?,
         val prerelease: Boolean?,
         val hasExplicitChannel: Boolean,
-        val isV2LatestEndpoint: Boolean
+        val isLatestApiEndpoint: Boolean
     )
     private data class HistorySource(
         val owner: String,
@@ -883,12 +887,33 @@ class ExternalGraphqlPatchBundle(
         } else {
             metadata.isPrerelease ?: endpointMetadata.prerelease
         }
-        val endpointAsset = if (endpointMetadata.hasExplicitChannel && endpointMetadata.isV2LatestEndpoint) {
-            http.request<ReVancedAsset> { url(endpoint) }.getOrNull()
-        } else {
-            null
+        val trackLatestAcrossChannels = owner.isNotBlank() && repo.isNotBlank() && prerelease == null
+        val (endpointAsset, latestFromServices) = coroutineScope {
+            val endpointDeferred = async {
+                if (endpointMetadata.hasExplicitChannel && endpointMetadata.isLatestApiEndpoint) {
+                    withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
+                        http.request<ReVancedAsset> { url(endpoint) }.getOrNull()
+                    }
+                } else {
+                    null
+                }
+            }
+            val latestDeferred = async {
+                findLatestExternalSnapshot(owner, repo, prerelease)
+            }
+            endpointDeferred.await() to latestDeferred.await()
         }
         if (endpointAsset != null) {
+            val latestCreatedAt = latestFromServices?.let { parseInstant(it.createdAt) }
+            val endpointCreatedAt = endpointAsset.createdAt.toInstant(TimeZone.UTC)
+            if (latestFromServices != null && latestCreatedAt != null && latestCreatedAt > endpointCreatedAt) {
+                metadata = metadataFromSnapshot(
+                    snapshot = latestFromServices,
+                    preserveChannelSelection = trackLatestAcrossChannels
+                )
+                ExternalBundleMetadataStore.write(directory, metadata)
+                return@withContext snapshotToAsset(latestFromServices)
+            }
             metadata = metadata.copy(
                 downloadUrl = endpointAsset.downloadUrl,
                 signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
@@ -923,21 +948,8 @@ class ExternalGraphqlPatchBundle(
                 return@withContext officialAsset
             }
         }
-        val trackLatestAcrossChannels = owner.isNotBlank() && repo.isNotBlank() && prerelease == null
-        val latest = if (owner.isNotBlank() && repo.isNotBlank()) {
-            if (prerelease != null) {
-                api.getLatestBundle(owner, repo, prerelease).getOrNull()
-            } else {
-                api.getLatestBundleAny(owner, repo).getOrNull()
-                    ?: run {
-                        val latestRelease = api.getLatestBundle(owner, repo, prerelease = false).getOrNull()
-                        val latestPrerelease = api.getLatestBundle(owner, repo, prerelease = true).getOrNull()
-                        pickLatestSnapshot(latestRelease, latestPrerelease)
-                    }
-            }
-        } else {
-            null
-        } ?: api.getBundleById(metadata.bundleId).getOrNull()
+        val latest = latestFromServices
+            ?: api.getBundleById(metadata.bundleId, externalBundlesHost()).getOrNull()
         if (latest != null) {
             metadata = metadataFromSnapshot(
                 snapshot = latest,
@@ -946,6 +958,24 @@ class ExternalGraphqlPatchBundle(
             ExternalBundleMetadataStore.write(directory, metadata)
         }
         snapshotToAsset(latest)
+    }
+
+    private suspend fun findLatestExternalSnapshot(
+        owner: String,
+        repo: String,
+        prerelease: Boolean?
+    ): ExternalBundleSnapshot? {
+        if (owner.isBlank() || repo.isBlank()) return null
+        return if (prerelease != null) {
+            api.getLatestBundle(owner, repo, prerelease).getOrNull()
+        } else {
+            api.getLatestBundleAny(owner, repo).getOrNull()
+                ?: run {
+                    val latestRelease = api.getLatestBundle(owner, repo, prerelease = false).getOrNull()
+                    val latestPrerelease = api.getLatestBundle(owner, repo, prerelease = true).getOrNull()
+                    pickLatestSnapshot(latestRelease, latestPrerelease)
+                }
+        }
     }
 
     override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
@@ -1119,7 +1149,7 @@ class ExternalGraphqlPatchBundle(
         val metadataOwner = metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
         val metadataRepo = metadata.repoName?.trim().takeIf { !it.isNullOrBlank() }
         val snapshot = metadata.bundleId.takeIf { it > 0 }?.let { bundleId ->
-            api.getBundleById(bundleId).getOrNull()
+            api.getBundleById(bundleId, externalBundlesHost()).getOrNull()
         }
         val snapshotOwner = snapshot?.ownerName?.trim().takeIf { !it.isNullOrBlank() }
         val snapshotRepo = snapshot?.repoName?.trim().takeIf { !it.isNullOrBlank() }
@@ -1180,6 +1210,28 @@ class ExternalGraphqlPatchBundle(
         for (candidate in candidates) {
             val parsed = runCatching { Url(candidate) }.getOrNull() ?: continue
             val segments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
+            if (parsed.encodedPath.equals(ExternalBundlesEndpoints.V3_BUNDLE_PATH, ignoreCase = true)) {
+                val sourceUrl = parsed.parameters["source_url"]
+                val source = sourceUrl?.let { runCatching { Url(it) }.getOrNull() }
+                val sourceSegments = source?.encodedPath
+                    ?.trim('/')
+                    ?.split('/')
+                    ?.filter { it.isNotBlank() }
+                    .orEmpty()
+                val (hasExplicitChannel, prerelease) = when (parsed.parameters["channel"]?.lowercase()) {
+                    "any" -> true to null
+                    "stable" -> true to false
+                    "prerelease" -> true to true
+                    else -> false to null
+                }
+                return EndpointMetadata(
+                    owner = sourceSegments.dropLast(1).joinToString("/").takeIf { it.isNotBlank() },
+                    repo = sourceSegments.lastOrNull(),
+                    prerelease = prerelease,
+                    hasExplicitChannel = hasExplicitChannel,
+                    isLatestApiEndpoint = parsed.parameters["version"].equals("latest", ignoreCase = true)
+                )
+            }
             if (segments.size >= 5 &&
                 segments[0].equals("api", ignoreCase = true) &&
                 (segments[1].equals("v1", ignoreCase = true) || segments[1].equals("v2", ignoreCase = true)) &&
@@ -1206,7 +1258,7 @@ class ExternalGraphqlPatchBundle(
                     repo = repo,
                     prerelease = prerelease,
                     hasExplicitChannel = hasExplicitChannel,
-                    isV2LatestEndpoint = segments[1].equals("v2", ignoreCase = true) &&
+                    isLatestApiEndpoint = segments[1].equals("v2", ignoreCase = true) &&
                         segments.getOrNull(5).equals("latest", ignoreCase = true)
                 )
             }
@@ -1216,8 +1268,16 @@ class ExternalGraphqlPatchBundle(
             repo = null,
             prerelease = null,
             hasExplicitChannel = false,
-            isV2LatestEndpoint = false
+            isLatestApiEndpoint = false
         )
+    }
+
+    private fun externalBundlesHost(): String {
+        for (candidate in listOfNotNull(endpoint, metadata.downloadUrl)) {
+            val host = runCatching { Url(candidate).host }.getOrNull() ?: continue
+            if (ExternalBundlesEndpoints.isExternalBundlesHost(host)) return host
+        }
+        return ExternalBundlesEndpoints.STABLE_HOST
     }
 
     private fun safeArtifactUrl(raw: String?): String? {
@@ -1230,13 +1290,10 @@ class ExternalGraphqlPatchBundle(
     private fun isExternalBundleApiEndpoint(raw: String): Boolean {
         val parsed = runCatching { Url(raw) }.getOrNull() ?: return false
         val host = parsed.host.lowercase()
-        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
-            host == "revanced-external-bundles-dev.brosssh.com"
+        val isExternalBundlesHost = ExternalBundlesEndpoints.isExternalBundlesHost(host)
         if (!isExternalBundlesHost) return false
         val pathNoQuery = parsed.encodedPath.substringBefore('?').substringBefore('#')
-        return pathNoQuery.startsWith("/api/v1/bundle/") ||
-            pathNoQuery.startsWith("/api/v2/bundle/") ||
-            pathNoQuery.startsWith("/bundles/id")
+        return ExternalBundlesEndpoints.isBundleApiPath(pathNoQuery)
     }
 
     private fun parseCreatedAt(raw: String?): LocalDateTime {
@@ -1271,6 +1328,7 @@ class ExternalGraphqlPatchBundle(
         val trimmed = raw?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
         return runCatching { Instant.parse(trimmed) }.getOrNull()
+            ?: runCatching { LocalDateTime.parse(trimmed).toInstant(TimeZone.UTC) }.getOrNull()
     }
 
     private fun pickNewestOfficialAsset(

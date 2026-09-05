@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ExternalBundleSnapshot(
+    val apiHost: String = "",
     val ownerName: String = "",
     val ownerAvatarUrl: String? = null,
     val repoName: String = "",
