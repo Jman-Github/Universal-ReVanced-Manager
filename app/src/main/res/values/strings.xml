@@ -1573,7 +1573,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="selected_file_not_supported_apk_file">Selected file must be an APK file (.apk).</string>
     <string name="selected_file_not_supported_json">Selected file must be a JSON file (.json)</string>
     <string name="selected_file_not_supported_keystore">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks)</string>
-    <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks).</string>
+    <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
+    <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
     <string name="patch_bundle_url_invalid_json_or_external">Patch bundle URL must point to a .json file or a supported external bundles API URL</string>
     <string name="patch_bundle_url_invalid_external">Patch bundle URL must point to a supported external bundles API URL</string>
     <string name="selected_file_not_supported_image">Selected file is not a supported image type</string>
