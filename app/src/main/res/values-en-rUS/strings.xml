@@ -69,6 +69,10 @@
     <string name="bundle_update_manual_available">Update available</string>
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
     <string name="saved_app_bundle_update_badge">Bundle update</string>
+    <plurals name="saved_app_bundle_update_badge_quantity">
+        <item quantity="one">Bundle update</item>
+        <item quantity="other">Bundle updates</item>
+    </plurals>
     <string name="patch_bundle_force_redownload_title">Force redownload</string>
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
     <string name="patch_bundle_experimental_version_label">EXPERIMENTAL</string>
@@ -1354,7 +1358,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_log_export_failed">Failed to export merge log.</string>
     <string name="merge_split_apk_installed_not_split">This installed app is not using split APKs.</string>
     <string name="merge_split_apk_selection_title">Choose splits to merge</string>
-    <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge. All splits are selected by default.</string>
+    <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge.</string>
     <string name="merge_split_apk_selection_preset_all">All</string>
     <string name="merge_split_apk_selection_strip_native_libs_title">Exclude extra native libraries</string>
     <string name="merge_split_apk_selection_confirm">Start merge</string>
@@ -1540,6 +1544,10 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
 %1$s
 Enable them again (or pick alternatives) and then try patching once more.</string>
     <string name="removed_saved_patches_message">These patches are no longer available and were removed from your saved selection:</string>
+    <plurals name="removed_saved_patches_message_quantity">
+        <item quantity="one">This patch is no longer available and was removed from your saved selection:</item>
+        <item quantity="other">These patches are no longer available and were removed from your saved selection:</item>
+    </plurals>
     <string name="patch_profile_delete_multiple_dialog_description">Are you sure you want to delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>
@@ -1793,6 +1801,10 @@ Details: %2$s</string>
     <string name="install_app">Install</string>
     <string name="install_base_and_mount">Install base &amp; mount</string>
     <string name="install_app_success">Installed successfully</string>
+    <string name="installing_patched_app">Installing patched app…</string>
+    <string name="installing_merged_app">Installing merged app…</string>
+    <string name="patched_app_install_success">Patched app installed successfully</string>
+    <string name="merged_app_install_success">Merged app installed successfully</string>
     <string name="install_app_fail_title">Installation failed</string>
     <string name="uninstall_app_fail_title">Uninstall failed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
