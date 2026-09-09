@@ -40,6 +40,10 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
+        <meta-data
+            android:name="app.urv.manager.DATABASE_VERSION"
+            android:value="${databaseVersion}" />
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"

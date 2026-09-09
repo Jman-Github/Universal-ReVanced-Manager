@@ -1250,6 +1250,7 @@ Details: %2$s</string>
     <string name="keystore_diagnostics_present_size">Present (%1$s)</string>
     <string name="export">Export</string>
     <string name="confirm">Confirm</string>
+    <string name="manager_update_incompatible_pr">This release is incompatible with this PR build. Please wait for a newer manager release. Your data has not been changed.</string>
     </resources>
 
 

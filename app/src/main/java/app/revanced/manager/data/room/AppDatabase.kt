@@ -1,5 +1,6 @@
 package app.revanced.manager.data.room
 
+import app.universal.revanced.manager.BuildConfig
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
@@ -24,7 +25,7 @@ import kotlin.random.Random
 
 @Database(
     entities = [PatchBundleEntity::class, PatchSelection::class, SelectedPatch::class, DownloadedApp::class, InstalledApp::class, AppliedPatch::class, OptionGroup::class, Option::class, TrustedDownloaderPlugin::class, PatchProfileEntity::class],
-    version = 13
+    version = BuildConfig.DATABASE_VERSION
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {

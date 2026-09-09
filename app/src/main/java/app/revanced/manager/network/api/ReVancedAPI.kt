@@ -7,6 +7,7 @@ import app.revanced.manager.network.utils.APIResponse
 import app.revanced.manager.network.utils.APIFailure
 import app.revanced.manager.network.utils.getOrNull
 import app.universal.revanced.manager.BuildConfig
+import app.revanced.manager.util.isManagerReleaseAfter
 import io.ktor.client.request.header
 import io.ktor.client.request.url
 import kotlinx.datetime.Instant
@@ -84,13 +85,15 @@ class ReVancedAPI(
     private suspend fun fetchReleaseAsset(
         config: RepoConfig,
         includePrerelease: Boolean,
-        matcher: (GitHubAsset) -> Boolean
+        matcher: (GitHubAsset) -> Boolean,
+        publishedAfter: Instant? = null
     ): APIResponse<ReVancedAsset> {
         return when (val releasesResponse = githubRequest<List<GitHubRelease>>(config, "releases")) {
             is APIResponse.Success -> {
                 val mapped = runCatching {
                     val release = releasesResponse.data.firstOrNull { release ->
-                        !release.draft && (includePrerelease || !release.prerelease) && release.assets.any(matcher)
+                        !release.draft && (includePrerelease || !release.prerelease) && release.assets.any(matcher) &&
+                            isManagerReleaseAfter(release.publishedAt, publishedAfter?.toEpochMilliseconds())
                     } ?: throw IllegalStateException("No matching release found")
 
                     val asset = release.assets.first(matcher)
@@ -145,16 +148,22 @@ class ReVancedAPI(
                 asset.contentType?.contains("android.package-archive", ignoreCase = true) == true
 
 
-    suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
+    suspend fun getLatestAppInfo(publishedAfter: Instant? = null): APIResponse<ReVancedAsset> {
         val config = repoConfig()
         val includePrerelease = prefs.useManagerPrereleases.get()
-        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset)
+        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, publishedAfter)
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
-        return getLatestAppInfo()
+        // A PR can be ahead of every published release, even within the same version.
+        val publishedAfter = if (BuildConfig.IS_PR_TEST_BUILD) {
+            Instant.fromEpochMilliseconds(BuildConfig.PR_BUILD_TIMESTAMP)
+        } else {
+            null
+        }
+        return getLatestAppInfo(publishedAfter)
             .getOrNull()
-            ?.takeIf { it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
+            ?.takeIf { BuildConfig.IS_PR_TEST_BUILD || it.version.removePrefix("v") != BuildConfig.VERSION_NAME }
     }
 
     suspend fun getPatchesUpdate(prerelease: Boolean): APIResponse<ReVancedAsset> =

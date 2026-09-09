@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
@@ -14,9 +15,13 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.universal.revanced.manager.BuildConfig
+import app.revanced.manager.util.MANAGER_DATABASE_VERSION_METADATA
+import app.revanced.manager.util.isCompatibleManagerUpdate
 import app.revanced.manager.data.platform.Filesystem
 import app.revanced.manager.data.platform.NetworkInfo
 import app.revanced.manager.network.api.ReVancedAPI
@@ -166,6 +171,36 @@ class UpdateViewModel(
         externalInstallTimeoutJob = null
         installError = ""
         prefs.pendingManagerUpdateVersionCode.update(-1)
+
+        if (BuildConfig.IS_PR_TEST_BUILD) {
+            state = State.INSTALLING
+            val compatible = withContext(Dispatchers.IO) {
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    val candidate = app.packageManager.getPackageArchiveInfo(
+                        location.absolutePath,
+                        PackageManager.GET_META_DATA
+                    ) ?: return@runCatching false
+                    val metadata = candidate.applicationInfo?.metaData
+                    isCompatibleManagerUpdate(
+                        currentPackage = app.packageName,
+                        currentVersionCode = BuildConfig.VERSION_CODE.toLong(),
+                        currentDatabaseVersion = BuildConfig.DATABASE_VERSION,
+                        candidatePackage = candidate.packageName,
+                        candidateVersionCode = PackageInfoCompat.getLongVersionCode(candidate),
+                        candidateDatabaseVersion = metadata
+                            ?.takeIf { it.containsKey(MANAGER_DATABASE_VERSION_METADATA) }
+                            ?.getInt(MANAGER_DATABASE_VERSION_METADATA)
+                    )
+                }.getOrDefault(false)
+            }
+            if (!compatible) {
+                installError = app.getString(R.string.manager_update_incompatible_pr)
+                state = State.FAILED
+                app.toast(installError)
+                return@launch
+            }
+        }
 
         val plan = installerManager.resolvePlan(
             InstallerManager.InstallTarget.MANAGER_UPDATE,

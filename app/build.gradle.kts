@@ -24,6 +24,11 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
+// PR builds share the normal app identity and only offer newer published releases.
+val prTestBuild = providers.gradleProperty("prTestBuild")
+    .map(String::toBoolean)
+    .getOrElse(false)
+val managerDatabaseVersion = 13
 
 val apkEditorLib by configurations.creating
 
@@ -50,6 +55,8 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
 }
 
 dependencies {
+    testImplementation(kotlin("test-junit"))
+
     // AndroidX Core
     implementation(libs.androidx.ktx)
     implementation(libs.runtime.ktx)
@@ -187,6 +194,10 @@ android {
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager"
+        buildConfigField("boolean", "IS_PR_TEST_BUILD", prTestBuild.toString())
+        buildConfigField("long", "PR_BUILD_TIMESTAMP", "${if (prTestBuild) System.currentTimeMillis() else 0L}L")
+        buildConfigField("int", "DATABASE_VERSION", managerDatabaseVersion.toString())
+        manifestPlaceholders["databaseVersion"] = managerDatabaseVersion
         minSdk = 26
         targetSdk = 35
 
