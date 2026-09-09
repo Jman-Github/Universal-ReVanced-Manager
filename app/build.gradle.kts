@@ -69,6 +69,11 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
+// PR builds share the normal app identity and only offer newer published releases.
+val prTestBuild = providers.gradleProperty("prTestBuild")
+    .map(String::toBoolean)
+    .getOrElse(false)
+val managerDatabaseVersion = 20
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
 val devVersionNameSuffix = if (resolvedProjectVersion.contains('-')) "" else "-$devVersionSuffix"
 val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")
@@ -271,6 +276,10 @@ android {
 
     defaultConfig {
         applicationId = "app.universal.revanced.manager"
+        buildConfigField("boolean", "IS_PR_TEST_BUILD", prTestBuild.toString())
+        buildConfigField("long", "PR_BUILD_TIMESTAMP", "${if (prTestBuild) System.currentTimeMillis() else 0L}L")
+        buildConfigField("int", "DATABASE_VERSION", managerDatabaseVersion.toString())
+        manifestPlaceholders["databaseVersion"] = managerDatabaseVersion
         minSdk = 26
         targetSdk = 36
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

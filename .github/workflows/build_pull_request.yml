@@ -70,6 +70,7 @@ jobs:
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
           RELEASE_SIGNING_AVAILABLE: ${{ steps.signing.outputs.available }}
+          PR_TEST_SUFFIX: pr.${{ github.event.pull_request.number || github.run_id }}
         shell: bash
         run: |
           signing_args=()
@@ -78,8 +79,11 @@ jobs:
           fi
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             "${signing_args[@]}" \
+            -PprTestBuild=true \
+            "-PdevVersionSuffix=$PR_TEST_SUFFIX" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease
+          echo "PR APKs update the normal manager in place. Return using a newer normal release with a compatible database and version code. Older releases such as dev 22 are not supported rollback targets; back up your data before testing." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release-signed validation APKs
         if: steps.signing.outputs.available == 'true'
