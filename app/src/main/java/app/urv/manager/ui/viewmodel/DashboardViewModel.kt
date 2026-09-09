@@ -57,6 +57,7 @@ import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.PM
 import app.urv.manager.util.announcementTagKey
 import app.urv.manager.util.SplitMergeNotification
+import app.urv.manager.service.SplitMergeTaskMonitorService
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
 import app.urv.manager.plugin.downloader.GetScope
@@ -203,6 +204,7 @@ class DashboardViewModel(
     val openSplitMergeScreenFlow = openSplitMergeScreenChannel.receiveAsFlow()
     private val splitMergeWorkspace = app.cacheDir.resolve("split-merge-tools").apply { mkdirs() }
     private val splitMergeRuntime = SplitMergeProcessRuntime(app)
+    private val onSplitMergeTaskClosed: () -> Unit = { cancelSplitMerge() }
     private val splitMergeNotificationLock = Any()
     private var cachedMergedApk: File? = null
     private var activeSplitMergeRunWorkspace: File? = null
@@ -219,6 +221,7 @@ class DashboardViewModel(
     val activeSplitMergePluginId: String? get() = splitMergePlugin?.id
 
     init {
+        SplitMergeTaskMonitorService.register(onSplitMergeTaskClosed)
         viewModelScope.launch {
             checkForManagerUpdates()
             updateBatteryOptimizationsWarning()
@@ -2581,6 +2584,7 @@ class DashboardViewModel(
     }
 
     override fun onCleared() {
+        SplitMergeTaskMonitorService.unregister(app, onSplitMergeTaskClosed)
         splitMergeRuntime.cancelActiveExecution()
         splitMergeJob?.cancel()
         splitMergeJob = null

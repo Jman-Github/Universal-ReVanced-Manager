@@ -46,6 +46,10 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
+        <meta-data
+            android:name="app.urv.manager.DATABASE_VERSION"
+            android:value="${databaseVersion}" />
+
         <provider
             android:name="rikka.shizuku.ShizukuProvider"
             android:authorities="${applicationId}.shizuku"
@@ -143,6 +147,16 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="patching"
                 />
+        </service>
+
+        <service
+            android:name="app.urv.manager.service.SplitMergeTaskMonitorService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="split_apk_merging" />
         </service>
 
         <service
