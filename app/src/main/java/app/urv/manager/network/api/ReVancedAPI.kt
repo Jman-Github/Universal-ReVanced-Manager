@@ -9,6 +9,7 @@ import app.urv.manager.network.utils.APIResponse
 import app.urv.manager.network.utils.APIFailure
 import app.urv.manager.network.utils.getOrNull
 import app.universal.revanced.manager.BuildConfig
+import app.urv.manager.util.isManagerReleaseAfter
 import io.ktor.client.request.header
 import io.ktor.client.request.url
 import kotlinx.datetime.Instant
@@ -115,7 +116,8 @@ class ReVancedAPI(
         matcher: (GitHubAsset) -> Boolean,
         pickAsset: (List<GitHubAsset>) -> GitHubAsset? = { assets ->
             assets.firstOrNull()
-        }
+        },
+        publishedAfter: Instant? = null
     ): APIResponse<ReVancedAsset> {
         return when (val releasesResponse = githubRequest<List<GitHubRelease>>(config, "releases")) {
             is APIResponse.Success -> {
@@ -123,6 +125,9 @@ class ReVancedAPI(
                     val releaseAndAsset = releasesResponse.data
                         .asSequence()
                         .filter { release -> !release.draft && (includePrerelease || !release.prerelease) }
+                        .filter { release ->
+                            isManagerReleaseAfter(release.publishedAt, publishedAfter?.toEpochMilliseconds())
+                        }
                         .mapNotNull { release ->
                             val matchingAssets = release.assets.filter(matcher)
                             pickAsset(matchingAssets)?.let { asset -> release to asset }
@@ -258,18 +263,25 @@ class ReVancedAPI(
         }
     }
 
-    suspend fun getLatestAppInfo(): APIResponse<ReVancedAsset> {
+    suspend fun getLatestAppInfo(publishedAfter: Instant? = null): APIResponse<ReVancedAsset> {
         val config = repoConfig()
         val includePrerelease =
             prefs.useManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
-        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, ::pickManagerAsset)
+        return fetchReleaseAsset(config, includePrerelease, ::isManagerAsset, ::pickManagerAsset, publishedAfter)
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
-        return getLatestAppInfo()
+        // A PR can be ahead of every published release, even within the same version.
+        val publishedAfter = if (BuildConfig.IS_PR_TEST_BUILD) {
+            Instant.fromEpochMilliseconds(BuildConfig.PR_BUILD_TIMESTAMP)
+        } else {
+            null
+        }
+        return getLatestAppInfo(publishedAfter)
             .getOrNull()
             ?.takeIf {
-                normalizeManagerVersion(it.version) != normalizeManagerVersion(BuildConfig.VERSION_NAME)
+                BuildConfig.IS_PR_TEST_BUILD ||
+                    normalizeManagerVersion(it.version) != normalizeManagerVersion(BuildConfig.VERSION_NAME)
             }
     }
 

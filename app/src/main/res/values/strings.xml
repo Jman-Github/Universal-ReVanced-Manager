@@ -2370,6 +2370,7 @@ Details: %2$s</string>
     <string name="batch_patch_minimum_apps">Select at least two apps to use batch patching</string>
     <string name="batch_patch_edit_apk">Edit APK</string>
     <string name="batch_patch_metadata_save_failed">Installed, but URV Manager could not save the app metadata: %1$s</string>
+    <string name="manager_update_incompatible_pr">This release is incompatible with this PR build. Please wait for a newer manager release. Your data has not been changed.</string>
 </resources>
 
 
