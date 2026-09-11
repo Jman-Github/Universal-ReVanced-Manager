@@ -12,6 +12,8 @@ import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.ProgressEventParcel
 import app.urv.manager.patcher.StepId
+import app.urv.manager.patcher.failureDetail
+import app.urv.manager.patcher.fatalFailureOrNull
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.runStep
@@ -106,6 +108,7 @@ class Revanced22ProcessRuntime(
         skipUnneededSplits: Boolean,
     ) = coroutineScope {
         val logMode = prefs.patcherLogMode.get()
+        val continueOnPatchError = prefs.continueOnPatchError.get()
         val runtimeLogger = logger.filtered(logMode)
         currentCoroutineContext()[Job]?.invokeOnCompletion {
             cancellationRequested.set(true)
@@ -194,8 +197,6 @@ class Revanced22ProcessRuntime(
             Log.w(tag, "Skipping prop override on Android ${Build.VERSION.SDK_INT}")
         }
         env["REVANCED22_MERGE_MEMORY_LIMIT_MB"] = runtimeLimit.toString()
-
-        fun handleProgressEvent(event: ProgressEvent) = Unit
 
         val patching = CompletableDeferred<Unit>()
         val finishedReported = AtomicBoolean(false)
@@ -300,7 +301,10 @@ class Revanced22ProcessRuntime(
                     event?.let {
                         val progressEvent = it.toEvent()
                         eventQueue.trySend(progressEvent)
-                        handleProgressEvent(progressEvent)
+                        progressEvent.fatalFailureOrNull()?.let { failure ->
+                            completeFailure(RemoteFailureException(failure.failureDetail()))
+                            runCatching { binder.exit() }
+                        }
                     }
                 }
 
@@ -351,7 +355,7 @@ class Revanced22ProcessRuntime(
                 },
                 stripNativeLibs = stripNativeLibs,
                 skipUnneededSplits = skipUnneededSplits,
-                continueOnPatchError = prefs.continueOnPatchError.get(),
+                continueOnPatchError = continueOnPatchError,
                 patcherLogMode = logMode
             )
 

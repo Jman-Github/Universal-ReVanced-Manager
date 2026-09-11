@@ -53,6 +53,7 @@ class Session private constructor(
     private val sanitizeAllEmbeddedApksOnInit: Boolean = false,
     private val onEvent: (ProgressEvent) -> Unit,
     private val checkCancelled: () -> Unit = {},
+    private val continueOnPatchError: Boolean = false,
 ) : Closeable {
     private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
     private val patcherInputDir = File(cacheDir).resolve("patcher-inputs").also { it.mkdirs() }
@@ -124,6 +125,8 @@ class Session private constructor(
         if (selectedPatches.isEmpty()) return
         val indexByPatch = selectedPatches.withIndex().associate { it.value to it.index }
         val started = mutableSetOf<Int>()
+        val failedPatchIndexes = mutableSetOf<Int>()
+        var firstPatchFailure: Throwable? = null
         var nextIndex = 0
 
         fun startPatch(index: Int) {
@@ -137,11 +140,20 @@ class Session private constructor(
             checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
             if (exception != null) {
-                if (index < nextIndex) {
+                fun recordFailure() {
+                    if (firstPatchFailure == null) {
+                        firstPatchFailure = exception
+                    }
+                    failedPatchIndexes += index
                     onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
                     logger.error(
                         "${patch.name} failed:\n" + exception.toSafeStackTraceString()
                     )
+                }
+
+                if (index < nextIndex) {
+                    recordFailure()
+                    if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) return@collect
                     throw exception
                 }
                 while (nextIndex < index) {
@@ -151,10 +163,14 @@ class Session private constructor(
                     nextIndex += 1
                 }
                 startPatch(index)
-                onEvent(ProgressEvent.Failed(StepId.ExecutePatch(index), exception.toSafeRemoteError()))
-                logger.error(
-                    "${patch.name} failed:\n" + exception.toSafeStackTraceString()
-                )
+                recordFailure()
+                if (continueOnPatchError && !isLikelyFrameworkDecodeFailure(exception)) {
+                    nextIndex = index + 1
+                    if (nextIndex < selectedPatches.size) {
+                        startPatch(nextIndex)
+                    }
+                    return@collect
+                }
                 throw exception
             }
 
@@ -172,6 +188,9 @@ class Session private constructor(
             if (nextIndex < selectedPatches.size) {
                 startPatch(nextIndex)
             }
+        }
+        if (continueOnPatchError && failedPatchIndexes.size == selectedPatches.size) {
+            throw firstPatchFailure ?: IllegalStateException("All selected patches failed")
         }
     }
 
@@ -1177,6 +1196,7 @@ class Session private constructor(
             sanitizeAllEmbeddedApksOnInit: Boolean = false,
             onEvent: (ProgressEvent) -> Unit,
             checkCancelled: () -> Unit = {},
+            continueOnPatchError: Boolean = false,
         ): Session {
             val session = Session(
                 cacheDir = cacheDir,
@@ -1187,7 +1207,8 @@ class Session private constructor(
                 initialPatcherInput = initialPatcherInput,
                 sanitizeAllEmbeddedApksOnInit = sanitizeAllEmbeddedApksOnInit,
                 onEvent = onEvent,
-                checkCancelled = checkCancelled
+                checkCancelled = checkCancelled,
+                continueOnPatchError = continueOnPatchError
             )
             return try {
                 if (sanitizeAllEmbeddedApksOnInit) {

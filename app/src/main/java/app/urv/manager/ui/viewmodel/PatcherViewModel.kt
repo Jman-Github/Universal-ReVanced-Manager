@@ -700,7 +700,12 @@ class PatcherViewModel(
         ?: input.options
     val currentSelectedApp: SelectedApp
         get() = when (val current = selectedApp) {
-            is SelectedApp.Local -> inputFile?.let { current.copy(file = it) } ?: current
+            // Keep the original selection when it is still usable. A worker's temporary
+            // copy must not become the next run's input or trigger another metadata load.
+            is SelectedApp.Local -> if (current.file.isFile) current else inputFile
+                ?.takeIf { it.isFile }
+                ?.let { current.copy(file = it) }
+                ?: current
             else -> current
         }
 
@@ -1855,15 +1860,12 @@ class PatcherViewModel(
     fun suppressInstallProgressToasts() = stopInstallProgressToasts()
 
     private val tempDir = savedStateHandle.saveable(key = "tempDir") {
-        fs.uiTempDir.resolve("installer").also {
-            it.deleteRecursively()
-            it.mkdirs()
-        }
+        fs.uiTempDir.resolve("installer-${UUID.randomUUID()}").also { it.mkdirs() }
     }
 
     private var inputFile: File? by savedStateHandle.saveableVar()
     private var requiresSplitPreparation by savedStateHandle.saveableVar {
-        initialSplitRequirement(input.selectedApp)
+        false
     }
     private val outputFile = tempDir.resolve("output.apk")
 
@@ -2218,6 +2220,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun runPreflightCheck(chooseSplitApks: Boolean) {
+        requiresSplitPreparation = withContext(Dispatchers.IO) {
+            initialSplitRequirement(input.selectedApp)
+        }
         val scopedBundles = gatherScopedBundles()
         val currentSelection = appliedSelection
         val sanitizedSelection = filterSelectionToAvailablePatches(currentSelection, scopedBundles)
@@ -2984,9 +2989,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } else if (cleanupLocalInput) {
             cleanupTemporaryLocalInput()
         }
-        fs.deleteRepatchInputStagingFile(patchedRepatchSourcePath)
+        val repatchSourcePath = patchedRepatchSourcePath
         patchedRepatchSourcePath = null
-        tempDir.deleteRecursively()
+        val workId = patcherWorkerId?.uuid
+        // Each screen owns its directory, so delayed cleanup cannot delete a retry's output.
+        CoroutineScope(Dispatchers.IO).launch {
+            workId?.let {
+                withContext(Dispatchers.Main.immediate) { awaitWorkToFinish(it) }
+            }
+            fs.deleteRepatchInputStagingFile(repatchSourcePath)
+            tempDir.deleteRecursively()
+        }
     }
 
     fun isDeviceRooted() = rootInstaller.isDeviceRooted()
@@ -5186,10 +5199,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 }
 
                 is ProgressEvent.Completed -> {
-                    if (step.state == State.FAILED) {
+                    val recoveredPatch = step.state == State.FAILED && eventStepId is StepId.ExecutePatch
+                    if (step.state == State.FAILED && !recoveredPatch) {
                         null
                     } else {
-                        step.withState(State.COMPLETED, progress = null)
+                        step.withState(
+                            State.COMPLETED,
+                            message = if (recoveredPatch) null else step.message,
+                            progress = null
+                        )
                     }
                 }
 
@@ -6547,7 +6565,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                         ?.toSet()
                         .orEmpty()
                     completedPatchHadFailures = failedPatchIndexes.isNotEmpty()
-                    applyFailedPatchIndexes(failedPatchIndexes)
+                    reconcileFailedPatchIndexes(failedPatchIndexes)
                     reconcileProgressStateAfterSuccess()
                     refreshExportMetadata()
                     // Code adapted from Morphe, see third-party/NOTICE for more information
@@ -6690,20 +6708,27 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 steps[index] = step.withState(state = State.COMPLETED, progress = null)
             }
         }
-        applyFailedPatchIndexes(failedPatchIndexes)
+        reconcileFailedPatchIndexes(failedPatchIndexes)
     }
 
-    private fun applyFailedPatchIndexes(failedPatchIndexes: Set<Int>) {
-        failedPatchIndexes.forEach { patchIndex ->
-            val stepIndex = steps.indexOfFirst { it.id == StepId.ExecutePatch(patchIndex) }
-            if (stepIndex == -1) return@forEach
-            val step = steps[stepIndex]
-            if (step.state == State.FAILED) return@forEach
-            steps[stepIndex] = step.withState(
-                state = State.FAILED,
-                message = step.message,
-                progress = null
-            )
+    private fun reconcileFailedPatchIndexes(failedPatchIndexes: Set<Int>) {
+        steps.forEachIndexed { index, step ->
+            val patchStep = step.id as? StepId.ExecutePatch ?: return@forEachIndexed
+            when {
+                patchStep.index in failedPatchIndexes && step.state != State.FAILED -> {
+                    steps[index] = step.withState(
+                        state = State.FAILED,
+                        progress = null
+                    )
+                }
+                patchStep.index !in failedPatchIndexes && step.state == State.FAILED -> {
+                    steps[index] = step.withState(
+                        state = State.COMPLETED,
+                        message = null,
+                        progress = null
+                    )
+                }
+            }
         }
     }
 
@@ -6872,8 +6897,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         merged: Boolean = false
     ) {
         val needsSplit = needsSplitOverride
-            ?: merged
-            || file?.let(SplitApkPreparer::isSplitArchive) == true
+            ?: (merged || file?.let(SplitApkPreparer::isSplitArchive) == true)
         when {
             needsSplit && !requiresSplitPreparation -> {
                 requiresSplitPreparation = true
