@@ -450,7 +450,10 @@ private fun InstalledAppCard(
                         )
                         if (showBundleUpdateBadges && bundleSummaries.any { it.hasUpdate }) {
                             AppMetaPill(
-                                text = stringResource(R.string.saved_app_bundle_update_badge),
+                                text = pluralStringResource(
+                                    R.plurals.saved_app_bundle_update_badge_quantity,
+                                    bundleSummaries.count { it.hasUpdate }
+                                ),
                                 containerColor = MaterialTheme.colorScheme.primaryContainer,
                                 contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                             )

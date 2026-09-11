@@ -7,6 +7,7 @@
 - Added a delete action to individual saved unpatched app cards in Downloads, with a confirmation prompt before removing the stored APK
 - Bumped Morphe Patcher to `1.9.0`
 - Added configurable Play Store installation source modes for the system and rooted mount installers, adapted from https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
+- Added patcher-style installation feedback to the Split APK Merger, including installation cancellation, a success dialog, and distinct patched/merged app installation messages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/666 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/671 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/672
 
 
 # Bug fixes
@@ -20,6 +21,13 @@
 - Fixed single and batch patching sometimes using or reporting stale patch selections, options, app metadata, and runtime information, especially after missing patches were removed or the patcher screen was restored
 - Fixed system Play Store installs still appearing as installed by URV Manager in Android settings
 - Fixed some Morphe patch bundles failing to load in process mode with an incorrect corrupted or incomplete error
+- Fixed patch bundle import and update feedback by preserving bundle name casing, identifying the selected release channel, and using correct singular/plural progress wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/601 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/632 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/633
+- Fixed incorrect singular/plural wording when removing saved patches and displaying patch bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/605 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/680
+- Fixed cancelling APK preparation incorrectly displaying a failure dialog https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/610
+- Improved split selection dialogs by removing outdated guidance and aligning the Cancel action consistently https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/613 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/618
+- Fixed manager, installed app, and applied patch bundle version displays to consistently use a single `v` prefix https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/704
+- Fixed the Process Memory Limit dialog title alignment https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/676
+- Fixed unsupported keystore converter errors wrapping unnaturally https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/673
 
 
 # CI

@@ -429,7 +429,7 @@ fun InstalledAppInfoScreen(
         if (appliedBundles.isEmpty()) ""
         else appliedBundles.joinToString("\n") { bundle ->
             val version = bundle.version?.takeIf { it.isNotBlank() }
-            if (version != null) "${bundle.title} ($version)" else bundle.title
+            if (version != null) "${bundle.title} (v${version.removePrefix("v").removePrefix("V")})" else bundle.title
         }
     }
 
@@ -1138,6 +1138,7 @@ fun InstalledAppInfoScreen(
                 AppVersion(
                     appInfo = viewModel.appInfo,
                     versionName = installedApp.version,
+                    prefixVersion = true,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 viewModel.savedApkAbiLabel?.let { abiLabel ->

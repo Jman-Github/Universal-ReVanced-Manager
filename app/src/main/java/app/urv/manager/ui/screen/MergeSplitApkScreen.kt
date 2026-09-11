@@ -68,6 +68,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -309,12 +310,26 @@ fun MergeSplitApkScreen(
         )
     }
 
-    when {
-        state.installing -> TransparentLoadingDialog(
-            message = state.installStatus ?: stringResource(R.string.installing_ellipsis)
-        )
-        state.savingOutput -> TransparentLoadingDialog(
-            message = stringResource(R.string.merge_split_apk_saving)
+    if (state.savingOutput) {
+        TransparentLoadingDialog(message = stringResource(R.string.merge_split_apk_saving))
+    }
+
+    state.installedPackageName?.let { packageName ->
+        AlertDialog(
+            onDismissRequest = vm::dismissSplitMergeInstallSuccess,
+            title = { CenteredDialogTitle(stringResource(R.string.install_app_success)) },
+            text = {
+                Text(
+                    text = packageName,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = vm::dismissSplitMergeInstallSuccess) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
         )
     }
 
@@ -629,11 +644,24 @@ fun MergeSplitApkScreen(
                     }
                 },
                 floatingActionButton = {
-                    AnimatedVisibility(visible = canInstallNow) {
+                    AnimatedVisibility(visible = canInstallNow || state.installing) {
                         HapticExtendedFloatingActionButton(
-                            text = { Text(stringResource(R.string.install_app)) },
-                            icon = { Icon(Icons.Outlined.FileDownload, null) },
-                            onClick = ::requestInstall
+                            text = {
+                                Text(
+                                    stringResource(
+                                        if (state.installing) R.string.cancel else R.string.install_app
+                                    )
+                                )
+                            },
+                            icon = {
+                                Icon(
+                                    if (state.installing) Icons.Outlined.Cancel else Icons.Outlined.FileDownload,
+                                    null
+                                )
+                            },
+                            onClick = {
+                                if (state.installing) vm.cancelSplitMergeInstall() else requestInstall()
+                            }
                         )
                     }
                 }
@@ -1460,7 +1488,7 @@ internal fun SplitMergeSelectionDialog(
                             Text(stringResource(R.string.cancel))
                         }
                         if (confirmTextRes != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.weight(1f))
                             FilledTonalButton(
                                 onClick = {
                                     onConfirm(selectedModules + requiredModules, stripNativeLibs)
