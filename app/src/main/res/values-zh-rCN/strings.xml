@@ -287,7 +287,7 @@
     <string name="downloader_plugin_state_failed">加载失败。点击查看更多详情</string>
     <string name="downloader_plugin_state_untrusted">不受信任</string>
     <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任</string>
     <string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
     <string name="downloader_plugin_uninstall_title">卸载插件？</string>
@@ -317,11 +317,7 @@
     <string name="dark">深色</string>
     <string name="appearance">外观</string>
     <string name="downloaded_apps">已下载的应用</string>
-    <string name="process_runtime">在另一个进程中运行修补程序（实验性）</string>
-    <string name="process_runtime_description">这速度更快，并允许修补程序使用更多内存</string>
     <string name="strip_unused_libs">移除未使用的原生库</string>
-    <string name="process_runtime_memory_limit">修补程序进程内存限制</string>
-    <string name="process_runtime_memory_limit_description">修补程序进程可以使用的最大内存量（以兆字节为单位）</string>
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>
@@ -435,11 +431,6 @@
     <string name="patch_profile_bundle_change_uid_success">包 UID 已更新为 %1$d。</string>
     <string name="patch_profile_bundle_change_uid_not_found">未找到 UID 为 %1$d 的本地补丁包。</string>
     <string name="patcher_process_exit_message">修补程序进程退出，代码为 %1$d。</string>
-    <string name="patcher_memory_adjustment_title">修补程序内存不足</string>
-    <string name="patcher_memory_adjustment_message_reduced">实验性修补程序进程因内存不足而停止。我们将其内存限制从 %1$d MB 降低到 %2$d MB，以便您可以立即重试。</string>
-    <string name="patcher_memory_adjustment_message_no_change">实验性修补程序进程因内存不足而停止，但内存限制已为 %1$d MB。请尝试在高级设置中进一步降低它，或在重试前禁用实验模式。</string>
-    <string name="patcher_memory_adjustment_retry">重试</string>
-    <string name="patcher_memory_adjustment_dismiss">忽略</string>
     <string name="patcher_missing_patch_title">补丁选择需要注意</string>
     <string name="patcher_preflight_missing_patch_message">The following patches aren\'t available in the current bundle:\n%1$s\nYou can remove them automatically, adjust the selection, or continue anyway.</string>
     <string name="patcher_missing_patch_review">查看选择</string>

@@ -1,0 +1,12 @@
+{
+  "uniqueId": "app.universal.revanced.manager",
+  "name": "Universal ReVanced Manager",
+  "developers": [
+    {
+      "name": "Universal ReVanced Manager contributors"
+    }
+  ],
+  "licenses": [
+    "GPL-3.0-or-later"
+  ]
+}

@@ -424,7 +424,7 @@
     <string name="downloader_plugin_state_failed">लोड नहीं हो पाया। ज़्यादा जानकारी के लिए दबाए</string>
     <string name="downloader_plugin_state_untrusted">अविश्वसनीय</string>
     <string name="downloader_plugin_trust_dialog_title">प्लगइन पर विश्वास है?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">विश्वास रद्द करें?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">विश्वास रद्द करें</string>
     <string name="downloader_plugin_trust_dialog_signature">हस्ताक्षर:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">प्लगइन:\n%s</string>
     <string name="downloader_plugin_view_error">त्रुटि विवरण देखें</string>
@@ -457,10 +457,6 @@
     <string name="dark">अँधेरा</string>
     <string name="appearance">रूप</string>
     <string name="downloaded_apps">डाउनलोड किए गए ऐप्स</string>
-    <string name="process_runtime">पैचर को दूसरे प्रोसेस मे चलाएं (प्रयोगात्मक)</string>
-    <string name="process_runtime_description">यह तेज़ है और पैचर को ज्यादा संग्रहण शक्ति का उपयोग करने देता है</string>
-    <string name="process_runtime_effective_limit_format">प्रभावी सीमा: %1$d MB</string>
-    <string name="process_runtime_effective_limit_disabled">प्रभावी सीमा: बंध है </string>
     <string name="strip_unused_libs">अप्रयुक्त नेटिव लाइब्रेरीज़ को हटाएँ</string>
     <string name="strip_unused_libs_description">पैच किए गए ऐप्स से एक समर्थित CPU आर्किटेक्चर को छोड़कर सभी नेटिव लाइब्रेरी हटा दें</string>
     <string name="skip_unneeded_split_apks">अनावश्यक स्प्लिट APKs को छोड़ें</string>

@@ -1,0 +1,877 @@
+package app.urv.manager.ui.component.patches
+
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Android
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material.icons.outlined.SdCard
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import app.universal.revanced.manager.R
+import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.manager.base.Preference
+import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
+import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.AppIcon
+import app.urv.manager.ui.component.ConfirmDialog
+import app.urv.manager.ui.component.FullscreenDialog
+import app.urv.manager.ui.component.GroupHeader
+import app.urv.manager.ui.component.InterceptBackHandler
+import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.ShimmerBox
+import app.urv.manager.util.toast
+import app.urv.manager.util.APK_FILE_EXTENSIONS
+import app.urv.manager.util.PM
+import app.urv.manager.util.saver.PathSaver
+import coil3.compose.AsyncImage
+import org.koin.compose.koinInject
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.Locale
+import kotlin.io.path.absolutePathString
+import kotlin.io.path.isDirectory
+import kotlin.io.path.isReadable
+import kotlin.io.path.listDirectoryEntries
+import kotlin.io.path.name
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import app.urv.manager.ui.component.CenteredDialogTitle
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PathSelectorDialog(
+    roots: List<Filesystem.StorageRoot>,
+    onSelect: (Path?) -> Unit,
+    fileFilter: (Path) -> Boolean = { true },
+    allowDirectorySelection: Boolean = true,
+    fileTypeLabel: String? = null,
+    confirmButtonText: String? = null,
+    onConfirm: ((Path) -> Unit)? = null,
+    lastDirectoryPreference: Preference<String>? = null
+) {
+    val context = LocalContext.current
+    val prefs = koinInject<PreferencesManager>()
+    val pm = koinInject<PM>()
+    val filesystem = koinInject<Filesystem>()
+    val scope = rememberCoroutineScope()
+    val (permissionContract, permissionName) = remember { filesystem.permissionContract() }
+    var permissionGranted by remember { mutableStateOf(filesystem.hasStoragePermission()) }
+    var permissionRequested by rememberSaveable { mutableStateOf(false) }
+    val permissionLauncher =
+        rememberLauncherForActivityResult(permissionContract) { granted ->
+            permissionGranted = granted || filesystem.hasStoragePermission()
+        }
+    val availableRoots = remember(roots) {
+        roots.filter { runCatching { it.path.isReadable() }.getOrDefault(true) }.ifEmpty { roots }
+    }
+    val defaultRoot = availableRoots.firstOrNull() ?: return
+    val directoryPreference = lastDirectoryPreference ?: prefs.pathSelectorLastDirectory
+    val lastDirectoryValue by directoryPreference.getAsState()
+    val (initialRootPath, initialDirectory) = remember(availableRoots, defaultRoot, lastDirectoryValue) {
+        val lastPath = lastDirectoryValue.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Paths.get(it) }.getOrNull() }
+        val resolved = lastPath
+            ?.let { if (it.isDirectory()) it else it.parent }
+            ?.takeIf { it.isReadable() }
+        val rootForResolved = resolved?.let { dir ->
+            availableRoots.firstOrNull { dir.startsWith(it.path) }
+        }
+        val root = rootForResolved ?: defaultRoot
+        val directory = if (rootForResolved != null) resolved ?: root.path else root.path
+        root.path to directory
+    }
+    var currentRootPath by rememberSaveable(initialRootPath, stateSaver = PathSaver) {
+        mutableStateOf(initialRootPath)
+    }
+    val currentRoot = remember(currentRootPath, availableRoots) {
+        availableRoots.firstOrNull { it.path == currentRootPath } ?: defaultRoot
+    }
+    var currentDirectory by rememberSaveable(initialRootPath, stateSaver = PathSaver) {
+        mutableStateOf(initialDirectory)
+    }
+    val notAtRootDir = remember(currentDirectory, currentRoot) {
+        currentDirectory != currentRoot.path
+    }
+    LaunchedEffect(permissionGranted) {
+        if (!permissionGranted && !permissionRequested) {
+            permissionRequested = true
+            permissionLauncher.launch(permissionName)
+        }
+    }
+    var refreshNonce by remember { mutableStateOf(0) }
+    var refreshInProgress by remember { mutableStateOf(false) }
+    val entries = remember(currentDirectory, permissionGranted, refreshNonce) {
+        if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
+    }
+    val persistedSortMode by prefs.pathSelectorSortMode.getAsState()
+    var sortMode by rememberSaveable(persistedSortMode) {
+        mutableStateOf(PathSortMode.fromStorage(persistedSortMode))
+    }
+    var showSortMenu by rememberSaveable { mutableStateOf(false) }
+    val sortKeys = remember(entries) {
+        entries.associateWith(::buildPathSortKey)
+    }
+    val sortComparator = remember(sortMode, sortKeys) {
+        sortMode.comparator(sortKeys)
+    }
+    val directories = remember(entries, sortComparator) {
+        entries.filter(Path::isDirectory).sortedWith(sortComparator)
+    }
+    val files = remember(entries, fileFilter, sortComparator) {
+        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
+    }
+    val persistedSearchQuery by prefs.pathSelectorSearchQuery.getAsState()
+    var searchQuery by rememberSaveable(persistedSearchQuery) { mutableStateOf(persistedSearchQuery) }
+    val normalizedQuery = searchQuery.trim()
+    val filteredDirectories = remember(directories, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            directories
+        } else {
+            directories.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
+    val filteredFiles = remember(files, normalizedQuery) {
+        if (normalizedQuery.isBlank()) {
+            files
+        } else {
+            files.filter { it.name.contains(normalizedQuery, ignoreCase = true) }
+        }
+    }
+    val duplicateDirectoryNames = remember(directories) {
+        directories
+            .groupingBy { it.name.lowercase(Locale.ROOT) }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
+    }
+    val favoriteSet: Set<String> by prefs.pathSelectorFavorites.getAsState()
+    val favorites: List<Path> = remember(favoriteSet, fileFilter) {
+        favoriteSet.mapNotNull { runCatching { Paths.get(it) }.getOrNull() }
+            .filter { isReadableSafe(it) }
+            .sortedBy { it.absolutePathString() }
+            .filter { it.isDirectory() || fileFilter(it) }
+    }
+    var favoritesExpanded by rememberSaveable { mutableStateOf(false) }
+    var pendingRemoveFavorite by remember { mutableStateOf<Path?>(null) }
+    var pendingAddFavorite by remember { mutableStateOf<Path?>(null) }
+    var previewImagePath by remember { mutableStateOf<Path?>(null) }
+
+    fun addFavorite(path: Path) {
+        val key = path.absolutePathString()
+        scope.launch {
+            prefs.pathSelectorFavorites.update(favoriteSet + key)
+            context.toast(context.getString(R.string.path_selector_favorite_added))
+        }
+    }
+
+    fun removeFavorite(path: Path) {
+        val key = path.absolutePathString()
+        scope.launch {
+            prefs.pathSelectorFavorites.update(favoriteSet - key)
+            context.toast(context.getString(R.string.path_selector_favorite_removed))
+        }
+    }
+
+    fun handleFavoritePress(path: Path) {
+        if (favoriteSet.contains(path.absolutePathString())) {
+            pendingRemoveFavorite = path
+        } else {
+            pendingAddFavorite = path
+        }
+    }
+
+    LaunchedEffect(currentDirectory, lastDirectoryValue) {
+        val nextValue = currentDirectory.absolutePathString()
+        if (nextValue != lastDirectoryValue) {
+            directoryPreference.update(nextValue)
+        }
+    }
+
+    LaunchedEffect(sortMode, persistedSortMode) {
+        val nextValue = sortMode.name
+        if (nextValue != persistedSortMode) {
+            prefs.pathSelectorSortMode.update(nextValue)
+        }
+    }
+
+    LaunchedEffect(searchQuery, persistedSearchQuery) {
+        if (searchQuery != persistedSearchQuery) {
+            prefs.pathSelectorSearchQuery.update(searchQuery)
+        }
+    }
+
+    FullscreenDialog(
+        onDismissRequest = { onSelect(null) },
+    ) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.surface,
+            topBar = {
+                AppTopBar(
+                    title = stringResource(R.string.path_selector),
+                    onBackClick = { onSelect(null) },
+                    backIcon = {
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
+                    },
+                    actions = {
+                        IconButton(onClick = {
+                            refreshNonce += 1
+                            refreshInProgress = true
+                            scope.launch {
+                                delay(1500)
+                                refreshInProgress = false
+                            }
+                        }) {
+                            Icon(
+                                Icons.Outlined.Refresh,
+                                contentDescription = stringResource(R.string.refresh)
+                            )
+                        }
+                        Box {
+                            IconButton(onClick = { showSortMenu = true }) {
+                                Icon(
+                                    Icons.Outlined.Sort,
+                                    contentDescription = stringResource(R.string.path_selector_sort_title)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false },
+                                modifier = Modifier.heightIn(max = 420.dp)
+                            ) {
+                                PathSortMode.entries.forEach { mode ->
+                                    val selected = mode == sortMode
+                                    DropdownMenuItem(
+                                        text = { Text(text = stringResource(mode.labelRes)) },
+                                        leadingIcon = {
+                                            if (selected) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Check,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                )
+                                            } else {
+                                                Spacer(modifier = Modifier.size(24.dp))
+                                            }
+                                        },
+                                        onClick = {
+                                            sortMode = mode
+                                            showSortMenu = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        if (confirmButtonText != null && onConfirm != null) {
+                            TextButton(onClick = { onConfirm(currentDirectory) }) {
+                                Text(confirmButtonText)
+                            }
+                        }
+                    }
+                )
+            },
+        ) { paddingValues ->
+            InterceptBackHandler(enabled = notAtRootDir) {
+                currentDirectory = currentDirectory.parent
+            }
+
+            LazyColumnWithScrollbar(
+                modifier = Modifier.padding(paddingValues)
+            ) {
+                if (refreshInProgress) {
+                    item(key = "refresh_current") {
+                        PathSelectorRowShimmer(headlineWidth = 0.7f)
+                    }
+                    item(key = "refresh_search") {
+                        PathSelectorSearchShimmer()
+                    }
+                    item(key = "refresh_favorites_header") {
+                        PathSelectorHeaderShimmer()
+                    }
+                    items(2, key = { "refresh_favorite_$it" }) {
+                        PathSelectorRowShimmer(headlineWidth = 0.5f)
+                    }
+                    item(key = "refresh_storage_header") {
+                        PathSelectorGroupHeaderShimmer()
+                    }
+                    items(2, key = { "refresh_storage_$it" }) {
+                        PathSelectorRowShimmer(headlineWidth = 0.45f)
+                    }
+                    item(key = "refresh_dirs_header") {
+                        PathSelectorGroupHeaderShimmer()
+                    }
+                    items(6, key = { "refresh_dir_$it" }) {
+                        PathSelectorRowShimmer(headlineWidth = 0.6f)
+                    }
+                    item(key = "refresh_files_header") {
+                        PathSelectorGroupHeaderShimmer()
+                    }
+                    items(4, key = { "refresh_file_$it" }) {
+                        PathSelectorRowShimmer(headlineWidth = 0.55f)
+                    }
+                } else {
+                    item(key = "current") {
+                        PathItem(
+                            onClick = { onSelect(currentDirectory) },
+                            onLongClick = { handleFavoritePress(currentDirectory) },
+                            icon = Icons.Outlined.Folder,
+                            name = currentDirectory.toString(),
+                            enabled = allowDirectorySelection
+                        )
+                    }
+
+                    item(key = "search") {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            label = { Text(stringResource(R.string.path_selector_search)) },
+                            singleLine = true,
+                            trailingIcon = {
+                                if (searchQuery.isNotBlank()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = stringResource(R.string.clear)
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                        )
+                    }
+
+                    item(key = "favorites_header") {
+                        val headerColor = MaterialTheme.colorScheme.primary
+                        val icon = if (favoritesExpanded) {
+                            Icons.Outlined.ExpandLess
+                        } else {
+                            Icons.Outlined.ChevronRight
+                        }
+                        val description = if (favoritesExpanded) {
+                            stringResource(R.string.collapse_content)
+                        } else {
+                            stringResource(R.string.expand_content)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)
+                                .semantics { heading() }
+                                .clickable { favoritesExpanded = !favoritesExpanded },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.path_selector_favorites),
+                                color = headerColor,
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(icon, contentDescription = description, tint = headerColor)
+                        }
+                    }
+                    if (favoritesExpanded && favorites.isNotEmpty()) {
+                        items(favorites, key = { "fav_${it.absolutePathString()}" }) { favorite ->
+                            val isDir = favorite.isDirectory()
+                            PathItem(
+                                onClick = {
+                                    if (isDir) {
+                                        val matchingRoot = availableRoots.firstOrNull {
+                                            favorite.startsWith(it.path)
+                                        }
+                                        matchingRoot?.let { currentRootPath = it.path }
+                                        currentDirectory = favorite
+                                    } else {
+                                        onSelect(favorite)
+                                    }
+                                },
+                                onLongClick = { handleFavoritePress(favorite) },
+                                icon = if (isDir) Icons.Outlined.Folder else fileIconForPath(favorite),
+                                leadingContent = if (isDir) null else {
+                                    {
+                                        FileLeadingIcon(
+                                            path = favorite,
+                                            pm = pm,
+                                            filesystem = filesystem,
+                                            onImagePreviewClick = if (isImagePreviewablePath(favorite)) {
+                                                { previewImagePath = favorite }
+                                            } else {
+                                                null
+                                            }
+                                        )
+                                    }
+                                },
+                                name = favorite.name.ifBlank { favorite.absolutePathString() },
+                                supportingText = favorite.absolutePathString()
+                            )
+                        }
+                    }
+
+                    if (availableRoots.size > 1) {
+                        item(key = "roots_header") {
+                            GroupHeader(title = stringResource(R.string.storage))
+                        }
+                        items(availableRoots, key = { it.path.toString() }) { root ->
+                            val icon = if (root.isRemovable) Icons.Outlined.SdCard else Icons.Outlined.Storage
+                            PathItem(
+                                onClick = {
+                                    currentRootPath = root.path
+                                    currentDirectory = root.path
+                                },
+                                onLongClick = { handleFavoritePress(root.path) },
+                                icon = icon,
+                                name = root.label
+                            )
+                        }
+                    }
+
+                    if (notAtRootDir) {
+                        item(key = "parent") {
+                            PathItem(
+                                onClick = { currentDirectory = currentDirectory.parent },
+                                icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                                name = stringResource(R.string.path_selector_parent_dir)
+                            )
+                        }
+                    }
+
+                    if (filteredDirectories.isNotEmpty()) {
+                        item(key = "dirs_header") {
+                            GroupHeader(title = stringResource(R.string.path_selector_dirs))
+                        }
+                    }
+                    items(filteredDirectories, key = { it.absolutePathString() }) {
+                        val nameKey = it.name.lowercase(Locale.ROOT)
+                        PathItem(
+                            onClick = { currentDirectory = it },
+                            onLongClick = { handleFavoritePress(it) },
+                            icon = Icons.Outlined.Folder,
+                            name = it.name,
+                            supportingText = if (nameKey in duplicateDirectoryNames) {
+                                it.absolutePathString()
+                            } else {
+                                null
+                            }
+                        )
+                    }
+
+                    if (filteredFiles.isNotEmpty()) {
+                        item(key = "files_header") {
+                            val header = if (!fileTypeLabel.isNullOrBlank()) {
+                                "${stringResource(R.string.path_selector_files)} ($fileTypeLabel)"
+                            } else {
+                                stringResource(R.string.path_selector_files)
+                            }
+                            GroupHeader(title = header)
+                        }
+                    }
+                    items(filteredFiles, key = { it.absolutePathString() }) {
+                        PathItem(
+                            onClick = { onSelect(it) },
+                            onLongClick = { handleFavoritePress(it) },
+                            icon = fileIconForPath(it),
+                            leadingContent = {
+                                FileLeadingIcon(
+                                    path = it,
+                                    pm = pm,
+                                    filesystem = filesystem,
+                                    onImagePreviewClick = if (isImagePreviewablePath(it)) {
+                                        { previewImagePath = it }
+                                    } else {
+                                        null
+                                    }
+                                )
+                            },
+                            name = it.name
+                        )
+                    }
+                }
+            }
+        }
+
+        pendingRemoveFavorite?.let { target ->
+            val displayName = target.name.ifBlank { target.absolutePathString() }
+            ConfirmDialog(
+                onDismiss = { pendingRemoveFavorite = null },
+                onConfirm = {
+                    pendingRemoveFavorite = null
+                    removeFavorite(target)
+                },
+                title = stringResource(R.string.path_selector_favorite_remove_title),
+                description = stringResource(R.string.path_selector_favorite_remove_description, displayName),
+                icon = Icons.Outlined.Star
+            )
+        }
+
+        pendingAddFavorite?.let { target ->
+            val displayName = target.name.ifBlank { target.absolutePathString() }
+            ConfirmDialog(
+                onDismiss = { pendingAddFavorite = null },
+                onConfirm = {
+                    pendingAddFavorite = null
+                    addFavorite(target)
+                },
+                title = stringResource(R.string.path_selector_favorite_add_title),
+                description = stringResource(R.string.path_selector_favorite_add_description, displayName),
+                icon = Icons.Outlined.Star
+            )
+        }
+
+        previewImagePath?.let { target ->
+            val displayName = target.name.ifBlank { target.absolutePathString() }
+            AlertDialog(
+                onDismissRequest = { previewImagePath = null },
+                confirmButton = {
+                    TextButton(onClick = { previewImagePath = null }) {
+                        Text(stringResource(R.string.close))
+                    }
+                },
+                title = { CenteredDialogTitle(stringResource(R.string.path_selector_image_preview_title, displayName)) },
+                text = {
+                    AsyncImage(
+                        model = target.toFile(),
+                        contentDescription = stringResource(R.string.path_selector_image_preview_content_description, displayName),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 160.dp, max = 420.dp)
+                            .clip(MaterialTheme.shapes.medium)
+                    )
+                }
+            )
+        }
+
+    }
+}
+
+private fun fileIconForPath(path: Path): ImageVector {
+    val lowerName = path.fileName?.toString()?.lowercase().orEmpty()
+    return if (lowerName.endsWith(".apk")) {
+        Icons.Outlined.Android
+    } else {
+        Icons.AutoMirrored.Outlined.InsertDriveFile
+    }
+}
+
+private data class PathSortKey(
+    val nameLower: String,
+    val extensionLower: String,
+    val modified: Long,
+    val size: Long
+)
+
+private enum class PathSortMode(val labelRes: Int) {
+    NAME_ASC(R.string.path_selector_sort_name_asc),
+    NAME_DESC(R.string.path_selector_sort_name_desc),
+    MODIFIED_DESC(R.string.path_selector_sort_modified_desc),
+    MODIFIED_ASC(R.string.path_selector_sort_modified_asc),
+    TYPE_ASC(R.string.path_selector_sort_type_asc),
+    TYPE_DESC(R.string.path_selector_sort_type_desc),
+    SIZE_DESC(R.string.path_selector_sort_size_desc),
+    SIZE_ASC(R.string.path_selector_sort_size_asc);
+
+    companion object {
+        fun fromStorage(value: String): PathSortMode =
+            entries.firstOrNull { it.name == value } ?: MODIFIED_DESC
+    }
+
+    fun comparator(keys: Map<Path, PathSortKey>): Comparator<Path> {
+        val nameComparator = compareBy<Path>(
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val typeComparator = compareBy<Path>(
+            { keys[it]?.extensionLower ?: extensionOf(it) },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val modifiedComparator = compareBy<Path>(
+            { keys[it]?.modified ?: 0L },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+        val sizeComparator = compareBy<Path>(
+            { keys[it]?.size ?: 0L },
+            { keys[it]?.nameLower ?: it.name.lowercase(Locale.ROOT) },
+            { it.name }
+        )
+
+        return when (this) {
+            NAME_ASC -> nameComparator
+            NAME_DESC -> nameComparator.reversed()
+            MODIFIED_DESC -> modifiedComparator.reversed()
+            MODIFIED_ASC -> modifiedComparator
+            TYPE_ASC -> typeComparator
+            TYPE_DESC -> typeComparator.reversed()
+            SIZE_DESC -> sizeComparator.reversed()
+            SIZE_ASC -> sizeComparator
+        }
+    }
+}
+
+private fun buildPathSortKey(path: Path): PathSortKey {
+    val file = path.toFile()
+    return PathSortKey(
+        nameLower = path.name.lowercase(Locale.ROOT),
+        extensionLower = extensionOf(path),
+        modified = runCatching { file.lastModified() }.getOrDefault(0L),
+        size = runCatching {
+            if (file.isDirectory) 0L else file.length()
+        }.getOrDefault(0L)
+    )
+}
+
+private fun extensionOf(path: Path): String =
+    path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+
+private fun listDirectoryEntriesSafe(path: Path): List<Path> {
+    val rawEntries = runCatching { path.listDirectoryEntries() }.getOrNull()
+        ?: runCatching { path.toFile().listFiles()?.map { it.toPath() }.orEmpty() }.getOrElse { emptyList() }
+    if (rawEntries.isEmpty()) return emptyList()
+    val readable = rawEntries.filter { isReadableSafe(it) }
+    return if (readable.isEmpty()) rawEntries else readable
+}
+
+private fun isReadableSafe(path: Path): Boolean =
+    runCatching { path.isReadable() }.getOrDefault(true)
+
+@Composable
+private fun PathSelectorRowShimmer(
+    headlineWidth: Float = 0.55f
+) {
+    ListItem(
+        leadingContent = {
+            ShimmerBox(modifier = Modifier.size(24.dp))
+        },
+        headlineContent = {
+            ShimmerBox(modifier = Modifier.fillMaxWidth(headlineWidth).height(16.dp))
+        }
+    )
+}
+
+@Composable
+private fun PathSelectorSearchShimmer() {
+    ShimmerBox(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+            .height(56.dp)
+    )
+}
+
+@Composable
+private fun PathSelectorHeaderShimmer() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        ShimmerBox(modifier = Modifier.width(88.dp).height(14.dp))
+        Spacer(modifier = Modifier.weight(1f))
+        ShimmerBox(modifier = Modifier.size(20.dp))
+    }
+}
+
+@Composable
+private fun PathSelectorGroupHeaderShimmer() {
+    ShimmerBox(
+        modifier = Modifier
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp)
+            .width(96.dp)
+            .height(14.dp)
+    )
+}
+
+@Composable
+private fun FileLeadingIcon(
+    path: Path,
+    pm: PM,
+    filesystem: Filesystem,
+    onImagePreviewClick: (() -> Unit)? = null
+) {
+    if (isImagePreviewablePath(path)) {
+        Box(
+            modifier = Modifier.then(
+                if (onImagePreviewClick != null) Modifier.clickable(onClick = onImagePreviewClick) else Modifier
+            )
+        ) {
+            AsyncImage(
+                model = path.toFile(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(MaterialTheme.shapes.extraSmall)
+            )
+        }
+        return
+    }
+
+    val fileName = path.fileName?.toString()?.lowercase().orEmpty()
+    val extension = fileName.substringAfterLast('.', "")
+    if (extension !in APK_FILE_EXTENSIONS) {
+        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+        return
+    }
+
+    var iconInfo by remember(path) { mutableStateOf<ApkIconInfo?>(null) }
+    LaunchedEffect(path) {
+        iconInfo?.cleanup?.invoke()
+        iconInfo = loadApkIconInfo(path, pm, filesystem)
+    }
+    DisposableEffect(path) {
+        onDispose {
+            iconInfo?.cleanup?.invoke()
+        }
+    }
+
+    val packageInfo = iconInfo?.packageInfo
+    if (packageInfo != null) {
+        AppIcon(
+            packageInfo = packageInfo,
+            iconOverride = iconInfo?.iconOverride,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp)
+        )
+    } else {
+        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+    }
+}
+
+private val IMAGE_PREVIEW_EXTENSIONS = setOf(
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "tif", "tiff",
+    "avif", "heif", "heic", "jfif", "ico", "apng"
+)
+
+private fun isImagePreviewablePath(path: Path): Boolean {
+    val extension = path.fileName?.toString()
+        ?.substringAfterLast('.', "")
+        ?.lowercase(Locale.ROOT)
+        .orEmpty()
+    return extension in IMAGE_PREVIEW_EXTENSIONS
+}
+
+private data class ApkIconInfo(
+    val packageInfo: android.content.pm.PackageInfo?,
+    val iconOverride: android.graphics.drawable.Drawable? = null,
+    val cleanup: (() -> Unit)?
+)
+
+private suspend fun loadApkIconInfo(
+    path: Path,
+    pm: PM,
+    filesystem: Filesystem
+): ApkIconInfo? = withContext(Dispatchers.IO) {
+    val file = path.toFile()
+    if (!file.exists()) return@withContext null
+    val extension = file.extension.lowercase()
+    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
+    if (extension != "apk" && !isSplitArchive) return@withContext null
+
+    if (isSplitArchive) {
+        val resolved = SplitArchiveDisplayResolver.resolve(
+            source = file,
+            workspace = filesystem.tempDir,
+            app = pm.application,
+            pm = pm
+        ) ?: return@withContext null
+        ApkIconInfo(
+            packageInfo = resolved.packageInfo,
+            iconOverride = resolved.icon,
+            cleanup = null
+        )
+    } else {
+        ApkIconInfo(
+            packageInfo = pm.getPackageInfo(file),
+            iconOverride = null,
+            cleanup = null
+        )
+    }
+}
+
+@Composable
+private fun PathItem(
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    icon: ImageVector,
+    leadingContent: (@Composable () -> Unit)? = null,
+    name: String,
+    enabled: Boolean = true,
+    supportingText: String? = null
+) {
+    val hasLongClick = onLongClick != null
+    val clickEnabled = enabled || hasLongClick
+    ListItem(
+        modifier = if (clickEnabled) {
+            Modifier.combinedClickable(
+                enabled = clickEnabled,
+                onClick = { if (enabled) onClick() },
+                onLongClick = onLongClick
+            )
+        } else {
+            Modifier
+        },
+        headlineContent = { Text(name) },
+        supportingContent = supportingText?.let { { Text(it) } },
+        leadingContent = {
+            leadingContent?.invoke() ?: Icon(icon, contentDescription = null)
+        }
+    )
+}
+

@@ -1,6 +1,7 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.binary.compatibility.validator)
@@ -19,7 +20,7 @@ dependencies {
 
 android {
     namespace = "app.universal.revanced.manager.plugin.downloader"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 26
@@ -46,17 +47,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         aidl = true
+    }
+
+    publishing {
+        singleVariant("release")
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+    compilerOptions {
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 
 apiValidation {
-    nonPublicMarkers += "app.revanced.manager.plugin.downloader.PluginHostApi"
+    nonPublicMarkers += "app.urv.manager.plugin.downloader.PluginHostApi"
 }
 
 publishing {
@@ -133,4 +141,27 @@ signing {
         useGpgCmd()
     }
     sign(publishing.publications["Api"])
+}
+
+tasks.matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
+    enabled = false
+}
+
+tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Aidl") }.configureEach {
+    doLast {
+        val generatedRoot = layout.buildDirectory.dir("generated/aidl_source_output_dir").get().asFile
+        if (!generatedRoot.exists()) return@doLast
+        generatedRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "java" }
+            .forEach { file ->
+                val original = file.readText()
+                val sanitized = original.lineSequence().joinToString(separator = "\n") { line ->
+                    if (line.startsWith(" * Using: ")) line.replace('\\', '/')
+                    else line
+                }
+                if (sanitized != original) {
+                    file.writeText(sanitized)
+                }
+            }
+    }
 }

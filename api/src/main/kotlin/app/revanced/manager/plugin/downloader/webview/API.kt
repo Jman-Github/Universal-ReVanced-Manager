@@ -2,11 +2,11 @@ package app.revanced.manager.plugin.downloader.webview
 
 import android.content.Intent
 import app.revanced.manager.plugin.downloader.DownloadUrl
+import app.revanced.manager.plugin.downloader.Downloader
 import app.revanced.manager.plugin.downloader.DownloaderScope
 import app.revanced.manager.plugin.downloader.GetScope
-import app.revanced.manager.plugin.downloader.Scope
-import app.revanced.manager.plugin.downloader.Downloader
 import app.revanced.manager.plugin.downloader.PluginHostApi
+import app.revanced.manager.plugin.downloader.Scope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -21,14 +21,7 @@ typealias PageLoadCallback<T> = suspend WebViewCallbackScope<T>.(url: String) ->
 typealias DownloadCallback<T> = suspend WebViewCallbackScope<T>.(url: String, mimeType: String, userAgent: String) -> Unit
 
 interface WebViewCallbackScope<T> : Scope {
-    /**
-     * Finishes the activity and returns the [result].
-     */
     suspend fun finish(result: T)
-
-    /**
-     * Tells the WebView to load the specified [url].
-     */
     suspend fun load(url: String)
 }
 
@@ -74,26 +67,18 @@ class WebViewScope<T> internal constructor(
     private val callbackScope = object : WebViewCallbackScope<T>, Scope by scopeImpl {
         override suspend fun finish(result: T) {
             setResult(result)
-            // Tell the WebViewActivity to finish
             webView.let { withContext(Dispatchers.IO) { it.finish() } }
         }
 
         override suspend fun load(url: String) {
             webView.let { withContext(Dispatchers.IO) { it.load(url) } }
         }
-
     }
 
-    /**
-     * Called when the WebView attempts to download a file to disk.
-     */
     fun download(block: DownloadCallback<T>) {
         onDownloadCallback = block
     }
 
-    /**
-     * Called when the WebView finishes loading a page.
-     */
     fun pageLoad(block: PageLoadCallback<T>) {
         onPageLoadCallback = block
     }
@@ -102,14 +87,6 @@ class WebViewScope<T> internal constructor(
 @JvmInline
 private value class Container<U>(val value: U)
 
-/**
- * Run a [android.webkit.WebView] Activity controlled by the provided code block.
- * The activity will keep running until it is cancelled or an event handler calls [WebViewCallbackScope.finish].
- * The [block] defines the event handlers and returns the initial URL.
- *
- * @param title The string displayed in the action bar.
- * @param block The control block.
- */
 @OptIn(PluginHostApi::class)
 suspend fun <T> GetScope.runWebView(
     title: String,
@@ -120,7 +97,6 @@ suspend fun <T> GetScope.runWebView(
     val scope = WebViewScope<T>(this@supervisorScope, this@runWebView) { result = Container(it) }
     scope.initialUrl = scope.block()
 
-    // Start the webview activity and wait until it finishes.
     requestStartActivity(Intent().apply {
         putExtra(
             WebViewActivity.KEY,
@@ -132,17 +108,10 @@ suspend fun <T> GetScope.runWebView(
         )
     })
 
-    // Return the result and cancel any leftover coroutines.
     coroutineContext.cancelChildren()
     result.value
 }
 
-/**
- * Implement a downloader using [runWebView] and [DownloadUrl]. This function will automatically define a handler for download events unlike [runWebView].
- * Returning null inside the [block] is equivalent to returning null inside [DownloaderScope.get].
- *
- * @see runWebView
- */
 fun WebViewDownloader(block: suspend WebViewScope<DownloadUrl>.(packageName: String, version: String?) -> InitialUrl?) =
     Downloader<DownloadUrl> {
         val label = context.applicationInfo.loadLabel(

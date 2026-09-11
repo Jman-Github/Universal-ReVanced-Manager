@@ -96,7 +96,6 @@ class WebViewActivity : ComponentActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem) = if (item.itemId == android.R.id.home) {
         cancelActivity()
-
         true
     } else super.onOptionsItemSelected(item)
 

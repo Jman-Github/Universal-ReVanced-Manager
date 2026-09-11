@@ -98,7 +98,7 @@ fabric.properties
 .idea/caches/build_file_checksums.ser
 
 ### Gradle template
-.gradle
+.gradle**
 **/build/
 !src/**/build/
 
@@ -111,12 +111,6 @@ gradle-app.setting
 # Cache of project
 .gradletasknamecache
 
-# # Work around https://youtrack.jetbrains.com/issue/IDEA-116898
-# gradle/wrapper/gradle-wrapper.properties
-
-# Potentially copyrighted test APK
-*.apk
-
 # Ignore vscode config
 .vscode/
 
@@ -125,14 +119,10 @@ node_modules/
 
 # Ignore IDEA files
 .idea/
-
 .kotlin/
-
 local.properties
-
+app/keystore.jks
+.android/
 .cxx
-AGENTS.md
-.gitignore
 to-do.txt
-.ai/mcp/mcp.json
 /release-assets/

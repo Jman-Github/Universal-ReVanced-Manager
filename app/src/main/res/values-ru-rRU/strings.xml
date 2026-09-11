@@ -422,7 +422,7 @@
     <string name="downloader_plugin_state_failed">Не удалось загрузить. Нажмите, чтобы узнать больше</string>
     <string name="downloader_plugin_state_untrusted">Недоверенный</string>
     <string name="downloader_plugin_trust_dialog_title">Доверять плагину?</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">Отменить доверие?</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">Отменить доверие</string>
     <string name="downloader_plugin_trust_dialog_body">Продолжение позволит этому плагину работать в вашей системе.
 
 Включайте этот плагин только в том случае, если вы ему доверяете. Плагины могут выполнять произвольный код и могут поставить под угрозу ваше устройство.</string>
@@ -463,18 +463,10 @@
     <string name="dark">Темная</string>
     <string name="appearance">Внешний вид</string>
     <string name="downloaded_apps">Скачанные приложения</string>
-    <string name="process_runtime">Запустить Патчер в другом процессе (экспериментально)</string>
-    <string name="process_runtime_description">Это быстрее и позволяет Патчеру использовать больше памяти</string>
-    <string name="process_runtime_effective_limit_format">Эффективный лимит: %1$d МБ</string>
-    <string name="process_runtime_effective_limit_disabled">Эффективный лимит: Выключен</string>
     <string name="strip_unused_libs">Удалить неиспользуемые нативные библиотеки</string>
     <string name="strip_unused_libs_description">Удаляет все нативные библиотеки, кроме одной поддерживаемой архитектуры CPU, из пропатченноых приложений</string>
     <string name="skip_unneeded_split_apks">Пропустить ненужные разделенные APKs</string>
     <string name="skip_unneeded_split_apks_description">Пропустить разделенные модули APK, не соответствующие этому устройству (например, язык или плотность DPI)</string>
-    <string name="process_runtime_memory_limit">Ограничение памяти процесса Патчера</string>
-    <string name="process_runtime_memory_limit_description">Максимальный объем памяти, который может использовать процесс Патчера (в мегабайтах)</string>
-    <string name="process_runtime_memory_aggressive">Агрессивное ограничение памяти патчера</string>
-    <string name="process_runtime_memory_aggressive_description">Использует максимально допустимый объем памяти, разрешенный вашим устройством, для экспериментального патчера</string>
     <string name="reset_to_recommended">Сбросить</string>
     <string name="patcher_auto_collapse_steps">Автоматически свернуть завершенные шаги патчера</string>
     <string name="patcher_auto_collapse_steps_description">Автоматически сворачивать каждый виджет хода работы программы патча после завершения всех его шагов</string>
@@ -782,11 +774,6 @@
     <string name="patch_profile_bundle_override_title">Разрешить переопределение несовместимого пакета</string>
     <string name="patch_profile_bundle_override_description">Показывать кнопку переопределения, доступную только разработчикам, если пакет профиля патча несовместим.</string>
     <string name="patcher_process_exit_message">Процесс патчера завершился с кодом %1$d.</string>
-    <string name="patcher_memory_adjustment_title">Патчеру не хватает памяти</string>
-    <string name="patcher_memory_adjustment_message_reduced">Экспериментальный процесс патчинга остановился, поскольку ему не хватило памяти. Мы снизили лимит памяти с %1$d МБ до %2$d МБ, чтобы вы могли немедленно повторить попытку.</string>
-    <string name="patcher_memory_adjustment_message_no_change">Экспериментальный процесс патчинга остановился, поскольку ему не хватило памяти, но предел памяти уже составляет %1$d МБ. Попробуйте еще снизить его в дополнительных настройках или отключите экспериментальный режим, прежде чем повторять попытку.</string>
-    <string name="patcher_memory_adjustment_retry">Попробуйте еще раз</string>
-    <string name="patcher_memory_adjustment_dismiss">Отклонить</string>
     <string name="patcher_missing_patch_title">Выбор патча требует внимания</string>
     <string name="patcher_preflight_missing_patch_message">Следующие патчи недоступны в текущем пакете: %1$s Вы можете удалить их автоматически, изменить выбор или продолжить.</string>
     <string name="patcher_preflight_missing_patch_remove">Удалить недостающие патчи</string>
