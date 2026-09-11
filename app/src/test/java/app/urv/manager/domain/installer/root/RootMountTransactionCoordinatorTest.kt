@@ -790,6 +790,33 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `mount only rebuild uses committed stock identity behind the mounted base`() = runBlocking {
+        val stockState = defaultState()
+        val previous = committed(stockState)
+        val fixture = Fixture(stockState.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        // The module needs rebuilding, but the old bind is still visible at sourceDir.
+        fixture.module.snapshotHash = null
+        fixture.verifier.onRemove = { fixture.reader.state = stockState }
+        val patched = fixture.artifact("saved-patched.apk", 2, "saved-patched")
+        val registeredStock = File(requireNotNull(stockState.basePath))
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.MOUNT_ONLY,
+                patched = patched.first,
+                stock = registeredStock
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.stageCalls)
+        assertEquals(stockState.baseSha256, fixture.store.committed?.stockSha256)
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals(listOf(patched.first.absolutePath), fixture.reader.inspectedPaths)
+    }
+
+    @Test
     fun `progress observer failures cannot alter a verified transaction`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")

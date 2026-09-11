@@ -37,11 +37,12 @@ known_mount_sources() {
 }
 
 installed_user_ids() {
-  users="$(pm list users 2>/dev/null |
+  user_dump="$(timeout 10 pm list users 2>/dev/null)" || return 1
+  users="$(printf '%s\n' "$user_dump" |
     sed -n 's/.*UserInfo{\([0-9][0-9]*\):.*/\1/p')" || return 1
   [ -n "$users" ] || return 1
   for user in $users; do
-    packages="$(pm list packages --user "$user" "$URV_PACKAGE" 2>/dev/null)" || return 1
+    packages="$(timeout 10 pm list packages --user "$user" "$URV_PACKAGE" 2>/dev/null)" || return 1
     if printf '%s\n' "$packages" | grep -Fx "package:$URV_PACKAGE" >/dev/null; then
       echo "$user"
     fi
@@ -461,6 +462,10 @@ load_state() {
   [ "$URV_STATE_VERSION" = 1 ] || { log_status "Unsupported state version"; return 1; }
 }
 
+# Boot completion does not mean PackageManager has finished startup work. Keep
+# the package lock free while the phone settles, so Manager actions can proceed.
+log_status "Allowing five minutes for Android startup to settle"
+sleep 300
 load_state || exit 0
 locked_package="$URV_PACKAGE"
 
@@ -566,34 +571,77 @@ if [ -f "$transaction_dir/active.json" ]; then
   exit 0
 fi
 
-if ! acquire_package_lock; then
-  log_status "Transaction lock busy; deferring verification"
+read_package_state() {
+  installed_users="$(installed_user_ids)" || return 1
+  # A successful ownership query can prove removal without querying an absent app.
+  echo "$installed_users" | grep -Fx "$URV_USER_ID" >/dev/null || return 0
+  path_dump="$(timeout 10 pm path --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null)" || return 1
+  current_path="$(echo "$path_dump" | sed -n 's/^package://p' | head -n 1)"
+  [ -n "$current_path" ] || return 1
+  path_count="$(echo "$path_dump" | grep -c '^package:')"
+  version_dump="$(timeout 10 dumpsys package "$URV_PACKAGE" 2>/dev/null)" || return 1
+  current_version_name="$(echo "$version_dump" | sed -n 's/^[[:space:]]*versionName=//p' | head -n 1)"
+  current_version_code="$(echo "$version_dump" | sed -n 's/^[[:space:]]*versionCode=\([0-9]*\).*/\1/p' | head -n 1)"
+  [ -n "$current_version_name" ] && [ -n "$current_version_code" ] || return 1
+  disabled_packages="$(timeout 10 pm list packages -d --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null)" || return 1
+  if echo "$disabled_packages" | grep -Fx "package:$URV_PACKAGE" >/dev/null; then
+    current_enabled=0
+  else
+    current_enabled=1
+  fi
+  launcher_line="$(timeout 10 cmd package resolve-activity --brief --user "$URV_USER_ID" \
+    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$URV_PACKAGE" 2>/dev/null)" || return 1
+  case "$launcher_line" in
+    */*) current_launcher=1 ;;
+    *"No activity found"*) current_launcher=0 ;;
+    *) return 1 ;;
+  esac
+}
+
+wait_for_package_manager() {
+  ready_started="${1:-$(awk '{print int($1)}' /proc/uptime)}" || return 1
+  while :; do
+    ready_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    [ "$((ready_now - ready_started))" -lt 300 ] || return 1
+    [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 1
+    [ ! -f "$transaction_dir/active.json" ] || return 1
+    read_package_state && return 0
+    sleep 5
+  done
+}
+
+acquire_ready_package_lock() {
+  recovery_started="$(awk '{print int($1)}' /proc/uptime)" || return 1
+  while wait_for_package_manager "$recovery_started"; do
+    acquire_package_lock || return 1
+    boot_lock_held=1
+    # Every acquisition needs fresh state: Manager may have acted between retries.
+    [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 1
+    if [ -f "$transaction_dir/active.json" ]; then
+      log_status "Transaction appeared before the boot lock was acquired; deferring to Manager"
+      echo INCOMPLETE_TRANSACTION >"$transaction_dir/boot-status"
+      return 1
+    fi
+    load_state || return 1
+    [ "$URV_PACKAGE" = "$locked_package" ] || return 1
+
+    # Use only a fresh locked snapshot for mount decisions.
+    read_package_state && return 0
+    log_status "PackageManager became unavailable; releasing lock before retry"
+    release_package_lock || return 1
+    boot_lock_held=0
+    sleep 5
+  done
+  return 1
+}
+
+boot_lock_held=0
+trap '[ "$boot_lock_held" = 0 ] || release_package_lock || log_status "Unable to release transaction lock cleanly"' EXIT
+trap 'exit 0' HUP INT TERM
+if ! acquire_ready_package_lock; then
+  log_status "PackageManager not ready, transaction lock busy, or module changed; deferring verification"
   exit 0
 fi
-trap 'release_package_lock || log_status "Unable to release transaction lock cleanly"' EXIT
-trap 'exit 0' HUP INT TERM
-
-load_state || exit 0
-[ "$URV_PACKAGE" = "$locked_package" ] || {
-  log_status "Committed package changed before the boot lock was acquired; deferring mount verification"
-  exit 0
-}
-
-ownership_waited=0
-ownership_ready=0
-installed_users=''
-while [ "$ownership_waited" -lt 30 ]; do
-  if installed_users="$(installed_user_ids)"; then
-    ownership_ready=1
-    break
-  fi
-  sleep 1
-  ownership_waited=$((ownership_waited + 1))
-done
-[ "$ownership_ready" = 1 ] || {
-  log_status "PackageManager state is still unavailable; deferring ownership verification"
-  exit 0
-}
 if ! echo "$installed_users" | grep -Fx "$URV_USER_ID" >/dev/null; then
   log_status "Committed Android user no longer owns the package; removing URV mounts"
   if ! stop_and_wait || ! remove_target_mounts; then
@@ -618,37 +666,7 @@ if [ -n "$other_users" ]; then
   exit 0
 fi
 
-path_waited=0
-path_dump=''
-while [ "$path_waited" -lt 30 ]; do
-  path_dump="$(pm path --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null)"
-  [ -n "$path_dump" ] && break
-  sleep 1
-  path_waited=$((path_waited + 1))
-done
-[ -n "$path_dump" ] || {
-  log_status "PackageManager state is still unavailable; deferring mount verification"
-  exit 0
-}
-current_path="$(echo "$path_dump" | sed -n 's/^package://p' | head -n 1)"
-
-version_dump="$(dumpsys package "$URV_PACKAGE" 2>/dev/null)"
-current_version_name="$(echo "$version_dump" | sed -n 's/^[[:space:]]*versionName=//p' | head -n 1)"
-current_version_code="$(echo "$version_dump" | sed -n 's/^[[:space:]]*versionCode=\([0-9]*\).*/\1/p' | head -n 1)"
-path_count="$(pm path --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null | wc -l | tr -d ' ')"
 if [ "$URV_TOPOLOGY" = SINGLE ]; then expected_path_count=1; else expected_path_count=0; fi
-if pm list packages -d --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null |
-   grep -Fx "package:$URV_PACKAGE" >/dev/null; then
-  current_enabled=0
-else
-  current_enabled=1
-fi
-launcher_line="$(cmd package resolve-activity --brief --user "$URV_USER_ID" \
-  -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$URV_PACKAGE" 2>/dev/null)"
-case "$launcher_line" in
-  */*) current_launcher=1 ;;
-  *) current_launcher=0 ;;
-esac
 
 mount_count="$(awk -v target="$URV_STOCK_PATH" '$5 == target { count++ } END { print count+0 }' /proc/self/mountinfo)"
 mounted_hash=""
