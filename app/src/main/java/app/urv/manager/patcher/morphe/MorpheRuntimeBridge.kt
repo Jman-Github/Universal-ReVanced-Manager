@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.morphe
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.ProgressEvent
@@ -164,7 +166,7 @@ object MorpheRuntimeBridge {
             val current = classLoader
             if (current != null && runtimeClassPath == cacheKey) return current
 
-            val optimizedDir = File(context.codeCacheDir, "morphe-runtime-dex").apply { mkdirs() }
+            val optimizedDir = File(context.managerStorageContext.codeCacheDir, "morphe-runtime-dex").apply { mkdirs() }
             // Use the boot classloader as parent to avoid app classpath conflicts.
             val parent = context.classLoader.parent ?: context.classLoader
             val loader = DexClassLoader(path, optimizedDir.absolutePath, null, parent)

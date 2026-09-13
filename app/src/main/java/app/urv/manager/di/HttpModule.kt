@@ -1,5 +1,7 @@
 package app.urv.manager.di
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.universal.revanced.manager.BuildConfig
 import io.ktor.client.*
@@ -40,7 +42,7 @@ val httpModule = module {
                 // Force HTTP/1.1 to avoid intermittent HTTP/2 PROTOCOL_ERROR stream resets when
                 // downloading patch bundles from GitHub-backed endpoints.
                 protocols(listOf(Protocol.HTTP_1_1))
-                cache(Cache(context.cacheDir.resolve("cache").also { it.mkdirs() }, 1024 * 1024 * 100))
+                cache(Cache(context.managerStorageContext.cacheDir.resolve("cache").also { it.mkdirs() }, 1024 * 1024 * 100))
                 followRedirects(true)
                 followSslRedirects(true)
             }

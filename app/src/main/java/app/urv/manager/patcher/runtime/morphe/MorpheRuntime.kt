@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.runtime.morphe
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
@@ -25,7 +27,7 @@ sealed class MorpheRuntime(context: Context) : KoinComponent {
     protected val aaptPath = Aapt.binary(context)?.absolutePath
         ?: throw FileNotFoundException("Could not resolve Morphe aapt.")
     protected val frameworkPath: String =
-        context.cacheDir.resolve("framework_morphe").also { it.mkdirs() }.absolutePath
+        context.managerStorageContext.cacheDir.resolve("framework_morphe").also { it.mkdirs() }.absolutePath
 
     protected suspend fun bundles() = patchBundlesRepo.bundlesByType(PatchBundleType.MORPHE).first()
 

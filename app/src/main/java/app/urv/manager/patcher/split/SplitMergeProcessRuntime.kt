@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.split
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -181,7 +183,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                 add("-Xmx${effectiveMemoryLimitMb}m")
                 add("-XX:HeapGrowthLimit=${effectiveMemoryLimitMb}m")
             }
-            add("-Djava.io.tmpdir=${context.cacheDir.absolutePath}")
+            add("-Djava.io.tmpdir=${context.managerStorageContext.cacheDir.absolutePath}")
             add("/")
             add("--nice-name=${context.packageName}:SplitMerge")
             add(SplitMergeProcess::class.java.name)

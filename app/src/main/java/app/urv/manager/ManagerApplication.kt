@@ -78,6 +78,7 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.io.File
 
 class ManagerApplication : Application() {
+
     private val scope = MainScope()
     private var rootExternalInstallRecoveryJob: Job? = null
     private val prefs: PreferencesManager by inject()
@@ -361,11 +362,12 @@ class ManagerApplication : Application() {
     }
 
     override fun attachBaseContext(base: Context?) {
-        super.attachBaseContext(base)
+        val storageBase = base?.let { app.urv.manager.util.BuildProfileContext.wrap(it) }
+        super.attachBaseContext(storageBase)
 
         // Apply stored app language as early as possible using DataStore, but never crash startup.
         val storedLang = runCatching {
-            base?.let {
+            storageBase?.let {
                 runBlocking { PreferencesManager(it).appLanguage.get() }.ifBlank { "en" }
             }
         }.getOrNull() ?: "en"

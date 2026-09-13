@@ -5,6 +5,13 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ManagerUpdateCompatibilityTest {
+    @Test
+    fun absentReleaseDatabaseAllowsOlderSchema() {
+        assertTrue(isCompatibleManagerUpdate("manager", 10, 0, "manager", 10, 18))
+        assertTrue(isCompatibleManagerUpdate("manager", 10, 0, "manager", 10, null))
+        assertFalse(isCompatibleManagerUpdate("manager", 10, 20, "manager", 10, 18))
+    }
+
     private fun accepts(code: Long = 10801023, schema: Int? = 20, pkg: String = "manager") =
         isCompatibleManagerUpdate("manager", 10801000, 20, pkg, code, schema)
 

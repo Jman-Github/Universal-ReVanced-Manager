@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.aapt
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.urv.manager.patcher.LibraryResolver
 import java.io.File
@@ -38,7 +40,7 @@ object AaptModern : LibraryResolver() {
             .distinct()
             .toList()
 
-        val outputDir = context.codeCacheDir.resolve("aapt2")
+        val outputDir = context.managerStorageContext.codeCacheDir.resolve("aapt2")
         outputDir.mkdirs()
         val output = outputDir.resolve("libaapt2_modern.so")
 

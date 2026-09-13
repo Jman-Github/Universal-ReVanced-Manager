@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.runtime
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
@@ -28,7 +30,7 @@ sealed class Runtime(context: Context) : KoinComponent {
         ?: throw FileNotFoundException("Could not resolve modern aapt.")
     protected val aaptLegacyPath = Aapt.legacyBinary(context)?.absolutePath
     protected val frameworkPath: String =
-        context.cacheDir.resolve("framework").also { it.mkdirs() }.absolutePath
+        context.managerStorageContext.cacheDir.resolve("framework").also { it.mkdirs() }.absolutePath
 
     protected suspend fun bundles() =
         patchBundlesRepo.bundlesByType(PatchBundleType.REVANCED).first()
