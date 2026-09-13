@@ -1,5 +1,7 @@
 package app.urv.manager.ui.component.patcher
 
+import app.urv.manager.util.managerStorageContext
+
 import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -366,7 +368,7 @@ private data class DeviceInformation(
 private fun readDeviceInformation(context: Context): DeviceInformation {
     val memoryInfo = ActivityManager.MemoryInfo()
     context.getSystemService(ActivityManager::class.java)?.getMemoryInfo(memoryInfo)
-    val storage = StatFs(context.filesDir.absolutePath)
+    val storage = StatFs(context.managerStorageContext.filesDir.absolutePath)
     val manufacturer = Build.MANUFACTURER.trim()
     val model = Build.MODEL.trim()
     val deviceName = when {

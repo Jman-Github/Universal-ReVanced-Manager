@@ -1,5 +1,7 @@
 package app.urv.manager.ui.viewmodel
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -247,7 +249,7 @@ class GeneralSettingsViewModel(
         mimeType: String?,
         input: InputStream
     ): Uri {
-        val directory = File(appContext.filesDir, backgroundDirectoryName)
+        val directory = File(appContext.managerStorageContext.filesDir, backgroundDirectoryName)
         if (!directory.exists()) {
             directory.mkdirs()
         }
@@ -320,7 +322,7 @@ class GeneralSettingsViewModel(
         if (!uri.scheme.equals("file", ignoreCase = true)) return
         val filePath = uri.path?.takeIf { it.isNotBlank() } ?: return
         val file = File(filePath)
-        val managedDirectory = File(appContext.filesDir, backgroundDirectoryName)
+        val managedDirectory = File(appContext.managerStorageContext.filesDir, backgroundDirectoryName)
         val managedPath = runCatching { managedDirectory.canonicalFile.toPath() }.getOrNull() ?: return
         val filePathCanonical = runCatching { file.canonicalFile.toPath() }.getOrNull() ?: return
         if (filePathCanonical.startsWith(managedPath)) {

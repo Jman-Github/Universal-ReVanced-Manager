@@ -83,7 +83,7 @@ jobs:
             "-PdevVersionSuffix=$PR_TEST_SUFFIX" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease
-          echo "PR APKs update the normal manager in place. Return using a newer normal release with a compatible database and version code. Older releases such as dev 22 are not supported rollback targets; back up your data before testing." >> "$GITHUB_STEP_SUMMARY"
+          echo "PR APKs replace the manager in place and use separate, initially empty PR storage. Normal-release data is left untouched, including when switching with an external installer. PR changes do not transfer back. Previously upgraded release databases still require recovery. Android signing and version-code rules still apply." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release-signed validation APKs
         if: steps.signing.outputs.available == 'true'

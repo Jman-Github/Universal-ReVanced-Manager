@@ -1,5 +1,7 @@
 package app.urv.manager.domain.installer
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
@@ -100,7 +102,7 @@ class InstallerFileProvider : ContentProvider() {
             val fileName = segments.first()
             require(".." !in fileName) { "Path traversal is not allowed." }
 
-            val dir = File(context.cacheDir, InstallerManager.SHARE_DIR)
+            val dir = File(context.managerStorageContext.cacheDir, InstallerManager.SHARE_DIR)
             val target = File(dir, fileName)
             val canonicalDir = dir.canonicalFile
             val canonicalTarget = target.canonicalFile

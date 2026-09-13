@@ -1,5 +1,9 @@
 package app.urv.manager.ui.screen.settings
 
+import app.urv.manager.util.managerStorageRoot
+
+import app.urv.manager.util.managerStorageContext
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -1027,10 +1031,10 @@ private suspend fun loadStorageSnapshot(
 ): StorageSnapshot = withContext(Dispatchers.IO) {
     pruneUnreferencedPatchedAppFiles(filesystem, installedAppRepository)
 
-    val dataRoot = File(context.applicationInfo.dataDir)
-    val customBackgroundsDir = context.filesDir.resolve("custom_background")
-    val preferencesDataStoreDir = context.filesDir.resolve("datastore")
-    val lsposedModulesDir = context.filesDir.resolve("lsposed_modules")
+    val dataRoot = context.managerStorageRoot
+    val customBackgroundsDir = context.managerStorageContext.filesDir.resolve("custom_background")
+    val preferencesDataStoreDir = context.managerStorageContext.filesDir.resolve("datastore")
+    val lsposedModulesDir = context.managerStorageContext.filesDir.resolve("lsposed_modules")
     val databasesDir = dataRoot.resolve("databases")
     val downloadedAppsDir = context.privateAppDir("downloaded-apps")
     val patchBundlesDir = context.privateAppDir("patch_bundles")
@@ -1043,17 +1047,17 @@ private suspend fun loadStorageSnapshot(
     val patchProfileInputsDir = context.privateAppDir("patch-profile-inputs")
     val temporaryWorkspaceDir = context.privateAppDir("ephemeral")
     val uiTemporaryWorkspaceDir = context.privateAppDir("ui_ephemeral")
-    val apkSignerCacheDir = context.cacheDir.resolve(APK_SIGNER_CACHE_DIR)
+    val apkSignerCacheDir = context.managerStorageContext.cacheDir.resolve(APK_SIGNER_CACHE_DIR)
     val signingStorageRoots = keystoreManager.signingStorageRoots()
-    val externalFilesDirs = context.getExternalFilesDirs(null).filterNotNull()
+    val externalFilesDirs = context.managerStorageContext.getExternalFilesDirs(null).filterNotNull()
     val internalSigningRoots = signingStorageRoots.filter { root -> root.isWithin(dataRoot) }
-    val signingRootsInFilesDir = internalSigningRoots.filter { root -> root.isWithin(context.filesDir) }
+    val signingRootsInFilesDir = internalSigningRoots.filter { root -> root.isWithin(context.managerStorageContext.filesDir) }
     val externalSigningRoots = signingStorageRoots.filter { root ->
         externalFilesDirs.any { externalRoot -> root.isWithin(externalRoot) }
     }
 
-    val internalCacheStats = context.cacheDir.directoryStats()
-    val codeCacheStats = context.codeCacheDir.directoryStats()
+    val internalCacheStats = context.managerStorageContext.cacheDir.directoryStats()
+    val codeCacheStats = context.managerStorageContext.codeCacheDir.directoryStats()
     val apkSignerCacheStats = apkSignerCacheDir.directoryStats()
     val customBackgroundsStats = customBackgroundsDir.directoryStats()
     val preferencesDataStoreStats = preferencesDataStoreDir.directoryStats()
@@ -1061,12 +1065,12 @@ private suspend fun loadStorageSnapshot(
     val databasesStats = databasesDir.directoryStats()
     val internalSigningStats = internalSigningRoots.combinedStats()
     val signingStats = signingStorageRoots.combinedStats()
-    val internalFilesStats = context.filesDir.directoryStats() -
+    val internalFilesStats = context.managerStorageContext.filesDir.directoryStats() -
         customBackgroundsStats -
         preferencesDataStoreStats -
         lsposedModulesStats -
         signingRootsInFilesDir.combinedStats()
-    val noBackupStats = context.noBackupFilesDir.directoryStats()
+    val noBackupStats = context.managerStorageContext.noBackupFilesDir.directoryStats()
     val downloadedAppsStats = downloadedAppsDir.directoryStats()
     val patchBundlesStats = patchBundlesDir.directoryStats()
     val downloaderPluginsStats = downloaderPluginsDir.directoryStats()
@@ -1079,16 +1083,18 @@ private suspend fun loadStorageSnapshot(
     val patchProfileInputsStats = patchProfileInputsDir.directoryStats()
     val temporaryWorkspaceStats = temporaryWorkspaceDir.directoryStats()
     val uiTemporaryWorkspaceStats = uiTemporaryWorkspaceDir.directoryStats()
-    val externalCacheStats = context.externalCacheDirs.filterNotNull().combinedStats()
+    val externalCacheStats = context.managerStorageContext.externalCacheDirs.filterNotNull().combinedStats()
     val externalFilesStats = externalFilesDirs.combinedStats() - externalSigningRoots.combinedStats()
+    // PR cache and no-backup directories live outside the private profile root.
+    // Subtract only directories actually included in dataRoot's total.
     val knownInternalStats = listOf(
-        internalCacheStats,
-        codeCacheStats,
+        internalCacheStats.takeIf { context.managerStorageContext.cacheDir.isWithin(dataRoot) } ?: DirectoryStats(),
+        codeCacheStats.takeIf { context.managerStorageContext.codeCacheDir.isWithin(dataRoot) } ?: DirectoryStats(),
         internalFilesStats,
         preferencesDataStoreStats,
         lsposedModulesStats,
         databasesStats,
-        noBackupStats,
+        noBackupStats.takeIf { context.managerStorageContext.noBackupFilesDir.isWithin(dataRoot) } ?: DirectoryStats(),
         customBackgroundsStats,
         downloadedAppsStats,
         patchBundlesStats,
@@ -1109,7 +1115,8 @@ private suspend fun loadStorageSnapshot(
         title = context.getString(R.string.storage_code_cache),
         description = context.getString(R.string.storage_code_cache_description),
         stats = codeCacheStats,
-        clearTarget = StorageClearTarget.CodeCache
+        clearTarget = StorageClearTarget.CodeCache,
+        clearableBytes = context.managerStorageContext.codeCacheDir.clearableStorageBytes()
     )
     val apkSignerCacheArea = StorageAreaUsage(
         targetKey = R.string.storage_apk_signer_cache,
@@ -1140,6 +1147,8 @@ private suspend fun loadStorageSnapshot(
             description = context.getString(R.string.storage_internal_cache_description),
             stats = internalCacheStats + codeCacheStats,
             clearTarget = StorageClearTarget.InternalCache,
+            clearableBytes = context.managerStorageContext.cacheDir.clearableStorageBytes() +
+                context.managerStorageContext.codeCacheDir.clearableStorageBytes(),
             children = listOf(codeCacheArea, apkSignerCacheArea)
         ),
         StorageAreaUsage(
@@ -1155,7 +1164,8 @@ private suspend fun loadStorageSnapshot(
             title = context.getString(R.string.storage_no_backup_files),
             description = context.getString(R.string.storage_no_backup_files_description),
             stats = noBackupStats,
-            clearTarget = StorageClearTarget.NoBackupFiles
+            clearTarget = StorageClearTarget.NoBackupFiles,
+            clearableBytes = context.managerStorageContext.noBackupFilesDir.clearableStorageBytes()
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_downloaded_apps,
@@ -1241,21 +1251,24 @@ private suspend fun loadStorageSnapshot(
             title = context.getString(R.string.storage_other_internal_data),
             description = context.getString(R.string.storage_other_internal_data_description),
             stats = otherInternalStats,
-            clearTarget = StorageClearTarget.OtherInternalData
+            clearTarget = StorageClearTarget.OtherInternalData,
+            clearableBytes = dataRoot.clearableStorageBytes(context.knownInternalStorageRoots())
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_external_cache,
             title = context.getString(R.string.storage_external_cache),
             description = context.getString(R.string.storage_external_cache_description),
             stats = externalCacheStats,
-            clearTarget = StorageClearTarget.ExternalCache
+            clearTarget = StorageClearTarget.ExternalCache,
+            clearableBytes = context.managerStorageContext.externalCacheDirs.filterNotNull().sumOf { it.clearableStorageBytes() }
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_external_files,
             title = context.getString(R.string.storage_external_files),
             description = context.getString(R.string.storage_external_files_description),
             stats = externalFilesStats,
-            clearTarget = StorageClearTarget.ExternalFiles
+            clearTarget = StorageClearTarget.ExternalFiles,
+            clearableBytes = externalFilesDirs.sumOf { it.clearableStorageBytes(signingStorageRoots) }
         )
     )
     StorageSnapshot(
@@ -1277,27 +1290,27 @@ private suspend fun clearStorageTarget(
     lsposedRepository: LsposedRepository,
     keystoreManager: KeystoreManager
 ): Long = when (target) {
-    StorageClearTarget.InternalCache -> clearStorageDirectories(context.cacheDir, context.codeCacheDir)
-    StorageClearTarget.CodeCache -> clearStorageDirectories(context.codeCacheDir)
-    StorageClearTarget.ApkSignerCache -> clearStorageDirectories(context.cacheDir.resolve(APK_SIGNER_CACHE_DIR))
-    StorageClearTarget.InternalFiles -> measureClearedStorage(context.filesDir) {
+    StorageClearTarget.InternalCache -> clearStorageDirectories(context.managerStorageContext.cacheDir, context.managerStorageContext.codeCacheDir)
+    StorageClearTarget.CodeCache -> clearStorageDirectories(context.managerStorageContext.codeCacheDir)
+    StorageClearTarget.ApkSignerCache -> clearStorageDirectories(context.managerStorageContext.cacheDir.resolve(APK_SIGNER_CACHE_DIR))
+    StorageClearTarget.InternalFiles -> measureClearedStorage(context.managerStorageContext.filesDir) {
         withContext(Dispatchers.IO) {
             val excludedFiles = buildList {
-                add(context.filesDir.resolve("datastore"))
-                add(context.filesDir.resolve("lsposed_modules"))
+                add(context.managerStorageContext.filesDir.resolve("datastore"))
+                add(context.managerStorageContext.filesDir.resolve("lsposed_modules"))
                 addAll(
                     keystoreManager.signingStorageRoots()
-                        .filter { root -> root.isWithin(context.filesDir) }
+                        .filter { root -> root.isWithin(context.managerStorageContext.filesDir) }
                 )
             }
-            context.filesDir.deleteContentsExcept(excludedFiles)
+            context.managerStorageContext.filesDir.deleteContentsExcept(excludedFiles)
         }
         prefs.customBackgroundImageUri.update("")
     }
-    StorageClearTarget.NoBackupFiles -> clearStorageDirectories(context.noBackupFilesDir)
-    StorageClearTarget.CustomBackgrounds -> measureClearedStorage(context.filesDir.resolve("custom_background")) {
+    StorageClearTarget.NoBackupFiles -> clearStorageDirectories(context.managerStorageContext.noBackupFilesDir)
+    StorageClearTarget.CustomBackgrounds -> measureClearedStorage(context.managerStorageContext.filesDir.resolve("custom_background")) {
         withContext(Dispatchers.IO) {
-            context.filesDir.resolve("custom_background").deleteContentsAndReturnBytes()
+            context.managerStorageContext.filesDir.resolve("custom_background").deleteContentsAndReturnBytes()
         }
         prefs.customBackgroundImageUri.update("")
     }
@@ -1329,7 +1342,7 @@ private suspend fun clearStorageTarget(
     ) {
         patcherRuntimePluginRepository.clearManagedSources()
     }
-    StorageClearTarget.LsposedModules -> measureClearedStorage(context.filesDir.resolve("lsposed_modules")) {
+    StorageClearTarget.LsposedModules -> measureClearedStorage(context.managerStorageContext.filesDir.resolve("lsposed_modules")) {
         lsposedRepository.clearStoredLocalModules()
     }
     StorageClearTarget.PatchedApps -> measureClearedStorage(context.privateAppDir("patched-apps")) {
@@ -1373,14 +1386,14 @@ private suspend fun clearStorageTarget(
         context.privateAppDir("ui_ephemeral")
     )
     StorageClearTarget.UiTemporaryWorkspace -> clearStorageDirectories(context.privateAppDir("ui_ephemeral"))
-    StorageClearTarget.OtherInternalData -> measureClearedStorage(File(context.applicationInfo.dataDir)) {
+    StorageClearTarget.OtherInternalData -> measureClearedStorage(context.managerStorageRoot) {
         withContext(Dispatchers.IO) {
-            File(context.applicationInfo.dataDir).deleteContentsExcept(context.knownInternalStorageRoots())
+            context.managerStorageRoot.deleteContentsExcept(context.knownInternalStorageRoots())
         }
     }
-    StorageClearTarget.ExternalCache -> clearStorageDirectories(context.externalCacheDirs.filterNotNull())
+    StorageClearTarget.ExternalCache -> clearStorageDirectories(context.managerStorageContext.externalCacheDirs.filterNotNull())
     StorageClearTarget.ExternalFiles -> clearStorageDirectoriesExcept(
-        directories = context.getExternalFilesDirs(null).filterNotNull(),
+        directories = context.managerStorageContext.getExternalFilesDirs(null).filterNotNull(),
         excludedFiles = keystoreManager.signingStorageRoots()
     )
 }
@@ -1414,14 +1427,17 @@ private suspend fun measureClearedStorage(
 }
 
 private fun Context.privateAppDir(name: String): File =
-    File(applicationInfo.dataDir, "app_$name")
+    File(managerStorageRoot, "app_$name")
 
 private fun Context.knownInternalStorageRoots(): List<File> = listOf(
-    cacheDir,
-    codeCacheDir,
-    filesDir,
-    noBackupFilesDir,
-    File(applicationInfo.dataDir, "databases"),
+    File(applicationInfo.dataDir, "app_pr_profile"),
+    File(applicationInfo.dataDir, "shared_prefs"),
+    File(applicationInfo.dataDir, "no_backup/pr_profile"),
+    managerStorageContext.cacheDir,
+    managerStorageContext.codeCacheDir,
+    managerStorageContext.filesDir,
+    managerStorageContext.noBackupFilesDir,
+    File(managerStorageRoot, "databases"),
     privateAppDir("downloaded-apps"),
     privateAppDir("patch_bundles"),
     privateAppDir("signing"),
@@ -1486,7 +1502,7 @@ private fun File.deleteContentsAndReturnBytes(): Long {
         return if (deleted) bytes else 0L
     }
     if (!isDirectory) return 0L
-    return listFiles().orEmpty().sumOf { child ->
+    return clearableStorageChildren().sumOf { child ->
         val bytes = child.directoryStats().bytes
         val deleted = runCatching { child.deleteRecursively() }.getOrDefault(false)
         if (deleted) bytes else 0L
@@ -1498,19 +1514,25 @@ private fun File.deleteContentsExcept(vararg excludedFiles: File): Long =
 
 private fun File.deleteContentsExcept(excludedFiles: Collection<File>): Long {
     if (!exists() || !isDirectory) return 0L
+    return clearableStorageChildren(excludedFiles).sumOf { child ->
+        val bytes = child.directoryStats().bytes
+        val deleted = runCatching { child.deleteRecursively() }.getOrDefault(false)
+        if (deleted) bytes else 0L
+    }
+}
+
+/** Use the same exclusions for the Clear button and the actual deletion. */
+private fun File.clearableStorageBytes(excludedFiles: Collection<File> = emptyList()): Long =
+    clearableStorageChildren(excludedFiles).sumOf { it.directoryStats().bytes }
+
+private fun File.clearableStorageChildren(excludedFiles: Collection<File> = emptyList()): List<File> {
     val excludedPaths = excludedFiles.mapTo(mutableSetOf()) { it.canonicalStoragePath() }
-    return listFiles().orEmpty().sumOf { child ->
+    return listFiles().orEmpty().filterNot { child ->
         val childPath = child.canonicalStoragePath()
-        val containsExcludedFile = excludedPaths.any { excludedPath ->
-            excludedPath == childPath || excludedPath.startsWith(childPath + File.separator)
-        }
-        if (containsExcludedFile) {
-            0L
-        } else {
-            val bytes = child.directoryStats().bytes
-            val deleted = runCatching { child.deleteRecursively() }.getOrDefault(false)
-            if (deleted) bytes else 0L
-        }
+        child.name == "pr_profile" || child.name == "app_pr_profile" ||
+            excludedPaths.any { excludedPath ->
+                excludedPath == childPath || excludedPath.startsWith(childPath + File.separator)
+            }
     }
 }
 

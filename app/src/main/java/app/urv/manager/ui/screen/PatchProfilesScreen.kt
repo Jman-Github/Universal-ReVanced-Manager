@@ -1,5 +1,7 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.util.managerStorageContext
+
 import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -293,7 +295,7 @@ fun PatchProfilesScreen(
                     displayName = displayName,
                     mimeType = context.contentResolver.getType(uri)
                 ) ?: "apk"
-                val file = File.createTempFile("patch-profile-apk", ".${extension}", context.cacheDir)
+                val file = File.createTempFile("patch-profile-apk", ".${extension}", context.managerStorageContext.cacheDir)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     file.outputStream().use { output -> input.copyTo(output) }
                 }

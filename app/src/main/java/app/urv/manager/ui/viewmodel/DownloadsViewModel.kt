@@ -1,5 +1,7 @@
 package app.urv.manager.ui.viewmodel
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.graphics.drawable.BitmapDrawable
@@ -126,9 +128,9 @@ class DownloadsViewModel(
     private val appContext = pm.application
     private val splitMergeRuntime = SplitMergeProcessRuntime(appContext)
     private val installWorkspaceRoot =
-        appContext.cacheDir.resolve("download-install").apply { mkdirs() }
+        appContext.managerStorageContext.cacheDir.resolve("download-install").apply { mkdirs() }
     private val displayWorkspaceRoot =
-        appContext.cacheDir.resolve("downloaded-app-display").apply { mkdirs() }
+        appContext.managerStorageContext.cacheDir.resolve("downloaded-app-display").apply { mkdirs() }
     private val installProgressFlow = MutableStateFlow<DownloadInstallProgress?>(null)
     val installProgress = installProgressFlow.asStateFlow()
     private var activeInstallWorkspace: File? = null

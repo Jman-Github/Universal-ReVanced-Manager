@@ -1,5 +1,7 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.graphics.Bitmap
@@ -364,7 +366,7 @@ fun CreateYoutubeAssetsScreen(onBackClick: () -> Unit) {
         scope.launch {
             runCatching {
                 withContext(Dispatchers.Default) {
-                    val cacheDir = context.cacheDir.resolve("youtube-assets-tools").apply { mkdirs() }
+                    val cacheDir = context.managerStorageContext.cacheDir.resolve("youtube-assets-tools").apply { mkdirs() }
                     cleanupOldGeneratedZips(cacheDir)
                     generateArchive(
                         cacheDir = cacheDir,
