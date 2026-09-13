@@ -34,6 +34,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.DownloadProgressNotifier
 import app.urv.manager.util.PM
 import app.urv.manager.util.MANAGER_DATABASE_VERSION_METADATA
+import app.urv.manager.util.releaseDatabaseVersion
 import app.urv.manager.util.isCompatibleManagerUpdate
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
@@ -194,7 +195,7 @@ class UpdateViewModel(
                     isCompatibleManagerUpdate(
                         currentPackage = app.packageName,
                         currentVersionCode = BuildConfig.VERSION_CODE.toLong(),
-                        currentDatabaseVersion = BuildConfig.DATABASE_VERSION,
+                        currentDatabaseVersion = releaseDatabaseVersion(app),
                         candidatePackage = candidate.packageName,
                         candidateVersionCode = PackageInfoCompat.getLongVersionCode(candidate),
                         candidateDatabaseVersion = metadata

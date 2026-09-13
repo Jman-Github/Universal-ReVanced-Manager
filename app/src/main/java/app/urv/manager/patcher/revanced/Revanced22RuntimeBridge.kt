@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.revanced
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.RemoteError
@@ -165,7 +167,7 @@ object Revanced22RuntimeBridge {
             val current = classLoader
             if (current != null && runtimeClassPath == cacheKey) return current
 
-            val optimizedDir = File(context.codeCacheDir, "revanced22-runtime-dex").apply { mkdirs() }
+            val optimizedDir = File(context.managerStorageContext.codeCacheDir, "revanced22-runtime-dex").apply { mkdirs() }
             val parent = context.classLoader.parent ?: context.classLoader
             val loader = DexClassLoader(path, optimizedDir.absolutePath, null, parent)
             classLoader = loader

@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.runtime.morphe
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import app.universal.revanced.manager.BuildConfig
 import android.os.Build
@@ -21,7 +23,7 @@ object MorpheRuntimeAssets {
     fun ensureRuntimeApk(context: Context): File {
         val appContext = normalizeContext(context)
         requireRuntime(appContext)
-        val outputDir = File(appContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
+        val outputDir = File(appContext.managerStorageContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val output = File(
             outputDir,
             "$OUTPUT_PREFIX-${BuildConfig.VERSION_CODE}-${BuildConfig.BUILD_ID}.apk"

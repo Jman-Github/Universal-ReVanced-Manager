@@ -5,6 +5,8 @@
 
 package app.urv.manager.util
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.content.Intent
 import java.security.MessageDigest
@@ -43,7 +45,7 @@ object BatchPatchIntents {
         .distinct()
 
     private fun internalToken(context: Context): String {
-        val preferences = context.getSharedPreferences(
+        val preferences = context.managerStorageContext.getSharedPreferences(
             INTERNAL_TOKEN_PREFERENCES,
             Context.MODE_PRIVATE
         )

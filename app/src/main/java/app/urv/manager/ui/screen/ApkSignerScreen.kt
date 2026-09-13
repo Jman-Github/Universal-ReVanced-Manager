@@ -1,5 +1,7 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -647,7 +649,7 @@ private fun prepareSigningFiles(
     source: String,
     outputFileName: String
 ): PreparedApkSigningFiles {
-    val cacheDir = context.cacheDir.resolve(APK_SIGNER_CACHE_DIR).apply { mkdirs() }
+    val cacheDir = context.managerStorageContext.cacheDir.resolve(APK_SIGNER_CACHE_DIR).apply { mkdirs() }
     cacheDir.listFiles()?.forEach { it.deleteRecursively() }
     val uri = Uri.parse(source)
     val input = if (uri.scheme.equals("file", ignoreCase = true)) {

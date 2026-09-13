@@ -69,7 +69,7 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "dev"
-// PR builds share the normal app identity and only offer newer published releases.
+// PR builds share the normal app identity, with separate private storage.
 val prTestBuild = providers.gradleProperty("prTestBuild")
     .map(String::toBoolean)
     .getOrElse(false)
