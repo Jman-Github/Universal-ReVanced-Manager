@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.runtime.revanced
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.os.Build
 import android.system.Os
@@ -27,7 +29,7 @@ object Revanced22RuntimeAssets {
         )
 
     private fun ensureAsset(context: Context, assetName: String, outputName: String): File {
-        val outputDir = File(context.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
+        val outputDir = File(context.managerStorageContext.codeCacheDir, OUTPUT_PREFIX).apply { mkdirs() }
         val appApk = ensureRuntimeClassPath(context)
         val output = File(outputDir, outputName)
         if (output.exists() && output.length() > 0L && output.lastModified() >= appApk.lastModified()) {

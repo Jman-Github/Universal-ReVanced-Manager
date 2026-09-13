@@ -1,5 +1,7 @@
 package app.urv.manager.worker
 
+import app.urv.manager.util.managerStorageContext
+
 import android.app.Application
 import android.content.ComponentName
 import android.content.Context
@@ -86,7 +88,7 @@ class RootMountReconciliationScheduler(
         private fun packagesKey(userId: Int) = "$PACKAGES_PREFIX$userId"
 
         fun isEnabled(context: Context): Boolean =
-            context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            context.managerStorageContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
                 .all
                 .any { (key, value) ->
                     key.startsWith(PACKAGES_PREFIX) && (value as? Set<*>)?.isNotEmpty() == true
@@ -114,7 +116,7 @@ class RootMountReconciliationScheduler(
         }
 
         fun isTracked(context: Context, userId: Int, packageName: String): Boolean =
-            context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            context.managerStorageContext.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
                 .getStringSet(packagesKey(userId), emptySet())
                 .orEmpty()
                 .contains(packageName)

@@ -271,13 +271,8 @@ class ReVancedAPI(
     }
 
     suspend fun getAppUpdate(): ReVancedAsset? {
-        // A PR can be ahead of every published release, even within the same version.
-        val publishedAfter = if (BuildConfig.IS_PR_TEST_BUILD) {
-            Instant.fromEpochMilliseconds(BuildConfig.PR_BUILD_TIMESTAMP)
-        } else {
-            null
-        }
-        return getLatestAppInfo(publishedAfter)
+        // PR and release builds now use separate storage profiles.
+        return getLatestAppInfo()
             .getOrNull()
             ?.takeIf {
                 BuildConfig.IS_PR_TEST_BUILD ||

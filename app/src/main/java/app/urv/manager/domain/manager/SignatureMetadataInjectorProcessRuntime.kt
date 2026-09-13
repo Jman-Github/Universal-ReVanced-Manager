@@ -1,5 +1,7 @@
 package app.urv.manager.domain.manager
 
+import app.urv.manager.util.managerStorageContext
+
 import android.content.Context
 import android.os.Build
 import app.urv.manager.patcher.LibraryResolver
@@ -125,7 +127,7 @@ internal class SignatureMetadataInjectorProcessRuntime(
                 add("-Xmx${effectiveMemoryLimitMb}m")
                 add("-XX:HeapGrowthLimit=${effectiveMemoryLimitMb}m")
             }
-            add("-Djava.io.tmpdir=${context.cacheDir.absolutePath}")
+            add("-Djava.io.tmpdir=${context.managerStorageContext.cacheDir.absolutePath}")
             add("/")
             add("--nice-name=${context.packageName}:SignatureMetadataInjector")
             add(SignatureMetadataInjectorProcess::class.java.name)
