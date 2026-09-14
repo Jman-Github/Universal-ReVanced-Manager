@@ -81,6 +81,7 @@ object RevancedRuntimeEntry {
             ?: return "Missing outputFile parameter."
         val stripNativeLibs = params["stripNativeLibs"] as? Boolean ?: false
         val skipUnneededSplits = params["skipUnneededSplits"] as? Boolean ?: false
+        val continueOnPatchError = params["continueOnPatchError"] as? Boolean ?: false
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
         val aaptLogs = AaptLogCapture().apply { start() }
@@ -201,7 +202,8 @@ object RevancedRuntimeEntry {
                                 initialPatcherInput = patcherInput,
                                 sanitizeAllEmbeddedApksOnInit = preparedInput.merged,
                                 onEvent = eventSink,
-                                checkCancelled = ::throwIfCancelled
+                                checkCancelled = ::throwIfCancelled,
+                                continueOnPatchError = continueOnPatchError
                             )
                         }
 
@@ -215,8 +217,19 @@ object RevancedRuntimeEntry {
                         }
 
                         fun hiddenFallbackOnEvent(event: ProgressEvent) {
-                            if (event is ProgressEvent.Failed) {
-                                onEvent(ProgressEvent.Failed(StepId.WriteAPK, event.error))
+                            when (event) {
+                                // Reconcile final patch outcomes without replaying duplicate start/progress noise.
+                                is ProgressEvent.Failed -> if (event.stepId is StepId.ExecutePatch) {
+                                    onEvent(event)
+                                } else {
+                                    onEvent(ProgressEvent.Failed(StepId.WriteAPK, event.error))
+                                }
+                                is ProgressEvent.Completed -> {
+                                    if (event.stepId is StepId.ExecutePatch) {
+                                        onEvent(event)
+                                    }
+                                }
+                                else -> Unit
                             }
                         }
 

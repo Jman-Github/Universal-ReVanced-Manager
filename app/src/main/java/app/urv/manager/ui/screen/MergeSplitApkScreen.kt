@@ -259,6 +259,12 @@ fun MergeSplitApkScreen(
         }
     }
 
+    LaunchedEffect(state.inProgress) {
+        if (!state.inProgress) {
+            showDismissConfirmationDialog = false
+        }
+    }
+
     fun onPageBack() {
         when {
             state.cancellationInProgress || state.installing || state.savingOutput -> Unit
