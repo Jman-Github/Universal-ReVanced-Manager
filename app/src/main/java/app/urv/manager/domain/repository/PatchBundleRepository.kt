@@ -34,6 +34,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.RepositoryBundleSettings
 import app.urv.manager.domain.bundles.RepositoryBundleSettingsStore
+import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
@@ -951,24 +952,18 @@ class PatchBundleRepository(
     }
 
     fun discoveryImportKey(bundle: ExternalBundleSnapshot, preferLatestAcrossChannels: Boolean = false): String {
-        if (bundle.bundleId > 0) {
-            val channel = if (preferLatestAcrossChannels) {
-                "latest"
-            } else if (bundle.isPrerelease) {
-                "prerelease"
-            } else {
-                "release"
-            }
-            return "${bundle.bundleId}|$channel"
-        }
+        val sourceUrl = bundle.sourceUrl.trim().trimEnd('/').lowercase(Locale.US)
         val owner = bundle.ownerName.trim().lowercase(Locale.US)
         val repo = bundle.repoName.trim().lowercase(Locale.US)
+        val apiHost = bundle.apiHost.trim().lowercase(Locale.US)
+            .takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
         val base = when {
+            sourceUrl.isNotBlank() -> sourceUrl
             owner.isNotBlank() || repo.isNotBlank() ->
                 listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/")
-            bundle.sourceUrl.isNotBlank() -> bundle.sourceUrl.trim().lowercase(Locale.US)
             !bundle.downloadUrl.isNullOrBlank() ->
                 bundle.downloadUrl.trim().lowercase(Locale.US)
+            bundle.bundleId > 0 -> "${apiHost ?: "unknown-host"}|id=${bundle.bundleId}"
             else -> "unknown"
         }
         val channel = if (preferLatestAcrossChannels) {
@@ -2393,19 +2388,23 @@ class PatchBundleRepository(
     ): String {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
-        if (owner.isNotBlank() && repo.isNotBlank()) {
-            val channel = when {
-                preferLatestAcrossChannels -> "any"
-                bundle.isPrerelease -> "prerelease"
-                else -> "stable"
-            }
-            return "https://revanced-external-bundles.brosssh.com/api/v2/bundle/$owner/$repo/latest?channel=$channel"
-        }
-        return externalBundleEndpoint(bundle.bundleId)
+        val sourceUrl = bundle.sourceUrl.trim().takeIf { it.isNotBlank() }
+            ?: if (owner.isNotBlank() && repo.isNotBlank()) "https://github.com/$owner/$repo" else ""
+        val host = bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+            ?: ExternalBundlesEndpoints.STABLE_HOST
+        ExternalBundlesEndpoints.latestBundleUrl(
+            host = host,
+            sourceUrl = sourceUrl,
+            prerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
+        )?.let { return it }
+        return externalBundleEndpoint(bundle.bundleId, host)
     }
 
-    private fun externalBundleEndpoint(bundleId: Int): String =
-        "https://revanced-external-bundles.brosssh.com/bundles/id?id=$bundleId"
+    private fun externalBundleEndpoint(bundleId: Int, apiHost: String): String {
+        val host = apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+            ?: ExternalBundlesEndpoints.STABLE_HOST
+        return "https://$host/bundles/id?id=$bundleId"
+    }
 
     private fun validateRemoteBundleUrl(input: String): String {
         val trimmed = input.trim()
@@ -2418,14 +2417,9 @@ class PatchBundleRepository(
         val pathNoQuery = parsed.encodedPath.substringBefore('?').substringBefore('#')
         val isJson = pathNoQuery.endsWith(".json", ignoreCase = true)
         val host = parsed.host.lowercase(Locale.US)
-        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
-            host == "revanced-external-bundles-dev.brosssh.com"
+        val isExternalBundlesHost = ExternalBundlesEndpoints.isExternalBundlesHost(host)
         val isExternalBundlesEndpoint = isExternalBundlesHost &&
-            (
-                pathNoQuery.startsWith("/api/v1/bundle/") ||
-                    pathNoQuery.startsWith("/api/v2/bundle/") ||
-                    pathNoQuery.startsWith("/bundles/id")
-                )
+            ExternalBundlesEndpoints.isBundleApiPath(pathNoQuery)
         if (!isJson && !isExternalBundlesEndpoint) {
             throw IllegalArgumentException(
                 app.getString(R.string.patch_bundle_url_invalid_json_or_external)
@@ -2446,8 +2440,7 @@ class PatchBundleRepository(
         }
 
         val host = parsed.host.lowercase(Locale.US)
-        val isExternalBundlesHost = host == "revanced-external-bundles.brosssh.com" ||
-            host == "revanced-external-bundles-dev.brosssh.com"
+        val isExternalBundlesHost = ExternalBundlesEndpoints.isExternalBundlesHost(host)
         if (!isExternalBundlesHost) {
             throw IllegalArgumentException(
                 app.getString(R.string.patch_bundle_url_invalid_external)
@@ -2504,14 +2497,8 @@ class PatchBundleRepository(
 
         val normalizedPath = "/" + pathSegments.joinToString("/")
         val pathNoQuery = normalizedPath.substringBefore('?').substringBefore('#')
-        if (host.equals("revanced-external-bundles.brosssh.com", ignoreCase = true) ||
-            host.equals("revanced-external-bundles-dev.brosssh.com", ignoreCase = true)
-        ) {
-            if (
-                pathNoQuery.startsWith("/bundles/id") ||
-                pathNoQuery.startsWith("/api/v1/bundle/") ||
-                pathNoQuery.startsWith("/api/v2/bundle/")
-            ) {
+        if (ExternalBundlesEndpoints.isExternalBundlesHost(host)) {
+            if (ExternalBundlesEndpoints.isBundleApiPath(pathNoQuery)) {
                 val query = parsed.encodedQuery.takeIf { it.isNotEmpty() }?.let { "?$it" }.orEmpty()
                 return "https://$host$normalizedPath$query"
             }

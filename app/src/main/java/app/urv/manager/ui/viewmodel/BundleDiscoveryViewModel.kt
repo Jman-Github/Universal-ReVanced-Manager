@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.network.api.ExternalBundlesApi
+import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.network.dto.ExternalBundlePatch
 import app.urv.manager.network.service.HttpService
@@ -22,8 +23,6 @@ import io.ktor.client.request.url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,17 +56,20 @@ class BundleDiscoveryViewModel(
     var bundleSearchQuery: String by mutableStateOf("")
     var packageSearchQuery: String by mutableStateOf("")
 
-    private val patchesByBundle = mutableStateMapOf<Int, List<ExternalBundlePatch>>()
-    private val patchesLoading = mutableStateMapOf<Int, Boolean>()
-    private val patchesError = mutableStateMapOf<Int, String?>()
+    private val patchesByBundle = mutableStateMapOf<BundleInstanceKey, List<ExternalBundlePatch>>()
+    private val patchesLoading = mutableStateMapOf<BundleInstanceKey, Boolean>()
+    private val patchesError = mutableStateMapOf<BundleInstanceKey, String?>()
     private val bundleCache = mutableMapOf<String, BundleCacheEntry>()
     private val bundleExports = mutableStateMapOf<Int, BundleExportProgress>()
     private val cacheDir = File(app.cacheDir, "bundle_discovery").also { it.mkdirs() }
     private var refreshJob: Job? = null
     private var searchJob: Job? = null
     private var currentQueryKey: String = ""
+    private var currentApiHost: String? = null
     private var nextOffset: Int = 0
     private var refreshToken: Int = 0
+    private var bundleDatasetGeneration: Int = 0
+    private var isFirstPageRefreshInProgress: Boolean = false
     private var searchToken: Int = 0
     private var importProgressSnapshot by mutableStateOf<Map<String, PatchBundleRepository.DiscoveryImportProgress>>(emptyMap())
     private var queuedImportSnapshot by mutableStateOf<Set<String>>(emptySet())
@@ -110,60 +112,78 @@ class BundleDiscoveryViewModel(
         currentQueryKey = key
         nextOffset = 0
         canLoadMore = true
+        invalidatePatchState()
         val cached = bundleCache[key] ?: loadDiskCache(key)?.also { bundleCache[key] = it }
         if (cached != null) {
+            currentApiHost = cached.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+                ?: cached.bundles.firstNotNullOfOrNull { bundle ->
+                    bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+                }
             bundles = applyLastRefreshed(cached.bundles)
+        } else {
+            currentApiHost = null
         }
         val token = ++refreshToken
+        isFirstPageRefreshInProgress = true
         viewModelScope.launch {
             if (token != refreshToken) return@launch
             isLoading = cached == null
             errorMessage = null
-            val (snapshot, refreshJob) = withContext(Dispatchers.IO) {
-                coroutineScope {
-                    val bundlesDeferred = async {
-                        api.getBundles(packageNameQuery, limit = PAGE_SIZE, offset = 0).getOrNull()
+            try {
+                val page = withContext(Dispatchers.IO) {
+                    api.getBundles(packageNameQuery, limit = PAGE_SIZE, offset = 0).getOrNull()
+                }
+                if (token != refreshToken) return@launch
+                val refreshJob = page?.refreshJob
+                val refreshedAt = (refreshJob?.completedAt ?: refreshJob?.startedAt)
+                    ?.trim()
+                    .takeIf { !it.isNullOrBlank() }
+                if (refreshedAt != null && refreshedAt != lastRefreshAt) {
+                    lastRefreshAt = refreshedAt
+                }
+                if (page == null) {
+                    if (cached == null) {
+                        errorMessage = app.getString(R.string.patch_bundle_discovery_error)
+                    } else if (lastRefreshAt != null) {
+                        val updatedBundles = applyLastRefreshed(cached.bundles)
+                        val entry = BundleCacheEntry(
+                            bundles = updatedBundles,
+                            fingerprint = fingerprint(updatedBundles),
+                            apiHost = cached.apiHost
+                        )
+                        bundleCache[key] = entry
+                        bundles = entry.bundles
+                        persistDiskCache(key, entry)
                     }
-                    val refreshDeferred = async {
-                        api.getLatestRefreshJob().getOrNull()
+                } else {
+                    currentApiHost = page.apiHost
+                    val resolvedSnapshot = applyLastRefreshed(page.bundles)
+                    val fingerprint = fingerprint(resolvedSnapshot)
+                    if (cached == null || cached.fingerprint != fingerprint || cached.apiHost != page.apiHost) {
+                        val entry = BundleCacheEntry(
+                            bundles = resolvedSnapshot,
+                            fingerprint = fingerprint,
+                            apiHost = page.apiHost
+                        )
+                        bundleCache[key] = entry
+                        bundles = entry.bundles
+                        persistDiskCache(key, entry)
                     }
-                    bundlesDeferred.await() to refreshDeferred.await()
+                    nextOffset = resolvedSnapshot.size
+                    canLoadMore = resolvedSnapshot.size >= PAGE_SIZE
+                    errorMessage = null
+                }
+            } finally {
+                if (token == refreshToken) {
+                    isLoading = false
+                    isFirstPageRefreshInProgress = false
                 }
             }
-            if (token != refreshToken) return@launch
-            val refreshedAt = refreshJob?.startedAt?.trim().takeIf { !it.isNullOrBlank() }
-            if (refreshedAt != null && refreshedAt != lastRefreshAt) {
-                lastRefreshAt = refreshedAt
-            }
-            val resolvedSnapshot = snapshot?.let { applyLastRefreshed(it) }
-            if (resolvedSnapshot == null) {
-                if (cached == null) {
-                    errorMessage = app.getString(R.string.patch_bundle_discovery_error)
-                } else if (lastRefreshAt != null) {
-                    val updatedBundles = applyLastRefreshed(cached.bundles)
-                    val entry = BundleCacheEntry(updatedBundles, fingerprint(updatedBundles))
-                    bundleCache[key] = entry
-                    bundles = entry.bundles
-                    persistDiskCache(key, entry)
-                }
-            } else {
-                val fingerprint = fingerprint(resolvedSnapshot)
-                if (cached == null || cached.fingerprint != fingerprint) {
-                    val entry = BundleCacheEntry(resolvedSnapshot, fingerprint)
-                    bundleCache[key] = entry
-                    bundles = entry.bundles
-                    persistDiskCache(key, entry)
-                }
-                nextOffset = resolvedSnapshot.size
-                canLoadMore = resolvedSnapshot.size >= PAGE_SIZE
-                errorMessage = null
-            }
-            isLoading = false
         }
     }
 
     fun loadMore() {
-        if (!canLoadMore || isLoadingMore) return
+        if (isFirstPageRefreshInProgress || !canLoadMore || isLoadingMore) return
         viewModelScope.launch {
             loadNextPageInternal(force = false)
         }
@@ -194,7 +214,7 @@ class BundleDiscoveryViewModel(
             try {
                 val queryLower = trimmedBundle.lowercase()
                 while (token == refreshToken) {
-                    if (isLoading || isLoadingMore) {
+                    if (isLoading || isFirstPageRefreshInProgress || isLoadingMore) {
                         delay(50)
                         continue
                     }
@@ -325,34 +345,60 @@ class BundleDiscoveryViewModel(
     fun bundleEndpoints(bundle: ExternalBundleSnapshot): Set<String> {
         val endpoints = mutableSetOf<String>()
         bundle.downloadUrl?.let { endpoints.add(it) }
-        graphqlBundleEndpoint(bundle, useDev = false, prerelease = null)?.let { endpoints.add(it) }
-        graphqlBundleEndpoint(bundle, useDev = true, prerelease = null)?.let { endpoints.add(it) }
-        graphqlBundleEndpoint(bundle, useDev = false)?.let { endpoints.add(it) }
-        graphqlBundleEndpoint(bundle, useDev = true)?.let { endpoints.add(it) }
-        legacyEndpoint(bundle.bundleId)?.let { endpoints.add(it) }
+        externalBundleEndpoint(bundle, useDev = false, prerelease = null)?.let { endpoints.add(it) }
+        externalBundleEndpoint(bundle, useDev = true, prerelease = null)?.let { endpoints.add(it) }
+        externalBundleEndpoint(bundle, useDev = false)?.let { endpoints.add(it) }
+        externalBundleEndpoint(bundle, useDev = true)?.let { endpoints.add(it) }
+        legacyV2Endpoint(bundle, useDev = false, prerelease = null)?.let { endpoints.add(it) }
+        legacyV2Endpoint(bundle, useDev = true, prerelease = null)?.let { endpoints.add(it) }
+        legacyV2Endpoint(bundle, useDev = false)?.let { endpoints.add(it) }
+        legacyV2Endpoint(bundle, useDev = true)?.let { endpoints.add(it) }
+        legacyEndpoint(bundle.bundleId, bundleApiHost(bundle)).let(endpoints::add)
         return endpoints
     }
 
-    fun remoteBundleUrl(bundle: ExternalBundleSnapshot): String? {
-        val host = bundleHostFromDownload(bundle.downloadUrl)
-            ?: bundleHostFromDownload(bundle.signatureDownloadUrl)
-            ?: STABLE_BUNDLES_HOST
-        val owner = bundle.ownerName.trim()
-        val repo = bundle.repoName.trim()
-        return if (owner.isNotBlank() && repo.isNotBlank()) {
-            val channel = if (bundle.isPrerelease) "prerelease" else "stable"
-            "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
-        } else if (bundle.bundleId > 0) {
-            "https://$host/bundles/id?id=${bundle.bundleId}"
-        } else {
-            null
-        }
+    fun discoverySiteUrl(): String {
+        val host = currentApiHost
+            ?.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+            ?: bundles.orEmpty().firstNotNullOfOrNull { bundle ->
+                bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+            }
+        return ExternalBundlesEndpoints.siteUrl(host)
     }
 
-    private fun legacyEndpoint(bundleId: Int): String? =
-        "https://revanced-external-bundles.brosssh.com/bundles/id?id=$bundleId"
+    fun remoteBundleUrl(bundle: ExternalBundleSnapshot): String? {
+        return ExternalBundlesEndpoints.latestBundleUrl(
+            host = bundleApiHost(bundle),
+            sourceUrl = bundleSourceUrl(bundle),
+            prerelease = bundle.isPrerelease
+        )
+    }
 
-    private fun graphqlBundleEndpoint(
+    private fun bundleApiHost(bundle: ExternalBundleSnapshot): String {
+        val apiHost = bundle.apiHost.trim().lowercase(Locale.US)
+        return apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
+            ?: bundleHostFromDownload(bundle.downloadUrl)
+            ?: bundleHostFromDownload(bundle.signatureDownloadUrl)
+            ?: ExternalBundlesEndpoints.STABLE_HOST
+    }
+
+    private fun legacyEndpoint(bundleId: Int, apiHost: String): String =
+        "https://$apiHost/bundles/id?id=$bundleId"
+
+    private fun externalBundleEndpoint(
+        bundle: ExternalBundleSnapshot,
+        useDev: Boolean,
+        prerelease: Boolean? = bundle.isPrerelease
+    ): String? {
+        val host = if (useDev) {
+            ExternalBundlesEndpoints.DEV_HOST
+        } else {
+            ExternalBundlesEndpoints.STABLE_HOST
+        }
+        return ExternalBundlesEndpoints.latestBundleUrl(host, bundleSourceUrl(bundle), prerelease)
+    }
+
+    private fun legacyV2Endpoint(
         bundle: ExternalBundleSnapshot,
         useDev: Boolean,
         prerelease: Boolean? = bundle.isPrerelease
@@ -360,11 +406,7 @@ class BundleDiscoveryViewModel(
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
         if (owner.isBlank() || repo.isBlank()) return null
-        val host = if (useDev) {
-            "revanced-external-bundles-dev.brosssh.com"
-        } else {
-            "revanced-external-bundles.brosssh.com"
-        }
+        val host = if (useDev) ExternalBundlesEndpoints.DEV_HOST else ExternalBundlesEndpoints.STABLE_HOST
         val channel = when (prerelease) {
             null -> "any"
             true -> "prerelease"
@@ -373,35 +415,54 @@ class BundleDiscoveryViewModel(
         return "https://$host/api/v2/bundle/$owner/$repo/latest?channel=$channel"
     }
 
-    fun loadPatches(bundleId: Int) {
-        if (patchesByBundle.containsKey(bundleId) || patchesLoading[bundleId] == true) return
+    private fun bundleSourceUrl(bundle: ExternalBundleSnapshot): String =
+        bundle.sourceUrl.trim().takeIf { it.isNotBlank() }
+            ?: if (bundle.ownerName.isNotBlank() && bundle.repoName.isNotBlank()) {
+                "https://github.com/${bundle.ownerName.trim()}/${bundle.repoName.trim()}"
+            } else {
+                ""
+            }
+
+    fun loadPatches(bundle: ExternalBundleSnapshot) {
+        val key = patchStateKey(bundle)
+        if (patchesByBundle.containsKey(key) || patchesLoading[key] == true) return
+        val generation = bundleDatasetGeneration
         viewModelScope.launch {
-            patchesLoading[bundleId] = true
-            patchesError[bundleId] = null
+            if (generation != bundleDatasetGeneration) return@launch
+            patchesLoading[key] = true
+            patchesError[key] = null
             try {
                 val patches = withContext(Dispatchers.IO) {
-                    api.getBundlePatches(bundleId).getOrNull()
+                    api.getBundlePatches(bundle).getOrNull()
                 }
+                if (generation != bundleDatasetGeneration) return@launch
                 if (patches == null) {
-                    patchesError[bundleId] = app.getString(R.string.patch_bundle_discovery_error)
+                    patchesError[key] = app.getString(R.string.patch_bundle_discovery_error)
                 } else {
-                    patchesByBundle[bundleId] = patches
+                    patchesByBundle[key] = patches
                 }
             } catch (cancel: CancellationException) {
                 throw cancel
             } catch (error: Throwable) {
-                patchesError[bundleId] = app.getString(R.string.patch_bundle_discovery_error)
+                if (generation == bundleDatasetGeneration) {
+                    patchesError[key] = app.getString(R.string.patch_bundle_discovery_error)
+                }
             } finally {
-                patchesLoading[bundleId] = false
+                if (generation == bundleDatasetGeneration) {
+                    patchesLoading[key] = false
+                }
             }
         }
     }
 
-    fun getPatches(bundleId: Int): List<ExternalBundlePatch>? = patchesByBundle[bundleId]
+    fun getPatches(bundle: ExternalBundleSnapshot): List<ExternalBundlePatch>? =
+        patchesByBundle[patchStateKey(bundle)]
 
-    fun isPatchesLoading(bundleId: Int): Boolean = patchesLoading[bundleId] == true
+    fun isPatchesLoading(bundle: ExternalBundleSnapshot): Boolean =
+        patchesLoading[patchStateKey(bundle)] == true
 
-    fun getPatchesError(bundleId: Int): String? = patchesError[bundleId]
+    fun getPatchesError(bundle: ExternalBundleSnapshot): String? =
+        patchesError[patchStateKey(bundle)]
 
     fun getExportProgress(bundleId: Int): BundleExportProgress? = bundleExports[bundleId]
 
@@ -447,30 +508,86 @@ class BundleDiscoveryViewModel(
     }
 
     private suspend fun loadNextPageInternal(force: Boolean): Boolean {
-        if ((!canLoadMore && !force) || isLoadingMore) return false
+        if (isFirstPageRefreshInProgress || (!canLoadMore && !force) || isLoadingMore) return false
         val key = currentQueryKey
         val query = key.takeIf { it.isNotBlank() }
+        val requestedHost = currentApiHost
+        val requestedOffset = nextOffset
+        val requestedRefreshToken = refreshToken
         isLoadingMore = true
         return try {
-            val snapshot = withContext(Dispatchers.IO) {
-                api.getBundles(query, limit = PAGE_SIZE, offset = nextOffset).getOrNull()
+            val (page, replaceCurrentPage) = withContext(Dispatchers.IO) {
+                val requestedPage = api.getBundles(
+                    packageNameQuery = query,
+                    limit = PAGE_SIZE,
+                    offset = requestedOffset,
+                    apiHost = requestedHost
+                ).getOrNull()
+                if (requestedPage != null || requestedHost == null) {
+                    requestedPage to false
+                } else {
+                    val alternateHost = ExternalBundlesEndpoints.alternateHost(requestedHost)
+                    val fallbackPage = alternateHost?.let { host ->
+                        api.getBundles(
+                            packageNameQuery = query,
+                            limit = PAGE_SIZE,
+                            offset = 0,
+                            apiHost = host
+                        ).getOrNull()
+                    }
+                    fallbackPage to (fallbackPage != null)
+                }
             }
-            val resolvedSnapshot = snapshot?.let { applyLastRefreshed(it) }
-            if (!resolvedSnapshot.isNullOrEmpty()) {
-                val current = bundles.orEmpty()
-                val updated = current + resolvedSnapshot
+            if (
+                key != currentQueryKey ||
+                requestedOffset != nextOffset ||
+                requestedHost != currentApiHost ||
+                requestedRefreshToken != refreshToken
+            ) {
+                return false
+            }
+            if (page != null) {
+                if (replaceCurrentPage) {
+                    invalidatePatchState()
+                }
+                val refreshedAt = (page.refreshJob?.completedAt ?: page.refreshJob?.startedAt)
+                    ?.trim()
+                    .takeIf { !it.isNullOrBlank() }
+                if (refreshedAt != null) {
+                    lastRefreshAt = refreshedAt
+                }
+                val resolvedSnapshot = applyLastRefreshed(page.bundles)
+                val selectedHost = page.apiHost
+                currentApiHost = selectedHost
+                val updated = if (replaceCurrentPage) {
+                    resolvedSnapshot
+                } else {
+                    bundles.orEmpty() + resolvedSnapshot
+                }
                 val cached = bundleCache[key]
                 val entry = if (cached != null) {
-                    cached.copy(bundles = updated)
+                    cached.copy(
+                        bundles = updated,
+                        fingerprint = fingerprint(updated),
+                        apiHost = selectedHost
+                    )
                 } else {
-                    BundleCacheEntry(updated, fingerprint(updated))
+                    BundleCacheEntry(
+                        bundles = updated,
+                        fingerprint = fingerprint(updated),
+                        apiHost = selectedHost
+                    )
                 }
                 bundleCache[key] = entry
                 bundles = entry.bundles
                 persistDiskCache(key, entry)
-                nextOffset += resolvedSnapshot.size
+                nextOffset = if (replaceCurrentPage) {
+                    resolvedSnapshot.size
+                } else {
+                    requestedOffset + resolvedSnapshot.size
+                }
                 canLoadMore = resolvedSnapshot.size >= PAGE_SIZE
-                true
+                resolvedSnapshot.isNotEmpty()
             } else {
                 canLoadMore = false
                 false
@@ -529,6 +646,7 @@ class BundleDiscoveryViewModel(
     private fun fingerprint(bundles: List<ExternalBundleSnapshot>): String =
         bundles.joinToString(separator = "|") { bundle ->
             listOf(
+                bundle.apiHost,
                 bundle.bundleId,
                 bundle.version,
                 bundle.downloadUrl,
@@ -560,10 +678,22 @@ class BundleDiscoveryViewModel(
         if (trimmed.isEmpty()) return null
         val host = runCatching { URI(trimmed).host?.lowercase() }.getOrNull() ?: return null
         return when {
-            host == DEV_BUNDLES_HOST -> DEV_BUNDLES_HOST
-            host == STABLE_BUNDLES_HOST -> STABLE_BUNDLES_HOST
+            host == ExternalBundlesEndpoints.DEV_HOST -> ExternalBundlesEndpoints.DEV_HOST
+            host == ExternalBundlesEndpoints.STABLE_HOST -> ExternalBundlesEndpoints.STABLE_HOST
             else -> null
         }
+    }
+
+    private fun patchStateKey(bundle: ExternalBundleSnapshot) = BundleInstanceKey(
+        apiHost = bundle.apiHost.trim().lowercase(Locale.US),
+        bundleId = bundle.bundleId
+    )
+
+    private fun invalidatePatchState() {
+        bundleDatasetGeneration++
+        patchesByBundle.clear()
+        patchesLoading.clear()
+        patchesError.clear()
     }
 
     suspend fun fetchLatestBundle(
@@ -577,7 +707,8 @@ class BundleDiscoveryViewModel(
     @Serializable
     private data class BundleCacheEntry(
         val bundles: List<ExternalBundleSnapshot>,
-        val fingerprint: String
+        val fingerprint: String,
+        val apiHost: String = ""
     )
 
     data class BundleExportProgress(val bytesRead: Long, val bytesTotal: Long?)
@@ -585,6 +716,11 @@ class BundleDiscoveryViewModel(
     private data class SearchGroup(
         val release: ExternalBundleSnapshot?,
         val prerelease: ExternalBundleSnapshot?
+    )
+
+    private data class BundleInstanceKey(
+        val apiHost: String,
+        val bundleId: Int
     )
 
     private fun cacheFileForKey(key: String): File {
@@ -611,8 +747,6 @@ class BundleDiscoveryViewModel(
     }
 
     private companion object {
-        const val STABLE_BUNDLES_HOST = "revanced-external-bundles.brosssh.com"
-        const val DEV_BUNDLES_HOST = "revanced-external-bundles-dev.brosssh.com"
         const val PAGE_SIZE = 30
     }
 }

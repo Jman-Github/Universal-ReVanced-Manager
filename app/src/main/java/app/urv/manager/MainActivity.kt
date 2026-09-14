@@ -787,8 +787,19 @@ private fun ReVancedManager(
         composable<PatchBundleDiscovery> {
             PatchBundleDiscoveryScreen(
                 onBackClick = navController::popBackStack,
-                onViewPatches = { bundleId ->
-                    navController.navigate(PatchBundleDiscoveryPatches(bundleId))
+                onViewPatches = { bundle ->
+                    navController.navigate(
+                        PatchBundleDiscoveryPatches(
+                            bundleId = bundle.bundleId,
+                            apiHost = bundle.apiHost,
+                            sourceUrl = bundle.sourceUrl,
+                            version = bundle.version,
+                            isPrerelease = bundle.isPrerelease,
+                            patchCount = bundle.patchCount,
+                            ownerName = bundle.ownerName,
+                            repoName = bundle.repoName
+                        )
+                    )
                 }
             )
         }
@@ -797,6 +808,13 @@ private fun ReVancedManager(
             val data = it.toRoute<PatchBundleDiscoveryPatches>()
             PatchBundleDiscoveryPatchesScreen(
                 bundleId = data.bundleId,
+                apiHost = data.apiHost,
+                sourceUrl = data.sourceUrl,
+                version = data.version,
+                isPrerelease = data.isPrerelease,
+                patchCount = data.patchCount,
+                ownerName = data.ownerName,
+                repoName = data.repoName,
                 onBackClick = navController::popBackStack
             )
         }

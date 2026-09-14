@@ -10,7 +10,6 @@ import app.urv.manager.network.dto.GraphqlRequest
 import app.urv.manager.network.dto.GraphqlResponse
 import app.urv.manager.network.dto.PatchNode
 import app.urv.manager.network.dto.RefreshJobNode
-import app.urv.manager.network.dto.RefreshJobsQueryData
 import app.urv.manager.network.service.HttpService
 import app.urv.manager.network.utils.APIFailure
 import app.urv.manager.network.utils.APIResponse
@@ -21,86 +20,65 @@ import io.ktor.client.request.url
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.io.IOException
+
+data class ExternalBundlesPage(
+    val bundles: List<ExternalBundleSnapshot>,
+    val apiHost: String,
+    val refreshJob: RefreshJobNode?
+)
 
 class ExternalBundlesApi(
     private val client: HttpService,
 ) {
+    private val endpointSelectionMutex = Mutex()
+    @Volatile
+    private var cachedEndpointSelection: CachedEndpointSelection? = null
+
     suspend fun getBundles(
         packageNameQuery: String? = null,
         limit: Int = DEFAULT_PAGE_SIZE,
-        offset: Int = 0
-    ): APIResponse<List<ExternalBundleSnapshot>> {
-        val stableVariables = buildBundleVariables(packageNameQuery, limit, offset)
-        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLES_QUERY, stableVariables)
-        if (stableResponse is APIResponse.Success) {
-            return stableResponse.transform { data ->
-                data.bundle.map { it.toSnapshot(STABLE_BUNDLES_HOST) }
-            }
+        offset: Int = 0,
+        apiHost: String? = null
+    ): APIResponse<ExternalBundlesPage> {
+        val variables = buildBundleVariables(packageNameQuery, limit, offset)
+        endpointForHost(apiHost.orEmpty())?.let { endpoint ->
+            return graphqlWithDeadline<BundlesQueryData>(
+                endpoint.graphqlUrl,
+                BUNDLES_QUERY,
+                variables
+            ).transform { data -> data.toDiscoveryPage(endpoint) }
         }
-
-        val devVariables = buildBundleVariables(packageNameQuery, limit, offset)
-        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLES_QUERY, devVariables)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                data.bundle.map { it.toSnapshot(DEV_BUNDLES_HOST) }
-            }
-        }
-
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-            is APIResponse.Success -> APIResponse.Success(emptyList())
-        }
+        return queryPreferred<BundlesQueryData, ExternalBundlesPage>(
+            BUNDLES_QUERY,
+            variables
+        ) { data, endpoint -> data.toDiscoveryPage(endpoint) }
     }
 
-    suspend fun getBundleById(bundleId: Int): APIResponse<ExternalBundleSnapshot?> {
+    suspend fun getBundleById(
+        bundleId: Int,
+        apiHost: String = ExternalBundlesEndpoints.STABLE_HOST
+    ): APIResponse<ExternalBundleSnapshot?> {
         val variables = buildJsonObject {
             put("id", JsonPrimitive(bundleId))
         }
-        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLE_BY_ID_QUERY, variables)
-        if (stableResponse is APIResponse.Success) {
-            return stableResponse.transform { data ->
-                data.bundle.firstOrNull()?.toSnapshot(STABLE_BUNDLES_HOST)
-            }
-        }
-
-        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLE_BY_ID_QUERY, variables)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                data.bundle.firstOrNull()?.toSnapshot(DEV_BUNDLES_HOST)
-            }
-        }
-
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-            is APIResponse.Success -> APIResponse.Success(null)
-        }
-    }
-
-    suspend fun getLatestRefreshJob(): APIResponse<RefreshJobNode?> {
-        val stableResponse = graphql<RefreshJobsQueryData>(STABLE_GRAPHQL_URL, REFRESH_JOBS_QUERY, null)
-        if (stableResponse is APIResponse.Success) {
-            return stableResponse.transform { data ->
-                data.refreshJobs.firstOrNull()
-            }
-        }
-
-        val devResponse = graphql<RefreshJobsQueryData>(DEV_GRAPHQL_URL, REFRESH_JOBS_QUERY, null)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                data.refreshJobs.firstOrNull()
-            }
-        }
-
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-            is APIResponse.Success -> APIResponse.Success(null)
+        val endpoint = endpointForHost(apiHost) ?: STABLE_ENDPOINT
+        return graphqlWithDeadline<BundlesQueryData>(
+            endpoint.graphqlUrl,
+            BUNDLE_BY_ID_QUERY,
+            variables
+        ).transform { data ->
+            data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
         }
     }
 
@@ -119,29 +97,11 @@ class ExternalBundlesApi(
             put("repo", JsonPrimitive(trimmedRepo))
             put("prerelease", JsonPrimitive(prerelease))
         }
-        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLE_LATEST_QUERY, variables)
-        if (stableResponse is APIResponse.Success) {
-            val stableSnapshot = stableResponse.data.bundle.firstOrNull()?.toSnapshot(STABLE_BUNDLES_HOST)
-            if (stableSnapshot != null) {
-                return APIResponse.Success(stableSnapshot)
-            }
-        }
-
-        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLE_LATEST_QUERY, variables)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                data.bundle.firstOrNull()?.toSnapshot(DEV_BUNDLES_HOST)
-            }
-        }
-
-        if (stableResponse is APIResponse.Success) {
-            return APIResponse.Success(null)
-        }
-
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-            is APIResponse.Success -> APIResponse.Success(null)
+        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+            BUNDLE_LATEST_QUERY,
+            variables
+        ) { data, endpoint ->
+            data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
         }
     }
 
@@ -158,29 +118,11 @@ class ExternalBundlesApi(
             put("owner", JsonPrimitive(trimmedOwner))
             put("repo", JsonPrimitive(trimmedRepo))
         }
-        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLE_LATEST_ANY_QUERY, variables)
-        if (stableResponse is APIResponse.Success) {
-            val stableSnapshot = stableResponse.data.bundle.firstOrNull()?.toSnapshot(STABLE_BUNDLES_HOST)
-            if (stableSnapshot != null) {
-                return APIResponse.Success(stableSnapshot)
-            }
-        }
-
-        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLE_LATEST_ANY_QUERY, variables)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                data.bundle.firstOrNull()?.toSnapshot(DEV_BUNDLES_HOST)
-            }
-        }
-
-        if (stableResponse is APIResponse.Success) {
-            return APIResponse.Success(null)
-        }
-
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-            is APIResponse.Success -> APIResponse.Success(null)
+        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+            BUNDLE_LATEST_ANY_QUERY,
+            variables
+        ) { data, endpoint ->
+            data.bundle.firstOrNull()?.toSnapshot(endpoint.host)
         }
     }
 
@@ -197,72 +139,109 @@ class ExternalBundlesApi(
         }
 
         val targetLimit = limit.coerceAtLeast(1)
+        val preferredEndpoint = preferredEndpoint()
+        val preferredResponse = getBundleHistory(
+            preferredEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit
+        )
+        if (preferredResponse is APIResponse.Success) return preferredResponse
+
+        val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
+        return getBundleHistory(
+            fallbackEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit
+        ).also { response ->
+            if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
+        }
+    }
+
+    private suspend fun getBundleHistory(
+        endpoint: Endpoint,
+        owner: String,
+        repo: String,
+        prerelease: Boolean?,
+        limit: Int
+    ): APIResponse<List<ExternalBundleSnapshot>> {
         val history = mutableListOf<ExternalBundleSnapshot>()
         var offset = 0
 
-        while (history.size < targetLimit) {
-            val pageLimit = minOf(DEFAULT_PAGE_SIZE, targetLimit - history.size)
+        while (history.size < limit) {
+            val pageLimit = minOf(DEFAULT_PAGE_SIZE, limit - history.size)
             val variables = buildBundleHistoryVariables(
-                owner = trimmedOwner,
-                repo = trimmedRepo,
+                owner = owner,
+                repo = repo,
                 limit = pageLimit,
                 offset = offset,
                 prerelease = prerelease
             )
-            val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLES_QUERY, variables)
-            if (stableResponse is APIResponse.Success) {
-                val batch = stableResponse.data.bundle.map { it.toSnapshot(STABLE_BUNDLES_HOST) }
-                if (batch.isNotEmpty()) {
+            when (val response = graphqlWithDeadline<BundlesQueryData>(endpoint.graphqlUrl, BUNDLES_QUERY, variables)) {
+                is APIResponse.Success -> {
+                    val batch = response.data.bundle.map { it.toSnapshot(endpoint.host) }
                     history += batch
                     if (batch.size < pageLimit) break
                     offset += batch.size
-                    continue
                 }
-                if (history.isNotEmpty()) break
-            }
-
-            val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLES_QUERY, variables)
-            if (devResponse is APIResponse.Success) {
-                val batch = devResponse.data.bundle.map { it.toSnapshot(DEV_BUNDLES_HOST) }
-                history += batch
-                if (batch.size < pageLimit) break
-                offset += batch.size
-                continue
-            }
-
-            return when (devResponse) {
-                is APIResponse.Error -> APIResponse.Error(devResponse.error)
-                is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
-                is APIResponse.Success -> APIResponse.Success(history)
+                is APIResponse.Error -> return APIResponse.Error(response.error)
+                is APIResponse.Failure -> return APIResponse.Failure(response.error)
             }
         }
 
-        return APIResponse.Success(history.take(targetLimit))
+        return APIResponse.Success(history.take(limit))
     }
 
-    suspend fun getBundlePatches(bundleId: Int): APIResponse<List<ExternalBundlePatch>> {
+    suspend fun getBundlePatches(bundle: ExternalBundleSnapshot): APIResponse<List<ExternalBundlePatch>> {
         val variables = buildJsonObject {
-            put("id", JsonPrimitive(bundleId))
+            put("id", JsonPrimitive(bundle.bundleId))
         }
-        val stableResponse = graphql<BundlesQueryData>(STABLE_GRAPHQL_URL, BUNDLE_PATCHES_QUERY, variables)
-        if (stableResponse is APIResponse.Success) {
-            return stableResponse.transform { data ->
-                val bundle = data.bundle.firstOrNull()
-                bundle?.patches?.map { it.toPatch() }.orEmpty()
+        val preferredEndpoint = endpointForHost(bundle.apiHost) ?: STABLE_ENDPOINT
+        val fallbackEndpoint = if (preferredEndpoint == STABLE_ENDPOINT) DEV_ENDPOINT else STABLE_ENDPOINT
+        val preferredResponse = graphqlWithDeadline<BundlesQueryData>(
+            preferredEndpoint.graphqlUrl,
+            BUNDLE_PATCHES_QUERY,
+            variables
+        )
+        val preferredPatches = (preferredResponse as? APIResponse.Success)
+            ?.data
+            ?.bundle
+            ?.firstOrNull()
+            ?.patches
+            ?.map { it.toPatch() }
+        if (preferredPatches != null && (preferredPatches.isNotEmpty() || bundle.patchCount <= 0)) {
+            return APIResponse.Success(preferredPatches)
+        }
+
+        val fallbackVariables = buildBundleIdentityVariables(bundle)
+            ?: return preferredPatches?.let { APIResponse.Success(it) }
+                ?: preferredResponse.transform { data ->
+                    data.bundle.firstOrNull()?.patches?.map { it.toPatch() }.orEmpty()
+                }
+        val fallbackResponse = graphqlWithDeadline<BundlesQueryData>(
+            fallbackEndpoint.graphqlUrl,
+            BUNDLE_PATCHES_BY_IDENTITY_QUERY,
+            fallbackVariables
+        )
+        if (fallbackResponse is APIResponse.Success) {
+            val fallbackPatches = fallbackResponse.data.bundle
+                .firstOrNull()
+                ?.patches
+                ?.map { it.toPatch() }
+                .orEmpty()
+            if (fallbackPatches.isNotEmpty() || preferredPatches == null) {
+                return APIResponse.Success(fallbackPatches)
             }
         }
 
-        val devResponse = graphql<BundlesQueryData>(DEV_GRAPHQL_URL, BUNDLE_PATCHES_QUERY, variables)
-        if (devResponse is APIResponse.Success) {
-            return devResponse.transform { data ->
-                val bundle = data.bundle.firstOrNull()
-                bundle?.patches?.map { it.toPatch() }.orEmpty()
-            }
-        }
+        preferredPatches?.let { return APIResponse.Success(it) }
 
-        return when (devResponse) {
-            is APIResponse.Error -> APIResponse.Error(devResponse.error)
-            is APIResponse.Failure -> APIResponse.Failure(devResponse.error)
+        return when (fallbackResponse) {
+            is APIResponse.Error -> APIResponse.Error(fallbackResponse.error)
+            is APIResponse.Failure -> APIResponse.Failure(fallbackResponse.error)
             is APIResponse.Success -> APIResponse.Success(emptyList())
         }
     }
@@ -296,6 +275,16 @@ class ExternalBundlesApi(
         }
     }
 
+    private suspend inline fun <reified T> graphqlWithDeadline(
+        endpointUrl: String,
+        query: String,
+        variables: JsonObject? = null,
+    ): APIResponse<T> = withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
+        graphql<T>(endpointUrl, query, variables)
+    } ?: APIResponse.Failure(
+        APIFailure(IOException("Timed out querying $endpointUrl"), null)
+    )
+
     private fun BundleNode.toSnapshot(bundlesHost: String): ExternalBundleSnapshot {
         val metadata = source?.sourceMetadata
         val bundleTypeValue = bundleType?.trim().orEmpty()
@@ -310,6 +299,7 @@ class ExternalBundlesApi(
         val normalizedSignatureUrl = normalizeExternalBundlesUrl(signatureDownloadUrl, bundlesHost)
 
         return ExternalBundleSnapshot(
+            apiHost = bundlesHost,
             ownerName = metadata?.ownerName.orEmpty(),
             ownerAvatarUrl = metadata?.ownerAvatarUrl,
             repoName = metadata?.repoName.orEmpty(),
@@ -441,13 +431,177 @@ class ExternalBundlesApi(
         put("offset", JsonPrimitive(offset))
     }
 
+    private fun BundlesQueryData.toDiscoveryPage(endpoint: Endpoint) = ExternalBundlesPage(
+        bundles = bundle.map { it.toSnapshot(endpoint.host) },
+        apiHost = endpoint.host,
+        refreshJob = refreshJobs.firstOrNull()
+    )
+
+    private fun buildBundleIdentityVariables(bundle: ExternalBundleSnapshot): JsonObject? {
+        val sourceUrl = bundle.sourceUrl.trim().removeSuffix("/")
+        val version = bundle.version.trim()
+        if (sourceUrl.isBlank() || version.isBlank()) return null
+        return buildJsonObject {
+            put("sourceUrls", buildJsonArray {
+                add(JsonPrimitive(sourceUrl))
+                add(JsonPrimitive("$sourceUrl/"))
+            })
+            put("version", JsonPrimitive(version))
+            put("prerelease", JsonPrimitive(bundle.isPrerelease))
+        }
+    }
+
+    private data class Endpoint(
+        val host: String,
+        val graphqlUrl: String,
+        val apiDocumentUrl: String
+    )
+
+    private data class ResolvedEndpointSelection(
+        val endpoint: Endpoint,
+        val cacheDurationMillis: Long
+    )
+
+    private data class CachedEndpointSelection(
+        val endpoint: Endpoint,
+        val resolvedAtMillis: Long,
+        val cacheDurationMillis: Long
+    )
+
+    @Serializable
+    private data class ApiDocument(
+        val info: ApiInfo
+    )
+
+    @Serializable
+    private data class ApiInfo(
+        val version: String
+    )
+
+    private suspend inline fun <reified T, R> queryPreferred(
+        query: String,
+        variables: JsonObject?,
+        crossinline transform: (T, Endpoint) -> R
+    ): APIResponse<R> {
+        val preferredEndpoint = preferredEndpoint()
+        val preferredResponse = graphqlWithDeadline<T>(
+            preferredEndpoint.graphqlUrl,
+            query,
+            variables
+        )
+        if (preferredResponse is APIResponse.Success) {
+            return APIResponse.Success(transform(preferredResponse.data, preferredEndpoint))
+        }
+
+        val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
+        return graphqlWithDeadline<T>(fallbackEndpoint.graphqlUrl, query, variables)
+            .transform { data -> transform(data, fallbackEndpoint) }
+            .also { response ->
+                if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
+            }
+    }
+
+    private suspend fun preferredEndpoint(): Endpoint {
+        cachedEndpoint()?.let { return it }
+        endpointSelectionMutex.lock()
+        return try {
+            cachedEndpoint() ?: resolvePreferredEndpoint().let { selection ->
+                cachedEndpointSelection = CachedEndpointSelection(
+                    endpoint = selection.endpoint,
+                    resolvedAtMillis = monotonicMillis(),
+                    cacheDurationMillis = selection.cacheDurationMillis
+                )
+                selection.endpoint
+            }
+        } finally {
+            endpointSelectionMutex.unlock()
+        }
+    }
+
+    private fun cachedEndpoint(): Endpoint? {
+        val selection = cachedEndpointSelection ?: return null
+        val ageMillis = monotonicMillis() - selection.resolvedAtMillis
+        return selection.endpoint.takeIf { ageMillis < selection.cacheDurationMillis }
+    }
+
+    private suspend fun cacheDegradedEndpoint(endpoint: Endpoint) {
+        endpointSelectionMutex.lock()
+        try {
+            cachedEndpointSelection = CachedEndpointSelection(
+                endpoint = endpoint,
+                resolvedAtMillis = monotonicMillis(),
+                cacheDurationMillis = DEGRADED_ENDPOINT_SELECTION_TTL_MS
+            )
+        } finally {
+            endpointSelectionMutex.unlock()
+        }
+    }
+
+    private suspend fun resolvePreferredEndpoint(): ResolvedEndpointSelection = coroutineScope {
+        val stableVersion = async { apiVersion(STABLE_ENDPOINT) }
+        val devVersion = async { apiVersion(DEV_ENDPOINT) }
+        val stableVersionValue = stableVersion.await()
+        val devVersionValue = devVersion.await()
+        val endpoint = endpointForHost(
+            ExternalBundlesEndpoints.preferredHost(stableVersionValue, devVersionValue)
+        ) ?: DEV_ENDPOINT
+        ResolvedEndpointSelection(
+            endpoint = endpoint,
+            cacheDurationMillis = if (stableVersionValue != null && devVersionValue != null) {
+                ENDPOINT_SELECTION_TTL_MS
+            } else {
+                DEGRADED_ENDPOINT_SELECTION_TTL_MS
+            }
+        )
+    }
+
+    private fun monotonicMillis(): Long = System.nanoTime() / 1_000_000L
+
+    private suspend fun apiVersion(endpoint: Endpoint): String? =
+        withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
+            when (val response = client.request<ApiDocument> {
+                method = HttpMethod.Get
+                url(endpoint.apiDocumentUrl)
+            }) {
+                is APIResponse.Success -> response.data.info.version.trim().takeIf(String::isNotBlank)
+                is APIResponse.Error,
+                is APIResponse.Failure -> null
+            }
+        }
+
+    private fun alternateEndpoint(endpoint: Endpoint): Endpoint =
+        if (endpoint == STABLE_ENDPOINT) DEV_ENDPOINT else STABLE_ENDPOINT
+
+    private fun endpointForHost(host: String): Endpoint? = when {
+        host.equals(STABLE_ENDPOINT.host, ignoreCase = true) -> STABLE_ENDPOINT
+        host.equals(DEV_ENDPOINT.host, ignoreCase = true) -> DEV_ENDPOINT
+        else -> null
+    }
+
     companion object {
-        private const val DEV_GRAPHQL_URL = "https://revanced-external-bundles-dev.brosssh.com/hasura/v1/graphql"
-        private const val STABLE_GRAPHQL_URL = "https://revanced-external-bundles.brosssh.com/hasura/v1/graphql"
-        private const val DEV_BUNDLES_HOST = "revanced-external-bundles-dev.brosssh.com"
-        private const val STABLE_BUNDLES_HOST = "revanced-external-bundles.brosssh.com"
+        private val STABLE_ENDPOINT = Endpoint(
+            host = ExternalBundlesEndpoints.STABLE_HOST,
+            graphqlUrl = "https://${ExternalBundlesEndpoints.STABLE_HOST}/hasura/v1/graphql",
+            apiDocumentUrl = "https://${ExternalBundlesEndpoints.STABLE_HOST}/api.json"
+        )
+        private val DEV_ENDPOINT = Endpoint(
+            host = ExternalBundlesEndpoints.DEV_HOST,
+            graphqlUrl = "https://${ExternalBundlesEndpoints.DEV_HOST}/hasura/v1/graphql",
+            apiDocumentUrl = "https://${ExternalBundlesEndpoints.DEV_HOST}/api.json"
+        )
+        private const val ENDPOINT_SELECTION_TTL_MS = 15 * 60 * 1_000L
+        private const val DEGRADED_ENDPOINT_SELECTION_TTL_MS = 30 * 1_000L
         private const val BUNDLES_QUERY = """
             query BundleDiscovery(${"$"}where: bundle_bool_exp, ${"$"}limit: Int, ${"$"}offset: Int) {
+              refresh_jobs(
+                where: { status: { _eq: "COMPLETED" } }
+                order_by: { started_at: desc }
+                limit: 1
+              ) {
+                started_at
+                completed_at
+                status
+              }
               bundle(
                 where: ${"$"}where
                 order_by: { created_at: desc }
@@ -499,6 +653,35 @@ class ExternalBundlesApi(
               }
             }
         """
+        private const val BUNDLE_PATCHES_BY_IDENTITY_QUERY = """
+            query BundlePatchesByIdentity(
+              ${"$"}sourceUrls: [String!]!
+              ${"$"}version: String!
+              ${"$"}prerelease: Boolean!
+            ) {
+              bundle(
+                where: {
+                  source: { url: { _in: ${"$"}sourceUrls } }
+                  version: { _eq: ${"$"}version }
+                  is_prerelease: { _eq: ${"$"}prerelease }
+                }
+                order_by: { created_at: desc }
+                limit: 1
+              ) {
+                id
+                patches {
+                  name
+                  description
+                  patch_packages {
+                    package {
+                      name
+                      version
+                    }
+                  }
+                }
+              }
+            }
+        """
         private const val BUNDLE_BY_ID_QUERY = """
             query BundleById(${"$"}id: Int!) {
               bundle(where: { id: { _eq: ${"$"}id } }) {
@@ -527,14 +710,6 @@ class ExternalBundlesApi(
                     count
                   }
                 }
-              }
-            }
-        """
-        private const val REFRESH_JOBS_QUERY = """
-            query RefreshJobs {
-              refresh_jobs(order_by: { started_at: desc }, limit: 1) {
-                started_at
-                status
               }
             }
         """

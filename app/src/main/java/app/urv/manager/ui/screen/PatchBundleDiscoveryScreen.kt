@@ -121,7 +121,7 @@ import java.util.Locale
 @Composable
 fun PatchBundleDiscoveryScreen(
     onBackClick: () -> Unit,
-    onViewPatches: (Int) -> Unit,
+    onViewPatches: (ExternalBundleSnapshot) -> Unit,
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -614,7 +614,7 @@ fun PatchBundleDiscoveryScreen(
                         }
                     }
                     IconButton(
-                        onClick = { context.openUrl("https://revanced-external-bundles.brosssh.com/") }
+                        onClick = { context.openUrl(viewModel.discoverySiteUrl()) }
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Link,
@@ -909,9 +909,7 @@ fun PatchBundleDiscoveryScreen(
                                     preferLatestAcrossChannels = useLatest
                                 )
                             },
-                            onViewPatches = { bundle ->
-                                onViewPatches(bundle.bundleId)
-                            },
+                            onViewPatches = onViewPatches,
                             onMenuRequest = { activeBundleMenu = it },
                             exportProgressFor = viewModel::getExportProgress,
                             importProgressFor = { bundle, isImported ->

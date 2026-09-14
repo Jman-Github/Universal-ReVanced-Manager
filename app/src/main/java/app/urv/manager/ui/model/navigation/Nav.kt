@@ -37,7 +37,16 @@ data object BatchPatchesSelector :
 object PatchBundleDiscovery
 
 @Serializable
-data class PatchBundleDiscoveryPatches(val bundleId: Int)
+data class PatchBundleDiscoveryPatches(
+    val bundleId: Int,
+    val apiHost: String = "",
+    val sourceUrl: String = "",
+    val version: String = "",
+    val isPrerelease: Boolean = false,
+    val patchCount: Int = 0,
+    val ownerName: String = "",
+    val repoName: String = ""
+)
 
 @Serializable
 data object MergeSplitApk

@@ -48,6 +48,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNul
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.network.dto.ExternalBundlePatch
+import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
@@ -66,6 +67,13 @@ import org.koin.compose.koinInject
 @Composable
 fun PatchBundleDiscoveryPatchesScreen(
     bundleId: Int,
+    apiHost: String,
+    sourceUrl: String,
+    version: String,
+    isPrerelease: Boolean,
+    patchCount: Int,
+    ownerName: String,
+    repoName: String,
     onBackClick: () -> Unit,
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
@@ -79,15 +87,39 @@ fun PatchBundleDiscoveryPatchesScreen(
     val bundles = viewModel.bundles
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
-    val bundle = remember(bundles, bundleId) {
-        bundles?.firstOrNull { it.bundleId == bundleId }
+    val routedBundle = remember(
+        bundleId,
+        apiHost,
+        sourceUrl,
+        version,
+        isPrerelease,
+        patchCount,
+        ownerName,
+        repoName
+    ) {
+        ExternalBundleSnapshot(
+            apiHost = apiHost,
+            bundleId = bundleId,
+            sourceUrl = sourceUrl,
+            version = version,
+            isPrerelease = isPrerelease,
+            patchCount = patchCount,
+            ownerName = ownerName,
+            repoName = repoName
+        )
     }
-    val patches = viewModel.getPatches(bundleId)
-    val patchesLoading = viewModel.isPatchesLoading(bundleId)
-    val patchesError = viewModel.getPatchesError(bundleId)
+    val bundle = remember(bundles, routedBundle) {
+        bundles?.firstOrNull {
+            it.bundleId == routedBundle.bundleId &&
+                it.apiHost.equals(routedBundle.apiHost, ignoreCase = true)
+        } ?: routedBundle
+    }
+    val patches = viewModel.getPatches(bundle)
+    val patchesLoading = viewModel.isPatchesLoading(bundle)
+    val patchesError = viewModel.getPatchesError(bundle)
 
     val importedUid = remember(bundle, sources) {
-        val endpoints = bundle?.let { viewModel.bundleEndpoints(it) }.orEmpty()
+        val endpoints = viewModel.bundleEndpoints(bundle)
         sources.firstOrNull { src ->
             src.asRemoteOrNull?.endpoint in endpoints
         }?.uid
@@ -111,9 +143,14 @@ fun PatchBundleDiscoveryPatchesScreen(
         }
     }
 
-    LaunchedEffect(bundleId, useLocalPatches) {
-        if (!useLocalPatches) {
-            viewModel.loadPatches(bundleId)
+    LaunchedEffect(bundle, useLocalPatches, patches, patchesLoading, patchesError) {
+        if (
+            !useLocalPatches &&
+            patches == null &&
+            !patchesLoading &&
+            patchesError == null
+        ) {
+            viewModel.loadPatches(bundle)
         }
     }
 
