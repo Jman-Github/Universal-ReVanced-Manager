@@ -140,7 +140,8 @@ fun AppVersion(
     appInfo: PackageInfo?,
     versionName: String? = appInfo?.versionName,
     modifier: Modifier = Modifier,
-    style: TextStyle? = null
+    style: TextStyle? = null,
+    prefixVersion: Boolean = false
 ) {
     val displayVersion = versionName?.takeIf { it.isNotBlank() } ?: return
 
@@ -149,7 +150,9 @@ fun AppVersion(
             versionName = displayVersion,
             appInfo = appInfo,
             displayVersion = displayVersion
-        ),
+        ).let { label ->
+            if (prefixVersion) "v${label.removePrefix("v").removePrefix("V")}" else label
+        },
         modifier = modifier,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = style ?: MaterialTheme.typography.bodySmall

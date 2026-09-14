@@ -90,6 +90,7 @@ import java.security.MessageDigest
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
+import app.urv.manager.util.bundleImportLabel
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.LinkedHashSet
@@ -735,49 +736,9 @@ class PatchBundleRepository(
 
         val unnamed = app.getString(R.string.patches_name_fallback)
         if (bundle.name == unnamed) {
-            guessNameFromEndpoint(bundle.endpoint)?.let { return it }
+            return bundleImportLabel(bundle.endpoint)
         }
         return bundle.name
-    }
-
-    private fun guessNameFromEndpoint(endpoint: String): String? {
-        val uri = try {
-            URI(endpoint)
-        } catch (_: URISyntaxException) {
-            return null
-        }
-        val host = uri.host?.lowercase(Locale.US) ?: return null
-        val segments = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() }.orEmpty()
-
-        // Prefer a segment containing "bundle" (case-insensitive), e.g. ".../piko-latest-patches-bundle.json".
-        val bundleCandidates = segments.filter { it.contains("bundle", ignoreCase = true) }
-        val chosen = bundleCandidates
-            .lastOrNull { seg ->
-                val normalized = seg.lowercase(Locale.US)
-                normalized !in setOf("bundle", "bundles")
-            }
-            ?: bundleCandidates.lastOrNull()
-
-        if (chosen != null) {
-            val withoutExt = chosen.replace(Regex("\\.[A-Za-z0-9]+$"), "")
-            val normalized = withoutExt
-                .replace(Regex("[._\\-]+"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .lowercase(Locale.US)
-
-            if (normalized.isNotBlank()) {
-                return normalized.replaceFirstChar { c -> c.titlecase(Locale.US) }
-            }
-        }
-
-        // Fallbacks for common GitHub URL patterns.
-        if (segments.isEmpty()) return host
-        return when {
-            host == "github.com" && segments.size >= 2 -> segments[1]
-            host == "api.github.com" && segments.size >= 3 && segments[0] == "repos" -> segments[2]
-            else -> host
-        }
     }
 
     suspend fun enforceOfficialOrderPreference() = withTrackedReload {
@@ -2243,6 +2204,7 @@ class PatchBundleRepository(
         createdAt: Long? = null,
         updatedAt: Long? = null,
         showInAppProgress: Boolean = false,
+        importLabel: String? = null,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         val normalizedUrl = try {
@@ -2278,7 +2240,7 @@ class PatchBundleRepository(
 
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification = downloadProgressNotifier.begin(
-            progressLabelFor(src).ifBlank { "Patch bundle" }
+            importLabel ?: bundleImportLabel(normalizedUrl)
         )
         val updated = try {
             updateNow(
@@ -2358,7 +2320,7 @@ class PatchBundleRepository(
         }
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification = downloadProgressNotifier.begin(
-            bundle.repoName.ifBlank { bundle.ownerName.ifBlank { "Patch bundle" } }
+            discoveryImportLabel(bundle, preferLatestAcrossChannels)
         )
         val updated = try {
             updateNow(
@@ -3441,7 +3403,7 @@ class PatchBundleRepository(
             } ?: break
 
             val bundleKey = request.key
-            val label = discoveryImportLabel(request.bundle)
+            val label = discoveryImportLabel(request.bundle, request.preferLatestAcrossChannels)
             discoveryImportProgressFlow.update { current ->
                 current + (bundleKey to DiscoveryImportProgress(0L, null, DiscoveryImportStatus.Importing))
             }
@@ -3523,11 +3485,20 @@ class PatchBundleRepository(
         )
     }
 
-    private fun discoveryImportLabel(bundle: ExternalBundleSnapshot): String {
+    private fun discoveryImportLabel(
+        bundle: ExternalBundleSnapshot,
+        preferLatestAcrossChannels: Boolean
+    ): String {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
-        return listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/").ifBlank {
+        val identity = listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/").ifBlank {
             bundle.sourceUrl
         }
+        val channel = when {
+            preferLatestAcrossChannels -> "latest"
+            bundle.isPrerelease -> "pre-release"
+            else -> "release"
+        }
+        return "$identity $channel patch bundle"
     }
 }

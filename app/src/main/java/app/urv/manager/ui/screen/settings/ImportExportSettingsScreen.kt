@@ -748,7 +748,7 @@ fun ImportExportSettingsScreen(
                             val step = (progress.processed + 1).coerceAtMost(total)
                             stringResource(R.string.import_patch_bundles_banner_steps, step, total)
                         } else {
-                            stringResource(R.string.import_patch_bundles_banner_subtitle, progress.processed, total)
+                            pluralStringResource(R.plurals.bundle_update_progress_quantity, total, progress.processed, total)
                         }
                         add(stepLabel)
                         val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList

@@ -1258,7 +1258,7 @@ fun DashboardScreen(
                                         val step = collapsedCount
                                         stringResource(R.string.import_patch_bundles_banner_steps, step, total)
                                     } else {
-                                        stringResource(R.string.import_patch_bundles_banner_subtitle, collapsedCount, total)
+                                        pluralStringResource(R.plurals.bundle_update_progress_quantity, total, collapsedCount, total)
                                     }
                                     add(stepLabel)
                                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList

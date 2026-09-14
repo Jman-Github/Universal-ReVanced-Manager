@@ -1174,15 +1174,17 @@ class DashboardViewModel(
             val ownerJob = coroutineContext[Job]
             val cacheUseToken = CacheCleanupGuard.begin()
             try {
-                val installingMessage = app.getString(R.string.installing_ellipsis)
+                val installingMessage = app.getString(R.string.installing_merged_app)
                 splitMergeStateFlow.update {
                     it.copy(
                         installing = true,
                         installStatus = installingMessage,
+                        installedPackageName = null,
                         error = null
                     )
                 }
                 appendSplitMergeLog(installingMessage)
+                app.toast(installingMessage)
 
                 val packageInfo = withContext(Dispatchers.IO) { pm.getPackageInfo(merged) }
                     ?: throw IOException(app.getString(R.string.failed_to_load_apk))
@@ -1259,7 +1261,11 @@ class DashboardViewModel(
                 splitMergeStateFlow.update { it.copy(installStatus = null) }
                 appendSplitMergeLog(app.getString(R.string.installation_cancelled_dialog_title))
             } catch (error: Throwable) {
-                failSplitMergeInstall(error)
+                if (ownerJob?.isCancelled == true) {
+                    splitMergeStateFlow.update { it.copy(installStatus = null) }
+                } else {
+                    failSplitMergeInstall(error)
+                }
             } finally {
                 splitMergeExternalInstall?.let(installerManager::cleanup)
                 splitMergeExternalInstall = null
@@ -1270,6 +1276,14 @@ class DashboardViewModel(
                 }
             }
         }
+    }
+
+    fun cancelSplitMergeInstall() {
+        splitMergeInstallJob?.cancel()
+    }
+
+    fun dismissSplitMergeInstallSuccess() {
+        splitMergeStateFlow.update { it.copy(installedPackageName = null) }
     }
 
     fun clearSplitMergeState() {
@@ -2314,10 +2328,11 @@ class DashboardViewModel(
     }
 
     private fun completeSplitMergeInstall(packageName: String) {
-        val message = app.getString(R.string.install_app_success)
+        val message = app.getString(R.string.merged_app_install_success)
         splitMergeStateFlow.update {
             it.copy(
                 installStatus = message,
+                installedPackageName = packageName,
                 error = null
             )
         }
@@ -2548,6 +2563,7 @@ data class SplitMergeState(
     val savingOutput: Boolean = false,
     val installing: Boolean = false,
     val installStatus: String? = null,
+    val installedPackageName: String? = null,
     val showDownloadStep: Boolean = false,
     val inputName: String? = null,
     val outputName: String? = null,

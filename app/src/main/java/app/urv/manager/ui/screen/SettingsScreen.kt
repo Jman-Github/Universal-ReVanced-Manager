@@ -599,7 +599,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 ) {
                     ExpressiveSettingsItem(
                         headlineContent = stringResource(R.string.about_revanced_manager),
-                        supportingContent = BuildConfig.VERSION_NAME,
+                        supportingContent = "v${BuildConfig.VERSION_NAME.removePrefix("v").removePrefix("V")}",
                         leadingContent = {
                             AppIcon(
                                 packageInfo = null,

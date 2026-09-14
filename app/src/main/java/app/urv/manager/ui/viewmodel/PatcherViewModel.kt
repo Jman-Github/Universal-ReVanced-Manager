@@ -152,6 +152,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
@@ -675,7 +676,7 @@ class PatcherViewModel(
     private fun markInstallSuccess(packageName: String?) {
         if (installStatus is InstallCompletionStatus.Success) return
         installStatus = InstallCompletionStatus.Success(packageName)
-        app.toast(app.getString(R.string.install_app_success))
+        app.toast(app.getString(R.string.patched_app_install_success))
     }
 
     private fun handleUninstallFailure(message: String) {
@@ -915,6 +916,8 @@ class PatcherViewModel(
                 throw error
             } catch (error: Throwable) {
                 cleanupPreparedInput()
+                // Interrupted file IO can throw before coroutine cancellation is delivered.
+                currentCoroutineContext().ensureActive()
                 splitSelectionPreparationError =
                     error.simpleMessage() ?: error.javaClass.simpleName
             } finally {
@@ -1796,7 +1799,7 @@ class PatcherViewModel(
             while (isActive) {
                 val messageRes =
                     if (activeInstallType == InstallType.MOUNT) R.string.mounting_ellipsis
-                    else R.string.installing_ellipsis
+                    else R.string.installing_patched_app
                 installProgressToast?.cancel()
                 installProgressToast = app.toastHandle(app.getString(messageRes))
                 delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
