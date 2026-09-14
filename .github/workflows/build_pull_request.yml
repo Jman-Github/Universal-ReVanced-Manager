@@ -36,6 +36,18 @@ jobs:
       - name: Cache Gradle
         uses: burrunan/gradle-cache-action@v3.0.3
 
+      - name: Read latest published APK version code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          python3 .github/scripts/test_pr_version_code.py
+          aapt2="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt2 | sort -V | tail -n 1)"
+          test -x "$aapt2"
+          python3 .github/scripts/resolve-pr-version-code.py \
+            --repository "$GITHUB_REPOSITORY" --aapt2 "$aapt2"
+
       - name: Run JVM unit tests
         env:
           GITHUB_ACTOR: ${{ github.actor }}
