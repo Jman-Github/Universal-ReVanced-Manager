@@ -375,7 +375,10 @@ class RootMountTransactionCoordinator(
     ): RootArtifactState {
         val installedBasePath = installed.basePath
         val isRegisteredInstalledBase =
-            request.operation == RootMountOperation.SWITCH_PATCHED_BUILD &&
+            request.operation in setOf(
+                RootMountOperation.SWITCH_PATCHED_BUILD,
+                RootMountOperation.MOUNT_ONLY
+            ) &&
                 installed.installed &&
                 installedBasePath != null &&
                 stockApk.absolutePath == File(installedBasePath).absolutePath
