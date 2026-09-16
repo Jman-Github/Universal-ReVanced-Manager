@@ -10,11 +10,12 @@ import android.graphics.drawable.Icon
 import android.util.Log
 import app.universal.revanced.manager.R
 import app.urv.manager.MainActivity
+import app.urv.manager.service.SplitMergeTaskMonitorService
 import app.urv.manager.util.permission.hasNotificationPermission
 
 object SplitMergeNotification {
     private const val CHANNEL_ID = "split-merge-progress-channel"
-    private const val NOTIFICATION_ID = 9006
+    const val NOTIFICATION_ID = 9006
     private const val TAG = "SplitMergeNotification"
 
     data class Progress(
@@ -46,13 +47,16 @@ object SplitMergeNotification {
                     indeterminate = progress.indeterminate
                 )
                 .build()
-            manager.notify(NOTIFICATION_ID, notification)
+            if (SplitMergeTaskMonitorService.show(appContext, notification)) {
+                manager.notify(NOTIFICATION_ID, notification)
+            }
         }.onFailure { error ->
             Log.d(TAG, "Failed to publish split merge notification", error)
         }
     }
 
     fun clear(context: Context) {
+        SplitMergeTaskMonitorService.clear()
         runCatching {
             context.applicationContext
                 .getSystemService(NotificationManager::class.java)

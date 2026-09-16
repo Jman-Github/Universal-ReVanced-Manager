@@ -64,6 +64,21 @@ data class RemoteError(
     val stackTrace: String,
 ) : Parcelable
 
+internal fun ProgressEvent.fatalFailureOrNull(): RemoteError? {
+    val failure = this as? ProgressEvent.Failed ?: return null
+    // ExecutePatch failures can be provisional while framework recovery retries the patch set.
+    // Terminal patch failures are emitted again by the enclosing ExecutePatches step.
+    if (failure.stepId is StepId.ExecutePatch) return null
+    return failure.error
+}
+
+internal fun RemoteError.failureDetail(): String =
+    stackTrace.trim().takeIf(String::isNotBlank)
+        ?: buildString {
+            append(type)
+            message?.takeIf(String::isNotBlank)?.let { append(": ").append(it) }
+        }
+
 private const val OOM_FAILURE_MESSAGE = "Patching ran out of memory"
 
 fun Throwable.toSafeStackTraceString(): String {

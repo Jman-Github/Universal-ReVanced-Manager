@@ -73,6 +73,15 @@ val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
 val prTestBuild = providers.gradleProperty("prTestBuild")
     .map(String::toBoolean)
     .getOrElse(false)
+// Use the published APK's code verbatim; deriving it from its version name can differ.
+val prReleaseVersionCode = if (prTestBuild) {
+    val code = providers.gradleProperty("prReleaseVersionCode").orNull?.toIntOrNull()
+    require(code != null && code in 1..2_100_000_000) {
+        "PR builds require -PprReleaseVersionCode=<published APK version code>. " +
+            "Use .github/scripts/resolve-pr-version-code.py to read it."
+    }
+    code
+} else null
 val managerDatabaseVersion = 20
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
 val devVersionNameSuffix = if (resolvedProjectVersion.contains('-')) "" else "-$devVersionSuffix"
@@ -286,7 +295,7 @@ android {
 
         val versionStr = resolvedProjectVersion
         versionName = versionStr
-        versionCode = androidVersionCode(versionStr)
+        versionCode = prReleaseVersionCode ?: androidVersionCode(versionStr)
         vectorDrawables.useSupportLibrary = true
         buildConfigField("boolean", "HAS_MORPHE_RUNTIME", includedMorpheRuntime.toString())
         buildConfigField(
@@ -436,7 +445,9 @@ androidComponents {
     onVariants { variant ->
         val developmentBuild = variant.buildType == "debug" || variant.buildType == "dev"
         variant.outputs.forEach { output ->
-            if (developmentBuild && !resolvedProjectVersion.contains('-')) {
+            if (prReleaseVersionCode != null) {
+                output.versionCode.set(prReleaseVersionCode)
+            } else if (developmentBuild && !resolvedProjectVersion.contains('-')) {
                 output.versionCode.set(
                     androidVersionCode(resolvedProjectVersion, developmentBuild = true)
                 )

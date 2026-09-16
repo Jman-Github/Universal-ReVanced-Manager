@@ -538,10 +538,15 @@ private fun buildBatchProgressUiState(
                 }
 
                 is ProgressEvent.Completed -> {
-                    if (step.state == State.FAILED) {
+                    val recoveredPatch = step.state == State.FAILED && eventStepId is StepId.ExecutePatch
+                    if (step.state == State.FAILED && !recoveredPatch) {
                         null
                     } else {
-                        step.withState(State.COMPLETED, progress = null)
+                        step.withState(
+                            State.COMPLETED,
+                            message = if (recoveredPatch) null else step.message,
+                            progress = null
+                        )
                     }
                 }
 

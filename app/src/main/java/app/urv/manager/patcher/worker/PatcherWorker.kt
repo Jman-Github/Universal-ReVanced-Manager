@@ -792,6 +792,10 @@ class PatcherWorker(
         if (event is ProgressEvent.Failed) {
             val patchStepId = event.stepId as? StepId.ExecutePatch ?: return
             failedPatchIndexes += patchStepId.index
+        } else if (event is ProgressEvent.Completed) {
+            (event.stepId as? StepId.ExecutePatch)?.let { patchStepId ->
+                failedPatchIndexes -= patchStepId.index
+            }
         }
 
         cacheExpandableSubSteps(event)
