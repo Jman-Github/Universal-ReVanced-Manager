@@ -362,14 +362,15 @@ class JsonPatchBundle(
             return@withContext requestManifest(endpoint)
         }
 
-        val stable = runCatching { requestManifest(endpoint) }.getOrNull()
-        val latest = runCatching {
-            requestLatestRepositoryRelease(
-                source = releaseSource,
-                preferredExtension = stable?.downloadUrl?.patchBundleExtension()
-            )
-        }.getOrNull()
-        latest ?: stable ?: requestManifest(endpoint)
+        resolveRepositoryBundleRelease(
+            requestManifest = { requestManifest(endpoint) },
+            requestRelease = { manifest ->
+                requestLatestRepositoryRelease(
+                    source = releaseSource,
+                    preferredExtension = manifest?.downloadUrl?.patchBundleExtension()
+                )
+            }
+        )
     }
 
     override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
@@ -445,12 +446,12 @@ class JsonPatchBundle(
     ): ReVancedAsset? = when (source) {
         is RepositoryReleaseSource.GitHub -> releaseApi
             .getRepositoryReleaseHistory(source.repositoryUrl, prerelease = null, limit = 50)
-            .getOrNull()
-            ?.asSequence()
-            ?.mapNotNull { release ->
+            .getOrThrow()
+            .asSequence()
+            .mapNotNull { release ->
                 release.toPatchBundleAsset(source.repositoryUrl, preferredExtension)
             }
-            ?.maxByOrNull { it.createdAt }
+            .maxByOrNull { it.createdAt }
 
         is RepositoryReleaseSource.GitLab -> {
             val encodedProject = URLEncoder.encode(
@@ -459,13 +460,13 @@ class JsonPatchBundle(
             ).replace("+", "%20")
             http.request<List<GitLabRelease>> {
                 url("https://gitlab.com/api/v4/projects/$encodedProject/releases?per_page=50")
-            }.getOrNull()
-                ?.asSequence()
-                ?.filterNot { it.upcomingRelease }
-                ?.mapNotNull { release ->
+            }.getOrThrow()
+                .asSequence()
+                .filterNot { it.upcomingRelease }
+                .mapNotNull { release ->
                     release.toPatchBundleAsset(source.repositoryPath, preferredExtension)
                 }
-                ?.maxByOrNull { it.createdAt }
+                .maxByOrNull { it.createdAt }
         }
     }
 
