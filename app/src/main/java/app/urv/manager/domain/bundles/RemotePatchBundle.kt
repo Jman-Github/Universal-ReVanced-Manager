@@ -54,6 +54,11 @@ data class PatchBundleDownloadResult(
     val changelogAsset: ReVancedAsset? = null
 )
 
+data class PatchBundleChangelogResult(
+    val asset: ReVancedAsset,
+    val hasReleaseBody: Boolean = false
+)
+
 typealias PatchBundleDownloadProgress = (bytesRead: Long, bytesTotal: Long?) -> Unit
 
 sealed class RemotePatchBundle(
@@ -179,6 +184,23 @@ sealed class RemotePatchBundle(
         return refreshLatestReleaseInfo()
     }
 
+    suspend fun fetchLatestChangelog(): PatchBundleChangelogResult {
+        val asset = fetchLatestReleaseInfo()
+        val fallback = PatchBundleChangelogResult(asset)
+        if (this is GitHubPullRequestBundle) return fallback
+        val repoUrl = inferGitHubRepoUrl(asset.pageUrl, asset.downloadUrl, endpoint) ?: return fallback
+        val releaseApi: ReVancedAPI by inject()
+        val release = try {
+            releaseApi.getRepositoryReleaseByTag(repoUrl, asset.version).getOrNull()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return fallback
+        val body = release.body?.takeIf { it.isNotBlank() } ?: return fallback
+        return PatchBundleChangelogResult(asset.copy(description = body), hasReleaseBody = true)
+    }
+
     protected suspend fun refreshLatestReleaseInfo(): ReVancedAsset {
         val key = "$uid|${latestInfoCacheIdentity()}"
         val now = System.currentTimeMillis()
@@ -255,18 +277,6 @@ sealed class RemotePatchBundle(
         val repo = ownerRepo.second.removeSuffix(".git")
         if (owner.isBlank() || repo.isBlank()) return null
         return "https://github.com/$owner/$repo"
-    }
-
-    private fun GitHubRelease.toChangelogEntry(repoUrl: String): PatchBundleChangelogEntry {
-        val publishedAtMillis = (publishedAt ?: createdAt)
-            ?.let { timestamp -> runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull() }
-        val description = body?.ifBlank { name.orEmpty() } ?: name.orEmpty()
-        return PatchBundleChangelogEntry(
-            version = tagName,
-            description = description,
-            publishedAtMillis = publishedAtMillis,
-            pageUrl = "${repoUrl.removeSuffix("/")}/releases/tag/$tagName"
-        )
     }
 
     companion object {
@@ -987,63 +997,29 @@ class ExternalGraphqlPatchBundle(
         } else {
             metadata.isPrerelease ?: endpointMetadata.prerelease
         }
-        var history = fetchExternalHistory(
+        val history = fetchExternalHistory(
             source = historySource,
             prerelease = prerelease,
             limit = limit
         )
-        if (history.size < limit && prerelease != null) {
-            history = mergeHistoryEntries(
-                history,
-                fetchExternalHistory(
-                    source = historySource,
-                    prerelease = null,
-                    limit = limit
-                ),
-                limit
+        // Prefer complete release notes without crossing the selected channel.
+        // Optional GitHub backfilling must not discard successfully fetched service history.
+        val githubHistory = try {
+            fetchGitHubChangelogHistory(
+                limit,
+                prerelease,
+                historySource.repoUrl,
+                historySource.sourceUrl,
+                endpoint,
+                metadata.downloadUrl
             )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (history.isEmpty()) throw error
+            emptyList()
         }
-        if (history.size < limit && !historySource.repoUrl.isNullOrBlank()) {
-            history = mergeHistoryEntries(
-                history,
-                fetchGitHubChangelogHistory(
-                    limit,
-                    prerelease,
-                    historySource.repoUrl,
-                    historySource.sourceUrl,
-                    endpoint,
-                    metadata.downloadUrl
-                ),
-                limit
-            )
-        }
-        if (history.size < limit && prerelease != null && !historySource.repoUrl.isNullOrBlank()) {
-            history = mergeHistoryEntries(
-                history,
-                fetchGitHubChangelogHistory(
-                    limit,
-                    null,
-                    historySource.repoUrl,
-                    historySource.sourceUrl,
-                    endpoint,
-                    metadata.downloadUrl
-                ),
-                limit
-            )
-        }
-        if (history.isNotEmpty()) {
-            return@withContext history
-        }
-        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
-        fetchGitHubChangelogHistory(
-            limit,
-            prerelease,
-            historySource.repoUrl,
-            historySource.sourceUrl,
-            latest?.pageUrl,
-            latest?.downloadUrl,
-            endpoint
-        )
+        mergePatchBundleChangelogs(history, githubHistory, limit)
     }
 
     override suspend fun historicalInfoCacheIdentity(): String {
@@ -1188,22 +1164,6 @@ class ExternalGraphqlPatchBundle(
             .getOrNull()
             .orEmpty()
             .map { snapshot -> snapshot.toChangelogEntry() }
-    }
-
-    private fun mergeHistoryEntries(
-        current: List<PatchBundleChangelogEntry>,
-        incoming: List<PatchBundleChangelogEntry>,
-        limit: Int
-    ): List<PatchBundleChangelogEntry> {
-        val targetLimit = limit.coerceAtLeast(1)
-        if (incoming.isEmpty()) return current.take(targetLimit)
-        return (current + incoming)
-            .sortedWith(compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE })
-            .distinctBy { entry ->
-                entry.version.trim().lowercase().takeIf { it.isNotBlank() }
-                    ?: "${entry.publishedAtMillis ?: Long.MIN_VALUE}|${entry.description.trim()}"
-            }
-            .take(targetLimit)
     }
 
     private fun parseEndpointMetadata(): EndpointMetadata {
