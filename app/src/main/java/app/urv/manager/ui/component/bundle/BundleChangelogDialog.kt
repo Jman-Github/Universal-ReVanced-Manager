@@ -50,13 +50,23 @@ fun BundleChangelogDialog(
     var refreshKey by remember { mutableStateOf(0) }
     var state: BundleChangelogState by remember { mutableStateOf(BundleChangelogState.Loading) }
 
-    LaunchedEffect(src.uid, refreshKey) {
+    LaunchedEffect(src, refreshKey) {
         state = BundleChangelogState.Loading
         state = try {
-            val asset = src.fetchLatestReleaseInfo()
-            runCatching { bundleRepo.recordChangelog(src, asset) }
-            BundleChangelogState.Success(asset)
-        } catch (t: Throwable) {
+            val result = src.fetchLatestChangelog()
+            try {
+                bundleRepo.recordChangelog(
+                    src, result.asset, hasReleaseBody = result.hasReleaseBody
+                )
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A history write failure must not prevent reading downloaded notes.
+            }
+            BundleChangelogState.Success(result.asset)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (t: Exception) {
             BundleChangelogState.Error(t)
         }
     }

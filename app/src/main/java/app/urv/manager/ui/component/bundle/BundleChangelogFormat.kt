@@ -6,14 +6,18 @@ private val doubleBracketLinkRegex =
 private val listItemMarkerRegex =
     Regex("""^(?:[-+*]|\d+[.)])\s+""")
 
-internal fun String.sanitizePatchChangelogMarkdown(): String {
-    val normalizedLists = normalizeCodeIndentedListBlocks()
-    return doubleBracketLinkRegex.replace(normalizedLists) { match ->
-        val label = match.groupValues[1]
-        val link = match.groupValues[2]
-        "[\\[$label\\]]($link)"
+internal fun String.sanitizePatchChangelogMarkdown(): String =
+    transformChangelogProse { prose ->
+        val expanded = prose.lineSequence().joinToString("\n") { line ->
+            line.replace(detailsTagRegex, "")
+                .replace(summaryTagRegex) { match -> "\n**${match.groupValues[1]}**\n" }
+        }
+        doubleBracketLinkRegex.replace(expanded.normalizeCodeIndentedListBlocks()) { match ->
+            val label = match.groupValues[1]
+            val link = match.groupValues[2]
+            "[\\[$label\\]]($link)"
+        }
     }
-}
 
 private fun String.normalizeCodeIndentedListBlocks(): String {
     val lines = split('\n')
@@ -109,3 +113,51 @@ private fun String.removeCodeBlockIndent(): String {
 }
 
 private const val CODE_BLOCK_INDENT_WIDTH = 4
+
+/**
+ * The renderer does not render HTML blocks. Expose GitHub disclosure contents as
+ * ordinary Markdown, while leaving fenced code examples untouched.
+ */
+private fun String.transformChangelogProse(transform: (String) -> String): String {
+    val output = mutableListOf<String>()
+    val prose = mutableListOf<String>()
+    var fenceChar: Char? = null
+    var fenceLength = 0
+
+    fun flushProse() {
+        if (prose.isNotEmpty()) {
+            output += transform(prose.joinToString("\n"))
+            prose.clear()
+        }
+    }
+
+    split('\n').forEach { line ->
+        val trimmed = line.trimStart(' ')
+        val marker = trimmed.firstOrNull()
+        val markerLength = trimmed.takeWhile { it == marker }.length
+        val isFence = line.length - trimmed.length <= 3 &&
+            (marker == '`' || marker == '~') && markerLength >= 3
+        if (fenceChar != null) {
+            output += line
+            if (isFence && marker == fenceChar && markerLength >= fenceLength &&
+                trimmed.drop(markerLength).isBlank()
+            ) {
+                fenceChar = null
+            }
+        } else if (isFence) {
+            flushProse()
+            fenceChar = marker
+            fenceLength = markerLength
+            output += line
+        } else {
+            prose += line
+        }
+    }
+    flushProse()
+    return output.joinToString("\n")
+}
+
+private val detailsTagRegex =
+    Regex("""^ {0,3}</?details\b[^>]*>[ \t]*|[ \t]*</details>[ \t]*$""", RegexOption.IGNORE_CASE)
+private val summaryTagRegex =
+    Regex("""^ {0,3}<summary\b[^>]*>(.*?)</summary>[ \t]*$""", RegexOption.IGNORE_CASE)

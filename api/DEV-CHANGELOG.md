@@ -25,6 +25,8 @@
 - Fixed patcher runtimes not consistently honoring `Continue after patch errors`, including process runtimes continuing after fatal patch errors when it is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/685
 - Fixed the Split APK Merger progress notification being able to reappear after cancellation when concurrent merge state or progress updates raced with cancellation cleanup https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/669
 - Fixed returning from a cancelled local APK patch leaving the app name and icon blank when the patcher's temporary input had already been deleted https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/665
+- Fixed issues with remote patch bundles when using GitHub or GitLab URLs sometimes not detecting prereleases correctly
+- Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
 
 
 # CI
