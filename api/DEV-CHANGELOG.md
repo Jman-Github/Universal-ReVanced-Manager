@@ -9,6 +9,7 @@
 - Added configurable Play Store installation source modes for the system and rooted mount installers, adapted from https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
 - Bumped Morphe Patcher to `1.12.0`
 - Bumped Morphe Patcher to `1.14.0`
+- Patch bundle changelogs can now display the full changelog history, depending on your changelog loading and cache limit settings. This replaces the previous `Previous changelogs` section
 
 
 # Bug fixes
