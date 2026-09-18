@@ -26,6 +26,7 @@ import app.urv.manager.domain.bundles.JsonPatchBundle
 import app.urv.manager.data.room.bundles.Source as SourceInfo
 import app.urv.manager.domain.bundles.LocalPatchBundle
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
+import app.urv.manager.domain.bundles.mergePatchBundleChangelogs
 import app.urv.manager.domain.bundles.PatchBundleDownloadProgress
 import app.urv.manager.domain.bundles.PatchBundleDownloadResult
 import app.urv.manager.domain.bundles.RemotePatchBundle
@@ -509,7 +510,6 @@ class PatchBundleRepository(
     }
 
     suspend fun synchronizeChangelogHistory(source: RemotePatchBundle): List<PatchBundleChangelogEntry> {
-        val expectedIdentity = source.changelogHistoryIdentity()
         runCatching { source.fetchLatestReleaseInfo() }
             .getOrNull()
             ?.let { latestAsset ->
@@ -522,12 +522,16 @@ class PatchBundleRepository(
         return if (historyEntries.isEmpty()) {
             getChangelogHistory(source)
         } else {
-            mergeChangelogHistory(source.uid, historyEntries, expectedIdentity)
+            mergeChangelogHistory(source.uid, historyEntries, source.changelogHistoryIdentity())
         }
     }
 
-    suspend fun recordChangelog(source: RemotePatchBundle, asset: app.urv.manager.network.dto.ReVancedAsset) {
-        recordChangelog(source.uid, asset, source.changelogHistoryIdentity())
+    suspend fun recordChangelog(
+        source: RemotePatchBundle,
+        asset: app.urv.manager.network.dto.ReVancedAsset,
+        hasReleaseBody: Boolean = false
+    ) {
+        recordChangelog(source.uid, asset, source.changelogHistoryIdentity(), hasReleaseBody)
     }
 
     suspend fun recordChangelog(uid: Int, asset: app.urv.manager.network.dto.ReVancedAsset) {
@@ -537,104 +541,35 @@ class PatchBundleRepository(
     private suspend fun recordChangelog(
         uid: Int,
         asset: app.urv.manager.network.dto.ReVancedAsset,
-        expectedIdentity: String?
+        expectedIdentity: String?,
+        hasReleaseBody: Boolean = false
     ) {
-        val entry = PatchBundleChangelogEntry.fromAsset(asset)
+        val entry = PatchBundleChangelogEntry.fromAsset(asset, hasReleaseBody)
         withContext(Dispatchers.IO) {
             val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
                 reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
                 val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
-                val updated = mergeChangelogHistoryEntries(current, listOf(entry), storageLimit)
+                val updated = mergePatchBundleChangelogs(
+                    current, listOf(entry), storageLimit
+                )
                 writeChangelogHistoryInternal(uid, updated)
             }
         }
-    }
-
-    private fun isSameChangelogEntry(
-        existing: PatchBundleChangelogEntry,
-        candidate: PatchBundleChangelogEntry
-    ): Boolean {
-        val existingVersion = existing.version.normalizedChangelogVersion()
-        val candidateVersion = candidate.version.normalizedChangelogVersion()
-        if (
-            existingVersion != null &&
-            candidateVersion != null &&
-            existingVersion.equals(candidateVersion, ignoreCase = true)
-        ) {
-            return true
-        }
-
-        val existingPageUrl = existing.pageUrl.normalizedChangelogPageUrl()
-        val candidatePageUrl = candidate.pageUrl.normalizedChangelogPageUrl()
-        if (
-            existingPageUrl != null &&
-            candidatePageUrl != null &&
-            existingPageUrl.equals(candidatePageUrl, ignoreCase = true)
-        ) {
-            return true
-        }
-
-        val published = candidate.publishedAtMillis
-        return published != null &&
-            published > 0 &&
-            existing.publishedAtMillis == published &&
-            (
-                existingVersion == null ||
-                    candidateVersion == null ||
-                    existing.description.trim() == candidate.description.trim()
-            )
     }
 
     private fun mergeChangelogHistoryEntries(
         current: List<PatchBundleChangelogEntry>,
         incoming: List<PatchBundleChangelogEntry>,
         maxEntries: Int
-    ): List<PatchBundleChangelogEntry> {
-        if (incoming.isEmpty()) return trimChangelogHistoryEntries(current, maxEntries)
-        val merged = current.toMutableList()
-        incoming.forEach { candidate ->
-            merged.removeAll { existing -> isSameChangelogEntry(existing, candidate) }
-            merged.add(candidate)
-        }
-        return trimChangelogHistoryEntries(merged, maxEntries)
-    }
+    ): List<PatchBundleChangelogEntry> =
+        mergePatchBundleChangelogs(current, incoming, maxEntries)
 
     private fun trimChangelogHistoryEntries(
         entries: List<PatchBundleChangelogEntry>,
         maxEntries: Int
-    ): List<PatchBundleChangelogEntry> {
-        val sorted = entries.sortedWith(
-            compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE }
-        )
-        val unique = mutableListOf<PatchBundleChangelogEntry>()
-        sorted.forEach { candidate ->
-            if (unique.none { existing -> isSameChangelogEntry(existing, candidate) }) {
-                unique += candidate
-            }
-        }
-        return unique.take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
-    }
-
-    private fun String.normalizedChangelogVersion(): String? {
-        val trimmed = trim()
-        if (trimmed.isEmpty()) return null
-        return if (
-            trimmed.length > 1 &&
-            trimmed[0].equals('v', ignoreCase = true) &&
-            trimmed[1].isDigit()
-        ) {
-            trimmed.substring(1)
-        } else {
-            trimmed
-        }
-    }
-
-    private fun String?.normalizedChangelogPageUrl(): String? =
-        this
-            ?.trim()
-            ?.trimEnd('/')
-            ?.takeIf { it.isNotEmpty() }
+    ): List<PatchBundleChangelogEntry> =
+        mergePatchBundleChangelogs(emptyList(), entries, maxEntries)
 
     private suspend fun normalizedChangelogFetchLimit(): Int =
         prefs.bundleChangelogFetchLimit.get()

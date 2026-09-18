@@ -9,6 +9,7 @@
 - Added configurable Play Store installation source modes for the system and rooted mount installers, adapted from https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
 - Bumped Morphe Patcher to `1.12.0`
 - Bumped Morphe Patcher to `1.14.0`
+- Patch bundle changelogs can now display the full changelog history, depending on your changelog loading and cache limit settings. This replaces the previous `Previous changelogs` section
 - Added patcher-style installation feedback to the Split APK Merger, including installation cancellation, a success dialog, and distinct patched/merged app installation messages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/666 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/671 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/672
 
 
@@ -26,6 +27,8 @@
 - Fixed patcher runtimes not consistently honoring `Continue after patch errors`, including process runtimes continuing after fatal patch errors when it is disabled https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/685
 - Fixed the Split APK Merger progress notification being able to reappear after cancellation when concurrent merge state or progress updates raced with cancellation cleanup https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/669
 - Fixed returning from a cancelled local APK patch leaving the app name and icon blank when the patcher's temporary input had already been deleted https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/665
+- Fixed issues with remote patch bundles when using GitHub or GitLab URLs sometimes not detecting prereleases correctly
+- Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
 - Fixed patch bundle import and update feedback by preserving bundle name casing, identifying the selected release channel, and using correct singular/plural progress wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/601 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/632 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/633
 - Fixed incorrect singular/plural wording when removing saved patches and displaying patch bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/605 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/680
 - Fixed cancelling APK preparation incorrectly displaying a failure dialog https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/610
