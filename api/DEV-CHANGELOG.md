@@ -29,6 +29,7 @@
 - Fixed returning from a cancelled local APK patch leaving the app name and icon blank when the patcher's temporary input had already been deleted https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/665
 - Fixed issues with remote patch bundles when using GitHub or GitLab URLs sometimes not detecting prereleases correctly
 - Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
+- Fixed ReVanced 21 and 22 patching failing before patches are applied when using process mode
 - Fixed patch bundle import and update feedback by preserving bundle name casing, identifying the selected release channel, and using correct singular/plural progress wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/601 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/632 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/633
 - Fixed incorrect singular/plural wording when removing saved patches and displaying patch bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/605 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/680
 - Fixed cancelling APK preparation incorrectly displaying a failure dialog https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/610
@@ -36,7 +37,6 @@
 - Fixed manager, installed app, and applied patch bundle version displays to consistently use a single `v` prefix https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/704
 - Fixed the Process Memory Limit dialog title alignment https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/676
 - Fixed unsupported keystore converter errors wrapping unnaturally https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/673
-
 
 # CI
 
