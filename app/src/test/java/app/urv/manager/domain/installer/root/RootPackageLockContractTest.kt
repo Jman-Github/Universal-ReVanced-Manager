@@ -46,9 +46,9 @@ class RootPackageLockContractTest {
         assertTrue(service.contains("\$lock_dir/\$URV_PACKAGE.lock.d"))
         assertTrue(service.contains("try_acquire_package_lock"))
         assertTrue(service.contains("release_package_lock"))
-        assertTrue(service.contains("trap 'release_package_lock"))
+        assertTrue(service.contains("trap '[ \"\$boot_lock_held\" = 0 ] || release_package_lock"))
         val incompleteCheck = service.indexOf("if [ -f \"\$transaction_dir/active.json\" ]; then")
-        val lockAcquire = service.indexOf("if ! acquire_package_lock; then")
+        val lockAcquire = service.indexOf("if ! acquire_ready_package_lock; then")
         assertTrue(incompleteCheck >= 0 && lockAcquire > incompleteCheck)
         val incompleteBlock = service.substring(incompleteCheck, lockAcquire)
         assertTrue(incompleteBlock.contains("deferring entirely to Manager recovery"))
@@ -113,21 +113,33 @@ class RootPackageLockContractTest {
         assertTrue(bootReadiness.contains("Android boot did not complete; deferring mount verification"))
         assertFalse(bootReadiness.contains("disable_module"))
         assertTrue(late.indexOf("boot_waited=0") < late.indexOf(". \"\$state_file\""))
-        assertTrue(late.indexOf("boot_waited=0") < late.indexOf("if ! acquire_package_lock; then"))
-        val lockedStateReload = late.substringAfter("trap 'exit 0' HUP INT TERM")
-            .substringBefore("installed_users=\"\$(installed_user_ids)\"")
-        assertTrue(lockedStateReload.contains("load_state || exit 0"))
+        assertTrue(late.indexOf("boot_waited=0") < late.indexOf("if ! acquire_ready_package_lock; then"))
+        val lockedStateReload = shellFunction(late, "acquire_ready_package_lock")
+        assertTrue(lockedStateReload.contains("load_state || return 1"))
         assertTrue(lockedStateReload.contains("[ \"\$URV_PACKAGE\" = \"\$locked_package\" ]"))
-        val ownershipReadiness = late.substringAfter("ownership_waited=0")
-            .substringBefore("if ! echo \"\$installed_users\" | grep -Fx")
-        assertTrue(ownershipReadiness.contains("while [ \"\$ownership_waited\" -lt 30 ]"))
-        assertTrue(ownershipReadiness.contains("installed_users=\"\$(installed_user_ids)\""))
-        assertTrue(ownershipReadiness.contains("deferring ownership verification"))
+        assertTrue(lockedStateReload.indexOf("acquire_package_lock || return 1") <
+            lockedStateReload.indexOf("load_state || return 1"))
+        assertTrue(lockedStateReload.indexOf("load_state || return 1") <
+            lockedStateReload.indexOf("read_package_state && return 0"))
+        assertTrue(lockedStateReload.contains("[ ! -f \"\$MODDIR/disable\" ]"))
+        assertTrue(lockedStateReload.contains("[ ! -f \"\$MODDIR/remove\" ]"))
+        assertTrue(lockedStateReload.contains("INCOMPLETE_TRANSACTION"))
+        assertTrue(lockedStateReload.contains("while wait_for_package_manager \"\$recovery_started\"; do"))
+        assertTrue(lockedStateReload.contains("release_package_lock || return 1"))
+        assertTrue(lockedStateReload.indexOf("release_package_lock || return 1") <
+            lockedStateReload.indexOf("sleep 5"))
+        val ownershipReadiness = shellFunction(late, "wait_for_package_manager")
+        assertTrue(ownershipReadiness.contains("ready_now - ready_started"))
+        assertTrue(ownershipReadiness.contains("-lt 300 ] || return 1"))
+        assertTrue(ownershipReadiness.contains("read_package_state && return 0"))
+        assertTrue(ownershipReadiness.contains("sleep 5"))
         assertFalse(ownershipReadiness.contains("disable_module"))
-        val packageReadiness = late.substringAfter("path_waited=0")
-            .substringBefore("current_path=\"")
-        assertTrue(packageReadiness.contains("pm path --user \"\$URV_USER_ID\" \"\$URV_PACKAGE\""))
-        assertTrue(packageReadiness.contains("PackageManager state is still unavailable; deferring mount verification"))
+        val packageReadiness = shellFunction(late, "read_package_state")
+        assertTrue(packageReadiness.contains("installed_users=\"\$(installed_user_ids)\" || return 1"))
+        assertTrue(packageReadiness.contains("timeout 10 pm path --user \"\$URV_USER_ID\" \"\$URV_PACKAGE\""))
+        assertTrue(packageReadiness.contains("[ -n \"\$current_path\" ] || return 1"))
+        assertTrue(packageReadiness.contains("timeout 10 dumpsys package"))
+        assertTrue(packageReadiness.contains("timeout 10 cmd package resolve-activity"))
         assertFalse(packageReadiness.contains("disable_module"))
         assertTrue(late.contains("live_zygote_pids"))
         assertTrue(late.contains("nsenter --mount=\"/proc/\$pid/ns/mnt\" -- awk"))
@@ -189,7 +201,7 @@ class RootPackageLockContractTest {
         assertTrue(zygoteCleanup.trimEnd().endsWith("return 0"))
 
         val incompleteRecovery = late.substringAfter("if [ -f \"\$transaction_dir/active.json\" ]; then")
-            .substringBefore("\nfi\n\nif ! acquire_package_lock; then")
+            .substringBefore("\nfi")
         assertTrue(incompleteRecovery.contains("INCOMPLETE_TRANSACTION"))
         assertFalse(incompleteRecovery.contains("if target_is_mounted; then"))
         assertFalse(incompleteRecovery.contains("remove_target_mounts"))
@@ -271,6 +283,16 @@ class RootPackageLockContractTest {
 
         assertTrue(install.contains("\"${'$'}it --dexopt-compiler-filter skip ${'$'}apkPath\""))
         assertTrue(install.indexOf("--dexopt-compiler-filter skip") < install.indexOf("+ commandPrefixes.map"))
+    }
+
+    private fun shellFunction(script: String, name: String): String {
+        val normalized = script.replace("\r\n", "\n")
+        val marker = "$name() {\n"
+        val start = normalized.indexOf(marker)
+        require(start >= 0) { "Missing shell function: $name" }
+        val end = normalized.indexOf("\n}", start + marker.length)
+        require(end >= 0) { "Missing shell function end: $name" }
+        return normalized.substring(start + marker.length, end)
     }
 
     private fun asset(name: String): File = sequenceOf(
