@@ -56,7 +56,8 @@ class MorpheSession(
     private val checkCancelled: () -> Unit = {},
     private val continueOnPatchError: Boolean = false,
 ) : Closeable {
-    private val tempDir = File(cacheDir).resolve("patcher").also { it.mkdirs() }
+    private val cacheDirFile = File(cacheDir)
+    private val tempDir = cacheDirFile.resolve("patcher").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val resolvedAaptPath = aaptPath
     private var patcher = createPatcher()
@@ -67,7 +68,8 @@ class MorpheSession(
             temporaryFilesPath = tempDir,
             frameworkFileDirectory = frameworkDirFile.absolutePath,
             aaptBinaryPath = resolvedAaptPath,
-            useBytecodeMode = bytecodeMode
+            useBytecodeMode = bytecodeMode,
+            fileWorkspacePath = cacheDirFile,
         )
     )
 

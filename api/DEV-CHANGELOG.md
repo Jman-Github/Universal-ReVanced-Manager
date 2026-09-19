@@ -29,6 +29,7 @@
 - Fixed issues with remote patch bundles when using GitHub or GitLab URLs sometimes not detecting prereleases correctly
 - Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
 - Fixed ReVanced 21 and 22 patching failing before patches are applied when using process mode
+- Provide a writable temporary workspace for Morphe patches in both in-process and process-mode patching
 
 
 # CI
