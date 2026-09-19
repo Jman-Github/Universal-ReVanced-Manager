@@ -59,6 +59,7 @@ import app.urv.manager.util.announcementTagKey
 import app.urv.manager.util.SplitMergeNotification
 import app.urv.manager.service.SplitMergeTaskMonitorService
 import app.urv.manager.util.toast
+import app.urv.manager.util.toastHandle
 import app.urv.manager.util.uiSafe
 import app.urv.manager.plugin.downloader.GetScope
 import app.urv.manager.plugin.downloader.OutputDownloadScope
@@ -109,6 +110,7 @@ import kotlin.coroutines.coroutineContext
 private const val SPLIT_MERGE_NOTIFICATION_PROGRESS_MAX = 1000
 private const val SPLIT_MERGE_EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
 private const val SPLIT_MERGE_INSTALL_POLL_INTERVAL_MS = 1_000L
+private const val SPLIT_MERGE_INSTALL_TOAST_INTERVAL_MS = 2_500L
 internal const val SPLIT_MERGE_PRESET_UNSELECTED = "unselected"
 
 internal enum class NewPluginNotification {
@@ -1215,6 +1217,14 @@ class DashboardViewModel(
         splitMergeInstallJob = viewModelScope.launch {
             val ownerJob = coroutineContext[Job]
             val cacheUseToken = CacheCleanupGuard.begin()
+            var progressToast: Toast? = null
+            var progressToastJob: Job? = null
+            fun stopProgressToasts() {
+                progressToastJob?.cancel()
+                progressToastJob = null
+                progressToast?.cancel()
+                progressToast = null
+            }
             try {
                 val installingMessage = app.getString(R.string.installing_merged_app)
                 splitMergeStateFlow.update {
@@ -1226,7 +1236,18 @@ class DashboardViewModel(
                     )
                 }
                 appendSplitMergeLog(installingMessage)
-                app.toast(installingMessage)
+                progressToastJob = launch {
+                    try {
+                        while (isActive) {
+                            progressToast?.cancel()
+                            progressToast = app.toastHandle(installingMessage)
+                            delay(SPLIT_MERGE_INSTALL_TOAST_INTERVAL_MS)
+                        }
+                    } finally {
+                        progressToast?.cancel()
+                        progressToast = null
+                    }
+                }
 
                 val packageInfo = withContext(Dispatchers.IO) { pm.getPackageInfo(merged) }
                     ?: throw IOException(app.getString(R.string.failed_to_load_apk))
@@ -1291,6 +1312,7 @@ class DashboardViewModel(
                         launchAndMonitorSplitMergeExternalInstall(plan)
                     }
                 }
+                stopProgressToasts()
                 if (installed) {
                     completeSplitMergeInstall(packageName)
                 } else {
@@ -1306,9 +1328,11 @@ class DashboardViewModel(
                 if (ownerJob?.isCancelled == true) {
                     splitMergeStateFlow.update { it.copy(installStatus = null) }
                 } else {
+                    stopProgressToasts()
                     failSplitMergeInstall(error)
                 }
             } finally {
+                stopProgressToasts()
                 splitMergeExternalInstall?.let(installerManager::cleanup)
                 splitMergeExternalInstall = null
                 splitMergeStateFlow.update { it.copy(installing = false) }

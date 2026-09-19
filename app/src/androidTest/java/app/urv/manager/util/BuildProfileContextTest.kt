@@ -11,6 +11,21 @@ import org.junit.Test
 
 class BuildProfileContextTest {
     @Test
+    fun applicationExposesPlatformBaseButRetainsProfileStorage() {
+        val application = InstrumentationRegistry.getInstrumentation()
+            .targetContext.applicationContext as app.urv.manager.ManagerApplication
+        val base = requireNotNull(application.baseContext)
+        // ActivityThread performs this platform-type check before creating any manifest receiver.
+        assertEquals("android.app.ContextImpl", base.javaClass.name)
+        val selected = BuildProfileContext.wrap(base)
+        assertEquals(selected.filesDir, application.filesDir)
+        assertEquals(selected.noBackupFilesDir, application.noBackupFilesDir)
+        assertEquals(selected.getDatabasePath("manager"), application.getDatabasePath("manager"))
+        assertSame(selected.getSharedPreferences("receiver_test", Context.MODE_PRIVATE),
+            application.getSharedPreferences("receiver_test", Context.MODE_PRIVATE))
+    }
+
+    @Test
     fun packageContextWithoutApplicationUsesSelectedStorage() {
         val base = InstrumentationRegistry.getInstrumentation().targetContext
         val packageContext = object : ContextWrapper(base) {
