@@ -28,6 +28,7 @@
 - Fixed returning from a cancelled local APK patch leaving the app name and icon blank when the patcher's temporary input had already been deleted https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/665
 - Fixed issues with remote patch bundles when using GitHub or GitLab URLs sometimes not detecting prereleases correctly
 - Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
+- Fixed ReVanced 21 and 22 patching failing before patches are applied when using process mode
 - Provide a writable temporary workspace for Morphe patches in both in-process and process-mode patching
 
 
