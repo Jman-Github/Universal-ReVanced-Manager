@@ -10,6 +10,7 @@
 - Bumped Morphe Patcher to `1.12.0`
 - Bumped Morphe Patcher to `1.14.0`
 - Patch bundle changelogs can now display the full changelog history, depending on your changelog loading and cache limit settings. This replaces the previous `Previous changelogs` section
+- Added patcher-style installation feedback to the Split APK Merger, including installation cancellation, a success dialog, and distinct patched/merged app installation messages https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/666 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/671 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/672
 
 
 # Bug fixes
@@ -30,6 +31,13 @@
 - Fixed incomplete patch bundle changelogs and missing history entries, including hidden release notes, overwritten descriptions, mixed release channels, and refresh errors not appearing when cached history is available
 - Fixed ReVanced 21 and 22 patching failing before patches are applied when using process mode
 - Provide a writable temporary workspace for Morphe patches in both in-process and process-mode patching
+- Fixed patch bundle import and update feedback by preserving bundle name casing, identifying the selected release channel, and using correct singular/plural progress wording https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/601 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/632 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/633
+- Fixed incorrect singular/plural wording when removing saved patches and displaying patch bundle update badges https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/605 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/680
+- Fixed cancelling APK preparation incorrectly displaying a failure dialog https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/610
+- Improved split selection dialogs by removing outdated guidance and aligning the Cancel action consistently https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/613 https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/618
+- Fixed manager, installed app, and applied patch bundle version displays to consistently use a single `v` prefix https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/704
+- Fixed the Process Memory Limit dialog title alignment https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/676
+- Fixed unsupported keystore converter errors wrapping unnaturally https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/673
 
 
 # CI

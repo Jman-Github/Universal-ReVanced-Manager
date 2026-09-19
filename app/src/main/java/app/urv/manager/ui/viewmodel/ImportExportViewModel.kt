@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.util.bundleImportLabel
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.AutoClearCacheInterval
 import app.urv.manager.domain.manager.KeystoreManager
@@ -906,29 +907,12 @@ class ImportExportViewModel(
                                 val snapshotEnabled = snapshot.enabled
                                 val displayName = snapshot.displayName?.trim().takeUnless { it.isNullOrBlank() }
                                 val snapshotName = snapshot.name.trim().takeUnless { it.isBlank() }
-                                val bundleLabel = (displayName ?: snapshotName)
-                                    ?.takeUnless { it == app.getString(R.string.patches_name_fallback) }
-                                    ?: runCatching {
-                                        val uri = java.net.URI(endpoint)
-                                        val segments = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() }.orEmpty()
-                                        val candidates = segments.filter { it.contains("bundle", ignoreCase = true) }
-                                        val chosen = candidates.lastOrNull { seg ->
-                                            val normalized = seg.lowercase(java.util.Locale.US)
-                                            normalized !in setOf("bundle", "bundles")
-                                        } ?: candidates.lastOrNull()
-                                        if (chosen == null) return@runCatching uri.host ?: endpoint
-
-                                        val withoutExt = chosen.replace(Regex("\\.[A-Za-z0-9]+$"), "")
-                                        val normalized = withoutExt
-                                            .replace(Regex("[._\\-]+"), " ")
-                                            .replace(Regex("\\s+"), " ")
-                                            .trim()
-                                            .lowercase(java.util.Locale.US)
-                                        if (normalized.isBlank()) return@runCatching uri.host ?: endpoint
-
-                                        normalized.replaceFirstChar { c -> c.titlecase(java.util.Locale.US) }
-                                    }.getOrNull()
-                                    ?: endpoint
+                                val bundleLabel = bundleImportLabel(
+                                    endpoint,
+                                    (displayName ?: snapshotName)?.takeUnless {
+                                        it == app.getString(R.string.patches_name_fallback)
+                                    }
+                                )
 
                             fun setImportProgress(
                                 phase: PatchBundleRepository.BundleImportPhase,
@@ -1046,6 +1030,7 @@ class ImportExportViewModel(
                                         usePrereleases = snapshot.usePrereleases ?: false,
                                         createdAt = snapshot.createdAt,
                                         updatedAt = snapshot.updatedAt,
+                                        importLabel = bundleLabel,
                                         onProgress = { bytesRead, bytesTotal ->
                                             setImportProgress(
                                                 phase = PatchBundleRepository.BundleImportPhase.Downloading,

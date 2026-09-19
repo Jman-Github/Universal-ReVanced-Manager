@@ -361,6 +361,13 @@ class ManagerApplication : Application() {
         }
     }
 
+    override fun getBaseContext(): Context? {
+        val attached = super.getBaseContext()
+        // ActivityThread casts this to ContextImpl when creating manifest receivers.
+        // ContextWrapper's storage methods still delegate to the attached PR wrapper.
+        return if (attached is app.urv.manager.util.BuildProfileContext) attached.baseContext else attached
+    }
+
     override fun attachBaseContext(base: Context?) {
         val storageBase = base?.let { app.urv.manager.util.BuildProfileContext.wrap(it) }
         super.attachBaseContext(storageBase)
