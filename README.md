@@ -3,11 +3,11 @@
     <source
       width="256px"
       media="(prefers-color-scheme: dark)"
-      srcset="assets/icons/icon-circle.png"
+      srcset="assets/icons/icon-circle.svg"
     >
     <img
       width="256px"
-      src="assets/icons/icon-circle.png"
+      src="assets/icons/icon-circle.svg"
       alt="Universal ReVanced Manager icon"
     />
   </picture>
@@ -15,7 +15,7 @@
 
 # 💊 Universal ReVanced Manager
 
-Application for using ReVanced, Morphe and AmpleReVanced all in a single app on Android.
+Application for using ReVanced and Morphe in a single app on Android.
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
@@ -69,7 +69,6 @@ Universal ReVanced Manager includes powerful features that the official ReVanced
 <summary><strong>App Patching Flow</strong></summary>
 <ul>
   <li><strong>Morphe patch bundles support:</strong> Supports the <a href="https://github.com/MorpheApp/morphe-patcher">Morphe Patcher</a> without needing a computer or another app.</li>
-  <li><strong>Ample patch bundles support:</strong> Supports <a href="https://github.com/AmpleReVanced/revanced-patches">AmpleReVanced patch bundles</a> alongside ReVanced and Morphe runtimes.</li>
   <li><strong>Downloaded app source:</strong> Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available.</li>
   <li><strong>Split APK support:</strong> .apkm, .apks, and .xapk file formats are automatically converted to the .apk format when patching. No need for outside tools.</li>
   <li><strong>Split merge sub-steps:</strong> Expandable sub-steps for the "Merging split APKs" step, plus sub-steps for "Writing patched APK".</li>

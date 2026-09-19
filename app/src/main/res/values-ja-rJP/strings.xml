@@ -299,7 +299,7 @@
     <string name="downloader_plugin_state_failed">読み込みに失敗しました。詳細はクリックしてください</string>
     <string name="downloader_plugin_state_untrusted">信頼されていない</string>
     <string name="downloader_plugin_trust_dialog_title">プラグインを信頼しますか？</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">信頼を取り消しますか？</string>
+    <string name="downloader_plugin_revoke_trust_dialog_title">信頼を取り消す</string>
     <string name="downloader_plugin_view_error">エラー詳細を表示</string>
     <string name="downloader_plugin_failed_dialog_body">「%1$s」の読み込みに失敗しました。エラー詳細を表示するか、プラグインをアンインストールできます。</string>
     <string name="downloader_plugin_uninstall_title">プラグインをアンインストールしますか？</string>
@@ -328,11 +328,7 @@
     <string name="dark">ダーク</string>
     <string name="appearance">外観</string>
     <string name="downloaded_apps">ダウンロード済みアプリ</string>
-    <string name="process_runtime">パッチャーを別のプロセスで実行（実験的）</string>
-    <string name="process_runtime_description">高速化され、パッチャーがより多くのメモリを使用できるようになります</string>
     <string name="strip_unused_libs">未使用のネイティブライブラリを削除</string>
-    <string name="process_runtime_memory_limit">パッチャープロセスのメモリ制限</string>
-    <string name="process_runtime_memory_limit_description">パッチャープロセスが使用できるメモリの最大量（メガバイト単位）</string>
     <string name="reset_to_recommended">推奨値にリセット</string>
     <string name="patcher_auto_collapse_steps">完了したパッチャーステップを自動的に折りたたむ</string>
     <string name="patcher_auto_collapse_steps_description">すべてのステップが完了した後、各 Patcher 進捗ウィジェットを自動的に折りたたみます</string>
@@ -462,11 +458,6 @@
     <string name="patch_profile_bundle_change_uid_success">バンドル UID を %1$d に更新しました。</string>
     <string name="patch_profile_bundle_change_uid_not_found">UID %1$d のローカルパッチソースが見つかりません。</string>
     <string name="patcher_process_exit_message">Patcher プロセスはコード %1$d で終了しました。</string>
-    <string name="patcher_memory_adjustment_title">Patcher がメモリ不足になりました</string>
-    <string name="patcher_memory_adjustment_message_reduced">実験的な Patcher プロセスはメモリ不足のため停止しました。すぐに再試行できるように、メモリ制限を %1$d MB から %2$d MB に下げました。</string>
-    <string name="patcher_memory_adjustment_message_no_change">実験的な Patcher プロセスはメモリ不足のため停止しましたが、メモリ制限はすでに %1$d MB です。詳細設定でさらに下げるか、実験モードを無効にしてから再試行してください。</string>
-    <string name="patcher_memory_adjustment_retry">再試行</string>
-    <string name="patcher_memory_adjustment_dismiss">閉じる</string>
     <string name="patcher_missing_patch_title">パッチ選択に注意が必要です</string>
     <string name="patcher_preflight_missing_patch_message">以下のパッチは現在のバンドルでは利用できません:\n%1$s\n自動的に削除するか、選択を調整するか、とにかく続行することができます。</string>
     <string name="patcher_preflight_missing_patch_remove">不足しているパッチを削除</string>
