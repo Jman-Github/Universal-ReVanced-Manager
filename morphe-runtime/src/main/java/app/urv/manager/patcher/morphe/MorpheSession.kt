@@ -3,10 +3,11 @@ package app.urv.manager.patcher.morphe
 import android.os.Build
 import app.morphe.patcher.Patcher
 import app.morphe.patcher.PatcherConfig
+import app.morphe.patcher.PatcherResult
 import app.morphe.patcher.dex.BytecodeMode
+import app.morphe.patcher.apk.ApkUtils.applyTo
 import app.morphe.patcher.patch.Patch
 import app.morphe.patcher.patch.PatchResult
-import app.morphe.patcher.PatcherResult
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
@@ -20,10 +21,6 @@ import app.urv.manager.patcher.toSafeStackTraceString
 import app.urv.manager.patcher.util.NativeLibStripper
 import app.urv.manager.patcher.util.XmlSurrogateSanitizer
 import app.urv.manager.patcher.toRemoteError
-import com.android.tools.build.apkzlib.zip.AlignmentRules
-import com.android.tools.build.apkzlib.zip.ZFile
-import com.android.tools.build.apkzlib.zip.ZFileOptions
-import com.google.common.base.Predicate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -58,6 +55,7 @@ class MorpheSession(
 ) : Closeable {
     private val cacheDirFile = File(cacheDir)
     private val tempDir = cacheDirFile.resolve("patcher").also { it.mkdirs() }
+    private val fileWorkspace = cacheDirFile.resolve("patch-workspace").also { it.mkdirs() }
     private val frameworkDirFile = File(frameworkDir).also { it.mkdirs() }
     private val resolvedAaptPath = aaptPath
     private var patcher = createPatcher()
@@ -69,7 +67,7 @@ class MorpheSession(
             frameworkFileDirectory = frameworkDirFile.absolutePath,
             aaptBinaryPath = resolvedAaptPath,
             useBytecodeMode = bytecodeMode,
-            fileWorkspacePath = cacheDirFile,
+            fileWorkspacePath = fileWorkspace,
         )
     )
 
@@ -400,8 +398,36 @@ class MorpheSession(
                 runCancellableBlockingIo(checkCancelled) {
                     fastCopy(input, patched)
                 }
+                result.dexFiles.forEach { dex ->
+                    checkCancelled()
+                    val entryName = dex.name
+                    if (isDexEntryName(entryName)) {
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.WriteAPK,
+                                message = "Compiling $entryName"
+                            )
+                        )
+                    }
+                }
+                result.resources?.let { resources ->
+                    if (
+                        resources.resourcesApk != null ||
+                        resources.otherResources != null ||
+                        resources.deleteResources.isNotEmpty()
+                    ) {
+                        onEvent(
+                            ProgressEvent.Progress(
+                                stepId = StepId.WriteAPK,
+                                message = "Compiling modified resources"
+                            )
+                        )
+                    }
+                }
+                emitWriteApkProgress("Applying patched changes")
                 runCancellableBlockingIo(checkCancelled) {
-                    applyResultToApk(patched, result)
+                    checkCancelled()
+                    result.applyTo(patched)
                 }
                 checkCancelled()
 
@@ -455,65 +481,6 @@ class MorpheSession(
     private fun writeApkDexGroupTitle(): String = when (bytecodeMode) {
         BytecodeMode.FULL -> "Compiling DEX files: FULL"
         else -> "Compiling DEX files: FAST"
-    }
-
-    private fun applyResultToApk(apkFile: File, result: PatcherResult) {
-        ZFile.openReadWrite(apkFile, zFileOptions).use { apk ->
-            result.dexFiles.forEach { dex ->
-                checkCancelled()
-                val entryName = dex.name
-                if (isDexEntryName(entryName)) {
-                    onEvent(
-                        ProgressEvent.Progress(
-                            stepId = StepId.WriteAPK,
-                            message = "Compiling $entryName"
-                        )
-                    )
-                }
-                dex.stream.use { stream ->
-                    apk.add(entryName, stream)
-                }
-            }
-
-            result.resources?.let { resources ->
-                onEvent(
-                    ProgressEvent.Progress(
-                        stepId = StepId.WriteAPK,
-                        message = "Compiling modified resources"
-                    )
-                )
-                resources.resourcesApk?.let { resourcesApkFile ->
-                    ZFile.openReadOnly(resourcesApkFile).use { resourcesApk ->
-                        apk.entries()
-                            .filter { it.centralDirectoryHeader.name.startsWith("res/") }
-                            .toList()
-                            .forEach { it.delete() }
-                        apk.mergeFrom(resourcesApk, Predicate { false })
-                    }
-                }
-
-                resources.otherResources?.let { resourcesDir ->
-                    if (resourcesDir.exists()) {
-                        val noCompress = resources.doNotCompress
-                        apk.addAllRecursively(resourcesDir, Predicate { file ->
-                            val relative = file.relativeTo(resourcesDir).path.replace(File.separatorChar, '/')
-                            relative !in noCompress
-                        })
-                    }
-                }
-
-                if (resources.deleteResources.isNotEmpty()) {
-                    val deleteResources = resources.deleteResources
-                    apk.entries()
-                        .filter { it.centralDirectoryHeader.name in deleteResources }
-                        .toList()
-                        .forEach { it.delete() }
-                }
-            }
-
-            logger.info("Aligning APK")
-            apk.realign()
-        }
     }
 
     private fun isDexEntryName(name: String): Boolean =
@@ -838,6 +805,7 @@ class MorpheSession(
 
     override fun close() {
         tempDir.deleteRecursively()
+        fileWorkspace.deleteRecursively()
         patcher.close()
     }
 
@@ -845,14 +813,6 @@ class MorpheSession(
         private const val FRAMEWORK_APK_NAME = "1.apk"
         private const val FRAMEWORK_RESOURCES_TABLE = "resources.arsc"
         private const val MIN_BUNDLED_FRAMEWORK_SDK = 23
-        private val zFileOptions = ZFileOptions().apply {
-            setAlignmentRule(
-                AlignmentRules.compose(
-                    AlignmentRules.constantForSuffix(".so", 4096),
-                    AlignmentRules.constant(4)
-                )
-            )
-        }
         operator fun PatchResult.component1() = patch
         operator fun PatchResult.component2() = exception
     }
