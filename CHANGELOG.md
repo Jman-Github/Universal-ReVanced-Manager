@@ -4,6 +4,13 @@ Release notes from the Semantic Release migration onward are generated automatic
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [1.9.0-dev.2](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.9.0-dev.1...v1.9.0-dev.2) (2026-09-20)
+
+
+### Bug Fixes
+
+* **morphe:** correctly apply patch results and isolate workspace ([3aacd3a](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/3aacd3aba8a418c50692428dfb9fb9f94e051827))
+
 # v1.9.0-dev.1
 
 # Features
