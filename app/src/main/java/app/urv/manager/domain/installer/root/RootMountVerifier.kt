@@ -13,7 +13,11 @@ class RootMountVerifier(
         require(targets.all(::isSafeApkPath)) { "Unsafe APK mount target" }
         val occupied = mountTableReader.mountsAt(targets)
         check(occupied.isEmpty()) {
-            "APK mount target is occupied by another mount: ${occupied.joinToString { it.mountPoint }}"
+            "APK mount target is occupied by another mount: " +
+                occupied.joinToString { entry ->
+                    "${entry.mountPoint} (mountId=${entry.mountId}, " +
+                        "root=${entry.root}, source=${entry.source})"
+                }
         }
     }
 
@@ -47,8 +51,7 @@ class RootMountVerifier(
                 // stat calls across every APK mount on the device.
                 val visibleLayer = layers.maxByOrNull(MountInfoEntry::mountId)
                 if (visibleLayer != null && visibleLayer !in directlyOwned) {
-                    val inodes = sourceInodes ?: sources.mapNotNull { path -> inode(path) }
-                        .toSet()
+                    val inodes = sourceInodes ?: knownSourceInodes(packageName)
                         .also { sourceInodes = it }
                     if (inode(target) in inodes) {
                         owned += visibleLayer
@@ -80,8 +83,19 @@ class RootMountVerifier(
         return targetInode in sourceInodes
     }
 
-    private suspend fun knownSourceInodes(packageName: String): Set<String> =
-        urvSources(packageName).mapNotNull { path -> inode(path) }.toSet()
+    private suspend fun knownSourceInodes(packageName: String): Set<String> {
+        // Only the set of identities matters here, not which path produced each one.
+        // Probe all candidates in one bounded job, including legacy and mountinfo aliases.
+        // Missing candidates are expected: stat still prints identities for existing files
+        // even when another operand fails. Never retain these across discovery calls.
+        val paths = urvSources(packageName).joinToString(" ", transform = ::shellQuote)
+        val result = shell.runIsolatedBounded(
+            "stat -c '%d:%i' $paths 2>/dev/null",
+            METADATA_TIMEOUT_SECONDS,
+            "root mount source inode checks"
+        )
+        return result.stdout.map(String::trim).filter { it.matches(INODE_PATTERN) }.toSet()
+    }
 
     override suspend fun removeAllUrvMounts(
         packageName: String,
@@ -275,6 +289,7 @@ class RootMountVerifier(
         const val UNMOUNT_TIMEOUT_SECONDS = 15L
         const val METADATA_TIMEOUT_SECONDS = 15L
         const val HASH_TIMEOUT_SECONDS = 60L
+        val INODE_PATTERN = Regex("[0-9]+:[0-9]+")
 
         fun isSafeApkPath(path: String): Boolean =
             path.startsWith('/') &&

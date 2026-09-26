@@ -10,6 +10,31 @@ import kotlin.test.assertTrue
 
 class RootMountVerifierTest {
     @Test
+    fun `opaque mount ownership batches source probes and refreshes each discovery`() = runBlocking {
+        val shell = MountShell(TARGET, opaqueSource = true)
+        val verifier = verifier(shell)
+
+        repeat(2) {
+            assertEquals(listOf(TARGET), verifier.findUrvMounts(PACKAGE, emptySet()).map { it.mountPoint })
+        }
+
+        // One source batch and one fresh target probe per discovery, even though most
+        // candidate paths are absent and stat returns a nonzero status for the batch.
+        assertEquals(4, shell.commands.count { it.startsWith("stat -c") })
+        val batches = shell.commands.filter { it.startsWith("stat -c") && !it.contains(shellQuote(TARGET)) }
+        assertEquals(2, batches.size)
+        assertTrue(batches.all { it.contains(shellQuote("${RootPaths.LEGACY}/$PACKAGE/$PACKAGE.apk")) })
+    }
+
+    @Test
+    fun `opaque foreign mount is rejected with batched source probes`() = runBlocking {
+        val shell = MountShell(TARGET, source = "/data/adb/modules/other/payload.apk", opaqueSource = true)
+
+        assertTrue(verifier(shell).findUrvMounts(PACKAGE, emptySet()).isEmpty())
+        assertEquals(2, shell.commands.count { it.startsWith("stat -c") })
+    }
+
+    @Test
     fun `current and legacy payload inodes identify stale mounts without sourceDir`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(target, source = "/data/adb/revanced/com.example.app/com.example.app.apk")
@@ -425,6 +450,7 @@ class RootMountVerifierTest {
         private val mountLayers: Int = 1,
         private val includeForeignLayer: Boolean = false,
         private val exposeSourcePath: Boolean = true,
+        private val opaqueSource: Boolean = false,
         private val foreignLayerOnMountTableRead: Int? = null,
         private val dropUrvMountOnFailedNormalUnmount: Boolean = false,
         mountLayerSources: List<String>? = null
@@ -455,12 +481,12 @@ class RootMountVerifierTest {
                     if (mountTableReads == foreignLayerOnMountTableRead) foreignLayerMounted = true
                     val lines = if (mounted) {
                         val urv = remainingUrvSources.mapIndexed { index, layerSource ->
-                            val root = if (exposeSourcePath) {
+                            val root = if (opaqueSource || exposeSourcePath) {
                                 "/"
                             } else {
                                 layerSource.removePrefix("/data")
                             }
-                            val mountedSource = if (exposeSourcePath) layerSource else "/dev/block/dm-3"
+                            val mountedSource = if (exposeSourcePath && !opaqueSource) layerSource else "/dev/block/dm-3"
                             "${42 + index} 1 0:1 $root $target rw - ext4 $mountedSource rw"
                         }
                         if (foreignLayerMounted) {
@@ -480,16 +506,15 @@ class RootMountVerifierTest {
                         command.contains(shellQuote(target)) && remainingUrvSources.isNotEmpty() ->
                             RootCommandResult(0, listOf(inodeFor(remainingUrvSources.last())), emptyList())
                         else -> {
-                            val matchedSource = (
-                                remainingUrvSources +
-                                    RootPaths.moduleApk(PACKAGE) +
-                                    RootPaths.moduleStockApk(PACKAGE)
-                                ).firstOrNull { command.contains(shellQuote(it)) }
-                            if (matchedSource == null) {
-                                RootCommandResult(1, emptyList(), emptyList())
-                            } else {
-                                RootCommandResult(0, listOf(inodeFor(matchedSource)), emptyList())
-                            }
+                            val existing = remainingUrvSources + RootPaths.moduleApk(PACKAGE) +
+                                RootPaths.moduleStockApk(PACKAGE)
+                            val requested = Regex("'([^']*)'").findAll(command)
+                                .map { it.groupValues[1] }.filter { it.startsWith('/') }.toList()
+                            RootCommandResult(
+                                if (requested.all { it in existing }) 0 else 1,
+                                requested.filter { it in existing }.map(::inodeFor),
+                                emptyList()
+                            )
                         }
                     }
                 }
