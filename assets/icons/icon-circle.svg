@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048" role="img" aria-label="ReVanced circular icon">
+  <defs>
+    <linearGradient id="circleGradient" x1="230" y1="240" x2="1810" y2="1810" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#24359f" />
+      <stop offset="0.28" stop-color="#64218b" />
+      <stop offset="0.52" stop-color="#9f1b60" />
+      <stop offset="0.78" stop-color="#d12a25" />
+      <stop offset="1" stop-color="#ff4d08" />
+    </linearGradient>
+    <radialGradient id="circleDepth" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(995 990) rotate(135) scale(1000)">
+      <stop offset="0" stop-color="#ba1b6b" stop-opacity="0.36" />
+      <stop offset="0.56" stop-color="#742395" stop-opacity="0.26" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="triangleGradient" x1="1024" y1="731" x2="1024" y2="1328" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff6518" />
+      <stop offset="0.35" stop-color="#d94458" />
+      <stop offset="0.72" stop-color="#7132b5" />
+      <stop offset="1" stop-color="#1737d0" />
+    </linearGradient>
+    <filter id="iconShadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="5" stdDeviation="9" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <circle cx="1024" cy="1024" r="1024" fill="url(#circleGradient)" />
+  <circle cx="1024" cy="1024" r="1024" fill="url(#circleDepth)" />
+
+  <g filter="url(#iconShadow)">
+    <path fill="#ffffff" d="M721 667C646 667 599 749 638 814L934 1308C974 1374 1074 1374 1114 1308L1410 814C1449 749 1402 667 1327 667H721Z" />
+    <path fill="url(#triangleGradient)" d="M713 731C685 731 668 762 682 786L982 1287C1001 1319 1047 1319 1066 1287L1366 786C1380 762 1363 731 1335 731H713Z" />
+  </g>
+</svg>

@@ -27,26 +27,9 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         google()
-        maven("https://jitpack.io") {
-            metadataSources {
-                mavenPom()
-                artifact()
-            }
-        }
         maven {
             // From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
             url = uri("https://maven.pkg.github.com/brosssh/registry")
-            credentials {
-                val gprUser: String? = githubUser()
-                val gprKey: String? = githubToken()
-
-                username = gprUser.orEmpty().ifBlank { "anonymous" }
-                password = gprKey.orEmpty()
-            }
-        }
-        maven {
-            // AmpleReVanced packages are published to GitHub Packages.
-            url = uri("https://maven.pkg.github.com/AmpleReVanced/registry")
             credentials {
                 val gprUser: String? = githubUser()
                 val gprKey: String? = githubToken()
@@ -67,8 +50,11 @@ dependencyResolutionManagement {
             }
         }
         maven {
-            // Morphe packages are published to GitHub Packages.
-            url = uri("https://maven.pkg.github.com/MorpheApp/registry")
+            // Morphe library is published to its repository-specific GitHub Packages endpoint.
+            url = uri("https://maven.pkg.github.com/MorpheApp/morphe-library")
+            content {
+                includeModule("app.morphe", "morphe-library")
+            }
             credentials {
                 val gprUser: String? = githubUser()
                 val gprKey: String? = githubToken()
@@ -77,8 +63,59 @@ dependencyResolutionManagement {
                 password = gprKey.orEmpty()
             }
         }
+        maven {
+            // Morphe publishes multiple runtime artifacts under the app.morphe group from this endpoint.
+            url = uri("https://maven.pkg.github.com/MorpheApp/morphe-patcher")
+            content {
+                includeGroup("app.morphe")
+            }
+            credentials {
+                val gprUser: String? = githubUser()
+                val gprKey: String? = githubToken()
+
+                username = gprUser.orEmpty().ifBlank { "anonymous" }
+                password = gprKey.orEmpty()
+            }
+        }
+        maven {
+            // Morphe multidexlib2 is also published to its own GitHub Packages endpoint.
+            url = uri("https://maven.pkg.github.com/MorpheApp/multidexlib2")
+            content {
+                includeModule("app.morphe", "multidexlib2")
+            }
+            credentials {
+                val gprUser: String? = githubUser()
+                val gprKey: String? = githubToken()
+
+                username = gprUser.orEmpty().ifBlank { "anonymous" }
+                password = gprKey.orEmpty()
+            }
+        }
+        maven("https://jitpack.io") {
+            metadataSources {
+                mavenPom()
+                artifact()
+            }
+        }
     }
 }
 
 rootProject.name = "universal-revanced-manager"
-include(":app", ":api", ":morphe-runtime", ":ample-runtime")
+
+fun moduleExists(path: String): Boolean {
+    val relativePath = path.removePrefix(":").replace(':', '/')
+    val projectDir = rootDir.resolve(relativePath)
+    return projectDir.isDirectory && (
+        projectDir.resolve("build.gradle.kts").exists() ||
+            projectDir.resolve("build.gradle").exists()
+        )
+}
+
+fun includeIfAvailable(path: String) {
+    if (moduleExists(path)) include(path)
+}
+
+include(":app", ":api")
+includeIfAvailable(":morphe-runtime")
+includeIfAvailable(":revanced.v21-runtime-plugin")
+

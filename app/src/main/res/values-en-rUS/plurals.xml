@@ -4,8 +4,28 @@
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
     </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">%d patch was removed</item>
+        <item quantity="other">%d patches were removed</item>
+    </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d selected</item>
         <item quantity="other">%d selected</item>
     </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d app selected</item>
+        <item quantity="other">%d apps selected</item>
+    </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected app?\nRooted mount entries will also be unmounted and their root modules removed. Stock apps will remain installed.</item>
+        <item quantity="other">Are you sure you want to delete the selected apps?\nRooted mount entries will also be unmounted and their root modules removed. Stock apps will remain installed.</item>
+        </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected patch bundle?</item>
+        <item quantity="other">Are you sure you want to delete the selected patch bundles?</item>
+        </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Are you sure you want to delete the selected patch profile?</item>
+        <item quantity="other">Are you sure you want to delete the selected patch profiles?</item>
+        </plurals>
 </resources>

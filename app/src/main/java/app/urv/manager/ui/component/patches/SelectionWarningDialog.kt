@@ -1,0 +1,17 @@
+package app.urv.manager.ui.component.patches
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import app.universal.revanced.manager.R
+import app.urv.manager.ui.component.SafeguardDialog
+
+@Composable
+fun SelectionWarningDialog(
+    onDismiss: () -> Unit
+) {
+    SafeguardDialog(
+        onDismiss = onDismiss,
+        title = R.string.warning,
+        body = stringResource(R.string.selection_warning_description),
+    )
+}
