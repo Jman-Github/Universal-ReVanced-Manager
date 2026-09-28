@@ -112,14 +112,16 @@ public final class ApkEditorMergeProcess {
                     cancellationCheckpoint
             );
 
+            for (ApkModule module : bundle.getApkModuleList()) {
+                normalizeSparseResources(module, cancellationCheckpoint);
+            }
+
             String expectedPackageName = baseModule.getPackageName();
             int expectedVersionCode = baseModule.getVersionCode();
             boolean expectedResourceTable = baseModule.hasTableBlock();
             ApkModule mergedModule = null;
             try {
                 runCancellationCheckpoint(cancellationCheckpoint);
-                // Keep manual split selection and the merger tool on the same bundle-level
-                // merge path used by automatic split pruning in the patcher runtimes.
                 mergedModule = bundle.mergeModules(false);
                 writeAndVerifyMergedApk(
                         mergedModule,
@@ -210,6 +212,28 @@ public final class ApkEditorMergeProcess {
             String normalized = normalizeModuleName(module.getModuleName());
             if (skipLookup.contains(normalized)) {
                 bundle.removeApkModule(module.getModuleName());
+            }
+        }
+    }
+
+    private static void normalizeSparseResources(ApkModule module, Runnable cancellationCheckpoint) {
+        if (!module.hasTableBlock()) return;
+        // ARSCLib's dense merge treats array positions as entry IDs, which drops sparse entries.
+        // Expand sparse types before merging so each entry keeps its resource ID.
+        for (var pkg : module.getTableBlock().listPackages()) {
+            for (var pair : pkg.listSpecTypePairs()) {
+                var types = pair.getTypeBlockArray();
+                for (int i = 0; i < types.size(); i++) {
+                    runCancellationCheckpoint(cancellationCheckpoint);
+                    var type = types.get(i);
+                    if (!type.isSparse()) continue;
+                    var snapshot = type.toJson();
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_sparse, false);
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_offset16, false);
+                    type.getEntryArray().clear();
+                    type.getHeaderBlock().setOffsetType(false, false);
+                    type.fromJson(snapshot);
+                }
             }
         }
     }

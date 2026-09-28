@@ -203,7 +203,11 @@ class RootMountVerifier(
         stockPath: String,
         pids: List<Int>
     ) {
-        namespaces.verifyStockProcesses(packageName, userId, stockPath, pids)
+        if (pids.isEmpty()) return
+        val stock = packageStateReader.read(packageName, userId)
+        check(stock.installed && stock.basePath == stockPath) { "Stock package moved during process verification" }
+        stock.verifiedSplits()
+        namespaces.verifyStockProcesses(packageName, userId, stockPath, pids, stock.splitPaths)
     }
 
     private suspend fun verifyMountedState(
@@ -247,6 +251,7 @@ class RootMountVerifier(
         check(packageState.signerSha256 == expected.signerSha256) { "PackageManager signer changed during mount" }
         check(packageState.basePath == expected.stockPath) { "PackageManager base path changed during mount" }
         check(packageState.topology == expected.topology) { "Package topology changed during mount" }
+        check(packageState.matchesSplits(expected.stockSplits)) { "Installed split APKs changed during mount" }
         check(packageState.enabled == expected.enabled) { "Package enabled state changed during mount" }
         check(packageState.launcherResolvable == expected.launcherResolvable) {
             "Package launcher resolution changed during mount"

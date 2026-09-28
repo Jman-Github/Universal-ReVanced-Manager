@@ -108,7 +108,11 @@ internal object Merger {
                     closeables.add(bundle)
 
                     coroutineContext.ensureActive()
+                    val mergeContext = coroutineContext
                     val mergedModule = runInterruptible(Dispatchers.Default) {
+                        bundle.apkModuleList.forEach { module ->
+                            normalizeSparseResources(module) { mergeContext.ensureActive() }
+                        }
                         bundle.mergeModules(false)
                     }.apply {
                         setAPKLogger(logger)
@@ -212,6 +216,28 @@ internal object Merger {
             }
         } finally {
             closeables.forEach(Closeable::close)
+        }
+    }
+
+    private fun normalizeSparseResources(module: ApkModule, checkCancelled: () -> Unit) {
+        if (!module.hasTableBlock()) return
+        // ARSCLib's dense merge treats array positions as entry IDs, which drops sparse entries.
+        // Expand sparse types before merging so each entry keeps its resource ID.
+        module.tableBlock.listPackages().forEach { pkg ->
+            pkg.listSpecTypePairs().forEach { pair ->
+                val types = pair.typeBlockArray
+                for (index in 0 until types.size()) {
+                    checkCancelled()
+                    val type = types.get(index)
+                    if (!type.isSparse) continue
+                    val snapshot = type.toJson()
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_sparse, false)
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_offset16, false)
+                    type.entryArray.clear()
+                    type.headerBlock.setOffsetType(false, false)
+                    type.fromJson(snapshot)
+                }
+            }
         }
     }
 

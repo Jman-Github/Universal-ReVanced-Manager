@@ -79,15 +79,15 @@ internal fun patchedOutputSupportsRootMount(
     patchedPackageName: String?,
     originalPackageName: String,
     patchedIsCompleteSingleApk: Boolean,
+    patchedIsSplitDependentBase: Boolean,
     patchedHasSigningCertificate: Boolean,
-    installedHasSplitApks: Boolean,
     installedHasSharedUserId: Boolean,
     hasUsableStockIdentity: Boolean,
+    hasUsableSplitStockIdentity: Boolean,
     patchedVersionMatchesSource: Boolean
 ): Boolean = patchedPackageName == originalPackageName &&
-    patchedIsCompleteSingleApk &&
+    (patchedIsCompleteSingleApk || patchedIsSplitDependentBase && hasUsableSplitStockIdentity) &&
     patchedHasSigningCertificate &&
-    !installedHasSplitApks &&
     !installedHasSharedUserId &&
     hasUsableStockIdentity &&
     patchedVersionMatchesSource
@@ -95,15 +95,15 @@ internal fun patchedOutputSupportsRootMount(
 internal fun rootMountStockIdentityUsable(
     installedMatchesSourceVersion: Boolean,
     installedHasSigningCertificate: Boolean,
-    hasStandaloneStockSource: Boolean,
-    standaloneStockIdentityCompatible: Boolean
+    hasStockSource: Boolean,
+    stockIdentityCompatible: Boolean
 ): Boolean {
     val installedCanSupplyStock =
         installedMatchesSourceVersion && installedHasSigningCertificate
     return if (installedCanSupplyStock) {
-        !hasStandaloneStockSource || standaloneStockIdentityCompatible
+        !hasStockSource || stockIdentityCompatible
     } else {
-        hasStandaloneStockSource && standaloneStockIdentityCompatible
+        hasStockSource && stockIdentityCompatible
     }
 }
 

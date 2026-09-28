@@ -137,6 +137,8 @@ class RootModuleStore(
             stockShadowSha256 = stockShadowSha256,
             preserveStockAcrossBoot = preserveStock,
             topology = values["URV_TOPOLOGY"].orEmpty(),
+            stockSplits = runCatching { decodeSplitIdentity(values["URV_STOCK_SPLITS"].orEmpty()) }
+                .getOrNull() ?: return null,
             enabled = values["URV_ENABLED"] == "1",
             launcherResolvable = values["URV_LAUNCHER_RESOLVABLE"] == "1",
             active = active,
@@ -508,6 +510,7 @@ class RootModuleStore(
         stockShadowSha256 = requireNotNull(compatible.baseSha256),
         preserveStockAcrossBoot = true,
         topology = compatible.topology,
+        stockSplits = compatible.verifiedSplits(),
         enabled = compatible.enabled,
         launcherResolvable = compatible.launcherResolvable
     )
@@ -527,6 +530,7 @@ class RootModuleStore(
         stockShadowSha256 = state.stockShadowSha256.orEmpty(),
         preserveStockAcrossBoot = state.preserveStockAcrossBoot,
         topology = state.topology,
+        stockSplits = state.stockSplits,
         enabled = state.enabled,
         launcherResolvable = state.launcherResolvable
     )
@@ -546,6 +550,7 @@ class RootModuleStore(
         stockShadowSha256: String,
         preserveStockAcrossBoot: Boolean,
         topology: String,
+        stockSplits: Map<String, String>,
         enabled: Boolean,
         launcherResolvable: Boolean
     ): String = buildString {
@@ -564,6 +569,7 @@ class RootModuleStore(
         appendLine("URV_STOCK_SHADOW_SHA256=${envQuote(stockShadowSha256)}")
         appendLine("URV_PRESERVE_STOCK=${envQuote(if (preserveStockAcrossBoot) "1" else "0")}")
         appendLine("URV_TOPOLOGY=${envQuote(topology)}")
+        appendLine("URV_STOCK_SPLITS=${envQuote(encodeSplitIdentity(stockSplits))}")
         appendLine("URV_ENABLED=${envQuote(if (enabled) "1" else "0")}")
         appendLine("URV_LAUNCHER_RESOLVABLE=${envQuote(if (launcherResolvable) "1" else "0")}")
     }

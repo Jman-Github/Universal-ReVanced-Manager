@@ -29,6 +29,8 @@ import app.urv.manager.domain.installer.shouldUseConfiguredInstallerWithoutPromp
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.root.AndroidPackageStateReader
+import app.urv.manager.domain.installer.root.LibsuRootShellGateway
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountRequest
 import app.urv.manager.domain.installer.root.RootMountResult
@@ -43,6 +45,7 @@ import app.urv.manager.domain.installer.root.restore
 import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
+import app.urv.manager.domain.installer.root.verifiedStockSet
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
@@ -1368,12 +1371,12 @@ class BatchPatchCoordinator(
         }
     }
 
-    private fun verifiedStandaloneStockCandidates(
+    private fun stockSourceCandidates(
         item: BatchPatchItem,
-        packageName: String = item.packageName
+        packageName: String,
+        sourceVersionName: String,
+        sourceVersionCode: Long
     ): List<File> {
-        val sourceVersionName = item.version?.takeIf(String::isNotBlank) ?: return emptyList()
-        val sourceVersionCode = item.versionCode ?: return emptyList()
         val retainedOriginals = fs.findOriginalAppFiles(
             packageName = packageName,
             version = sourceVersionName,
@@ -1383,6 +1386,16 @@ class BatchPatchCoordinator(
         val localSource = (item.input as? SelectedApp.Local)?.file
         return (sequenceOf(repatchSource, localSource).filterNotNull() + retainedOriginals.asSequence())
             .distinctBy { it.absolutePath }
+            .toList()
+    }
+
+    private fun verifiedStandaloneStockCandidates(
+        item: BatchPatchItem,
+        packageName: String = item.packageName
+    ): List<File> {
+        val sourceVersionName = item.version?.takeIf(String::isNotBlank) ?: return emptyList()
+        val sourceVersionCode = item.versionCode ?: return emptyList()
+        return stockSourceCandidates(item, packageName, sourceVersionName, sourceVersionCode)
             .filter { candidate ->
                 if (
                     !candidate.isFile ||
@@ -1400,7 +1413,57 @@ class BatchPatchCoordinator(
                     packageInfoIsCompleteSingleApk(info) &&
                     pm.getSignature(info) != null
             }
-            .toList()
+    }
+
+    private suspend fun verifiedSplitStockSource(
+        item: BatchPatchItem,
+        installedInfo: android.content.pm.PackageInfo?,
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): Pair<Boolean, File?> {
+        val packageStateReader = AndroidPackageStateReader(
+            pm = pm,
+            shell = LibsuRootShellGateway(rootInstaller)
+        )
+        var hasVerifiedSource = false
+        for (candidate in stockSourceCandidates(item, item.packageName, sourceVersionName, sourceVersionCode)) {
+            if (
+                !candidate.isFile ||
+                fs.isManagedPatchedAppFile(candidate) ||
+                !SplitApkPreparer.isSplitArchive(candidate)
+            ) {
+                continue
+            }
+
+            val workspace = File(app.cacheDir, "root-stock-check-${System.nanoTime()}")
+            try {
+                val verifiedSet = try {
+                    val extracted = SplitApkPreparer.extractEntriesForProcessing(candidate, workspace)
+                        .map { it.file }
+                    verifiedStockSet(extracted.map(packageStateReader::inspect))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                } ?: continue
+                val base = verifiedSet.singleOrNull() ?: continue
+                val baseInfo = pm.getPackageInfo(File(base.path), includeSigning = true)
+                    ?: continue
+                val verified = base.packageName == item.packageName &&
+                    base.versionName == sourceVersionName &&
+                    base.versionCode == sourceVersionCode &&
+                    baseInfo.sharedUserId == null &&
+                    pm.getSignature(baseInfo) != null
+                if (!verified) continue
+                hasVerifiedSource = true
+                if (installedSignerMatchesStockSource(installedInfo, baseInfo)) {
+                    return true to candidate
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { workspace.deleteRecursively() }
+            }
+        }
+        return hasVerifiedSource to null
     }
 
     private fun installedSignerMatchesStockSource(
@@ -1409,6 +1472,13 @@ class BatchPatchCoordinator(
     ): Boolean {
         val stockArchive = pm.getPackageInfo(stockSource, includeSigning = true)
             ?: return false
+        return installedSignerMatchesStockSource(installedInfo, stockArchive)
+    }
+
+    private fun installedSignerMatchesStockSource(
+        installedInfo: android.content.pm.PackageInfo?,
+        stockArchive: android.content.pm.PackageInfo
+    ): Boolean {
         val stockSigner = pm.getSignature(stockArchive)?.toByteArray()
             ?: return false
         if (installedInfo == null) return true
@@ -1467,6 +1537,9 @@ class BatchPatchCoordinator(
     ): Boolean {
         if (!patchSelectionSupportsRootMountModeOverride(item)) return false
         val patched = pm.getPackageInfo(patchedFile, includeSigning = true) ?: return false
+        val patchedArtifact = runCatching {
+            AndroidPackageStateReader(pm, LibsuRootShellGateway(rootInstaller)).inspect(patchedFile)
+        }.getOrNull() ?: return false
         val sourceVersionName = item.version?.takeIf(String::isNotBlank) ?: return false
         val sourceVersionCode = item.versionCode ?: return false
         val installedInfo = pm.getPackageInfo(item.packageName)
@@ -1474,6 +1547,13 @@ class BatchPatchCoordinator(
         val stockSource = stockCandidates.firstOrNull {
             installedSignerMatchesStockSource(installedInfo, it)
         }
+        val (hasSplitStockSource, compatibleSplitStockSource) = verifiedSplitStockSource(
+            item = item,
+            installedInfo = installedInfo,
+            sourceVersionName = sourceVersionName,
+            sourceVersionCode = sourceVersionCode
+        )
+        val splitStockIdentityCompatible = compatibleSplitStockSource != null
         val installedMatchesSourceVersion = installedPackageMatchesSourceVersion(
             installedInfo,
             sourceVersionName,
@@ -1485,17 +1565,22 @@ class BatchPatchCoordinator(
         val hasUsableStockIdentity = rootMountStockIdentityUsable(
             installedMatchesSourceVersion = installedMatchesSourceVersion,
             installedHasSigningCertificate = installedHasSigningCertificate,
-            hasStandaloneStockSource = stockCandidates.isNotEmpty(),
-            standaloneStockIdentityCompatible = stockSource != null
+            hasStockSource = stockCandidates.isNotEmpty() || hasSplitStockSource,
+            stockIdentityCompatible = stockSource != null || splitStockIdentityCompatible
         )
+        val installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true
+        val hasUsableSplitStockIdentity =
+            installedHasSplitApks && installedMatchesSourceVersion && installedHasSigningCertificate ||
+                !installedMatchesSourceVersion && splitStockIdentityCompatible
         return patchedOutputSupportsRootMount(
             patchedPackageName = patched.packageName,
             originalPackageName = item.packageName,
-            patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched),
-            patchedHasSigningCertificate = pm.getSignature(patched) != null,
-            installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true,
+            patchedIsCompleteSingleApk = patchedArtifact.splitName == null && patchedArtifact.topology == "SINGLE",
+            patchedIsSplitDependentBase = patchedArtifact.splitName == null && patchedArtifact.topology == "SPLIT",
+            patchedHasSigningCertificate = !patchedArtifact.signerSha256.isNullOrBlank(),
             installedHasSharedUserId = installedInfo?.sharedUserId != null,
             hasUsableStockIdentity = hasUsableStockIdentity,
+            hasUsableSplitStockIdentity = hasUsableSplitStockIdentity,
             patchedVersionMatchesSource = patched.versionName == sourceVersionName
         )
     }
@@ -1575,12 +1660,6 @@ class BatchPatchCoordinator(
         val requestedMount = resolvedToken?.let(installerManager::baseInstallerToken) ==
             InstallerManager.Token.AutoSaved
         val crossModeMountRequested = installerToken != null && !item.useMount && requestedMount
-        val installedPackageInfo = if (crossModeMountRequested) {
-            pm.getPackageInfo(item.packageName)
-        } else {
-            null
-        }
-        val installedHasSplitApks = installedPackageInfo?.let(pm::hasSplitApks) == true
         val supportsRootMountModeOverride = crossModeMountRequested &&
             canSelectRootMountForPatchedOutput(
                 item = item,
@@ -1600,15 +1679,10 @@ class BatchPatchCoordinator(
             return
         }
         if (crossModeMountRequested && !supportsRootMountModeOverride) {
-            val messageRes = if (installedHasSplitApks) {
-                R.string.mount_split_not_supported
-            } else {
-                R.string.root_mount_incompatible_output
-            }
             updateItem(index) {
                 it.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
-                    installMessage = app.getString(messageRes),
+                    installMessage = app.getString(R.string.root_mount_incompatible_output),
                     installedPackageName = targetPackage,
                     installing = false
                 )
@@ -1972,94 +2046,110 @@ class BatchPatchCoordinator(
                 ?.let(::File)
                 ?.takeIf(File::isFile)
         } else null
-        val verifiedRetainedStock = if (
-            stockNeedsReplacement || installedStock == null && !appMounted
-        ) {
-            verifiedStandaloneStockCandidates(item, targetPackage)
-                .firstOrNull { candidate ->
-                    installedSignerMatchesStockSource(installedInfo, candidate)
-                }
+        val splitSource = if (stockNeedsReplacement) {
+            verifiedSplitStockSource(
+                item = item,
+                installedInfo = installedInfo,
+                sourceVersionName = stockVersionName,
+                sourceVersionCode = stockVersionCode
+            ).second
         } else null
-        val stockFile = when {
-            stockNeedsReplacement -> verifiedRetainedStock
-            appMounted -> null
-            else -> installedStock ?: verifiedRetainedStock
-        }
-        if (stockFile == null && (stockNeedsReplacement || !appMounted)) {
-            return BatchInstallAttempt(app.getString(R.string.install_app_fail_missing_stock))
-        }
-
-        val request = RootMountRequest(
-            packageName = targetPackage,
-            userId = android.os.Process.myUid() / 100_000,
-            operation = if (stockNeedsReplacement) {
-                RootMountOperation.REPLACE_STOCK_AND_MOUNT
-            } else {
-                RootMountOperation.SWITCH_PATCHED_BUILD
-            },
-            patchedApk = patchedFile,
-            stockApks = listOfNotNull(stockFile),
-            expectedVersionName = patchedInfo.versionName,
-            expectedVersionCode = patchedVersionCode,
-            expectedStockVersionCode = stockVersionCode,
-            label = item.appName
-        )
-
-        var mountResult = executeRootMount(request, item)
-        val downgradeRequest =
-            mountResult as? RootMountResult.RequiresDowngradeConfirmation
-        if (downgradeRequest != null) {
-            val reason = downgradeRequest.reason
-            val completion = CompletableDeferred<Boolean>()
-            val confirmed = awaitBatchRequest(
-                timeoutMs = INTERACTIVE_ACTIVITY_TIMEOUT_MS,
-                completion = completion,
-                timeoutResult = false
+        val splitWorkspace = splitSource?.let { File(app.cacheDir, "root-stock-${System.nanoTime()}") }
+        try {
+            val splitStock = if (splitSource != null && splitWorkspace != null) {
+                SplitApkPreparer.extractEntriesForProcessing(splitSource, splitWorkspace).map { it.file }
+            } else emptyList()
+            val verifiedRetainedStock = if (
+                splitStock.isEmpty() && (stockNeedsReplacement || installedStock == null && !appMounted)
             ) {
-                rootDowngradeRequestChannel.send(
-                    BatchRootDowngradeRequest(
-                        appName = item.appName,
-                        reason = reason,
-                        completion = completion
-                    )
-                )
+                verifiedStandaloneStockCandidates(item, targetPackage)
+                    .firstOrNull { candidate ->
+                        installedSignerMatchesStockSource(installedInfo, candidate)
+                    }
+            } else null
+            val stockFile = when {
+                stockNeedsReplacement -> verifiedRetainedStock
+                appMounted -> null
+                else -> installedStock ?: verifiedRetainedStock
             }
-            if (!confirmed) {
-                return BatchInstallAttempt(
-                    failure = reason,
-                    allowFallback = false
-                )
+            if (splitStock.isEmpty() && stockFile == null && (stockNeedsReplacement || !appMounted)) {
+                return BatchInstallAttempt(app.getString(R.string.install_app_fail_missing_stock))
             }
-            mountResult = executeRootMount(
-                request.copy(downgradeFallbackConfirmed = true),
-                item
-            )
-        }
-        val attempt = BatchInstallAttempt(
-            failure = rootMountFailureMessage(mountResult),
-            allowFallback = rootMountAllowsBatchFallback(mountResult)
-        )
-        if (attempt.succeeded && installAsPlayStore) {
-            val attributionError = reinstallMountedStockAsPlayStore(
-                context = app,
-                rootInstaller = rootInstaller,
-                rootMountCoordinator = rootMountCoordinator,
+
+            val request = RootMountRequest(
                 packageName = targetPackage,
-                userId = android.os.Process.myUid() / 100_000
+                userId = android.os.Process.myUid() / 100_000,
+                operation = if (stockNeedsReplacement) {
+                    RootMountOperation.REPLACE_STOCK_AND_MOUNT
+                } else {
+                    RootMountOperation.SWITCH_PATCHED_BUILD
+                },
+                patchedApk = patchedFile,
+                stockApks = splitStock.ifEmpty { listOfNotNull(stockFile) },
+                expectedVersionName = patchedInfo.versionName,
+                expectedVersionCode = patchedVersionCode,
+                expectedStockVersionCode = stockVersionCode,
+                label = item.appName
             )
-            if (attributionError != null) {
-                Log.w(TAG, "Failed to record Play Store as the installation source", attributionError)
-                return attempt.copy(
-                    warning = app.getString(
-                        R.string.installer_play_store_attribution_failed,
-                        attributionError.simpleMessage()
-                            ?: attributionError.javaClass.simpleName.orEmpty()
-                    ),
-                    playStoreAttributionFailed = true
+
+            var mountResult = executeRootMount(request, item)
+            val downgradeRequest =
+                mountResult as? RootMountResult.RequiresDowngradeConfirmation
+            if (downgradeRequest != null) {
+                val reason = downgradeRequest.reason
+                val completion = CompletableDeferred<Boolean>()
+                val confirmed = awaitBatchRequest(
+                    timeoutMs = INTERACTIVE_ACTIVITY_TIMEOUT_MS,
+                    completion = completion,
+                    timeoutResult = false
+                ) {
+                    rootDowngradeRequestChannel.send(
+                        BatchRootDowngradeRequest(
+                            appName = item.appName,
+                            reason = reason,
+                            completion = completion
+                        )
+                    )
+                }
+                if (!confirmed) {
+                    return BatchInstallAttempt(
+                        failure = reason,
+                        allowFallback = false
+                    )
+                }
+                mountResult = executeRootMount(
+                    request.copy(downgradeFallbackConfirmed = true),
+                    item
                 )
             }
+            val attempt = BatchInstallAttempt(
+                failure = rootMountFailureMessage(mountResult),
+                allowFallback = rootMountAllowsBatchFallback(mountResult)
+            )
+            if (attempt.succeeded && installAsPlayStore) {
+                val attributionError = reinstallMountedStockAsPlayStore(
+                    context = app,
+                    rootInstaller = rootInstaller,
+                    rootMountCoordinator = rootMountCoordinator,
+                    packageName = targetPackage,
+                    userId = android.os.Process.myUid() / 100_000
+                )
+                if (attributionError != null) {
+                    Log.w(TAG, "Failed to record Play Store as the installation source", attributionError)
+                    return attempt.copy(
+                        warning = app.getString(
+                            R.string.installer_play_store_attribution_failed,
+                            attributionError.simpleMessage()
+                                ?: attributionError.javaClass.simpleName.orEmpty()
+                        ),
+                        playStoreAttributionFailed = true
+                    )
+                }
+            }
+            return attempt
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { splitWorkspace?.deleteRecursively() }
         }
-        return attempt
     }
 
     private suspend fun executeRootMount(

@@ -8,6 +8,7 @@ import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -77,12 +78,12 @@ class RootInstaller(
         boundedShellMutex.withLock {
             var shell = getOrCreateBoundedShell()
             try {
-                val first = executeWithTimeout(shell, command, timeoutSeconds, operation)
+                val first = runInterruptible { executeWithTimeout(shell, command, timeoutSeconds, operation) }
                 if (first.code != SHELL_JOB_NOT_EXECUTED) return@withLock first
 
                 discardBoundedShell(shell)
                 shell = getOrCreateBoundedShell()
-                executeWithTimeout(shell, command, timeoutSeconds, "$operation retry")
+                runInterruptible { executeWithTimeout(shell, command, timeoutSeconds, "$operation retry") }
             } catch (failure: Throwable) {
                 if (!shell.isAlive) discardBoundedShell(shell)
                 throw failure
@@ -318,12 +319,14 @@ class RootInstaller(
         val closeInstallShell = { runCatching { installShell.close() }; Unit }
         registerCancelCleanup?.invoke(closeInstallShell)
         try {
-            val rootProbe = executeWithTimeout(
-                installShell,
-                "id",
-                ROOT_PROBE_TIMEOUT_SECONDS,
-                "root shell probe"
-            )
+            val rootProbe = runInterruptible {
+                executeWithTimeout(
+                    installShell,
+                    "id",
+                    ROOT_PROBE_TIMEOUT_SECONDS,
+                    "root shell probe"
+                )
+            }
             onLog("Root shell probe: ${rootProbe.render()}")
             if (!rootProbe.hasRootUid()) throw RootServiceException()
 
@@ -342,12 +345,14 @@ class RootInstaller(
             createCommands.forEachIndexed { index, (backend, command) ->
                 if (session != null) return@forEachIndexed
                 kotlin.coroutines.coroutineContext.ensureActive()
-                val result = executeWithTimeout(
-                    installShell,
-                    command,
-                    SESSION_CONTROL_TIMEOUT_SECONDS,
-                    "root install session creation"
-                )
+                val result = runInterruptible {
+                    executeWithTimeout(
+                        installShell,
+                        command,
+                        SESSION_CONTROL_TIMEOUT_SECONDS,
+                        "root install session creation"
+                    )
+                }
                 val output = result.combinedOutput()
                 val parsed = parseSessionId(output)
                 onLog("Root install-create attempt ${index + 1}: ${result.render()}, session=${parsed ?: "n/a"}")
@@ -392,12 +397,14 @@ class RootInstaller(
                     val command =
                         "${created.backend} install-write -S ${file.length()} ${created.id} " +
                             "${shellQuote(splitName)} < ${shellQuote(file.absolutePath)}"
-                    val result = executeWithTimeout(
-                        installShell,
-                        command,
-                        installTimeoutSeconds(file.length()),
-                        "root install session write"
-                    )
+                    val result = runInterruptible {
+                        executeWithTimeout(
+                            installShell,
+                            command,
+                            installTimeoutSeconds(file.length()),
+                            "root install session write"
+                        )
+                    }
                     val output = result.combinedOutput()
                     onLog("Root install-write: ${result.render()}")
                     if (!result.isSuccess || output.contains("Failure", ignoreCase = true)) {
@@ -407,12 +414,14 @@ class RootInstaller(
 
                 kotlin.coroutines.coroutineContext.ensureActive()
                 val totalSize = apkFiles.sumOf { it.length().coerceAtLeast(0L) }
-                val commit = executeWithTimeout(
-                    installShell,
-                    "${created.backend} install-commit ${created.id}",
-                    installTimeoutSeconds(totalSize),
-                    "root install session commit"
-                )
+                val commit = runInterruptible {
+                    executeWithTimeout(
+                        installShell,
+                        "${created.backend} install-commit ${created.id}",
+                        installTimeoutSeconds(totalSize),
+                        "root install session commit"
+                    )
+                }
                 val commitOutput = commit.combinedOutput()
                 onLog("Root install-commit: ${commit.render()}")
                 if (!commit.isSuccess || commitOutput.contains("Failure", ignoreCase = true)) {
@@ -458,6 +467,11 @@ class RootInstaller(
                 "Root operation timed out during $operation after $timeoutSeconds seconds",
                 timeout
             )
+        } catch (interrupted: InterruptedException) {
+            // Cancel the pending job and close its shell before rollback can start.
+            future.cancel(true)
+            runCatching { shell.close() }
+            throw interrupted
         }
     }
 

@@ -61,6 +61,8 @@ import app.urv.manager.domain.installer.RootServiceException
 import app.urv.manager.domain.installer.SessionDeadException
 import app.urv.manager.domain.installer.SessionInstaller
 import app.urv.manager.domain.installer.ShizukuInstaller
+import app.urv.manager.domain.installer.root.AndroidPackageStateReader
+import app.urv.manager.domain.installer.root.LibsuRootShellGateway
 import app.urv.manager.domain.installer.root.RootMountOperation
 import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.domain.installer.root.RootMountRequest
@@ -75,6 +77,7 @@ import app.urv.manager.domain.installer.root.restore
 import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
+import app.urv.manager.domain.installer.root.verifiedStockSet
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadResult
 import app.urv.manager.domain.repository.DownloadedAppRepository
@@ -490,7 +493,7 @@ class PatcherViewModel(
         )
     }
 
-    private fun verifiedStandaloneStockCandidates(
+    private fun stockSourceCandidates(
         sourceVersionName: String,
         sourceVersionCode: Long
     ): List<File> {
@@ -502,24 +505,79 @@ class PatcherViewModel(
         val repatchSource = patchedRepatchSourcePath?.let(::File)
         return (sequenceOf(inputFile, repatchSource).filterNotNull() + retainedOriginals.asSequence())
             .distinctBy { it.absolutePath }
-            .filter { candidate ->
-                if (
-                    !candidate.isFile ||
-                    fs.isManagedPatchedAppFile(candidate) ||
-                    SplitApkPreparer.isSplitArchive(candidate)
-                ) {
-                    return@filter false
-                }
-                val info = pm.getPackageInfo(candidate, includeSigning = true)
-                    ?: return@filter false
-                info.packageName == packageName &&
-                    info.versionName == sourceVersionName &&
-                    pm.getVersionCode(info) == sourceVersionCode &&
-                    info.sharedUserId == null &&
-                    packageInfoIsCompleteSingleApk(info) &&
-                    pm.getSignature(info) != null
-            }
             .toList()
+    }
+
+    private fun verifiedStandaloneStockCandidates(
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): List<File> = stockSourceCandidates(sourceVersionName, sourceVersionCode)
+        .filter { candidate ->
+            if (
+                !candidate.isFile ||
+                fs.isManagedPatchedAppFile(candidate) ||
+                SplitApkPreparer.isSplitArchive(candidate)
+            ) {
+                return@filter false
+            }
+            val info = pm.getPackageInfo(candidate, includeSigning = true)
+                ?: return@filter false
+            info.packageName == packageName &&
+                info.versionName == sourceVersionName &&
+                pm.getVersionCode(info) == sourceVersionCode &&
+                info.sharedUserId == null &&
+                packageInfoIsCompleteSingleApk(info) &&
+                pm.getSignature(info) != null
+        }
+
+    private suspend fun verifiedSplitStockSource(
+        installedInfo: PackageInfo?,
+        sourceVersionName: String,
+        sourceVersionCode: Long
+    ): Pair<Boolean, File?> {
+        val packageStateReader = AndroidPackageStateReader(
+            pm = pm,
+            shell = LibsuRootShellGateway(rootInstaller)
+        )
+        var hasVerifiedSource = false
+        for (candidate in stockSourceCandidates(sourceVersionName, sourceVersionCode)) {
+            if (
+                !candidate.isFile ||
+                fs.isManagedPatchedAppFile(candidate) ||
+                !SplitApkPreparer.isSplitArchive(candidate)
+            ) {
+                continue
+            }
+
+            val workspace = File(app.cacheDir, "root-stock-check-${System.nanoTime()}")
+            try {
+                val verifiedSet = try {
+                    val extracted = SplitApkPreparer.extractEntriesForProcessing(candidate, workspace)
+                        .map { it.file }
+                    verifiedStockSet(extracted.map(packageStateReader::inspect))
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    null
+                } ?: continue
+                val base = verifiedSet.singleOrNull() ?: continue
+                val baseInfo = pm.getPackageInfo(File(base.path), includeSigning = true)
+                    ?: continue
+                val verified = base.packageName == packageName &&
+                    base.versionName == sourceVersionName &&
+                    base.versionCode == sourceVersionCode &&
+                    baseInfo.sharedUserId == null &&
+                    pm.getSignature(baseInfo) != null
+                if (!verified) continue
+                hasVerifiedSource = true
+                if (installedSignerMatchesStockSource(installedInfo, baseInfo)) {
+                    return true to candidate
+                }
+            } finally {
+                withContext(NonCancellable + Dispatchers.IO) { workspace.deleteRecursively() }
+            }
+        }
+        return hasVerifiedSource to null
     }
 
     private fun installedSignerMatchesStockSource(
@@ -528,6 +586,13 @@ class PatcherViewModel(
     ): Boolean {
         val stockArchive = pm.getPackageInfo(stockSource, includeSigning = true)
             ?: return false
+        return installedSignerMatchesStockSource(installedInfo, stockArchive)
+    }
+
+    private fun installedSignerMatchesStockSource(
+        installedInfo: PackageInfo?,
+        stockArchive: PackageInfo
+    ): Boolean {
         val stockSigner = pm.getSignature(stockArchive)?.toByteArray()
             ?: return false
         if (installedInfo == null) return true
@@ -550,6 +615,9 @@ class PatcherViewModel(
 
     private suspend fun canSelectRootMountForPatchedOutput(): Boolean {
         val patched = pm.getPackageInfo(outputFile, includeSigning = true) ?: return false
+        val patchedArtifact = runCatching {
+            AndroidPackageStateReader(pm, LibsuRootShellGateway(rootInstaller)).inspect(outputFile)
+        }.getOrNull() ?: return false
         val sourceVersionName = patchedSourceVersionName
             ?: input.selectedApp.version?.takeIf(String::isNotBlank)
             ?: return false
@@ -564,6 +632,12 @@ class PatcherViewModel(
         val stockSource = stockCandidates.firstOrNull {
             installedSignerMatchesStockSource(installedInfo, it)
         }
+        val (hasSplitStockSource, compatibleSplitStockSource) = verifiedSplitStockSource(
+            installedInfo = installedInfo,
+            sourceVersionName = sourceVersionName,
+            sourceVersionCode = sourceVersionCode
+        )
+        val splitStockIdentityCompatible = compatibleSplitStockSource != null
         val installedMatchesSourceVersion = installedPackageMatchesSourceVersion(
             installedInfo,
             sourceVersionName,
@@ -575,17 +649,22 @@ class PatcherViewModel(
         val hasUsableStockIdentity = rootMountStockIdentityUsable(
             installedMatchesSourceVersion = installedMatchesSourceVersion,
             installedHasSigningCertificate = installedHasSigningCertificate,
-            hasStandaloneStockSource = stockCandidates.isNotEmpty(),
-            standaloneStockIdentityCompatible = stockSource != null
+            hasStockSource = stockCandidates.isNotEmpty() || hasSplitStockSource,
+            stockIdentityCompatible = stockSource != null || splitStockIdentityCompatible
         )
+        val installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true
+        val hasUsableSplitStockIdentity =
+            installedHasSplitApks && installedMatchesSourceVersion && installedHasSigningCertificate ||
+                !installedMatchesSourceVersion && splitStockIdentityCompatible
         return patchedOutputSupportsRootMount(
             patchedPackageName = patched.packageName,
             originalPackageName = packageName,
-            patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched),
-            patchedHasSigningCertificate = pm.getSignature(patched) != null,
-            installedHasSplitApks = installedInfo?.let(pm::hasSplitApks) == true,
+            patchedIsCompleteSingleApk = patchedArtifact.splitName == null && patchedArtifact.topology == "SINGLE",
+            patchedIsSplitDependentBase = patchedArtifact.splitName == null && patchedArtifact.topology == "SPLIT",
+            patchedHasSigningCertificate = !patchedArtifact.signerSha256.isNullOrBlank(),
             installedHasSharedUserId = installedInfo?.sharedUserId != null,
             hasUsableStockIdentity = hasUsableStockIdentity,
+            hasUsableSplitStockIdentity = hasUsableSplitStockIdentity,
             patchedVersionMatchesSource = patched.versionName == sourceVersionName
         )
     }
@@ -1799,6 +1878,8 @@ class PatcherViewModel(
                     else R.string.installing_ellipsis
                 installProgressToast?.cancel()
                 installProgressToast = app.toastHandle(app.getString(messageRes))
+                // Mount phases are shown inline, so the initial toast does not need repeating.
+                if (activeInstallType == InstallType.MOUNT) break
                 delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
             }
         }
@@ -3700,82 +3781,103 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val selectedApp = input.selectedApp
         val sourceVersionNameHint = patchedSourceVersionName
         val sourceVersionCodeHint = patchedSourceVersionCode
-        val (installed, request) = withContext(Dispatchers.IO) {
-            if (!rootInstaller.hasRootAccess()) throw RootServiceException()
-            val installedBaseInfo = pm.getPackageInfo(packageName)
-            val appMounted = installedBaseInfo != null && rootInstaller.isAppMounted(packageName)
-            val originalInputIsSplit =
-                originalInput?.let(SplitApkPreparer::isSplitArchive) == true
-            val sourcePackageInfo = originalInput
-                ?.takeUnless { originalInputIsSplit }
-                ?.let(pm::getPackageInfo)
-            val sourceVersionName = sourceVersionNameHint
-                ?: sourcePackageInfo?.versionName?.takeIf(String::isNotBlank)
-                ?: selectedApp.version?.takeIf(String::isNotBlank)
-                ?: throw IllegalStateException("Patched APK source version name is unavailable")
-            val targetVersionCode = sourceVersionCodeHint
-                ?: sourcePackageInfo?.let(pm::getVersionCode)
-                ?: selectedApp.versionCode
-                ?: throw IllegalStateException("Patched APK source version code is unavailable")
-            val sourcePackageName = sourcePackageInfo?.packageName ?: selectedApp.packageName
-            check(
-                sourcePackageName == packageInfo.packageName &&
-                    sourceVersionName == packageInfo.versionName
-            ) {
-                "Patched APK does not match its stock source"
-            }
-            val installedMatchesSourceVersion = installedBaseInfo != null &&
-                pm.getVersionCode(installedBaseInfo) == targetVersionCode &&
-                installedBaseInfo.versionName == sourceVersionName
-            val stockNeedsReplacement = rootMountStockReplacementRequired(
-                installedMatchesSourceVersion = installedMatchesSourceVersion
-            )
-            val stockApks = when {
-                stockNeedsReplacement -> {
-                    val stock = verifiedStandaloneStockCandidates(
-                        sourceVersionName,
-                        targetVersionCode
-                    ).firstOrNull { candidate ->
-                        installedSignerMatchesStockSource(installedBaseInfo, candidate)
-                    } ?: throw IllegalStateException(
-                        app.getString(R.string.install_app_fail_missing_stock)
-                    )
-                    listOf(stock)
+        var stockWorkspace: File? = null
+        val (installed, request) = try {
+            withContext(Dispatchers.IO) {
+                if (!rootInstaller.hasRootAccess()) throw RootServiceException()
+                val installedBaseInfo = pm.getPackageInfo(packageName)
+                val appMounted = installedBaseInfo != null && rootInstaller.isAppMounted(packageName)
+                val originalInputIsSplit =
+                    originalInput?.let(SplitApkPreparer::isSplitArchive) == true
+                val sourcePackageInfo = originalInput
+                    ?.takeUnless { originalInputIsSplit }
+                    ?.let(pm::getPackageInfo)
+                val sourceVersionName = sourceVersionNameHint
+                    ?: sourcePackageInfo?.versionName?.takeIf(String::isNotBlank)
+                    ?: selectedApp.version?.takeIf(String::isNotBlank)
+                    ?: throw IllegalStateException("Patched APK source version name is unavailable")
+                val targetVersionCode = sourceVersionCodeHint
+                    ?: sourcePackageInfo?.let(pm::getVersionCode)
+                    ?: selectedApp.versionCode
+                    ?: throw IllegalStateException("Patched APK source version code is unavailable")
+                val sourcePackageName = sourcePackageInfo?.packageName ?: selectedApp.packageName
+                check(
+                    sourcePackageName == packageInfo.packageName &&
+                        sourceVersionName == packageInfo.versionName
+                ) {
+                    "Patched APK does not match its stock source"
                 }
-                appMounted -> {
-                    // applicationInfo.sourceDir resolves through the active bind mount. It is
-                    // the patched payload, while the committed mount owns the stock identity.
-                    emptyList()
+                val installedMatchesSourceVersion = installedBaseInfo != null &&
+                    pm.getVersionCode(installedBaseInfo) == targetVersionCode &&
+                    installedBaseInfo.versionName == sourceVersionName
+                val stockNeedsReplacement = rootMountStockReplacementRequired(
+                    installedMatchesSourceVersion = installedMatchesSourceVersion
+                )
+                val splitSource = if (stockNeedsReplacement) {
+                    verifiedSplitStockSource(
+                        installedInfo = installedBaseInfo,
+                        sourceVersionName = sourceVersionName,
+                        sourceVersionCode = targetVersionCode
+                    ).second
+                } else {
+                    null
                 }
-                else -> {
-                    // The installed package already has the stock version we need. Use its
-                    // registered base APK instead of the patch input, which can have a
-                    // different signing certificate.
-                    val installedStock = installedBaseInfo?.applicationInfo?.sourceDir
-                        ?.let(::File)
-                        ?.takeIf(File::isFile)
-                        ?: throw IllegalStateException(
+                val stockApks = when {
+                    stockNeedsReplacement && splitSource != null -> {
+                        val directory = File(app.cacheDir, "root-stock-${System.nanoTime()}")
+                        stockWorkspace = directory
+                        SplitApkPreparer.extractEntriesForProcessing(splitSource, directory)
+                            .map { it.file }
+                    }
+                    stockNeedsReplacement -> {
+                        val stock = verifiedStandaloneStockCandidates(
+                            sourceVersionName,
+                            targetVersionCode
+                        ).firstOrNull { candidate ->
+                            installedSignerMatchesStockSource(installedBaseInfo, candidate)
+                        } ?: throw IllegalStateException(
                             app.getString(R.string.install_app_fail_missing_stock)
                         )
-                    listOf(installedStock)
+                        listOf(stock)
+                    }
+                    appMounted -> {
+                        // applicationInfo.sourceDir resolves through the active bind mount. It is
+                        // the patched payload, while the committed mount owns the stock identity.
+                        emptyList()
+                    }
+                    else -> {
+                        // The installed package already has the stock version we need. Use its
+                        // registered base APK instead of the patch input, which can have a
+                        // different signing certificate.
+                        val installedStock = installedBaseInfo?.applicationInfo?.sourceDir
+                            ?.let(::File)
+                            ?.takeIf(File::isFile)
+                            ?: throw IllegalStateException(
+                                app.getString(R.string.install_app_fail_missing_stock)
+                            )
+                        listOf(installedStock)
+                    }
                 }
+                (installedBaseInfo != null) to RootMountRequest(
+                    packageName = packageInfo.packageName,
+                    userId = android.os.Process.myUid() / 100_000,
+                    operation = if (stockNeedsReplacement) {
+                        RootMountOperation.REPLACE_STOCK_AND_MOUNT
+                    } else {
+                        RootMountOperation.SWITCH_PATCHED_BUILD
+                    },
+                    patchedApk = outputFile,
+                    stockApks = stockApks,
+                    expectedVersionName = packageInfo.versionName,
+                    expectedVersionCode = pm.getVersionCode(packageInfo),
+                    expectedStockVersionCode = targetVersionCode,
+                    label = with(pm) { packageInfo.label() },
+                    downgradeFallbackConfirmed = downgradeFallbackConfirmed
+                )
             }
-            (installedBaseInfo != null) to RootMountRequest(
-                packageName = packageInfo.packageName,
-                userId = android.os.Process.myUid() / 100_000,
-                operation = if (stockNeedsReplacement) {
-                    RootMountOperation.REPLACE_STOCK_AND_MOUNT
-                } else {
-                    RootMountOperation.SWITCH_PATCHED_BUILD
-                },
-                patchedApk = outputFile,
-                stockApks = stockApks,
-                expectedVersionName = packageInfo.versionName,
-                expectedVersionCode = pm.getVersionCode(packageInfo),
-                expectedStockVersionCode = targetVersionCode,
-                label = with(pm) { packageInfo.label() },
-                downgradeFallbackConfirmed = downgradeFallbackConfirmed
-            )
+        } catch (failure: Throwable) {
+            withContext(NonCancellable + Dispatchers.IO) { stockWorkspace?.deleteRecursively() }
+            throw failure
         }
         basePackageInstalled = installed
         val result = try {
@@ -3784,6 +3886,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             ) { phase -> rootMountPhase = phase }
         } finally {
             rootMountPhase = null
+            withContext(NonCancellable + Dispatchers.IO) { stockWorkspace?.deleteRecursively() }
         }
         when (result) {
             is RootMountResult.Success -> {

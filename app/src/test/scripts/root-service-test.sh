@@ -1,11 +1,13 @@
 #!/bin/sh
 # Run from repository root. Production functions, mocked Android commands, no root.
 set -eu
-for function in installed_user_ids read_package_state wait_for_package_manager acquire_ready_package_lock; do
+for function in installed_user_ids split_set_matches read_package_state wait_for_package_manager acquire_ready_package_lock; do
   eval "$(sed -n "/^$function() {/,/^}/p" app/src/main/assets/root/service.sh)"
 done
 URV_PACKAGE=com.example.app
 URV_USER_ID=0
+URV_TOPOLOGY=SINGLE
+URV_STOCK_SPLITS=''
 scenario=ready
 timeout() { shift; "$@"; }
 pm() {
@@ -19,6 +21,11 @@ pm() {
     "path "*)
       [ "$scenario" != path_failure ] || return 1
       [ "$scenario" != path_empty ] || return 0
+      if [ "$scenario" = split_reordered ]; then
+        echo 'package:/data/app/example/split.apk'
+        echo 'package:/data/app/example/base.apk'
+        return 0
+      fi
       echo 'package:/data/app/example/base.apk'
       [ "$scenario" != split ] || echo 'package:/data/app/example/split.apk' ;;
     "list packages -d "*)
@@ -56,6 +63,42 @@ done
 scenario=absent
 read_package_state
 [ -z "$installed_users" ]
+# Verify the complete recorded split set, including same-version content changes.
+scenario=split
+URV_TOPOLOGY=SPLIT
+fixture_hash=$(printf '%064d' 0)
+URV_STOCK_SPLITS="split.apk:$fixture_hash"
+sha256sum() { printf '%s  %s\n' "$fixture_hash" "$1"; }
+read_package_state
+[ "$split_compatible" = 1 ]
+scenario=split_reordered
+read_package_state
+[ "$current_path" = /data/app/example/base.apk ]
+[ "$split_compatible" = 1 ]
+scenario=ready
+if split_set_matches refresh; then echo 'Missing split was accepted' >&2; exit 1; fi
+scenario=split
+fixture_hash=$(printf '%064d' 1)
+read_package_state
+[ "$split_compatible" = 0 ]
+URV_STOCK_SPLITS="split.apk:$fixture_hash split.apk:$fixture_hash"
+read_package_state
+[ "$split_compatible" = 0 ]
+URV_STOCK_SPLITS="../split.apk:$fixture_hash"
+read_package_state
+[ "$split_compatible" = 0 ]
+URV_STOCK_SPLITS="missing.apk:$fixture_hash"
+read_package_state
+[ "$split_compatible" = 0 ]
+URV_STOCK_SPLITS=''
+URV_TOPOLOGY=SINGLE
+# A foreign split in a Zygote must fail preflight before any bind mount is attempted.
+eval "$(sed -n '/^mount_and_verify_zygotes() {/,/^}/p' app/src/main/assets/root/service.sh)"
+live_zygote_pids() { echo 123; }
+validate_zygote() { return 0; }
+namespace_splits_match() { return 1; }
+nsenter() { echo 'Unexpected namespace mutation' >&2; exit 1; }
+if mount_and_verify_zygotes; then echo 'Foreign split was accepted' >&2; exit 1; fi
 # Virtual clock exercises retries without waiting five real minutes.
 MODDIR="$(mktemp -d)"
 transaction_dir="$MODDIR"

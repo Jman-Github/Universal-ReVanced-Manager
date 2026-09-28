@@ -282,9 +282,9 @@ class RootMountTransactionCoordinator(
             requireExclusivePackageUser(request.packageName, request.userId)
         }
         val patchedArtifact = request.patchedApk?.let(packageStateReader::inspect)
-        val stockArtifacts = request.stockApks.map { stockApk ->
+        val stockArtifacts = verifiedStockSet(request.stockApks.map { stockApk ->
             inspectRequestedStock(request, initialMountedState, previousCommitted, stockApk)
-        }
+        })
         val preflightMounts = mountVerifier.findUrvMounts(
             request.packageName,
             setOfNotNull(initialMountedState.basePath, previousCommitted?.stockPath)
@@ -727,7 +727,7 @@ class RootMountTransactionCoordinator(
         var stockChanged = false
         var moduleChanged = false
         var transactionCompleted = false
-        var stockBackup: RootBackupArtifact? = null
+        var stockBackup: List<RootBackupArtifact>? = null
         var preparingRecoveryOutcome: String? = null
         fun progress(phase: RootMountPhase) {
             currentPhase = phase
@@ -963,6 +963,7 @@ class RootMountTransactionCoordinator(
                         stockShadowSha256 = requireNotNull(rawStock.baseSha256),
                         preserveStockAcrossBoot = true,
                         topology = rawStock.topology,
+                        stockSplits = rawStock.verifiedSplits(),
                         enabled = rawStock.enabled,
                         launcherResolvable = rawStock.launcherResolvable,
                         active = false,
@@ -1038,6 +1039,9 @@ class RootMountTransactionCoordinator(
             }
 
             val initial = packageStateReader.read(request.packageName, request.userId)
+            check(initial.matchesSplits(initialMountedState.verifiedSplits())) {
+                "Installed split APKs changed after preflight; retry with the current package"
+            }
             if (request.operation == RootMountOperation.RECONCILE) {
                 return reconcile(
                     request,
@@ -1089,6 +1093,9 @@ class RootMountTransactionCoordinator(
                 check(initial.baseSha256 == stock.sha256) {
                     "Same-version stock input does not match the unmounted installed stock APK"
                 }
+                if (stock.splitHashes.isNotEmpty()) check(initial.matchesRequestedSplits(stock)) {
+                    "Same-version stock split set differs from the installed package"
+                }
             }
             if (request.operation == RootMountOperation.SWITCH_PATCHED_BUILD && stock == null) {
                 if (legacyMigration) {
@@ -1118,13 +1125,14 @@ class RootMountTransactionCoordinator(
                 val requiredStock = requireNotNull(stock) {
                     "A complete stock APK is required for this package transition"
                 }
-                val stockFile = request.stockApks.singleOrNull()
-                    ?: throw IllegalArgumentException("A complete stock APK is required for this package transition")
+                val stockFiles = request.stockApks.also {
+                    require(it.isNotEmpty()) { "A complete stock APK set is required for this package transition" }
+                }
                 progress(RootMountPhase.INSTALLING_STOCK)
                 persist { it.copy(stockMutationStarted = true) }
                 val downgrade = stockTransition == RootMountPolicy.StockTransition.DOWNGRADE
                 val replacement = packageInstaller.replace(
-                    listOf(stockFile),
+                    stockFiles,
                     userId = request.userId,
                     allowDowngrade = downgrade
                 )
@@ -1138,7 +1146,6 @@ class RootMountTransactionCoordinator(
                             versionName = requiredStock.versionName,
                             versionCode = requiredStock.versionCode,
                             signerSha256 = requiredStock.signerSha256,
-                            splitPaths = emptyList(),
                             baseSha256 = requiredStock.sha256
                         )
                         val stableAfterAmbiguousCommit = runCatching {
@@ -1181,7 +1188,7 @@ class RootMountTransactionCoordinator(
                     stockChanged = true
                     packageInstaller.uninstallKeepData(request.packageName, request.userId)
                     packageInstaller.replace(
-                        listOf(stockFile),
+                        stockFiles,
                         userId = request.userId,
                         allowDowngrade = false
                     ).getOrThrow()
@@ -1194,12 +1201,14 @@ class RootMountTransactionCoordinator(
                 persist()
                 waitForPackageManagerIdle()
                 val observed = packageStateReader.read(request.packageName, request.userId)
+                check(observed.matchesRequestedSplits(requiredStock)) {
+                    "Installed split APKs do not match the verified stock input"
+                }
                 val expected = observed.copy(
                     installed = true,
                     versionName = requiredStock.versionName,
                     versionCode = requiredStock.versionCode,
                     signerSha256 = requiredStock.signerSha256,
-                    splitPaths = emptyList(),
                     baseSha256 = requiredStock.sha256,
                     enabled = if (initial.installed) initial.enabled else observed.enabled,
                     launcherResolvable = if (initial.installed) {
@@ -1558,10 +1567,13 @@ class RootMountTransactionCoordinator(
     private suspend fun snapshotStockForRollback(
         packageName: String,
         initial: RootPackageState
-    ): RootBackupArtifact? {
-        val rawPaths = listOfNotNull(initial.basePath) + initial.splitPaths
-        val backup = moduleStore.snapshotStock(packageName, rawPaths).singleOrNull()
-        check(backup?.sha256 == initial.baseSha256) {
+    ): List<RootBackupArtifact> {
+        val rawPaths = listOfNotNull(initial.basePath) + initial.splitPaths.sorted()
+        val backup = moduleStore.snapshotStock(packageName, rawPaths)
+        val hashes = listOf(requireNotNull(initial.baseSha256)) + initial.splitPaths.sorted().map {
+            requireNotNull(initial.splitSha256[it]) { "Previous split APK hash is unavailable" }
+        }
+        check(backup.map { it.sha256 } == hashes) {
             "Raw stock rollback snapshot hash mismatch"
         }
         return backup
@@ -1703,9 +1715,7 @@ class RootMountTransactionCoordinator(
                 journal = recoveringJournal,
                 stockChanged = RootMountPolicy.interruptedJournalMayHaveChangedStock(interrupted),
                 moduleChanged = RootMountPolicy.interruptedJournalMayHaveChangedModule(interrupted),
-                stockBackup = interrupted.initialPackageState?.baseSha256?.let { hash ->
-                    RootBackupArtifact("${RootPaths.backup(request.packageName)}/package/0.apk", hash)
-                },
+                stockBackup = null,
                 diagnosticId = "recovery-${transactionId.take(8)}",
                 reason = "Recovered interrupted transaction"
             )
@@ -1769,6 +1779,7 @@ class RootMountTransactionCoordinator(
         stockShadowSha256 = requireNotNull(compatible.baseSha256),
         preserveStockAcrossBoot = true,
         topology = compatible.topology,
+        stockSplits = compatible.verifiedSplits(),
         enabled = compatible.enabled,
         launcherResolvable = compatible.launcherResolvable,
         committedAtEpochMs = System.currentTimeMillis()
@@ -1780,12 +1791,15 @@ class RootMountTransactionCoordinator(
         patchedArtifact: RootArtifactState?
     ) {
         check(stableStock.installed) { "Stock package is not installed for Android user ${request.userId}" }
-        check(stableStock.topology == "SINGLE") { "Safe root mount requires a complete single APK" }
+        stableStock.verifiedSplits()
         check(stableStock.sharedUserId == null) { "Shared-UID process ownership cannot be isolated safely" }
         check(!stableStock.signerSha256.isNullOrBlank()) { "Installed stock signer is unavailable" }
         check(!stableStock.basePath.isNullOrBlank()) { "Installed stock base path is unavailable" }
         check(!stableStock.baseSha256.isNullOrBlank()) { "Installed stock hash is unavailable" }
         patchedArtifact?.let { artifact ->
+            check(artifact.topology != "SPLIT" || stableStock.topology == "SPLIT") {
+                "Split-dependent patched base has no installed split APKs"
+            }
             check(stableStock.versionName == artifact.versionName) { "Patched and stock version names differ" }
             val expectedStockVersionCode = request.expectedStockVersionCode ?: artifact.versionCode
             check(stableStock.versionCode == expectedStockVersionCode) {
@@ -2214,6 +2228,7 @@ class RootMountTransactionCoordinator(
         check(current.signerSha256 == committed.signerSha256) { "Signing certificate mismatch" }
         check(current.baseSha256 == committed.stockSha256) { "Stock APK hash mismatch" }
         check(current.topology == committed.topology) { "APK topology mismatch" }
+        check(current.matchesSplits(committed.stockSplits)) { "Installed split APKs changed" }
         check(current.enabled == committed.enabled) { "Enabled state mismatch" }
         check(current.launcherResolvable == committed.launcherResolvable) { "Launcher resolution mismatch" }
     }
@@ -2222,7 +2237,7 @@ class RootMountTransactionCoordinator(
         journal: RootMountJournal,
         stockChanged: Boolean,
         moduleChanged: Boolean,
-        stockBackup: RootBackupArtifact?,
+        stockBackup: List<RootBackupArtifact>?,
         diagnosticId: String,
         reason: String
     ): RootMountResult {
@@ -2287,16 +2302,22 @@ class RootMountTransactionCoordinator(
                             "Failed to restore system package registration"
                         }
                     }
-                    val backup = stockBackup ?: RootBackupArtifact(
-                        "${RootPaths.backup(packageName)}/package/0.apk",
-                        requireNotNull(initial.baseSha256) { "Previous stock hash is unavailable" }
-                    )
-                    packageInstaller.replaceRootBackup(
-                        backup.path,
-                        backup.sha256,
-                        journal.userId
-                    ).getOrThrow()
-                    packageStateReader.waitForStable(initial.copy(installed = true))
+                    val hashes = listOf(requireNotNull(initial.baseSha256)) + initial.splitPaths.sorted().map {
+                        requireNotNull(initial.splitSha256[it]) { "Previous split APK hash is unavailable" }
+                    }
+                    val backup = stockBackup ?: hashes.mapIndexed { index, hash ->
+                        RootBackupArtifact("${RootPaths.backup(packageName)}/package/$index.apk", hash)
+                    }
+                    check(backup.map { it.sha256 } == hashes) { "Rollback APK set does not match the journal" }
+                    packageInstaller.replaceRootBackups(backup, journal.userId).getOrThrow()
+                    // PackageInstaller may allocate a new directory for the restored APK set.
+                    val restored = packageStateReader.read(packageName, journal.userId)
+                    check(restored.matchesSplits(initial.verifiedSplits())) { "Restored split APK set mismatch" }
+                    packageStateReader.waitForStable(initial.copy(
+                        installed = true,
+                        splitPaths = restored.splitPaths,
+                        splitSha256 = restored.splitSha256
+                    ))
                 } else {
                     transactionStore.appendDiagnostic(
                         packageName,
@@ -2564,20 +2585,25 @@ class RootMountTransactionCoordinator(
         if (stopped && mountsRemoved && previousCommitted != null &&
             !matchesCommittedStock(previousCommitted, restored) && !externalStockUpdate
         ) {
-            val restoredBackup = packageInstaller.replaceRootBackup(
-                "${RootPaths.backup(request.packageName)}/package/0.apk",
-                previousCommitted.stockSha256,
+            val backupHashes = listOf(previousCommitted.stockSha256) +
+                previousCommitted.stockSplits.toSortedMap().values
+            val restoredBackup = packageInstaller.replaceRootBackups(
+                backupHashes.mapIndexed { index, hash ->
+                    RootBackupArtifact("${RootPaths.backup(request.packageName)}/package/$index.apk", hash)
+                },
                 request.userId
             )
             if (restoredBackup.isSuccess) {
                 val observedAfterRestore = packageStateReader.read(request.packageName, request.userId)
+                check(observedAfterRestore.matchesSplits(previousCommitted.stockSplits)) {
+                    "Restored split APK set does not match the committed stock package"
+                }
                 restored = packageStateReader.waitForStable(
                     observedAfterRestore.copy(
                         installed = true,
                         versionName = previousCommitted.versionName,
                         versionCode = previousCommitted.versionCode,
                         signerSha256 = previousCommitted.signerSha256,
-                        splitPaths = emptyList(),
                         baseSha256 = previousCommitted.stockSha256
                     )
                 )
@@ -2724,6 +2750,7 @@ class RootMountTransactionCoordinator(
             before.signerSha256 != after.signerSha256 ||
             before.basePath != after.basePath ||
             before.splitPaths != after.splitPaths ||
+            before.splitSha256 != after.splitSha256 ||
             before.baseSha256 != after.baseSha256 ||
             before.enabled != after.enabled ||
             before.launcherResolvable != after.launcherResolvable
@@ -2734,7 +2761,7 @@ class RootMountTransactionCoordinator(
             state.versionName == artifact.versionName &&
             state.versionCode == artifact.versionCode &&
             state.signerSha256 == artifact.signerSha256 &&
-            state.topology == "SINGLE" &&
+            state.matchesRequestedSplits(artifact) &&
             !state.basePath.isNullOrBlank() &&
             state.baseSha256 == artifact.sha256
 
@@ -2756,6 +2783,7 @@ class RootMountTransactionCoordinator(
                     restored.signerSha256 == initial.signerSha256 &&
                     restored.basePath == initial.basePath &&
                     restored.topology == initial.topology &&
+                    restored.matchesSplits(initial.verifiedSplits()) &&
                     restored.enabled == initial.enabled &&
                     restored.launcherResolvable == initial.launcherResolvable &&
                     journal.patchedArtifact?.let { patched ->
@@ -2768,6 +2796,7 @@ class RootMountTransactionCoordinator(
                 restored.signerSha256 == initial.signerSha256 &&
                 restored.baseSha256 == initial.baseSha256 &&
                 restored.topology == initial.topology &&
+                restored.matchesSplits(initial.verifiedSplits()) &&
                 restored.enabled == initial.enabled &&
                 restored.launcherResolvable == initial.launcherResolvable
             if (matchesInitial) return true
@@ -2790,6 +2819,7 @@ class RootMountTransactionCoordinator(
             state.signerSha256 == committed.signerSha256 &&
             state.baseSha256 == committed.stockSha256 &&
             state.topology == committed.topology &&
+            state.matchesSplits(committed.stockSplits) &&
             state.enabled == committed.enabled &&
             state.launcherResolvable == committed.launcherResolvable
 
@@ -2811,6 +2841,7 @@ class RootMountTransactionCoordinator(
             module.stockShadowSha256 == committed.stockShadowSha256 &&
             module.preserveStockAcrossBoot == committed.preserveStockAcrossBoot &&
             module.topology == committed.topology &&
+            module.stockSplits == committed.stockSplits &&
             module.enabled == committed.enabled &&
             module.launcherResolvable == committed.launcherResolvable
 
@@ -2891,7 +2922,7 @@ class RootMountTransactionCoordinator(
 
     private fun isStructurallyVerifiedStock(state: RootPackageState): Boolean =
         state.installed &&
-            state.topology == "SINGLE" &&
+            runCatching { state.verifiedSplits() }.isSuccess &&
             state.sharedUserId == null &&
             !state.versionName.isNullOrBlank() &&
             state.versionCode != null &&
@@ -2907,13 +2938,13 @@ class RootMountTransactionCoordinator(
             !state.signerSha256.isNullOrBlank() &&
             state.basePath?.isSafeAbsoluteApkPath() == true &&
             state.splitPaths.all { it.isSafeAbsoluteApkPath() } &&
+            runCatching { state.verifiedSplits() }.isSuccess &&
             !state.baseSha256.isNullOrBlank()
 
     private fun changedStockRequiresRepatch(diagnosticId: String? = null) =
         RootMountResult.RequiresRepatch(
             reason = "The stock app changed after this root mount was created. " +
-                "Root mounting requires a complete standalone APK. If the update installed split APKs, " +
-                "install matching standalone stock before patching and mounting again.",
+                "Patch the currently installed APK set before mounting again.",
             diagnosticId = diagnosticId
         )
 
@@ -2997,6 +3028,7 @@ class RootMountTransactionCoordinator(
             actual.stockShadowSha256 == expected.stockShadowSha256 &&
             actual.preserveStockAcrossBoot == expected.preserveStockAcrossBoot &&
             actual.topology == expected.topology &&
+            actual.stockSplits == expected.stockSplits &&
             actual.enabled == expected.enabled &&
             actual.launcherResolvable == expected.launcherResolvable
 
@@ -3087,7 +3119,7 @@ class RootMountTransactionCoordinator(
             state.patchedPath == expectedPatchedPath &&
             state.patchedSha256.matches(SHA256) &&
             validStockShadow &&
-            state.topology == "SINGLE" &&
+            validSplitIdentity(state.topology, state.stockSplits) &&
             validStatus
     }
 
