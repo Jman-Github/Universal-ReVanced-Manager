@@ -44,6 +44,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 import java.util.jar.JarFile
 import java.util.zip.ZipInputStream
 import okhttp3.Protocol
@@ -871,6 +872,7 @@ class ExternalGraphqlPatchBundle(
     private val api: ExternalBundlesApi by inject()
     private val officialApi: ReVancedAPI by inject()
     override val supportsHistoricalChangelog: Boolean = true
+    private val installedArtifactUrlFile = directory.resolve("installed_artifact_url")
     private data class EndpointMetadata(
         val owner: String?,
         val repo: String?,
@@ -925,6 +927,25 @@ class ExternalGraphqlPatchBundle(
                 ExternalBundleMetadataStore.write(directory, metadata)
                 return@withContext snapshotToAsset(latestFromServices)
             }
+
+            val endpointHost = externalBundlesHost()
+            val matchingServiceSnapshot = latestFromServices
+                ?.takeIf {
+                    it.version.trim() == endpointAsset.version.trim() &&
+                        it.apiHost.equals(endpointHost, ignoreCase = true)
+                }
+            if (
+                matchingServiceSnapshot != null &&
+                snapshotArtifactDiffers(endpointAsset, matchingServiceSnapshot)
+            ) {
+                metadata = metadataFromSnapshot(
+                    snapshot = matchingServiceSnapshot,
+                    preserveChannelSelection = trackLatestAcrossChannels
+                )
+                ExternalBundleMetadataStore.write(directory, metadata)
+                return@withContext snapshotToAsset(matchingServiceSnapshot)
+            }
+
             metadata = metadata.copy(
                 downloadUrl = endpointAsset.downloadUrl,
                 signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
@@ -936,7 +957,14 @@ class ExternalGraphqlPatchBundle(
                 isPrerelease = prerelease
             )
             ExternalBundleMetadataStore.write(directory, metadata)
-            return@withContext endpointAsset
+            val endpointFileHash = matchingServiceSnapshot
+                ?.takeIf {
+                    it.downloadUrl?.trim().orEmpty() == endpointAsset.downloadUrl.trim()
+                }
+                ?.fileHash
+            return@withContext endpointAsset.copy(
+                fileHash = endpointAsset.fileHash ?: endpointFileHash
+            )
         }
         if (owner.equals("ReVanced", ignoreCase = true) && repo.equals("revanced-patches", ignoreCase = true)) {
             val officialAsset = if (prerelease == null) {
@@ -956,7 +984,15 @@ class ExternalGraphqlPatchBundle(
                     isPrerelease = prerelease
                 )
                 ExternalBundleMetadataStore.write(directory, metadata)
-                return@withContext officialAsset
+                val officialFileHash = latestFromServices
+                    ?.takeIf {
+                        it.version.trim() == officialAsset.version.trim() &&
+                            it.downloadUrl?.trim().orEmpty() == officialAsset.downloadUrl.trim()
+                    }
+                    ?.fileHash
+                return@withContext officialAsset.copy(
+                    fileHash = officialAsset.fileHash ?: officialFileHash
+                )
             }
         }
         val latest = latestFromServices
@@ -969,6 +1005,64 @@ class ExternalGraphqlPatchBundle(
             ExternalBundleMetadataStore.write(directory, metadata)
         }
         snapshotToAsset(latest)
+    }
+
+    protected override suspend fun download(
+        info: ReVancedAsset,
+        onProgress: PatchBundleDownloadProgress?
+    ): PatchBundleDownloadResult {
+        val result = super.download(info, onProgress)
+        writeInstalledArtifactUrl(info.downloadUrl)
+        return result
+    }
+
+    fun artifactDiffers(info: ReVancedAsset, installedSha256: String?): Boolean {
+        val expectedSha256 = artifactSha256(info)
+        if (expectedSha256 != null) {
+            val installed = installedSha256?.trim()?.lowercase(Locale.US)
+            return installed != expectedSha256
+        }
+
+        val expectedUrl = info.downloadUrl.trim()
+        if (expectedUrl.isBlank()) return false
+        return readInstalledArtifactUrl() != expectedUrl
+    }
+
+    fun artifactSha256(info: ReVancedAsset): String? =
+        normalizeSha256FileHash(info.fileHash)
+
+    fun artifactNotificationIdentity(info: ReVancedAsset): String? =
+        artifactSha256(info)?.let { "sha256:$it" }
+            ?: info.downloadUrl.trim().takeIf { it.isNotBlank() }?.let { "url:$it" }
+
+    private fun readInstalledArtifactUrl(): String? =
+        runCatching { installedArtifactUrlFile.readText().trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+
+    private fun writeInstalledArtifactUrl(url: String) {
+        val normalized = url.trim()
+        if (normalized.isBlank()) return
+        runCatching { installedArtifactUrlFile.writeText(normalized) }
+    }
+
+    private fun snapshotArtifactDiffers(
+        endpointAsset: ReVancedAsset,
+        snapshot: ExternalBundleSnapshot
+    ): Boolean {
+        val endpointHash = endpointAsset.fileHash?.trim().orEmpty()
+        val snapshotHash = snapshot.fileHash?.trim().orEmpty()
+        if (
+            endpointHash.isNotBlank() &&
+            snapshotHash.isNotBlank() &&
+            endpointHash != snapshotHash
+        ) {
+            return true
+        }
+
+        val snapshotDownloadUrl = snapshot.downloadUrl?.trim().orEmpty()
+        return snapshotDownloadUrl.isNotBlank() &&
+            endpointAsset.downloadUrl.trim() != snapshotDownloadUrl
     }
 
     private suspend fun findLatestExternalSnapshot(
@@ -1096,8 +1190,21 @@ class ExternalGraphqlPatchBundle(
             signatureDownloadUrl = signatureUrl,
             pageUrl = snapshot?.sourceUrl,
             description = description,
-            version = version
+            version = version,
+            fileHash = snapshot?.fileHash
         )
+    }
+
+    private fun normalizeSha256FileHash(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val digest = when {
+            trimmed.startsWith("sha256:", ignoreCase = true) -> trimmed.substringAfter(':')
+            ':' !in trimmed -> trimmed
+            else -> return null
+        }
+        if (!digest.matches(Regex("^[0-9a-fA-F]{64}$"))) return null
+        return digest.lowercase(Locale.US)
     }
 
     private fun ExternalBundleSnapshot.toChangelogEntry(): PatchBundleChangelogEntry {

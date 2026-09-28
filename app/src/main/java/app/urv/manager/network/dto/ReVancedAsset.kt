@@ -16,5 +16,7 @@ data class ReVancedAsset (
     val pageUrl: String? = null,
     val description: String,
     val version: String,
+    @SerialName("file_hash")
+    val fileHash: String? = null,
 )
 

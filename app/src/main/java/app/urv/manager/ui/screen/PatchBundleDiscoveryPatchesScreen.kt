@@ -70,6 +70,7 @@ fun PatchBundleDiscoveryPatchesScreen(
     apiHost: String,
     sourceUrl: String,
     version: String,
+    fileHash: String?,
     isPrerelease: Boolean,
     patchCount: Int,
     ownerName: String,
@@ -92,6 +93,7 @@ fun PatchBundleDiscoveryPatchesScreen(
         apiHost,
         sourceUrl,
         version,
+        fileHash,
         isPrerelease,
         patchCount,
         ownerName,
@@ -102,6 +104,7 @@ fun PatchBundleDiscoveryPatchesScreen(
             bundleId = bundleId,
             sourceUrl = sourceUrl,
             version = version,
+            fileHash = fileHash,
             isPrerelease = isPrerelease,
             patchCount = patchCount,
             ownerName = ownerName,
@@ -109,20 +112,30 @@ fun PatchBundleDiscoveryPatchesScreen(
         )
     }
     val bundle = remember(bundles, routedBundle) {
+        val routedSourceUrl = routedBundle.sourceUrl.trim().removeSuffix("/")
+        val routedFileHash = routedBundle.fileHash?.takeUnless(String::isBlank)
         bundles?.firstOrNull {
             it.bundleId == routedBundle.bundleId &&
-                it.apiHost.equals(routedBundle.apiHost, ignoreCase = true)
+                it.apiHost.equals(routedBundle.apiHost, ignoreCase = true) &&
+                it.sourceUrl.trim().removeSuffix("/") == routedSourceUrl &&
+                it.version == routedBundle.version &&
+                it.isPrerelease == routedBundle.isPrerelease &&
+                (routedFileHash == null || it.fileHash == routedFileHash)
         } ?: routedBundle
     }
     val patches = viewModel.getPatches(bundle)
     val patchesLoading = viewModel.isPatchesLoading(bundle)
     val patchesError = viewModel.getPatchesError(bundle)
 
-    val importedUid = remember(bundle, sources) {
-        val endpoints = viewModel.bundleEndpoints(bundle)
-        sources.firstOrNull { src ->
-            src.asRemoteOrNull?.endpoint in endpoints
-        }?.uid
+    val importedUid = remember(bundle, sources, bundleInfos) {
+        val matchingSources = sources.filter { src ->
+            src.asRemoteOrNull?.let { remote ->
+                viewModel.matchesLocalPatchSource(bundle, remote)
+            } == true
+        }
+        matchingSources.firstOrNull { source ->
+            !bundleInfos[source.uid]?.patches.isNullOrEmpty()
+        }?.uid ?: matchingSources.firstOrNull()?.uid
     }
     val localPatches = importedUid?.let { bundleInfos[it]?.patches }
     val useLocalPatches = !localPatches.isNullOrEmpty()

@@ -21,6 +21,7 @@ data class ExternalBundleSnapshot(
     val version: String = "",
     val downloadUrl: String? = null,
     val signatureDownloadUrl: String? = null,
+    val fileHash: String? = null,
     val isPrerelease: Boolean = false,
     val isBundleV3: Boolean = false,
     val patchCount: Int = 0,

@@ -2,6 +2,7 @@ package app.urv.manager.network.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonObject
 
 @Serializable
@@ -40,6 +41,12 @@ data class BundleNode(
     val downloadUrl: String? = null,
     @SerialName("signature_download_url")
     val signatureDownloadUrl: String? = null,
+    @SerialName("file_hash")
+    val fileHash: String? = null,
+    @SerialName("need_patches_update")
+    val needPatchesUpdate: Boolean = false,
+    @SerialName("patcher_failure_fingerprint")
+    val patcherFailureFingerprint: String? = null,
     @SerialName("is_prerelease")
     val isPrerelease: Boolean = false,
     val version: String? = null,
@@ -47,6 +54,8 @@ data class BundleNode(
     @SerialName("patches_aggregate")
     val patchesAggregate: PatchesAggregate? = null,
     val patches: List<PatchNode>? = null,
+    @Transient
+    val patchMetadataVerified: Boolean = true,
 )
 
 @Serializable

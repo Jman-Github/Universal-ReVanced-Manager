@@ -92,6 +92,7 @@ import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
 import app.urv.manager.util.bundleImportLabel
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.LinkedHashSet
@@ -114,6 +115,7 @@ class PatchBundleRepository(
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private val store = Store(scope, State())
+    private val bundleDigestHashCache = ConcurrentHashMap<Int, String>()
 
     val sources = store.state.map { it.sources.values.toList() }
     val bundles = store.state.map {
@@ -935,6 +937,8 @@ class PatchBundleRepository(
         return BundleDigestInfo(hash, size, lastModified)
     }
 
+    fun installedBundleSha256(uid: Int): String? = bundleDigestHashCache[uid]
+
     private fun writeBundleDigestInfo(uid: Int, info: BundleDigestInfo) {
         val file = bundleDigestFile(uid)
         file.parentFile?.mkdirs()
@@ -1000,21 +1004,29 @@ class PatchBundleRepository(
     private suspend fun ensureBundleCacheValid(uid: Int, bundle: PatchBundle) {
         withContext(Dispatchers.IO) {
             val file = File(bundle.patchesJar)
-            if (!file.exists()) return@withContext
+            if (!file.exists()) {
+                bundleDigestHashCache.remove(uid)
+                return@withContext
+            }
 
             val size = runCatching { file.length() }.getOrDefault(0L)
             val lastModified = runCatching { file.lastModified() }.getOrDefault(0L)
             val existing = readBundleDigestInfo(uid)
             if (existing != null && existing.size == size && existing.lastModified == lastModified) {
+                bundleDigestHashCache[uid] = existing.hash
                 return@withContext
             }
 
-            val hash = computeBundleHash(file) ?: return@withContext
+            val hash = computeBundleHash(file) ?: run {
+                bundleDigestHashCache.remove(uid)
+                return@withContext
+            }
             val changed = existing == null || existing.hash != hash
             if (changed) {
                 clearBundleOdex(uid)
             }
             writeBundleDigestInfo(uid, BundleDigestInfo(hash, size, lastModified))
+            bundleDigestHashCache[uid] = hash
         }
     }
 
@@ -2620,8 +2632,16 @@ class PatchBundleRepository(
     suspend fun fetchUpdatesAndNotify(
         context: Context,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-        onAlreadyNotified: ((bundle: RemotePatchBundle, bundleVersion: String) -> Unit)? = null,
-        onNotification: (bundle: RemotePatchBundle, bundleVersion: String) -> Boolean
+        onAlreadyNotified: ((
+            bundle: RemotePatchBundle,
+            bundleVersion: String,
+            notificationIdentity: String
+        ) -> Unit)? = null,
+        onNotification: (
+            bundle: RemotePatchBundle,
+            bundleVersion: String,
+            notificationIdentity: String
+        ) -> Boolean
     ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
         if (!allowMeteredUpdates && !networkInfo.isSafe()) {
@@ -2645,22 +2665,65 @@ class PatchBundleRepository(
                 val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
                 val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                 val manifestSignature = normalizeVersionForCompare(bundle.version)
+                val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+                    ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+                    ?: false
                 if (
-                    (installedSignature != null && installedSignature == latestSignature) ||
-                    (manifestSignature != null && manifestSignature == latestSignature)
+                    !artifactChanged &&
+                    (
+                        (installedSignature != null && installedSignature == latestSignature) ||
+                            (manifestSignature != null && manifestSignature == latestSignature)
+                        )
                 ) {
                     return@forEach
                 }
 
                 val versionLabel = latestSignature
-                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) {
-                    onAlreadyNotified?.invoke(bundle, info.version)
+                val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
+                    ?.artifactNotificationIdentity(info)
+                val notificationIdentity = artifactIdentity?.let {
+                    "$versionLabel|$it"
+                } ?: versionLabel
+                val persistedNotificationIdentity = bundle.lastNotifiedVersion
+                    ?.trim()
+                    .orEmpty()
+                val alreadyNotified = when {
+                    artifactIdentity == null ->
+                        normalizeVersionForCompare(
+                            persistedNotificationIdentity.substringBefore('|')
+                        ) == versionLabel
+
+                    artifactIdentity.startsWith("sha256:", ignoreCase = true) ->
+                        persistedNotificationIdentity.equals(
+                            notificationIdentity,
+                            ignoreCase = true
+                        )
+
+                    else -> {
+                        val persistedVersion = normalizeVersionForCompare(
+                            persistedNotificationIdentity.substringBefore('|')
+                        )
+                        val persistedArtifactIdentity = persistedNotificationIdentity
+                            .substringAfter('|', missingDelimiterValue = "")
+                        persistedVersion == versionLabel &&
+                            persistedArtifactIdentity == artifactIdentity
+                    }
+                }
+                if (alreadyNotified) {
+                    val effectiveNotificationIdentity = persistedNotificationIdentity
+                        .takeIf { it.isNotBlank() }
+                        ?: notificationIdentity
+                    onAlreadyNotified?.invoke(
+                        bundle,
+                        info.version,
+                        effectiveNotificationIdentity
+                    )
                     return@forEach
                 }
 
-                val notified = onNotification(bundle, info.version)
+                val notified = onNotification(bundle, info.version, notificationIdentity)
                 if (notified) {
-                    updateLastNotifiedVersion(bundle.uid, versionLabel)
+                    updateLastNotifiedVersion(bundle.uid, notificationIdentity)
                     notifiedAny = true
                 }
             }
@@ -2906,7 +2969,26 @@ class PatchBundleRepository(
                     var bundleFailed = false
                     val result = try {
                         withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
-                            if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                            if (force) {
+                                bundle.downloadLatest(onProgress)
+                            } else {
+                                val external = bundle as? ExternalGraphqlPatchBundle
+                                if (external == null) {
+                                    bundle.update(onProgress)
+                                } else {
+                                    val latest = external.fetchLatestReleaseInfo()
+                                    if (
+                                        external.artifactDiffers(
+                                            latest,
+                                            installedBundleSha256(external.uid)
+                                        )
+                                    ) {
+                                        external.downloadLatest(onProgress)
+                                    } else {
+                                        external.update(onProgress)
+                                    }
+                                }
+                            }
                         }
                     } catch (e: BundleUpdateCancelled) {
                         null
@@ -3072,10 +3154,15 @@ class PatchBundleRepository(
                                 ?: return@async bundle.uid to null
                             val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                             val manifestSignature = normalizeVersionForCompare(bundle.version)
+                            val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+                                ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+                                ?: false
                             val hasMatchingInstalledSignature =
                                 (installedSignature != null && installedSignature == latestSignature) ||
                                     (manifestSignature != null && manifestSignature == latestSignature)
-                            if (hasMatchingInstalledSignature) return@async bundle.uid to null
+                            if (hasMatchingInstalledSignature && !artifactChanged) {
+                                return@async bundle.uid to null
+                            }
                             bundle.uid to ManualBundleUpdateInfo(
                                 latestVersion = info.version,
                                 pageUrl = info.pageUrl
