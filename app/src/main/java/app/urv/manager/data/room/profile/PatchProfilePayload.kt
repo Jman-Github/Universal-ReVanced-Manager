@@ -5,8 +5,16 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class PatchProfilePayload(
-    val bundles: List<Bundle>
+    val bundles: List<Bundle>,
+    val signatureWorkflow: SignatureWorkflow = SignatureWorkflow()
 ) {
+    @Serializable
+    data class SignatureWorkflow(
+        val enabled: Boolean = false,
+        val remembered: Boolean = false,
+        val injected: Boolean = false
+    )
+
     @Serializable
     data class OptionDisplayInfo(
         val label: String? = null,

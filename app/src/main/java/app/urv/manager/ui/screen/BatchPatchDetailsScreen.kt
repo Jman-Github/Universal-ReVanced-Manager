@@ -39,6 +39,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -101,6 +104,10 @@ fun BatchPatchDetailsScreen(
     val useExclusiveAutoExpand =
         autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val item = state?.items?.firstOrNull { it.packageName == packageName }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    val showSignatureProgress = item?.signatureInjection?.running == true &&
+        lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     val awaitingProgress = item?.let {
         it.state == BatchItemState.RUNNING &&
             (it.input == null ||
@@ -128,6 +135,7 @@ fun BatchPatchDetailsScreen(
             )
     } == true
     AppScaffold(
+        modifier = Modifier.blur(if (showSignatureProgress) 12.dp else 0.dp),
         topBar = { scrollBehavior ->
             AppTopBar(
                 title = item?.appName
@@ -396,7 +404,13 @@ fun BatchPatchDetailsScreen(
         }
     }
 
-    if (showLoadingOverlay) {
+    if (showSignatureProgress && item != null) {
+        SignatureMetadataWorkflowLoadingDialog(
+            state = item.signatureInjection,
+            onCancel = onBackClick,
+            cancelButtonText = stringResource(R.string.back)
+        )
+    } else if (showLoadingOverlay && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
         TransparentLoadingDialog()
     }
 }

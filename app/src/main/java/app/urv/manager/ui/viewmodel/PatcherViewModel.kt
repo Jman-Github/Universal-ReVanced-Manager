@@ -75,7 +75,13 @@ import app.urv.manager.domain.installer.root.restore
 import app.urv.manager.domain.installer.root.retire
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
+import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.manager.SignatureMetadataInjectionMode
+import app.urv.manager.domain.manager.SignatureMetadataInjectorManager
+import app.urv.manager.domain.manager.SignatureMetadataWorkflowProgress
+import app.urv.manager.domain.manager.SignatureMetadataSigningMode
+import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.domain.repository.DownloadResult
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -158,6 +164,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
@@ -365,6 +374,7 @@ class PatcherViewModel(
     private val installerManager: InstallerManager by inject()
     private val sessionInstaller: SessionInstaller by inject()
     private val prefs: PreferencesManager by inject()
+    private val signatureMetadataInjector: SignatureMetadataInjectorManager by inject()
     private val json: Json by inject()
     private val skipApkSigning = prefs.skipApkSigning.getBlocking()
     private val savedStateHandle: SavedStateHandle = get()
@@ -633,6 +643,15 @@ class PatcherViewModel(
     var isInstalling by mutableStateOf(ongoingPmSession)
         private set
     private var autoInstallTriggered: Boolean by savedStateHandle.saveableVar { false }
+    private var signatureWorkflowJob: Job? = null
+    private val mutableSignatureWorkflowProgress = MutableStateFlow(SignatureMetadataWorkflowProgress())
+    val signatureWorkflowProgress = mutableSignatureWorkflowProgress.asStateFlow()
+    var signatureWorkflowRunning by mutableStateOf(false)
+        private set
+    var signatureWorkflowError by mutableStateOf<String?>(null)
+        private set
+    var signatureWorkflowCompleted by mutableStateOf(false)
+        private set
     var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
         private set
     var signatureMismatchPackage by mutableStateOf<String?>(null)
@@ -2282,6 +2301,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun startWorkerNow() {
+        signatureWorkflowJob?.cancel()
+        signatureWorkflowJob = null
+        signatureWorkflowRunning = false
+        signatureWorkflowCompleted = false
+        signatureWorkflowError = null
+        mutableSignatureWorkflowProgress.value = SignatureMetadataWorkflowProgress(
+            logSessionId = mutableSignatureWorkflowProgress.value.logSessionId + 1L
+        )
         resetDexCompileState()
         resetFailureLogState()
         fs.deleteRepatchInputStagingFile(patchedRepatchSourcePath)
@@ -2513,9 +2540,17 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val sanitizedSelectionOriginal = sanitizeSelection(appliedSelection, globalBundlesFinal)
             val sanitizedOptionsOriginal = sanitizeOptions(appliedOptions, globalBundlesFinal)
 
+            val rememberSignatureWorkflow = input.rememberSignatureWorkflow &&
+                (signatureWorkflowCompleted || hasOriginalSignatureMetadata())
             val selectionPayload = patchBundleRepository.snapshotSelection(
                 sanitizedSelectionFinal,
                 sanitizedOptionsFinal
+            )?.copy(
+                signatureWorkflow = PatchProfilePayload.SignatureWorkflow(
+                    enabled = signatureWorkflowCompleted,
+                    remembered = rememberSignatureWorkflow,
+                    injected = signatureWorkflowCompleted
+                )
             )
 
             val newVariantIdentity = buildSavedAppVariantIdentity(
@@ -4463,9 +4498,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun maybeAutoInstall() {
         if (autoInstallTriggered) return
+        val token = automaticInstallerToken() ?: return
+        autoInstallTriggered = true
+        installWithToken(token, automatic = true)
+    }
+
+    private fun automaticInstallerToken(): InstallerManager.Token? {
         val chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.getBlocking()
         val profileInstallerToken = input.profileInstallerToken
-        val token = when {
+        return when {
             input.autoInstall &&
                 profileInstallerToken != null &&
                 shouldApplyProfileInstallerPreference(
@@ -4478,13 +4519,152 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 )
             !usingMountInstall && prefs.autoInstallWithShizuku.getBlocking() -> {
                 val primary = installerManager.getPrimaryToken()
-                if (!installerManager.isShizukuToken(primary)) return
-                primary
+                primary.takeIf(installerManager::isShizukuToken)
             }
-            else -> return
+            else -> null
         }
-        autoInstallTriggered = true
-        installWithToken(token, automatic = true)
+    }
+
+    fun startSignatureWorkflow() {
+        if (signatureWorkflowRunning || signatureWorkflowCompleted ||
+            isInstalling || _patcherSucceeded.value != true
+        ) return
+        signatureWorkflowJob = viewModelScope.launch {
+            completeSignatureWorkflow()
+        }
+    }
+
+    private suspend fun completeSignatureWorkflow(): Boolean {
+        signatureWorkflowError = null
+        mutableSignatureWorkflowProgress.update {
+            SignatureMetadataWorkflowProgress(running = true, logSessionId = it.logSessionId + 1L)
+                .appendLog("Started signature metadata injection")
+        }
+        signatureWorkflowRunning = true
+        try {
+            CacheCleanupGuard.withCacheInUse {
+                if (!signatureWorkflowCompleted) {
+                    injectSourceSignatureIntoPatchedOutput()
+                }
+            }
+            appendSignatureWorkflowLog("Signature metadata injection complete")
+            return true
+        } catch (cancelled: CancellationException) {
+            appendSignatureWorkflowLog("Signature metadata injection cancelled")
+            if (input.injectSignatureMetadata) _patcherSucceeded.value = false
+            signatureWorkflowError = app.getString(
+                R.string.tools_signature_metadata_injector_cancelled
+            )
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(TAG, "Signature metadata workflow failed", error)
+            appendSignatureWorkflowLog("Signature metadata injection failed: ${error.simpleMessage()}")
+            signatureWorkflowError = error.simpleMessage()
+                ?: app.getString(R.string.tools_signature_metadata_injector_failed)
+            return false
+        } finally {
+            signatureWorkflowRunning = false
+            mutableSignatureWorkflowProgress.update { it.copy(running = false) }
+            signatureWorkflowJob = null
+        }
+    }
+
+    private fun appendSignatureWorkflowLog(message: String) {
+        mutableSignatureWorkflowProgress.update { it.appendLog(message) }
+        logger.info("Signature metadata: $message")
+    }
+
+    private fun originalSignatureSource(): File? = sequenceOf(
+        patchedRepatchSourcePath?.let(::File),
+        inputFile,
+        (input.selectedApp as? SelectedApp.Local)?.file
+    ).filterNotNull().firstOrNull { it.isFile && it.length() > 0L }
+
+    private suspend fun hasOriginalSignatureMetadata(): Boolean {
+        val source = originalSignatureSource() ?: return false
+        return try {
+            signatureMetadataInjector.analyzeSignatureSource(source)
+            true
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private suspend fun injectSourceSignatureIntoPatchedOutput() {
+        val source = originalSignatureSource()
+            ?: throw IOException(app.getString(R.string.patcher_signature_workflow_source_missing))
+        check(outputFile.isFile && outputFile.length() > 0L) {
+            app.getString(R.string.patcher_signature_workflow_output_missing)
+        }
+        try {
+            signatureMetadataInjector.analyzeSignatureSource(source)
+        } catch (error: IllegalArgumentException) {
+            throw IOException(app.getString(R.string.patcher_signature_workflow_unsigned_source), error)
+        }
+        val injected = tempDir.resolve("signature-injected.apk")
+        val backup = tempDir.resolve("output-before-signature.apk")
+        injected.delete()
+        backup.delete()
+        try {
+            signatureMetadataInjector.inject(
+                signatureSource = source,
+                targetApk = outputFile,
+                outputApk = injected,
+                mode = SignatureMetadataInjectionMode.REPLACE_EXISTING,
+                signingMode = SignatureMetadataSigningMode.APPLY_SUPPLIED_SIGNATURE,
+                onProgress = { progress ->
+                    mutableSignatureWorkflowProgress.update { it.copy(stage = progress.stage) }
+                },
+                onLog = ::appendSignatureWorkflowLog
+            )
+            currentCoroutineContext().ensureActive()
+            // Once replacement starts, keep the file and its completion state consistent.
+            withContext(NonCancellable) {
+                withContext(Dispatchers.IO) {
+                    Files.copy(outputFile.toPath(), backup.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    try {
+                        Files.move(
+                            injected.toPath(),
+                            outputFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                        backup.delete()
+                    } catch (error: Exception) {
+                        Files.copy(
+                            backup.toPath(),
+                            outputFile.toPath(),
+                            StandardCopyOption.REPLACE_EXISTING
+                        )
+                        backup.delete()
+                        throw error
+                    }
+                }
+                // The saved or installed APK still contains the previous output.
+                savedPatchedApp = false
+                installedPackageName = null
+                installStatus = null
+                installFailureMessage = null
+                packageInstallerStatus = null
+                suppressFailureAfterSuccess = false
+                lastSuccessInstallType = null
+                lastSuccessAtMs = 0L
+                signatureWorkflowCompleted = true
+            }
+            refreshExportMetadata()
+        } finally {
+            injected.delete()
+        }
+    }
+
+    fun cancelSignatureWorkflow() {
+        // Job cancellation stops this operation's process without affecting other injections.
+        signatureWorkflowJob?.cancel(CancellationException("Signature metadata workflow cancelled"))
+    }
+
+    fun clearSignatureWorkflowError() {
+        signatureWorkflowError = null
     }
 
     fun installWithToken(token: InstallerManager.Token, automatic: Boolean = false) {
@@ -6534,6 +6714,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
             when (workInfo?.state) {
                 WorkInfo.State.SUCCEEDED -> {
+                    if (signatureWorkflowRunning ||
+                        (signatureWorkflowCompleted && _patcherSucceeded.value == true)
+                    ) return@addSource
                     replayWorkerProgressSnapshots = false
                     workerRepository.clearActiveProgressSnapshot(id)
                     stopPatchingTaskMonitor()
@@ -6576,8 +6759,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     val patchedPackageInfo = pm.getPackageInfo(outputFile)
                     supportsRootMount = patchedPackageInfo?.packageName == packageName
                     supportsRootMountModeOverride = false
-                    _patcherSucceeded.value = true
-                    refreshRootMountModeOverrideAsync()
+                    if (input.injectSignatureMetadata) {
+                        _patcherSucceeded.value = null
+                        signatureWorkflowRunning = true
+                        signatureWorkflowJob = viewModelScope.launch {
+                            _patcherSucceeded.value = completeSignatureWorkflow()
+                            if (_patcherSucceeded.value == true) {
+                                refreshRootMountModeOverrideAsync()
+                            }
+                        }
+                    } else {
+                        _patcherSucceeded.value = true
+                        refreshRootMountModeOverrideAsync()
+                    }
                 }
 
                 WorkInfo.State.FAILED -> {

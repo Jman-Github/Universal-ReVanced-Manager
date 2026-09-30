@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
+import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
@@ -52,6 +53,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
@@ -66,6 +68,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -129,6 +132,10 @@ fun PatcherScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
+    val signatureProgress by viewModel.signatureWorkflowProgress.collectAsState()
+    val showSignatureProgress = viewModel.signatureWorkflowRunning &&
+        lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
@@ -166,7 +173,10 @@ fun PatcherScreen(
         if (patcherSucceeded == true) viewModel.maybeAutoInstall()
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
-    val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
+    val canInstall by remember { derivedStateOf {
+        patcherSucceeded == true && !viewModel.signatureWorkflowRunning &&
+            (viewModel.installedPackageName != null || !viewModel.isInstalling)
+    } }
     val supportsRootMount = viewModel.supportsRootMount
     val mountModeSupportsRootMount = viewModel.usingMountInstall && supportsRootMount
     var mountInstallerAvailable by remember { mutableStateOf(false) }
@@ -196,6 +206,7 @@ fun PatcherScreen(
     val rootDiagnosticsExportInProgress = viewModel.rootMountDiagnosticsExportInProgress
     var pendingRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
+    var showSignatureWorkflowDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallDropdown by rememberSaveable { mutableStateOf(false) }
     var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     val fs: Filesystem = koinInject()
@@ -1370,7 +1381,51 @@ fun PatcherScreen(
         )
     }
 
+    if (showSignatureProgress) {
+        SignatureMetadataWorkflowLoadingDialog(
+            state = signatureProgress,
+            onCancel = viewModel::cancelSignatureWorkflow
+        )
+    }
+
+    viewModel.signatureWorkflowError
+        ?.takeIf { lifecycleState.isAtLeast(Lifecycle.State.RESUMED) }
+        ?.let { error ->
+        AlertDialog(
+            onDismissRequest = viewModel::clearSignatureWorkflowError,
+            confirmButton = {
+                TextButton(onClick = viewModel::clearSignatureWorkflowError) {
+                    Text(stringResource(R.string.ok))
+                }
+            },
+            title = { CenteredDialogTitle(stringResource(R.string.patcher_signature_workflow_failed)) },
+            text = { Text(error) }
+        )
+    }
+
+    if (showSignatureWorkflowDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignatureWorkflowDialog = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSignatureWorkflowDialog = false
+                    viewModel.startSignatureWorkflow()
+                }) {
+                    Text(stringResource(R.string.continue_))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignatureWorkflowDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { CenteredDialogTitle(stringResource(R.string.patcher_signature_workflow_title)) },
+            text = { Text(stringResource(R.string.patcher_signature_workflow_description)) }
+        )
+    }
+
     AppScaffold(
+        modifier = Modifier.blur(if (showSignatureProgress) 12.dp else 0.dp),
         topBar = { scrollBehavior ->
             AppTopBar(
                 title = stringResource(R.string.patcher),
@@ -1387,9 +1442,20 @@ fun PatcherScreen(
                 actions = {
                     IconButton(
                         onClick = ::openExportPicker,
-                        enabled = patcherSucceeded == true
+                        enabled = patcherSucceeded == true && !viewModel.signatureWorkflowRunning
                     ) {
                     Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
+                }
+                IconButton(
+                    onClick = { showSignatureWorkflowDialog = true },
+                    enabled = patcherSucceeded == true &&
+                        !viewModel.signatureWorkflowRunning &&
+                        !viewModel.signatureWorkflowCompleted
+                ) {
+                    Icon(
+                        Icons.Outlined.SwapVert,
+                        stringResource(R.string.patcher_signature_workflow_title)
+                    )
                 }
                 IconButton(
                     onClick = { showLogActionsDialog = true },
