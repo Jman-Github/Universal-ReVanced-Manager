@@ -109,6 +109,32 @@ class SignatureMetadataInjectorManager(
     suspend fun analyzeTarget(file: File): SignatureMetadataTargetInfo =
         analyzer.analyzeTarget(file)
 
+    /** Captures the original donor's metadata before patching can merge or modify it. */
+    suspend fun cacheSignatureMetadata(source: File, output: File) = withContext(Dispatchers.IO) {
+        require(source.canonicalFile != output.canonicalFile) {
+            "The signature metadata cache must not overwrite the original APK."
+        }
+        val parent = requireNotNull(output.absoluteFile.parentFile)
+        val workspace = parent.resolve(".signature-cache-${UUID.randomUUID()}")
+        val operationContext = coroutineContext
+        output.delete()
+        try {
+            val prepared = analyzer.prepareSignatureSource(
+                file = source,
+                workspace = workspace,
+                checkCancelled = { operationContext.ensureActive() }
+            )
+            operationContext.ensureActive()
+            prepared.metadataArchive.copyTo(output, overwrite = true)
+            operationContext.ensureActive()
+        } catch (error: Throwable) {
+            output.delete()
+            throw error
+        } finally {
+            workspace.deleteRecursively()
+        }
+    }
+
     fun cancelActiveExecution() {
         processRuntime.cancelActiveExecution()
         splitMergeRuntime.cancelActiveExecution()

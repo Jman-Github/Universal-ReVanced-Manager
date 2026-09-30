@@ -3,6 +3,8 @@ package app.urv.manager.domain.manager
 /** Live injection state retained by the job, independently of its progress screen. */
 data class SignatureMetadataWorkflowProgress(
     val running: Boolean = false,
+    val completed: Boolean = false,
+    val error: String? = null,
     val stage: SignatureMetadataInjectorStage = SignatureMetadataInjectorStage.ANALYZING,
     val logEntries: List<String> = emptyList(),
     val logRevision: Long = 0L,

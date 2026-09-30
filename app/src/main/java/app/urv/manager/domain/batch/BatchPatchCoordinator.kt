@@ -512,6 +512,9 @@ class BatchPatchCoordinator(
 
                 try {
                     val output = fs.createBatchPatchOutputFile(item.packageName)
+                    val signatureMetadataSource = if (item.signatureWorkflow.enabled) {
+                        fs.tempDir.resolve("signature-source-${UUID.randomUUID()}.zip")
+                    } else null
                     var keepOutput = false
                     var repatchSourcePath: String? = null
                     var keepRepatchSource = false
@@ -521,7 +524,8 @@ class BatchPatchCoordinator(
                             output,
                             itemIndex,
                             queueIndex,
-                            indexes.size
+                            indexes.size,
+                            signatureMetadataSource
                         )
                         repatchSourcePath = patchResult.repatchSourcePath
                         if (patchResult.succeeded) {
@@ -532,7 +536,11 @@ class BatchPatchCoordinator(
                                 hadPatchFailures = patchResult.hadPatchFailures
                             )
                             if (resolvedItem.signatureWorkflow.enabled) {
-                                injectSourceSignatureIntoPatchedOutput(resolvedItem, output, itemIndex)
+                                injectSourceSignatureIntoPatchedOutput(
+                                    requireNotNull(signatureMetadataSource),
+                                    output,
+                                    itemIndex
+                                )
                             }
                             val canRememberSignatureWorkflow =
                                 resolvedItem.signatureWorkflow.remembered &&
@@ -580,6 +588,7 @@ class BatchPatchCoordinator(
                             }
                         }
                     } finally {
+                        signatureMetadataSource?.delete()
                         if (!keepOutput) output.delete()
                         if (!keepRepatchSource) {
                             fs.deleteRepatchInputStagingFile(repatchSourcePath)
@@ -652,7 +661,7 @@ class BatchPatchCoordinator(
     }
 
     private suspend fun injectSourceSignatureIntoPatchedOutput(
-        item: BatchPatchItem,
+        source: File,
         output: File,
         itemIndex: Int
     ) {
@@ -664,19 +673,13 @@ class BatchPatchCoordinator(
         }
         appendSignatureInjectionLog(itemIndex, "Started signature metadata injection")
         try {
-            val source = sequenceOf(
-                item.repatchSourcePath?.let(::File),
-                (item.input as? SelectedApp.Local)?.file
-            ).filterNotNull().firstOrNull { it.isFile && it.length() > 0L }
-                ?: throw IOException(app.getString(R.string.patcher_signature_workflow_source_missing))
+            check(source.isFile && source.length() > 0L) {
+                app.getString(R.string.patcher_signature_workflow_source_missing)
+            }
             check(output.isFile && output.length() > 0L) {
                 app.getString(R.string.patcher_signature_workflow_output_missing)
             }
-            try {
-                signatureMetadataInjector.analyzeSignatureSource(source)
-            } catch (error: IllegalArgumentException) {
-                throw IOException(app.getString(R.string.patcher_signature_workflow_unsigned_source), error)
-            }
+            appendSignatureInjectionLog(itemIndex, "Using original signature metadata cached before patching")
             val outputDirectory = requireNotNull(output.absoluteFile.parentFile)
             val injected = outputDirectory.resolve(
                 ".${output.nameWithoutExtension}-signature-${UUID.randomUUID()}.apk"
@@ -722,10 +725,24 @@ class BatchPatchCoordinator(
             } finally {
                 injected.delete()
             }
+            updateItem(itemIndex) {
+                it.copy(signatureInjection = it.signatureInjection.copy(completed = true))
+            }
+            appendSignatureInjectionLog(itemIndex, "Signature metadata injection complete")
         } catch (cancelled: CancellationException) {
+            updateItem(itemIndex) {
+                it.copy(signatureInjection = it.signatureInjection.copy(
+                    error = app.getString(R.string.tools_signature_metadata_injector_cancelled)
+                ))
+            }
             appendSignatureInjectionLog(itemIndex, "Signature metadata injection cancelled")
             throw cancelled
         } catch (error: Exception) {
+            updateItem(itemIndex) {
+                it.copy(signatureInjection = it.signatureInjection.copy(
+                    error = error.message ?: app.getString(R.string.tools_signature_metadata_injector_failed)
+                ))
+            }
             appendSignatureInjectionLog(itemIndex, "Signature metadata injection failed: ${error.message}")
             throw error
         } finally {
@@ -755,7 +772,8 @@ class BatchPatchCoordinator(
         output: File,
         itemIndex: Int,
         queueIndex: Int,
-        queueSize: Int
+        queueSize: Int,
+        signatureMetadataSource: File?
     ): BatchPatchWorkerResult {
         val input = item.input ?: return BatchPatchWorkerResult(succeeded = false)
         val backgroundExecution = mutableState.value?.scheduled == true
@@ -796,6 +814,7 @@ class BatchPatchCoordinator(
             logger = logger,
             preparedInput = null,
             splitSelection = null,
+            signatureMetadataOutput = signatureMetadataSource?.path,
             handleStartActivityRequest = { _, intent ->
                 if (allowsInteractiveBatchActivity(mutableState.value?.scheduled == true)) {
                     requestActivityResult(intent)

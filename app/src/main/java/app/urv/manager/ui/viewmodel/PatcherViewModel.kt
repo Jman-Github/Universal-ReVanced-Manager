@@ -648,8 +648,7 @@ class PatcherViewModel(
     val signatureWorkflowProgress = mutableSignatureWorkflowProgress.asStateFlow()
     var signatureWorkflowRunning by mutableStateOf(false)
         private set
-    var signatureWorkflowError by mutableStateOf<String?>(null)
-        private set
+    val signatureInjectionEnabled get() = input.injectSignatureMetadata
     var signatureWorkflowCompleted by mutableStateOf(false)
         private set
     var installStatus by mutableStateOf<InstallCompletionStatus?>(null)
@@ -1890,6 +1889,7 @@ class PatcherViewModel(
         false
     }
     private val outputFile = tempDir.resolve("output.apk")
+    private val signatureMetadataSource = tempDir.resolve("signature-source.zip")
 
     private val logs by savedStateHandle.saveable<MutableList<Pair<LogLevel, String>>> { mutableListOf() }
 
@@ -2134,7 +2134,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 input.selectedApp,
                 appliedSelection,
                 requiresSplitPreparation,
-                skipApkSigning
+                skipApkSigning,
+                input.injectSignatureMetadata
             ).toMutableStateList()
         }
     val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
@@ -2305,7 +2306,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         signatureWorkflowJob = null
         signatureWorkflowRunning = false
         signatureWorkflowCompleted = false
-        signatureWorkflowError = null
         mutableSignatureWorkflowProgress.value = SignatureMetadataWorkflowProgress(
             logSessionId = mutableSignatureWorkflowProgress.value.logSessionId + 1L
         )
@@ -2333,7 +2333,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.selectedApp,
             runSelection,
             requiresSplitPreparation,
-            skipApkSigning
+            skipApkSigning,
+            input.injectSignatureMetadata
         )
         steps.clear()
         steps.addAll(runSteps)
@@ -3015,6 +3016,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     fun onBack(cleanupLocalInput: Boolean) {
         cancelSplitSelectionPreparation()
+        val injectionJob = signatureWorkflowJob
+        injectionJob?.cancel(CancellationException("Patching stopped"))
         // tempDir cannot be deleted inside onCleared because it gets called on system-initiated process death.
         if (_isPatchingActive.value == true) {
             val workId = patcherWorkerId?.uuid
@@ -3024,7 +3027,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             if (cleanupLocalInput) {
                 cleanupTemporaryLocalInputAfterWorkStops(workId)
             }
-        } else if (cleanupLocalInput) {
+        } else if (cleanupLocalInput && injectionJob == null) {
             cleanupTemporaryLocalInput()
         }
         val repatchSourcePath = patchedRepatchSourcePath
@@ -3032,6 +3035,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val workId = patcherWorkerId?.uuid
         // Each screen owns its directory, so delayed cleanup cannot delete a retry's output.
         CoroutineScope(Dispatchers.IO).launch {
+            injectionJob?.join()
+            if (cleanupLocalInput && injectionJob != null) {
+                withContext(Dispatchers.Main.immediate) { cleanupTemporaryLocalInput() }
+            }
             workId?.let {
                 withContext(Dispatchers.Main.immediate) { awaitWorkToFinish(it) }
             }
@@ -4525,17 +4532,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
-    fun startSignatureWorkflow() {
-        if (signatureWorkflowRunning || signatureWorkflowCompleted ||
-            isInstalling || _patcherSucceeded.value != true
-        ) return
-        signatureWorkflowJob = viewModelScope.launch {
-            completeSignatureWorkflow()
-        }
-    }
-
     private suspend fun completeSignatureWorkflow(): Boolean {
-        signatureWorkflowError = null
         mutableSignatureWorkflowProgress.update {
             SignatureMetadataWorkflowProgress(running = true, logSessionId = it.logSessionId + 1L)
                 .appendLog("Started signature metadata injection")
@@ -4547,22 +4544,26 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     injectSourceSignatureIntoPatchedOutput()
                 }
             }
+            mutableSignatureWorkflowProgress.update { it.copy(completed = true) }
             appendSignatureWorkflowLog("Signature metadata injection complete")
             return true
         } catch (cancelled: CancellationException) {
             appendSignatureWorkflowLog("Signature metadata injection cancelled")
             if (input.injectSignatureMetadata) _patcherSucceeded.value = false
-            signatureWorkflowError = app.getString(
-                R.string.tools_signature_metadata_injector_cancelled
-            )
+            mutableSignatureWorkflowProgress.update {
+                it.copy(error = app.getString(R.string.tools_signature_metadata_injector_cancelled))
+            }
             throw cancelled
         } catch (error: Exception) {
             Log.e(TAG, "Signature metadata workflow failed", error)
             appendSignatureWorkflowLog("Signature metadata injection failed: ${error.simpleMessage()}")
-            signatureWorkflowError = error.simpleMessage()
-                ?: app.getString(R.string.tools_signature_metadata_injector_failed)
+            mutableSignatureWorkflowProgress.update {
+                it.copy(error = error.simpleMessage()
+                    ?: app.getString(R.string.tools_signature_metadata_injector_failed))
+            }
             return false
         } finally {
+            signatureMetadataSource.delete()
             signatureWorkflowRunning = false
             mutableSignatureWorkflowProgress.update { it.copy(running = false) }
             signatureWorkflowJob = null
@@ -4593,16 +4594,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     }
 
     private suspend fun injectSourceSignatureIntoPatchedOutput() {
-        val source = originalSignatureSource()
-            ?: throw IOException(app.getString(R.string.patcher_signature_workflow_source_missing))
+        val source = signatureMetadataSource
+        check(source.isFile && source.length() > 0L) {
+            app.getString(R.string.patcher_signature_workflow_source_missing)
+        }
         check(outputFile.isFile && outputFile.length() > 0L) {
             app.getString(R.string.patcher_signature_workflow_output_missing)
         }
-        try {
-            signatureMetadataInjector.analyzeSignatureSource(source)
-        } catch (error: IllegalArgumentException) {
-            throw IOException(app.getString(R.string.patcher_signature_workflow_unsigned_source), error)
-        }
+        appendSignatureWorkflowLog("Using original signature metadata cached before patching")
         val injected = tempDir.resolve("signature-injected.apk")
         val backup = tempDir.resolve("output-before-signature.apk")
         injected.delete()
@@ -4656,15 +4655,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } finally {
             injected.delete()
         }
-    }
-
-    fun cancelSignatureWorkflow() {
-        // Job cancellation stops this operation's process without affecting other injections.
-        signatureWorkflowJob?.cancel(CancellationException("Signature metadata workflow cancelled"))
-    }
-
-    fun clearSignatureWorkflowError() {
-        signatureWorkflowError = null
     }
 
     fun installWithToken(token: InstallerManager.Token, automatic: Boolean = false) {
@@ -5158,6 +5148,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             logger,
             preparedInput = resolvedPreparedInput,
             splitSelection = resolvedSplitSelection,
+            signatureMetadataOutput = signatureMetadataSource.path.takeIf {
+                input.injectSignatureMetadata
+            },
             setInputFile = { file, needsSplit, merged ->
                 val storedFile = if (shouldPreserveInput) {
                     val existing = inputFile
@@ -6999,7 +6992,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             input.selectedApp,
             appliedSelection,
             requiresSplitPreparation,
-            skipApkSigning
+            skipApkSigning,
+            input.injectSignatureMetadata
         ).toMutableStateList()
         steps.clear()
         resetDexCompileState()
@@ -7301,7 +7295,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             selectedApp: SelectedApp,
             selectedPatches: PatchSelection,
             splitStepActive: Boolean,
-            skipApkSigning: Boolean
+            skipApkSigning: Boolean,
+            injectSignatureMetadata: Boolean = false
         ): List<Step> = buildList {
             if (selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search) {
                 add(
@@ -7359,7 +7354,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     StepCategory.SAVING
                 )
             )
-            if (!skipApkSigning) {
+            if (!skipApkSigning || injectSignatureMetadata) {
                 add(
                     Step(
                         StepId.SignAPK,

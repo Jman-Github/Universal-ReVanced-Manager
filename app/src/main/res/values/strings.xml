@@ -2409,6 +2409,7 @@ Details: %2$s</string>
     <string name="tools_signature_input_preparing">Preparing selected input…</string>
     <string name="saved_app_signature_workflow_applied">Signature metadata was injected into this saved APK.</string>
     <string name="saved_app_signature_workflow_not_applied">Signature metadata was not injected into this saved APK.</string>
+    <string name="patcher_step_inject_signature_metadata">Injecting signature metadata</string>
 </resources>
 
 

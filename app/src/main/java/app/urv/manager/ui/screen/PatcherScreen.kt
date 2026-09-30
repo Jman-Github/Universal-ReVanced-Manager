@@ -36,7 +36,6 @@ import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.PostAdd
 import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
@@ -68,7 +67,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -100,6 +98,7 @@ import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
+import app.urv.manager.ui.model.signatureMetadataPatcherProgress
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.viewmodel.PatcherViewModel
 import app.urv.manager.data.room.apps.installed.InstallType
@@ -132,10 +131,15 @@ fun PatcherScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
     val signatureProgress by viewModel.signatureWorkflowProgress.collectAsState()
-    val showSignatureProgress = viewModel.signatureWorkflowRunning &&
-        lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    val patcherProgress = signatureMetadataPatcherProgress(
+        context = context,
+        steps = viewModel.steps.toList(),
+        subStepsById = viewModel.stepSubSteps.mapValues { it.value.toList() },
+        progress = viewModel.progress,
+        enabled = viewModel.signatureInjectionEnabled,
+        injection = signatureProgress
+    )
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
@@ -167,7 +171,8 @@ fun PatcherScreen(
     }
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
-    val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
+    val workerIsPatchingActive by viewModel.isPatchingActive.observeAsState(false)
+    val isPatchingActive = workerIsPatchingActive || viewModel.signatureWorkflowRunning
 
     LaunchedEffect(patcherSucceeded) {
         if (patcherSucceeded == true) viewModel.maybeAutoInstall()
@@ -206,7 +211,6 @@ fun PatcherScreen(
     val rootDiagnosticsExportInProgress = viewModel.rootMountDiagnosticsExportInProgress
     var pendingRootDiagnosticsFileName by rememberSaveable { mutableStateOf<String?>(null) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
-    var showSignatureWorkflowDialog by rememberSaveable { mutableStateOf(false) }
     var showInstallDropdown by rememberSaveable { mutableStateOf(false) }
     var pendingLogExportFileName by rememberSaveable { mutableStateOf<String?>(null) }
     val fs: Filesystem = koinInject()
@@ -445,11 +449,7 @@ fun PatcherScreen(
         }
     }
 
-    val steps by remember {
-        derivedStateOf {
-            viewModel.steps.groupBy { it.category }
-        }
-    }
+    val steps = patcherProgress.steps.groupBy { it.category }
 
     if (isPatchingActive) {
         DisposableEffect(Unit) {
@@ -1381,51 +1381,7 @@ fun PatcherScreen(
         )
     }
 
-    if (showSignatureProgress) {
-        SignatureMetadataWorkflowLoadingDialog(
-            state = signatureProgress,
-            onCancel = viewModel::cancelSignatureWorkflow
-        )
-    }
-
-    viewModel.signatureWorkflowError
-        ?.takeIf { lifecycleState.isAtLeast(Lifecycle.State.RESUMED) }
-        ?.let { error ->
-        AlertDialog(
-            onDismissRequest = viewModel::clearSignatureWorkflowError,
-            confirmButton = {
-                TextButton(onClick = viewModel::clearSignatureWorkflowError) {
-                    Text(stringResource(R.string.ok))
-                }
-            },
-            title = { CenteredDialogTitle(stringResource(R.string.patcher_signature_workflow_failed)) },
-            text = { Text(error) }
-        )
-    }
-
-    if (showSignatureWorkflowDialog) {
-        AlertDialog(
-            onDismissRequest = { showSignatureWorkflowDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSignatureWorkflowDialog = false
-                    viewModel.startSignatureWorkflow()
-                }) {
-                    Text(stringResource(R.string.continue_))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSignatureWorkflowDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-            title = { CenteredDialogTitle(stringResource(R.string.patcher_signature_workflow_title)) },
-            text = { Text(stringResource(R.string.patcher_signature_workflow_description)) }
-        )
-    }
-
     AppScaffold(
-        modifier = Modifier.blur(if (showSignatureProgress) 12.dp else 0.dp),
         topBar = { scrollBehavior ->
             AppTopBar(
                 title = stringResource(R.string.patcher),
@@ -1433,7 +1389,7 @@ fun PatcherScreen(
                 onBackClick = ::onPageBack,
                 onBackLongClick = ::onPageBackToDashboard,
                 actions = {
-                    ProgressPercentageBadge(progress = viewModel.progress)
+                    ProgressPercentageBadge(progress = patcherProgress.progress)
                 }
             )
         },
@@ -1445,17 +1401,6 @@ fun PatcherScreen(
                         enabled = patcherSucceeded == true && !viewModel.signatureWorkflowRunning
                     ) {
                     Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
-                }
-                IconButton(
-                    onClick = { showSignatureWorkflowDialog = true },
-                    enabled = patcherSucceeded == true &&
-                        !viewModel.signatureWorkflowRunning &&
-                        !viewModel.signatureWorkflowCompleted
-                ) {
-                    Icon(
-                        Icons.Outlined.SwapVert,
-                        stringResource(R.string.patcher_signature_workflow_title)
-                    )
                 }
                 IconButton(
                     onClick = { showLogActionsDialog = true },
@@ -1590,7 +1535,7 @@ fun PatcherScreen(
             }
 
             LinearProgressIndicator(
-                progress = { viewModel.progress },
+                progress = { patcherProgress.progress },
                 modifier = Modifier.fillMaxWidth(),
                 drawStopIndicator = {}
             )
@@ -1635,7 +1580,7 @@ fun PatcherScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        subStepsById = viewModel.stepSubSteps,
+                        subStepsById = patcherProgress.subStepsById,
                         isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         autoExpandRunningMainOnly = useExclusiveAutoExpand,
