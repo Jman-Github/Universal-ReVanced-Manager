@@ -1157,9 +1157,6 @@ internal fun SplitMergeSelectionDialog(
         when {
             initialPresetKey == SPLIT_MERGE_PRESET_UNSELECTED ->
                 SPLIT_MERGE_PRESET_UNSELECTED
-            recognizedInitialPresetKey == "recommended" &&
-                presetOptions.any { it.key == recognizedInitialPresetKey } ->
-                recognizedInitialPresetKey
             recognizedInitialPresetKey != null ->
                 recognizedInitialPresetKey.takeIf {
                     it in matchingPresetKeys(
@@ -1373,12 +1370,7 @@ internal fun SplitMergeSelectionDialog(
                                     val normalizedModules = updateSelection(
                                         modules = nextModules,
                                         stripUnusedNativeLibs = stripNativeLibs,
-                                        preferredPresetKey =
-                                            if (selectedPresetKey == "recommended") {
-                                                "recommended"
-                                            } else {
-                                                SPLIT_MERGE_PRESET_UNSELECTED
-                                            }
+                                        inferPresetFromModules = true
                                     )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,
@@ -1404,12 +1396,7 @@ internal fun SplitMergeSelectionDialog(
                                     val normalizedModules = updateSelection(
                                         modules = nextModules,
                                         stripUnusedNativeLibs = stripNativeLibs,
-                                        preferredPresetKey =
-                                            if (selectedPresetKey == "recommended") {
-                                                "recommended"
-                                            } else {
-                                                SPLIT_MERGE_PRESET_UNSELECTED
-                                            }
+                                        inferPresetFromModules = true
                                     )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,
@@ -1435,12 +1422,7 @@ internal fun SplitMergeSelectionDialog(
                                     val normalizedModules = updateSelection(
                                         modules = nextModules,
                                         stripUnusedNativeLibs = toggledStripNativeLibs,
-                                        preferredPresetKey =
-                                            if (selectedPresetKey == "recommended") {
-                                                "recommended"
-                                            } else {
-                                                SPLIT_MERGE_PRESET_UNSELECTED
-                                            }
+                                        inferPresetFromModules = true
                                     )
                                     rememberCurrentFilterSelection(
                                         modules = normalizedModules,
