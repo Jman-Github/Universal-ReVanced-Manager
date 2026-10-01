@@ -3,26 +3,12 @@ package app.urv.manager.ui.component
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
-import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 
-private fun Uri.toPickerInitialUri(): Uri {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
-    if (authority != EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY) return this
-    val documentId = runCatching { DocumentsContract.getDocumentId(this) }.getOrNull() ?: return this
-    if (documentId != "primary:${Environment.DIRECTORY_DOWNLOADS}") return this
-    return DocumentsContract.buildRootUri(DOWNLOADS_DOCUMENTS_AUTHORITY, DOWNLOADS_ROOT_ID)
-}
-
-private const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY = "com.android.externalstorage.documents"
-private const val DOWNLOADS_DOCUMENTS_AUTHORITY = "com.android.providers.downloads.documents"
-private const val DOWNLOADS_ROOT_ID = "downloads"
-
 private fun Intent.withInitialUri(initialUri: () -> Uri?): Intent = apply {
-    initialUri()?.toPickerInitialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
+    initialUri()?.let { putExtra(DocumentsContract.EXTRA_INITIAL_URI, it) }
 }
 
 class RememberedGetContent(private val initialUri: () -> Uri?) :

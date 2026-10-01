@@ -160,8 +160,8 @@ fun AppSelectorScreen(
         if (uri != null) {
             coroutineScope.launch {
                 prefs.apkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+                vm.handleStorageResult(uri)
             }
-            vm.handleStorageResult(uri)
         } else if (returnToDashboardOnStorage) {
             onBackClick()
         }

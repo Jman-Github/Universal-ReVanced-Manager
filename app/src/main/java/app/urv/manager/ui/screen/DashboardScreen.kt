@@ -375,8 +375,8 @@ fun DashboardScreen(
         if (uri != null) {
             pickerScope.launch {
                 prefs.dashboardApkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+                storageVm.handleStorageResult(uri)
             }
-            storageVm.handleStorageResult(uri)
         }
     }
     val openStoragePicker = {
