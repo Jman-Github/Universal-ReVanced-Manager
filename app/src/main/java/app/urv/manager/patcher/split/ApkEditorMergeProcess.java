@@ -4,7 +4,7 @@ import com.reandroid.apk.APKLogger;
 import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
-import com.reandroid.arsc.header.TableHeader;
+import com.reandroid.arsc.chunk.TableBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -112,16 +112,13 @@ public final class ApkEditorMergeProcess {
                     cancellationCheckpoint
             );
 
-            for (ApkModule module : bundle.getApkModuleList()) {
-                normalizeSparseResources(module, cancellationCheckpoint);
-            }
-
             String expectedPackageName = baseModule.getPackageName();
             int expectedVersionCode = baseModule.getVersionCode();
             boolean expectedResourceTable = baseModule.hasTableBlock();
             ApkModule mergedModule = null;
             try {
                 runCancellationCheckpoint(cancellationCheckpoint);
+                // Keep input tables unloaded so ARSCLib can reuse the base table without copying it.
                 mergedModule = bundle.mergeModules(false);
                 writeAndVerifyMergedApk(
                         mergedModule,
@@ -212,28 +209,6 @@ public final class ApkEditorMergeProcess {
             String normalized = normalizeModuleName(module.getModuleName());
             if (skipLookup.contains(normalized)) {
                 bundle.removeApkModule(module.getModuleName());
-            }
-        }
-    }
-
-    private static void normalizeSparseResources(ApkModule module, Runnable cancellationCheckpoint) {
-        if (!module.hasTableBlock()) return;
-        // ARSCLib's dense merge treats array positions as entry IDs, which drops sparse entries.
-        // Expand sparse types before merging so each entry keeps its resource ID.
-        for (var pkg : module.getTableBlock().listPackages()) {
-            for (var pair : pkg.listSpecTypePairs()) {
-                var types = pair.getTypeBlockArray();
-                for (int i = 0; i < types.size(); i++) {
-                    runCancellationCheckpoint(cancellationCheckpoint);
-                    var type = types.get(i);
-                    if (!type.isSparse()) continue;
-                    var snapshot = type.toJson();
-                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_sparse, false);
-                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_offset16, false);
-                    type.getEntryArray().clear();
-                    type.getHeaderBlock().setOffsetType(false, false);
-                    type.fromJson(snapshot);
-                }
             }
         }
     }
@@ -350,7 +325,7 @@ public final class ApkEditorMergeProcess {
         }
     }
 
-    private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) {
+    private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) throws IOException {
         ApkModule baseModule = bundle.getBaseModule();
         if (baseModule == null) {
             baseModule = findLargestTableModule(modules);
@@ -364,13 +339,14 @@ public final class ApkEditorMergeProcess {
         }
     }
 
-    private static ApkModule findLargestTableModule(List<ApkModule> modules) {
+    private static ApkModule findLargestTableModule(List<ApkModule> modules) throws IOException {
         ApkModule candidate = null;
-        int largestSize = 0;
+        long largestSize = 0;
         for (ApkModule module : modules) {
             if (!module.hasTableBlock()) continue;
-            TableHeader header = (TableHeader) module.getTableBlock().getHeaderBlock();
-            int size = header.getChunkSize();
+            TableBlock loaded = module.getLoadedTableBlock();
+            long size = loaded != null ? loaded.getHeaderBlock().getChunkSize()
+                    : module.getInputSource(TableBlock.FILE_NAME).getLength();
             if (candidate == null || size > largestSize) {
                 largestSize = size;
                 candidate = module;
