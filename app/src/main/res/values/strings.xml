@@ -592,6 +592,7 @@
     <string name="export_patch_bundles">Export patch bundles</string>
     <string name="export_patch_bundles_description">Save imported remote patch bundles to a JSON file</string>
     <string name="export_patch_bundles_fail">Could not export patch bundles: %s</string>
+    <string name="export_patch_bundles_empty">There are no patch bundles to export</string>
     <plurals name="export_patch_bundles_success_quantity">
         <item quantity="one">Exported %d patch bundle</item>
         <item quantity="other">Exported %d patch bundles</item>

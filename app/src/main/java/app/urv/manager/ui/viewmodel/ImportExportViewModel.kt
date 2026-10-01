@@ -278,6 +278,18 @@ class ImportExportViewModel(
         ExportAllBundles
     }
 
+    enum class ExportType(@StringRes val failureMessage: Int) {
+        PatchBundles(R.string.export_patch_bundles_fail),
+        PatchProfiles(R.string.export_patch_profiles_fail),
+        SelectionBundle(R.string.export_patch_selection_fail),
+        SelectionAllBundles(R.string.export_patch_selection_fail)
+    }
+
+    private var preparedPatchBundles: PatchBundleExportResult? = null
+    private var preparedPatchProfiles: List<PatchProfileExportEntry>? = null
+    private var preparedSelectionBundle: PatchSelectionBundleExport? = null
+    private var preparedSelectionAllBundles: PatchSelectionExportFile? = null
+
     private val contentResolver = app.contentResolver
     private val tolerantJson = Json { ignoreUnknownKeys = true }
     val patchBundles = patchBundleRepository.sources
@@ -561,12 +573,86 @@ class ImportExportViewModel(
         }
     }
 
-    fun executeSelectionExport(target: Uri) = viewModelScope.launch {
-        val source = selectedBundle ?: return@launch
-        clearSelectionAction()
+    // Prepare before opening either file picker: CreateDocument already creates the file.
+    suspend fun prepareExport(type: ExportType): Boolean {
+        clearPreparedExport()
+        var ready = false
+        uiSafe(app, type.failureMessage, "Failed to prepare settings export") {
+            ready = when (type) {
+                ExportType.PatchBundles -> {
+                    preparedPatchBundles = patchBundlesForExport()
+                    preparedPatchBundles != null
+                }
+                ExportType.PatchProfiles -> {
+                    preparedPatchProfiles = profilesForExport()
+                    preparedPatchProfiles != null
+                }
+                ExportType.SelectionBundle -> {
+                    preparedSelectionBundle = selectionBundleForExport()
+                    preparedSelectionBundle != null
+                }
+                ExportType.SelectionAllBundles -> {
+                    preparedSelectionAllBundles = selectionsForExport()
+                    preparedSelectionAllBundles != null
+                }
+            }
+        }
+        return ready
+    }
 
+    fun clearPreparedExport() {
+        preparedPatchBundles = null
+        preparedPatchProfiles = null
+        preparedSelectionBundle = null
+        preparedSelectionAllBundles = null
+    }
+
+    private suspend fun patchBundlesForExport(): PatchBundleExportResult? {
+        val result = preparedPatchBundles ?: buildPatchBundleExportResult()
+        preparedPatchBundles = null
+        if (result.exportedCount == 0) {
+            app.toast(app.getString(R.string.export_patch_bundles_empty))
+            return null
+        }
+        return result
+    }
+
+    private suspend fun profilesForExport(): List<PatchProfileExportEntry>? {
+        val profiles = preparedPatchProfiles ?: patchProfileRepository.exportProfiles()
+        preparedPatchProfiles = null
+        if (profiles.isEmpty()) {
+            app.toast(app.getString(R.string.export_patch_profiles_empty))
+            return null
+        }
+        return profiles
+    }
+
+    private suspend fun selectionBundleForExport(): PatchSelectionBundleExport? {
+        val source = selectedBundle ?: return null
+        val export = preparedSelectionBundle ?: buildPatchSelectionBundleExport(source)
+        preparedSelectionBundle = null
+        if (export.selection.isEmpty() && export.options.isNullOrEmpty()) {
+            app.toast(app.getString(R.string.export_patch_bundles_empty))
+            return null
+        }
+        return export
+    }
+
+    private suspend fun selectionsForExport(): PatchSelectionExportFile? {
+        val export = preparedSelectionAllBundles ?: buildPatchSelectionExportFile()
+        preparedSelectionAllBundles = null
+        if (export.bundles.isEmpty()) {
+            app.toast(app.getString(R.string.export_patch_bundles_empty))
+            return null
+        }
+        return export
+    }
+
+    fun executeSelectionExport(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
-            val selectionExport = buildPatchSelectionBundleExport(source)
+            val selectionExport = selectionBundleForExport()
+            clearSelectionAction()
+            if (selectionExport == null) return@uiSafe
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
@@ -578,11 +664,10 @@ class ImportExportViewModel(
     }
 
     fun executeSelectionExport(target: Path) = viewModelScope.launch {
-        val source = selectedBundle ?: return@launch
-        clearSelectionAction()
-
         uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
-            val selectionExport = buildPatchSelectionBundleExport(source)
+            val selectionExport = selectionBundleForExport()
+            clearSelectionAction()
+            if (selectionExport == null) return@uiSafe
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
@@ -595,10 +680,10 @@ class ImportExportViewModel(
     }
 
     fun executeSelectionExportAllBundles(target: Uri) = viewModelScope.launch {
-        clearSelectionAction()
-
         uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
-            val exportFile = buildPatchSelectionExportFile()
+            val exportFile = selectionsForExport()
+            clearSelectionAction()
+            if (exportFile == null) return@uiSafe
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
@@ -610,10 +695,10 @@ class ImportExportViewModel(
     }
 
     fun executeSelectionExportAllBundles(target: Path) = viewModelScope.launch {
-        clearSelectionAction()
-
         uiSafe(app, R.string.export_patch_selection_fail, "Failed to backup patch selections and options") {
-            val exportFile = buildPatchSelectionExportFile()
+            val exportFile = selectionsForExport()
+            clearSelectionAction()
+            if (exportFile == null) return@uiSafe
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
@@ -666,7 +751,7 @@ class ImportExportViewModel(
         val bundles = patchBundleRepository.sources.first()
         val exports = bundles.mapNotNull { bundle ->
             buildPatchSelectionBundleExport(bundle).takeIf { export ->
-                export.selection.isNotEmpty()
+                export.selection.isNotEmpty() || !export.options.isNullOrEmpty()
             }
         }
 
@@ -748,6 +833,7 @@ class ImportExportViewModel(
     fun clearSelectionAction() {
         selectionAction = null
         selectedBundle = null
+        clearPreparedExport()
     }
 
     fun importSelectionForBundle() = clearSelectionAction().also {
@@ -758,8 +844,15 @@ class ImportExportViewModel(
         selectionAction = SelectionAction.ImportAllBundles
     }
 
-    fun exportSelectionForBundle() = clearSelectionAction().also {
-        selectionAction = SelectionAction.ExportBundle
+    fun exportSelectionForBundle() = viewModelScope.launch {
+        clearSelectionAction()
+        uiSafe(app, R.string.export_patch_selection_fail, "Failed to prepare bundle selection export") {
+            if (patchBundleRepository.sources.first().isEmpty()) {
+                app.toast(app.getString(R.string.export_patch_bundles_empty))
+                return@uiSafe
+            }
+            selectionAction = SelectionAction.ExportBundle
+        }
     }
 
     fun exportSelectionAllBundles() = clearSelectionAction().also {
@@ -1364,7 +1457,7 @@ class ImportExportViewModel(
 
     fun exportPatchBundles(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
-            val result = buildPatchBundleExportResult()
+            val result = patchBundlesForExport() ?: return@uiSafe
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
@@ -1384,7 +1477,7 @@ class ImportExportViewModel(
 
     fun exportPatchBundles(target: Path) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_bundles_fail, "Failed to export patch bundles") {
-            val result = buildPatchBundleExportResult()
+            val result = patchBundlesForExport() ?: return@uiSafe
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
@@ -1453,11 +1546,7 @@ class ImportExportViewModel(
 
     fun exportPatchProfiles(target: Uri) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
-            val profiles = patchProfileRepository.exportProfiles()
-            if (profiles.isEmpty()) {
-                app.toast(app.getString(R.string.export_patch_profiles_empty))
-                return@uiSafe
-            }
+            val profiles = profilesForExport() ?: return@uiSafe
 
             withContext(Dispatchers.IO) {
                 contentResolver.openOutputStream(target, "wt")!!.use {
@@ -1477,11 +1566,7 @@ class ImportExportViewModel(
 
     fun exportPatchProfiles(target: Path) = viewModelScope.launch {
         uiSafe(app, R.string.export_patch_profiles_fail, "Failed to export patch profiles") {
-            val profiles = patchProfileRepository.exportProfiles()
-            if (profiles.isEmpty()) {
-                app.toast(app.getString(R.string.export_patch_profiles_empty))
-                return@uiSafe
-            }
+            val profiles = profilesForExport() ?: return@uiSafe
 
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }

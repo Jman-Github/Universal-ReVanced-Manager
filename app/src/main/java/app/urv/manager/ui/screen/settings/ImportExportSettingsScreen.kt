@@ -178,6 +178,7 @@ fun ImportExportSettingsScreen(
     var exportFileDialogState by remember { mutableStateOf<ExportFileDialogState?>(null) }
     var pendingExportConfirmation by remember { mutableStateOf<PendingExportConfirmation?>(null) }
     var exportInProgress by rememberSaveable { mutableStateOf(false) }
+    var exportPreparing by remember { mutableStateOf(false) }
 
     fun importDirectoryPreference(picker: ImportPicker): Preference<String> = when (picker) {
         ImportPicker.Keystore -> prefs.keystoreImportLastDirectory
@@ -215,6 +216,23 @@ fun ImportExportSettingsScreen(
         ExportPicker.PatchSelection -> patchSelectionExportDirectory
     }
 
+    fun filePickerBusy(): Boolean =
+        exportPreparing || exportInProgress ||
+            activeExportPicker != null || pendingExportPicker != null ||
+            pendingDocumentExportPicker != null ||
+            activeImportPicker != null || pendingImportPicker != null ||
+            pendingDocumentImportPicker != null
+
+    fun startSelectionAction(action: ImportExportViewModel.SelectionAction) {
+        if (filePickerBusy()) return
+        when (action) {
+            ImportExportViewModel.SelectionAction.ImportBundle -> vm.importSelectionForBundle()
+            ImportExportViewModel.SelectionAction.ImportAllBundles -> vm.importSelectionAllBundles()
+            ImportExportViewModel.SelectionAction.ExportBundle -> vm.exportSelectionForBundle()
+            ImportExportViewModel.SelectionAction.ExportAllBundles -> vm.exportSelectionAllBundles()
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(permissionContract) { granted ->
         val pendingImport = pendingImportPicker
         val pendingExport = pendingExportPicker
@@ -222,6 +240,7 @@ fun ImportExportSettingsScreen(
             activeImportPicker = pendingImport
             activeExportPicker = pendingExport
         } else {
+            if (pendingExport != null) vm.clearPreparedExport()
             if (pendingImport == ImportPicker.PatchSelection) {
                 vm.clearSelectionAction()
             }
@@ -307,6 +326,7 @@ fun ImportExportSettingsScreen(
         pendingDocumentExportPicker = null
         if (picker == null) return@rememberLauncherForActivityResult
         if (uri == null) {
+            vm.clearPreparedExport()
             if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
             return@rememberLauncherForActivityResult
         }
@@ -324,6 +344,7 @@ fun ImportExportSettingsScreen(
         pendingDocumentExportPicker = null
         if (picker == null) return@rememberLauncherForActivityResult
         if (uri == null) {
+            vm.clearPreparedExport()
             if (picker == ExportPicker.PatchSelection) vm.clearSelectionAction()
             return@rememberLauncherForActivityResult
         }
@@ -332,7 +353,10 @@ fun ImportExportSettingsScreen(
         }
         runDocumentExport(picker, uri)
     }
-    val openImportPicker = { target: ImportPicker ->
+    val openImportPicker: (ImportPicker) -> Unit = open@{ target ->
+        if (filePickerBusy()) return@open
+        if (target != ImportPicker.PatchSelection) vm.clearSelectionAction()
+
         if (useCustomFilePicker) {
             if (fs.hasStoragePermission()) {
                 activeImportPicker = target
@@ -352,21 +376,46 @@ fun ImportExportSettingsScreen(
             selectedBundleDisplayTitle = vm.selectedBundle?.displayTitle
         )
     }
-    val openExportPicker = { target: ExportPicker ->
-        val exportName = resolveExportFileName(target)
-        if (useCustomFilePicker) {
-            if (fs.hasStoragePermission()) {
-                activeExportPicker = target
-            } else {
-                pendingExportPicker = target
-                permissionLauncher.launch(permissionName)
-            }
-        } else {
-            pendingDocumentExportPicker = target
-            if (target == ExportPicker.Keystore) {
-                exportKeystoreDocumentLauncher.launch(exportName)
-            } else {
-                exportDocumentLauncher.launch(exportName)
+    val openExportPicker: (ExportPicker) -> Unit = open@{ target ->
+        if (filePickerBusy()) return@open
+        if (target != ExportPicker.PatchSelection) vm.clearSelectionAction()
+
+        exportPreparing = true
+        coroutineScope.launch {
+            try {
+                val type = when (target) {
+                    ExportPicker.PatchBundles -> ImportExportViewModel.ExportType.PatchBundles
+                    ExportPicker.PatchProfiles -> ImportExportViewModel.ExportType.PatchProfiles
+                    ExportPicker.PatchSelection -> when (vm.selectionAction) {
+                        ImportExportViewModel.SelectionAction.ExportAllBundles ->
+                            ImportExportViewModel.ExportType.SelectionAllBundles
+                        else -> ImportExportViewModel.ExportType.SelectionBundle
+                    }
+                    else -> null
+                }
+                if (type != null && !vm.prepareExport(type)) {
+                    if (target == ExportPicker.PatchSelection) vm.clearSelectionAction()
+                    return@launch
+                }
+
+                val exportName = resolveExportFileName(target)
+                if (useCustomFilePicker) {
+                    if (fs.hasStoragePermission()) {
+                        activeExportPicker = target
+                    } else {
+                        pendingExportPicker = target
+                        permissionLauncher.launch(permissionName)
+                    }
+                } else {
+                    pendingDocumentExportPicker = target
+                    if (target == ExportPicker.Keystore) {
+                        exportKeystoreDocumentLauncher.launch(exportName)
+                    } else {
+                        exportDocumentLauncher.launch(exportName)
+                    }
+                }
+            } finally {
+                exportPreparing = false
             }
         }
     }
@@ -480,11 +529,7 @@ fun ImportExportSettingsScreen(
     vm.selectionAction?.let { action ->
         when (action) {
             ImportExportViewModel.SelectionAction.ExportAllBundles -> {
-                if (
-                    activeExportPicker == null &&
-                    pendingDocumentExportPicker == null &&
-                    !exportInProgress
-                ) {
+                LaunchedEffect(action) {
                     openExportPicker(ExportPicker.PatchSelection)
                 }
             }
@@ -561,7 +606,7 @@ fun ImportExportSettingsScreen(
             icon = Icons.Outlined.WarningAmber
         )
     }
-    if (exportInProgress) {
+    if (exportPreparing || exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
             icon = {
@@ -584,7 +629,10 @@ fun ImportExportSettingsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        stringResource(R.string.patcher_step_group_saving),
+                        stringResource(
+                            if (exportPreparing) R.string.patcher_step_group_preparing
+                            else R.string.patcher_step_group_saving
+                        ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
@@ -680,6 +728,7 @@ fun ImportExportSettingsScreen(
                     onSelect = { path ->
                         if (path == null) {
                             activeExportPicker = null
+                            vm.clearPreparedExport()
                             if (picker == ExportPicker.PatchSelection) {
                                 vm.clearSelectionAction()
                             }
@@ -705,6 +754,8 @@ fun ImportExportSettingsScreen(
                     initialName = state.fileName,
                     onDismiss = {
                         exportFileDialogState = null
+                        activeExportPicker = null
+                        vm.clearPreparedExport()
                         if (state.picker == ExportPicker.PatchSelection) {
                             vm.clearSelectionAction()
                         }
@@ -908,13 +959,17 @@ fun ImportExportSettingsScreen(
                         modifier = highlightModifier,
                         expandableContent = {
                             GroupItem(
-                                onClick = vm::exportSelectionForBundle,
+                                onClick = {
+                                    startSelectionAction(ImportExportViewModel.SelectionAction.ExportBundle)
+                                },
                                 headline = R.string.export_patch_selection_bundle,
                                 description = R.string.export_patch_selection_bundle_description
                             )
 
                             GroupItem(
-                                onClick = vm::exportSelectionAllBundles,
+                                onClick = {
+                                    startSelectionAction(ImportExportViewModel.SelectionAction.ExportAllBundles)
+                                },
                                 headline = R.string.export_patch_selection_all,
                                 description = R.string.export_patch_selection_all_description
                             )
@@ -996,12 +1051,16 @@ fun ImportExportSettingsScreen(
                         modifier = highlightModifier,
                         expandableContent = {
                             GroupItem(
-                                onClick = vm::importSelectionForBundle,
+                                onClick = {
+                                    startSelectionAction(ImportExportViewModel.SelectionAction.ImportBundle)
+                                },
                                 headline = R.string.import_patch_selection_bundle,
                                 description = R.string.import_patch_selection_bundle_description
                             )
                             GroupItem(
-                                onClick = vm::importSelectionAllBundles,
+                                onClick = {
+                                    startSelectionAction(ImportExportViewModel.SelectionAction.ImportAllBundles)
+                                },
                                 headline = R.string.import_patch_selection_all,
                                 description = R.string.import_patch_selection_all_description
                             )
