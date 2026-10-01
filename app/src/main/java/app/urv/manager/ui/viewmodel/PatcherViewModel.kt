@@ -3125,42 +3125,48 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val environment: String,
             val selectedPatchLines: List<String>
         )
-        val fallbackSnapshot = runBlocking {
-            val fallbackSelection = currentSelectionSnapshot()
-            val bundleType = patchBundleRepository.selectionBundleType(fallbackSelection)
-            val hasMixedRevancedPatcherVersions =
-                bundleType == PatchBundleType.REVANCED &&
-                    patchBundleRepository.selectionHasMixedRevancedPatcherVersions(fallbackSelection)
-            val usesRevancedPatcher22 = !hasMixedRevancedPatcherVersions &&
-                bundleType == PatchBundleType.REVANCED &&
-                patchBundleRepository.selectionUsesRevancedPatcher22(fallbackSelection)
-            val patcherEngine = if (hasMixedRevancedPatcherVersions) {
-                null
-            } else {
-                patcherEngineDisplayName(bundleType, usesRevancedPatcher22)
+        val fallbackSnapshot by lazy(LazyThreadSafetyMode.NONE) {
+            runBlocking {
+                val fallbackSelection = currentSelectionSnapshot()
+                val bundleType = patchBundleRepository.selectionBundleType(fallbackSelection)
+                val hasMixedRevancedPatcherVersions =
+                    bundleType == PatchBundleType.REVANCED &&
+                        patchBundleRepository.selectionHasMixedRevancedPatcherVersions(fallbackSelection)
+                val usesRevancedPatcher22 = !hasMixedRevancedPatcherVersions &&
+                    bundleType == PatchBundleType.REVANCED &&
+                    patchBundleRepository.selectionUsesRevancedPatcher22(fallbackSelection)
+                val patcherEngine = if (hasMixedRevancedPatcherVersions) {
+                    null
+                } else {
+                    patcherEngineDisplayName(bundleType, usesRevancedPatcher22)
+                }
+                val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
+                    prefs.morpheBytecodeMode.get().runtimeValue
+                } else {
+                    null
+                }
+                val environment = environmentState()
+                LogFallbackSnapshot(
+                    bundleType = bundleType,
+                    morpheBytecodeMode = morpheBytecodeMode,
+                    patcherEngine = patcherEngine,
+                    stripNativeLibs = prefs.stripUnusedNativeLibs.get(),
+                    skipUnusedSplits = prefs.skipUnneededSplitApks.get(),
+                    environment = environment,
+                    selectedPatchLines = collectSelectedPatchDescriptions(fallbackSelection)
+                )
             }
-            val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE) {
-                prefs.morpheBytecodeMode.get().runtimeValue
-            } else {
-                null
-            }
-            val environment = environmentState()
-            LogFallbackSnapshot(
-                bundleType = bundleType,
-                morpheBytecodeMode = morpheBytecodeMode,
-                patcherEngine = patcherEngine,
-                stripNativeLibs = prefs.stripUnusedNativeLibs.get(),
-                skipUnusedSplits = prefs.skipUnneededSplitApks.get(),
-                environment = environment,
-                selectedPatchLines = collectSelectedPatchDescriptions(fallbackSelection)
-            )
         }
         val bundleType = patcherSessionInfo.bundleType
             ?: fallbackSnapshot.bundleType?.name
             ?: "UNKNOWN"
-        val morpheBytecodeMode = patcherSessionInfo.morpheBytecodeMode
-            ?: findLogValue("Morphe bytecode mode:")
-            ?: fallbackSnapshot.morpheBytecodeMode
+        val morpheBytecodeMode = if (bundleType == PatchBundleType.MORPHE.name) {
+            patcherSessionInfo.morpheBytecodeMode
+                ?: findLogValue("Morphe bytecode mode:")
+                ?: fallbackSnapshot.morpheBytecodeMode
+        } else {
+            null
+        }
         val patcherEngine = patcherSessionInfo.patcherEngine
             ?: findLogValue("Patcher engine:")
             ?: fallbackSnapshot.patcherEngine
