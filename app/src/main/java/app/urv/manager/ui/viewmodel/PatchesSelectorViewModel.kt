@@ -386,7 +386,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         var selectedCount = 0
         var totalCount = 0
         bundle.patchSequence(allowIncompatiblePatches).forEach { patch ->
-            if (effectiveLockState(patch) == PatchLockState.LOCKED_OFF) return@forEach
+            if (effectiveLockState(bundle.uid, patch) == PatchLockState.LOCKED_OFF) return@forEach
             totalCount++
             if (isSelected(bundle.uid, patch)) selectedCount++
         }
@@ -394,7 +394,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
     }
 
     fun isSelected(bundle: Int, patch: PatchInfo): Boolean {
-        when (effectiveLockState(patch)) {
+        when (effectiveLockState(bundle, patch)) {
             PatchLockState.LOCKED_ON -> return true
             PatchLockState.LOCKED_OFF -> return false
             PatchLockState.NONE -> Unit
@@ -406,13 +406,18 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
             ?: isDefaultSelected(patch)
     }
 
-    fun lockState(patch: PatchInfo): PatchLockState = effectiveLockState(patch)
+    fun lockState(bundle: Int, patch: PatchInfo): PatchLockState = effectiveLockState(bundle, patch)
 
     fun togglePatch(bundle: Int, patch: PatchInfo) = viewModelScope.launch {
-        if (effectiveLockState(patch) != PatchLockState.NONE) return@launch
+        if (effectiveLockState(bundle, patch) != PatchLockState.NONE) return@launch
         hasModifiedSelection = true
 
-        val baseSelection = customPatchSelection ?: currentDefaultSelection
+        // Materialize required patches before toggling so removing the last optional patch
+        // cannot also remove patches that the UI shows as locked on.
+        val baseSelection = (customPatchSelection ?: currentDefaultSelection)
+            .toPatchSelection()
+            .applyCurrentAvailability()
+            .toPersistentPatchSelection()
         val currentPatches = baseSelection[bundle] ?: persistentSetOf()
         val isSelected = patch.name in currentPatches
         if (!isSelected) {
@@ -441,6 +446,9 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         customPatchSelection = nextSelection
+            .toPatchSelection()
+            .applyCurrentAvailability()
+            .toPersistentPatchSelection()
     }
 
     fun reset() {
@@ -485,7 +493,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         val selections = eligibleBundles
             .associate { bundle ->
                 bundle.uid to bundle.patchSequence(allowIncompatiblePatches)
-                    .filter { effectiveLockState(it) != PatchLockState.LOCKED_OFF }
+                    .filter { effectiveLockState(bundle.uid, it) != PatchLockState.LOCKED_OFF }
                     .map(PatchInfo::name)
                     .toPersistentSet()
             }
@@ -523,7 +531,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         }
 
         val patches = bundle.patchSequence(allowIncompatiblePatches)
-            .filter { effectiveLockState(it) != PatchLockState.LOCKED_OFF }
+            .filter { effectiveLockState(bundleUid, it) != PatchLockState.LOCKED_OFF }
             .map(PatchInfo::name)
             .toPersistentSet()
 
@@ -569,7 +577,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         hasModifiedSelection = true
         val required = bundle?.patchSequence(allowIncompatiblePatches)
             .orEmpty()
-            .filter { effectiveLockState(it) == PatchLockState.LOCKED_ON }
+            .filter { effectiveLockState(bundleUid, it) == PatchLockState.LOCKED_ON }
             .map(PatchInfo::name)
             .toPersistentSet()
         customPatchSelection = if (required.isEmpty()) {
@@ -715,17 +723,25 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         !(removeGmsCoreForMount && patch.name == GMSCORE_SUPPORT_PATCH_NAME) &&
             patch.defaultSelected(installerType, patchAvailabilityEnabled)
 
-    private fun effectiveLockState(patch: PatchInfo): PatchLockState = when {
-        removeGmsCoreForMount && patch.name == GMSCORE_SUPPORT_PATCH_NAME ->
-            PatchLockState.LOCKED_OFF
-        else -> patch.lockState(installerType, patchAvailabilityEnabled)
+    private fun effectiveLockState(bundleUid: Int, patch: PatchInfo): PatchLockState {
+        if (removeGmsCoreForMount && patch.name == GMSCORE_SUPPORT_PATCH_NAME) {
+            return PatchLockState.LOCKED_OFF
+        }
+        val lockState = patch.lockState(installerType, patchAvailabilityEnabled)
+        // Required patches apply only after their bundle is part of the custom selection.
+        if (lockState == PatchLockState.LOCKED_ON &&
+            customPatchSelection?.containsKey(bundleUid) == false
+        ) {
+            return PatchLockState.NONE
+        }
+        return lockState
     }
 
     private fun requiredSelection(
         bundles: List<PatchBundleInfo.Scoped>
     ): PersistentPatchSelection = bundles.mapNotNull { bundle ->
         val required = bundle.patchSequence(allowIncompatiblePatches)
-            .filter { effectiveLockState(it) == PatchLockState.LOCKED_ON }
+            .filter { effectiveLockState(bundle.uid, it) == PatchLockState.LOCKED_ON }
             .map(PatchInfo::name)
             .toPersistentSet()
         bundle.uid.takeIf { required.isNotEmpty() }?.let { it to required }

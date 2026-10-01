@@ -2198,9 +2198,8 @@ private sealed interface SelectionState : Parcelable {
             installerType: app.urv.manager.patcher.patch.PatchInstallerType,
             availabilityEnabled: Boolean,
             removeGmsCore: Boolean,
-        ) = bundles.toPatchSelection(
-                allowIncompatible
-            ) { uid, patch ->
+        ) = bundles.filter { it.uid in patchSelection }
+            .toPatchSelection(allowIncompatible) { uid, patch ->
                 patchSelection[uid]?.contains(patch.name) ?: false
             }
             .applyAvailability(

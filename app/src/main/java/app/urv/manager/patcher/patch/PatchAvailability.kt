@@ -37,7 +37,8 @@ fun installerTypeFor(useMount: Boolean): PatchInstallerType =
     if (useMount) PatchInstallerType.MOUNT else PatchInstallerType.STANDARD
 
 /**
- * Enforce REQUIRED and UNAVAILABLE declarations after loading a saved or custom selection.
+ * Enforce REQUIRED and UNAVAILABLE declarations within the bundles in a selection.
+ * An explicit empty bundle still receives required patches; an absent bundle stays unselected.
  * ENABLED and DISABLED remain user choices once their initial default has been established.
  */
 fun PatchSelection.applyAvailability(
@@ -50,7 +51,7 @@ fun PatchSelection.applyAvailability(
     val result = mapValuesTo(mutableMapOf()) { (_, patches) -> patches.toMutableSet() }
 
     eligibleBundlePatches.forEach { (bundleUid, patchesInBundle) ->
-        val current = result[bundleUid]?.toMutableSet() ?: mutableSetOf()
+        val current = result[bundleUid] ?: return@forEach
 
         patchesInBundle.values.forEach { patch ->
             when (patch.availability?.get(installerType)) {

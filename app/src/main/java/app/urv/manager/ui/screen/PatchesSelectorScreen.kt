@@ -1106,7 +1106,7 @@ fun PatchesSelectorScreen(
                         uid,
                         patch
                     ),
-                    lockState = viewModel.lockState(patch),
+                    lockState = viewModel.lockState(uid, patch),
                     searchEngineHost = searchEngineHost,
                     showVersionTags = showVersionTags,
                     showOptionPreviews = showOptionPreviews,
