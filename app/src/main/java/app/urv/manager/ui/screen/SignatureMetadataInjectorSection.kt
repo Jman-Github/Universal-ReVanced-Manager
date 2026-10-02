@@ -11,6 +11,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +45,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +53,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -79,6 +85,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.data.room.apps.downloaded.DownloadedApp
+import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SignatureMetadataInjectorStage
 import app.urv.manager.domain.manager.SignatureMetadataInjectionMode
@@ -89,7 +97,11 @@ import app.urv.manager.domain.manager.SignatureMetadataSourceInfo
 import app.urv.manager.domain.manager.SignatureMetadataSourceType
 import app.urv.manager.domain.manager.SignatureMetadataTargetType
 import app.urv.manager.domain.storage.CacheCleanupGuard
+import app.urv.manager.ui.component.AlertDialogExtended
+import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.ui.component.ConfirmDialog
+import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.RememberedGetContent
@@ -101,6 +113,13 @@ import app.urv.manager.ui.viewmodel.SignatureMetadataInputRole
 import app.urv.manager.ui.viewmodel.SignatureMetadataInjectorViewModel
 import app.urv.manager.ui.viewmodel.SignatureMetadataSelectionState
 import app.urv.manager.util.APK_MIMETYPE
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.graphics.Color
+import app.urv.manager.ui.component.AppIcon
+import app.urv.manager.ui.component.AppLabel
+import app.urv.manager.domain.repository.DownloaderPluginRepository
+import app.urv.manager.util.AppInfo
+import app.urv.manager.util.PM
 import app.urv.manager.util.FilenameUtils
 import app.urv.manager.util.toast
 import java.io.IOException
@@ -122,6 +141,15 @@ fun SignatureMetadataInjectorSection(
     val scope = rememberCoroutineScope()
     val prefs: PreferencesManager = koinInject()
     val fs: Filesystem = koinInject()
+    val downloadedAppRepository: DownloadedAppRepository = koinInject()
+    val pm: PM = koinInject()
+    val pluginsRepository: DownloaderPluginRepository = koinInject()
+    val downloaderPlugins by pluginsRepository.loadedPluginsFlow
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val downloadedApps by downloadedAppRepository.getAll()
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+    val installedApps by pm.installedAppList
+        .collectAsStateWithLifecycle(initialValue = emptyList())
     val state by viewModel.state.collectAsStateWithLifecycle()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
@@ -137,6 +165,18 @@ fun SignatureMetadataInjectorSection(
     val roots = remember { fs.storageRoots() }
     val (permissionContract, permissionName) = remember { fs.permissionContract() }
 
+    var sourceDialogRole by remember { mutableStateOf<SignatureMetadataInputRole?>(null) }
+    var appPicker by remember { mutableStateOf<SignatureMetadataAppPicker?>(null) }
+    var pluginRole by remember { mutableStateOf<SignatureMetadataInputRole?>(null) }
+    var pluginPackageName by rememberSaveable { mutableStateOf("") }
+    var pluginVersion by rememberSaveable { mutableStateOf("") }
+    val pluginActivityLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+        viewModel::handlePluginActivityResult
+    )
+    LaunchedEffect(viewModel) {
+        viewModel.pluginActivityFlow.collect { pluginActivityLauncher.launch(it) }
+    }
     var customInputRole by rememberSaveable {
         mutableStateOf<SignatureMetadataInputRole?>(null)
     }
@@ -730,6 +770,87 @@ fun SignatureMetadataInjectorSection(
         )
     }
 
+    sourceDialogRole?.let { role ->
+        SignatureMetadataInputSourceDialog(
+            title = stringResource(
+                if (role == SignatureMetadataInputRole.SIGNATURE_SOURCE)
+                    R.string.tools_signature_metadata_injector_select_zip
+                else R.string.tools_signature_metadata_injector_select_apk
+            ),
+            onPlugin = {
+                sourceDialogRole = null
+                pluginRole = role
+            },
+            onDismiss = { sourceDialogRole = null },
+            onStorage = {
+                sourceDialogRole = null
+                requestInput(role)
+            },
+            onDownloaded = {
+                sourceDialogRole = null
+                appPicker = SignatureMetadataAppPicker(role, installed = false)
+            },
+            onInstalled = {
+                sourceDialogRole = null
+                appPicker = SignatureMetadataAppPicker(role, installed = true)
+            }
+        )
+    }
+    pluginRole?.let { role ->
+        DownloaderPluginInputDialog(
+            plugins = downloaderPlugins,
+            activePluginId = null,
+            packageName = pluginPackageName,
+            version = pluginVersion,
+            onPackageNameChange = { pluginPackageName = it },
+            onVersionChange = { pluginVersion = it },
+            onDismissRequest = { pluginRole = null },
+            onSelectPlugin = { plugin ->
+                pluginRole = null
+                viewModel.selectPlugin(role, plugin, pluginPackageName, pluginVersion)
+            }
+        )
+    }
+    if (state.signatureSource.analyzing || state.targetApk.analyzing) {
+        TransparentLoadingDialog(
+            message = stringResource(R.string.tools_signature_input_preparing),
+            cancelButtonText = stringResource(R.string.cancel),
+            onCancel = viewModel::cancelInputSelection
+        )
+    }
+    appPicker?.let { picker ->
+        SignatureMetadataAppPickerDialog(
+            picker = picker,
+            downloadedApps = downloadedApps,
+            installedApps = installedApps,
+            pm = pm,
+            onDismiss = { appPicker = null },
+            onDownloadedSelected = { downloaded ->
+                val source = runCatching {
+                    downloadedAppRepository.getApkFileForApp(downloaded)
+                }.getOrNull()
+                if (source?.isFile != true) {
+                    context.toast(context.getString(R.string.tools_signature_input_unavailable))
+                } else {
+                    appPicker = null
+                    acceptInput(
+                        picker.role,
+                        Uri.fromFile(source),
+                        "${downloaded.packageName}-${downloaded.version}.${source.extension}"
+                    )
+                }
+            },
+            onInstalledSelected = { selected ->
+                appPicker = null
+                viewModel.selectInstalled(
+                    picker.role,
+                    selected.packageName,
+                    selected.packageInfo?.let(pm::hasSplitApks) == true
+                )
+            }
+        )
+    }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -766,7 +887,7 @@ fun SignatureMetadataInjectorSection(
         )
 
         Button(
-            onClick = { requestInput(SignatureMetadataInputRole.SIGNATURE_SOURCE) },
+            onClick = { sourceDialogRole = SignatureMetadataInputRole.SIGNATURE_SOURCE },
             enabled = !state.working,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -790,7 +911,7 @@ fun SignatureMetadataInjectorSection(
         }
 
         Button(
-            onClick = { requestInput(SignatureMetadataInputRole.TARGET_APK) },
+            onClick = { sourceDialogRole = SignatureMetadataInputRole.TARGET_APK },
             enabled = !state.working,
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -1106,6 +1227,234 @@ private fun SignatureMetadataSplitOutputOption(
     }
 }
 
+private data class SignatureMetadataAppPicker(
+    val role: SignatureMetadataInputRole,
+    val installed: Boolean
+)
+
+@Composable
+private fun SignatureMetadataInputSourceDialog(
+    title: String,
+    onPlugin: () -> Unit,
+    onDismiss: () -> Unit,
+    onStorage: () -> Unit,
+    onDownloaded: () -> Unit,
+    onInstalled: () -> Unit
+) {
+    AlertDialogExtended(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+        title = {
+            CenteredDialogTitle(title)
+        },
+        textHorizontalPadding = PaddingValues(horizontal = 0.dp),
+        text = {
+            Column {
+                SignatureMetadataInputSourceOption(
+                    stringResource(R.string.tools_merge_split_source_plugin_title),
+                    stringResource(R.string.tools_signature_input_plugin_description),
+                    onPlugin
+                )
+                SignatureMetadataInputSourceOption(
+                    stringResource(R.string.downloaded_apps),
+                    stringResource(R.string.tools_signature_input_downloaded_description),
+                    onDownloaded
+                )
+                SignatureMetadataInputSourceOption(
+                    stringResource(R.string.tools_signature_input_installed),
+                    stringResource(R.string.tools_signature_input_installed_description),
+                    onInstalled
+                )
+                SignatureMetadataInputSourceOption(
+                    stringResource(R.string.tools_signature_input_storage),
+                    stringResource(R.string.tools_signature_input_storage_description),
+                    onStorage
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun SignatureMetadataInputSourceOption(
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        color = Color.Transparent
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SignatureMetadataAppPickerDialog(
+    picker: SignatureMetadataAppPicker,
+    downloadedApps: List<DownloadedApp>,
+    installedApps: List<AppInfo>,
+    pm: PM,
+    onDismiss: () -> Unit,
+    onDownloadedSelected: (DownloadedApp) -> Unit,
+    onInstalledSelected: (AppInfo) -> Unit
+) {
+    var filterText by remember(picker) { mutableStateOf("") }
+    val roleTitle = stringResource(
+        if (picker.role == SignatureMetadataInputRole.SIGNATURE_SOURCE) {
+            R.string.tools_signature_metadata_injector_select_zip
+        } else {
+            R.string.tools_signature_metadata_injector_select_apk
+        }
+    )
+    val sourceTitle = stringResource(
+        if (picker.installed) R.string.tools_signature_input_installed
+        else R.string.downloaded_apps
+    )
+    val filteredDownloads = remember(downloadedApps, filterText) {
+        downloadedApps.filter {
+            filterText.isBlank() ||
+                it.packageName.contains(filterText, ignoreCase = true) ||
+                it.version.contains(filterText, ignoreCase = true)
+        }.sortedWith(compareBy<DownloadedApp> { it.packageName }.thenByDescending { it.version })
+    }
+    val filteredInstalled = remember(installedApps, filterText) {
+        installedApps.filter { app ->
+            val label = app.packageInfo?.let { pm.run { it.label() } }.orEmpty()
+            filterText.isBlank() ||
+                app.packageName.contains(filterText, ignoreCase = true) ||
+                label.contains(filterText, ignoreCase = true)
+        }
+    }
+
+    FullscreenDialog(onDismissRequest = onDismiss) {
+        androidx.compose.material3.Scaffold(
+            topBar = {
+                AppTopBar(
+                    title = "$roleTitle · $sourceTitle",
+                    onBackClick = onDismiss
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    TextField(
+                        value = filterText,
+                        onValueChange = { filterText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.search_apps)) },
+                        singleLine = true
+                    )
+                }
+                if (picker.installed) {
+                    if (filteredInstalled.isEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.tools_signature_input_no_apps),
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                    items(filteredInstalled, key = { it.packageName }) { app ->
+                        val packageInfo = app.packageInfo ?: return@items
+                        Surface(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { onInstalledSelected(app) },
+                            shape = RoundedCornerShape(20.dp),
+                            tonalElevation = 2.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AppIcon(
+                                    packageInfo = packageInfo,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(44.dp)
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    AppLabel(
+                                        packageInfo = packageInfo,
+                                        defaultText = app.packageName,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        app.packageName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        packageInfo.versionName.orEmpty() +
+                                            if (pm.hasSplitApks(packageInfo)) " · " + stringResource(R.string.tools_signature_input_split_apks) else "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if (filteredDownloads.isEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.tools_signature_input_no_apps),
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                    items(
+                        filteredDownloads,
+                        key = { "${it.packageName}:${it.version}" }
+                    ) { app ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth()
+                                .clickable { onDownloadedSelected(app) },
+                            shape = RoundedCornerShape(20.dp),
+                            tonalElevation = 2.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    app.version,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SignatureMetadataModeOption(
     selected: Boolean,
@@ -1268,7 +1617,7 @@ private fun signatureMetadataSigningModeDescription(
 }
 
 @Composable
-private fun SignatureMetadataRawLog(
+internal fun SignatureMetadataRawLog(
     entries: List<String>,
     logRevision: Long,
     logSessionId: Long,
@@ -1309,7 +1658,8 @@ private fun SignatureMetadataRawLog(
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            contentColor = MaterialTheme.colorScheme.onSurface
         )
     ) {
         Column(
@@ -1325,7 +1675,8 @@ private fun SignatureMetadataRawLog(
             ) {
                 Text(
                     stringResource(R.string.tools_signature_metadata_injector_log_title),
-                    style = MaterialTheme.typography.titleSmall
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Icon(
                     imageVector = if (logExpanded) {
@@ -1351,7 +1702,8 @@ private fun SignatureMetadataRawLog(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 11.sp,
                                 lineHeight = 14.sp
-                            )
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                     if (showJumpToLatest) {
@@ -1725,7 +2077,7 @@ private fun SignatureMetadataMessageCard(
 }
 
 @Composable
-private fun signatureMetadataStageText(stage: SignatureMetadataInjectorStage?): String {
+internal fun signatureMetadataStageText(stage: SignatureMetadataInjectorStage?): String {
     return when (stage) {
         SignatureMetadataInjectorStage.ANALYZING ->
             stringResource(R.string.tools_signature_metadata_injector_stage_analyzing)

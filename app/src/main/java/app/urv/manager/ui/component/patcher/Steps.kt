@@ -45,6 +45,7 @@ import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
+import app.urv.manager.ui.model.StepLog
 import java.util.Locale
 import kotlin.math.floor
 
@@ -278,6 +279,7 @@ private fun ExpandableSubStep(
                             name = detail.title,
                             state = detail.state,
                             message = detail.message,
+                            log = detail.log,
                             progress = subProgress,
                             progressText = subProgressText,
                             skipped = detail.skipped,
@@ -456,6 +458,7 @@ fun SubStep(
     skipped: Boolean = false,
     isFirst: Boolean = false,
     isLast: Boolean = false,
+    log: StepLog? = null,
 ) {
     var messageExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -517,6 +520,7 @@ fun SubStep(
                 modifier = Modifier.padding(horizontal = 36.dp, vertical = 8.dp)
             )
         }
+        log?.takeIf { it.entries.isNotEmpty() }?.let { PatcherStepLog(it) }
     }
 }
 

@@ -1189,6 +1189,18 @@ fun PatchProfilesScreen(
         )
         var autoPatchUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
         var installerUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        var signatureWorkflowUpdating by remember(settingsProfile.id) { mutableStateOf(false) }
+        fun saveSignatureWorkflow(workflow: app.urv.manager.data.room.profile.PatchProfilePayload.SignatureWorkflow) {
+            if (signatureWorkflowUpdating) return
+            signatureWorkflowUpdating = true
+            scope.launch {
+                val updated = viewModel.updateProfileSignatureWorkflow(settingsProfile.id, workflow)
+                if (!updated) {
+                    context.toast(context.getString(R.string.patch_profile_save_failed_toast))
+                }
+                signatureWorkflowUpdating = false
+            }
+        }
         val selectedInstaller = settingsProfile.installerToken
             ?.let(installerManager::parseToken)
             ?.let { installerManager.describeEntry(it, InstallerManager.InstallTarget.PATCHER) }
@@ -1405,6 +1417,20 @@ fun PatchProfilesScreen(
                             )
                         }
                     }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text(
+                        stringResource(R.string.patch_profile_signature_workflow_title),
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    PatchProfileSignatureWorkflowOption(
+                        checked = settingsProfile.signatureWorkflow.enabled,
+                        enabled = !signatureWorkflowUpdating,
+                        title = stringResource(R.string.patch_profile_signature_workflow_enable),
+                        description = stringResource(R.string.patch_profile_signature_workflow_enable_description),
+                        onCheckedChange = { enabled ->
+                            saveSignatureWorkflow(settingsProfile.signatureWorkflow.copy(enabled = enabled))
+                        }
+                    )
                     Divider(color = MaterialTheme.colorScheme.outlineVariant)
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1931,6 +1957,34 @@ private fun PatchProfileApkIcon(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun PatchProfileSignatureWorkflowOption(
+    checked: Boolean,
+    enabled: Boolean,
+    title: String,
+    description: String,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        HapticCheckbox(
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

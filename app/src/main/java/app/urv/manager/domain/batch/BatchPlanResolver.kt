@@ -74,7 +74,7 @@ class BatchPlanResolver(
         entries.distinctBy { it.input.packageName }.map { entry ->
             async {
                 val resolved = resolve(
-                    targetIdentifier = entry.input.packageName,
+                    targetIdentifier = entry.sourceEntryKey ?: entry.input.packageName,
                     attachedInput = entry.input,
                     forcedUseMount = entry.useMount,
                 )
@@ -99,6 +99,8 @@ class BatchPlanResolver(
                     selection = selection,
                     options = options,
                     selectionPayload = null,
+                    signatureWorkflow = entry.signatureWorkflow ?: resolved.signatureWorkflow,
+                    sourceEntryKey = entry.sourceEntryKey ?: resolved.sourceEntryKey,
                     patcherEngine = patcherEngine,
                     state = state,
                     message = null
@@ -214,6 +216,14 @@ class BatchPlanResolver(
                 candidate.appVersion?.takeIf(String::isNotBlank)
                     ?.equals(targetVersion, ignoreCase = true) == true
         }
+        val globalSignatureWorkflow = prefs.injectSignatureMetadataAfterPatching.get()
+        val signatureWorkflow = installedRecord?.selectionPayload?.signatureWorkflow
+            ?.takeIf { it.remembered }
+            ?: PatchProfilePayload.SignatureWorkflow(
+                enabled = profile?.payload?.signatureWorkflow?.enabled ?: globalSignatureWorkflow,
+                remembered = globalSignatureWorkflow &&
+                    (profile?.payload?.signatureWorkflow?.enabled != false)
+            )
         val retainedOriginalFile = when {
             targetVersion != null && targetVersionCode != null ->
                 fs.findOriginalAppFile(
@@ -262,7 +272,8 @@ class BatchPlanResolver(
                         appName = appName(installedInfo, resolvedPackageName),
                         state = BatchItemState.NEEDS_APK,
                         message = attachedInput.packageName,
-                        sourceEntryKey = sourceEntryKey
+                        sourceEntryKey = sourceEntryKey,
+                        signatureWorkflow = signatureWorkflow
                     )
                 }
                 attachedInput
@@ -275,7 +286,8 @@ class BatchPlanResolver(
                         appName = appName(installedInfo, resolvedPackageName),
                         state = BatchItemState.NEEDS_APK,
                         message = info?.packageName,
-                        sourceEntryKey = sourceEntryKey
+                        sourceEntryKey = sourceEntryKey,
+                        signatureWorkflow = signatureWorkflow
                     )
                 }
                 SelectedApp.Local(
@@ -352,7 +364,8 @@ class BatchPlanResolver(
                 packageName = resolvedPackageName,
                 appName = appName(installedInfo, resolvedPackageName),
                 state = BatchItemState.NEEDS_APK,
-                sourceEntryKey = sourceEntryKey
+                sourceEntryKey = sourceEntryKey,
+                signatureWorkflow = signatureWorkflow
             )
         }
 
@@ -368,7 +381,8 @@ class BatchPlanResolver(
                 appName = appName(installedInfo, resolvedPackageName),
                 state = BatchItemState.NO_PATCHES,
                 input = input,
-                sourceEntryKey = sourceEntryKey
+                sourceEntryKey = sourceEntryKey,
+                signatureWorkflow = signatureWorkflow
             )
         }
 
@@ -480,7 +494,8 @@ class BatchPlanResolver(
                 state = BatchItemState.NO_PATCHES,
                 input = input,
                 bundles = refs,
-                sourceEntryKey = sourceEntryKey
+                sourceEntryKey = sourceEntryKey,
+                signatureWorkflow = signatureWorkflow
             )
         }
 
@@ -497,6 +512,7 @@ class BatchPlanResolver(
             state = if (mismatch) BatchItemState.VERSION_MISMATCH else BatchItemState.READY,
             sourceEntryKey = sourceEntryKey,
             profileInstallerToken = profileInstallerToken,
+            signatureWorkflow = signatureWorkflow,
             useMount = useMount,
         )
     }
@@ -623,7 +639,8 @@ class BatchPlanResolver(
             patcherEngine = patcherEngine,
             state = state,
             message = null,
-            forceVersionMismatch = forcedMismatch
+            forceVersionMismatch = forcedMismatch,
+            signatureWorkflow = item.signatureWorkflow
         )
     }
 
@@ -695,7 +712,8 @@ class BatchPlanResolver(
         message: String? = null,
         input: SelectedApp? = null,
         bundles: List<BatchBundleRef> = emptyList(),
-        sourceEntryKey: String? = null
+        sourceEntryKey: String? = null,
+        signatureWorkflow: PatchProfilePayload.SignatureWorkflow
     ) = BatchPatchItem(
         packageName = packageName,
         appName = appName,
@@ -707,7 +725,8 @@ class BatchPlanResolver(
         bundles = bundles,
         state = state,
         message = message,
-        sourceEntryKey = sourceEntryKey
+        sourceEntryKey = sourceEntryKey,
+        signatureWorkflow = signatureWorkflow
     )
 }
 

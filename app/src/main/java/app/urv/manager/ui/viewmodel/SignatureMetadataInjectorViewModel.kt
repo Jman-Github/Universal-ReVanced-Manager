@@ -1,5 +1,14 @@
 package app.urv.manager.ui.viewmodel
 
+import android.app.Activity
+import androidx.activity.result.ActivityResult
+import app.urv.manager.network.downloader.LoadedDownloaderPlugin
+import app.urv.manager.plugin.downloader.PluginHostApi
+import app.urv.manager.plugin.downloader.GetScope
+import app.urv.manager.plugin.downloader.OutputDownloadScope
+import app.urv.manager.plugin.downloader.UserInteractionException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import android.app.Application
 import android.content.Intent
 import android.content.pm.PackageInstaller as AndroidPackageInstaller
@@ -43,6 +52,7 @@ import app.urv.manager.domain.manager.SignatureMetadataSigningMode
 import app.urv.manager.domain.manager.SignatureMetadataOutputType
 import app.urv.manager.domain.manager.SignatureMetadataSplitOutputMode
 import app.urv.manager.domain.storage.CacheCleanupGuard
+import app.urv.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.APK_MIMETYPE
 import app.urv.manager.util.APK_SIGNATURE_METADATA_INJECTOR_CACHE_DIR
@@ -118,7 +128,8 @@ data class SignatureMetadataInjectorUiState(
     val error: String? = null
 ) {
     val working: Boolean
-        get() = injecting || installing || preparingSplitSelection
+        get() = injecting || installing || preparingSplitSelection ||
+            signatureSource.analyzing || targetApk.analyzing
 
     val signingSelectionEnabled: Boolean
         get() = signatureSource.sourceInfo?.sourceType ==
@@ -150,6 +161,7 @@ data class SignatureMetadataInjectorUiState(
             (!signingSelectionEnabled || selectedSigningMode != null)
 }
 
+@OptIn(PluginHostApi::class)
 class SignatureMetadataInjectorViewModel(
     private val app: Application,
     private val manager: SignatureMetadataInjectorManager,
@@ -171,6 +183,9 @@ class SignatureMetadataInjectorViewModel(
     private var fullLogWriter: BufferedWriter? = null
     private var fullLogWriteDisabled = false
     private var fullLogStoreClosed = false
+    private val pluginActivityChannel = Channel<Intent>()
+    val pluginActivityFlow = pluginActivityChannel.receiveAsFlow()
+    private var pendingPluginActivity: CompletableDeferred<ActivityResult>? = null
     private var metadataAnalysisJob: Job? = null
     private var apkAnalysisJob: Job? = null
     private var injectionJob: Job? = null
@@ -184,6 +199,130 @@ class SignatureMetadataInjectorViewModel(
     private var apkGeneration = 0L
 
     fun select(role: SignatureMetadataInputRole, uri: Uri, displayName: String) {
+        selectPrepared(role, displayName) { stageInput(role, uri, displayName) }
+    }
+
+    fun selectPlugin(
+        role: SignatureMetadataInputRole,
+        plugin: LoadedDownloaderPlugin,
+        packageName: String,
+        version: String?
+    ) {
+        selectPrepared(role, packageName.ifBlank { plugin.shortDisplayName }) {
+            val getScope = object : GetScope {
+                override val hostPackageName = app.packageName
+                override val pluginPackageName = plugin.packageName
+                override suspend fun requestStartActivity(intent: Intent): Intent? =
+                    withContext(Dispatchers.Main) {
+                        check(pendingPluginActivity == null) { "Previous activity has not finished" }
+                        val completion = CompletableDeferred<ActivityResult>()
+                        pendingPluginActivity = completion
+                        try {
+                            pluginActivityChannel.send(intent)
+                            val result = completion.await()
+                            when (result.resultCode) {
+                                Activity.RESULT_OK -> result.data
+                                Activity.RESULT_CANCELED -> throw UserInteractionException.Activity.Cancelled()
+                                else -> throw UserInteractionException.Activity.NotCompleted(
+                                    result.resultCode, result.data
+                                )
+                            }
+                        } finally {
+                            pendingPluginActivity = null
+                        }
+                    }
+            }
+            val (data, _) = plugin.get(
+                getScope, packageName.trim(), version?.trim()?.takeIf(String::isNotBlank)
+            ) ?: throw IOException(app.getString(R.string.downloader_app_not_found))
+            workspace.mkdirs()
+            val staged = workspace.resolve(
+                "${role.name.lowercase()}-plugin-${UUID.randomUUID()}.apk"
+            )
+            val downloadContext = currentCoroutineContext()
+            try {
+                staged.outputStream().buffered().use { output ->
+                    var bytesWritten = 0L
+                    val boundedOutput = object : java.io.OutputStream() {
+                        override fun write(b: Int) {
+                            downloadContext.ensureActive()
+                            check(++bytesWritten <= MAX_INPUT_APK_SIZE) { "Downloaded input is too large." }
+                            output.write(b)
+                        }
+                        override fun write(b: ByteArray, off: Int, len: Int) {
+                            downloadContext.ensureActive()
+                            bytesWritten = Math.addExact(bytesWritten, len.toLong())
+                            check(bytesWritten <= MAX_INPUT_APK_SIZE) { "Downloaded input is too large." }
+                            output.write(b, off, len)
+                        }
+                        override fun flush() = output.flush()
+                    }
+                    val downloadScope = object : OutputDownloadScope {
+                        override val hostPackageName = app.packageName
+                        override val pluginPackageName = plugin.packageName
+                        override suspend fun reportSize(size: Long) {
+                            downloadContext.ensureActive()
+                            require(size <= MAX_INPUT_APK_SIZE) { "Downloaded input is too large." }
+                        }
+                    }
+                    plugin.download(downloadScope, data, boundedOutput)
+                }
+                downloadContext.ensureActive()
+                check(staged.length() > 0L) { "Downloader plugin returned an empty file." }
+                staged
+            } catch (error: Throwable) {
+                staged.delete()
+                throw error
+            }
+        }
+    }
+
+    fun handlePluginActivityResult(result: ActivityResult) {
+        pendingPluginActivity?.complete(result)
+    }
+
+    fun cancelInputSelection() {
+        metadataAnalysisJob?.cancel()
+        apkAnalysisJob?.cancel()
+    }
+
+    fun selectInstalled(
+        role: SignatureMetadataInputRole,
+        packageName: String,
+        hasSplits: Boolean
+    ) {
+        val displayName = "$packageName.${if (hasSplits) "apks" else "apk"}"
+        selectPrepared(role, displayName) {
+            workspace.mkdirs()
+            val packageInfo = pm.getPackageInfo(packageName)
+                ?: throw IOException("Installed app is no longer available: $packageName")
+            val files = InstalledSplitArchiveBuilder.collectApkFiles(packageInfo)
+            val actualSplits = files.size > 1
+            val staged = workspace.resolve(
+                "${role.name.lowercase()}-${UUID.randomUUID()}.${if (actualSplits) "apks" else "apk"}"
+            )
+            try {
+                if (actualSplits) {
+                    InstalledSplitArchiveBuilder.buildArchive(files, staged)
+                } else {
+                    files.single().copyTo(staged)
+                }
+                if (staged.length() > MAX_INPUT_APK_SIZE) {
+                    throw IOException("Selected input exceeds the supported size limit.")
+                }
+                staged
+            } catch (error: Throwable) {
+                staged.delete()
+                throw error
+            }
+        }
+    }
+
+    private fun selectPrepared(
+        role: SignatureMetadataInputRole,
+        displayName: String,
+        prepare: suspend () -> File
+    ) {
         if (stateFlow.value.working) return
         acquireWorkspaceCacheGuard()
         val generation = when (role) {
@@ -221,9 +360,8 @@ class SignatureMetadataInjectorViewModel(
             try {
                 CacheCleanupGuard.withCacheInUse {
                     val staged = withContext(Dispatchers.IO) {
-                        stageInput(role, uri, displayName)
+                        prepare().also { stagedFile = it }
                     }
-                    stagedFile = staged
                     val selection = when (role) {
                         SignatureMetadataInputRole.SIGNATURE_SOURCE ->
                             SignatureMetadataSelectionState(
@@ -246,6 +384,10 @@ class SignatureMetadataInjectorViewModel(
                 }
             } catch (_: CancellationException) {
                 stagedFile?.delete()
+                if (generation == generationFor(role)) {
+                    updateSelection(role, SignatureMetadataSelectionState())
+                    releaseWorkspaceCacheGuardIfUnused()
+                }
             } catch (error: Throwable) {
                 stagedFile?.delete()
                 if (generation == generationFor(role)) {
@@ -522,8 +664,8 @@ class SignatureMetadataInjectorViewModel(
     }
 
     fun cancelInjection() {
+        // Job cancellation stops this operation's process without affecting background jobs.
         injectionJob?.cancel(CancellationException("User cancelled metadata injection"))
-        manager.cancelActiveExecution()
     }
 
     suspend fun getLogContent(): String = withContext(Dispatchers.IO) {
@@ -1190,7 +1332,6 @@ class SignatureMetadataInjectorViewModel(
         apkAnalysisJob?.cancel()
         injectionJob?.cancel()
         splitSelectionJob?.cancel()
-        manager.cancelActiveExecution()
         installJob?.cancel()
         val rootInstallerStillOpen =
             pendingExternalInstall?.token == InstallerManager.Token.PlayStore &&

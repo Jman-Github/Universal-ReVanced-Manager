@@ -53,7 +53,8 @@ fun TransparentLoadingDialog(
     logTitle: String? = null,
     logLines: List<String> = emptyList(),
     emptyLogMessage: String? = null,
-    progress: Float? = null
+    progress: Float? = null,
+    logContent: (@Composable () -> Unit)? = null
 ) {
     Dialog(
         onDismissRequest = {
@@ -100,7 +101,10 @@ fun TransparentLoadingDialog(
                         textAlign = TextAlign.Center
                     )
                 }
-                logTitle?.takeIf { it.isNotBlank() }?.let { title ->
+                if (logContent != null) {
+                    Spacer(modifier = Modifier.height(20.dp))
+                    logContent()
+                } else logTitle?.takeIf { it.isNotBlank() }?.let { title ->
                     Spacer(modifier = Modifier.height(20.dp))
                     ExpandableLoadingLog(
                         title = title,

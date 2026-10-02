@@ -1,6 +1,7 @@
 package app.urv.manager.domain.batch
 
 import app.urv.manager.data.platform.Filesystem
+import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.repository.PatchOptionInputManager
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.util.Options
@@ -16,6 +17,8 @@ data class ManualBatchPatchEntry(
     val selection: PatchSelection,
     val options: Options,
     val useMount: Boolean,
+    val signatureWorkflow: PatchProfilePayload.SignatureWorkflow? = null,
+    val sourceEntryKey: String? = null,
 )
 
 class ManualBatchPatchQueue(
@@ -34,6 +37,8 @@ class ManualBatchPatchQueue(
         selection: PatchSelection,
         options: Options,
         useMount: Boolean,
+        signatureWorkflow: PatchProfilePayload.SignatureWorkflow? = null,
+        sourceEntryKey: String? = null,
     ) {
         val generationAtStart = synchronized(lock) { queueGeneration }
         val (preparedInput, ownedPath) = prepareInput(input)
@@ -53,6 +58,8 @@ class ManualBatchPatchQueue(
                     selection = selection.filterValues { it.isNotEmpty() },
                     options = options,
                     useMount = useMount,
+                    signatureWorkflow = signatureWorkflow,
+                    sourceEntryKey = sourceEntryKey,
                 )
                 mutableEntries.value = if (previous == null) {
                     current + replacement

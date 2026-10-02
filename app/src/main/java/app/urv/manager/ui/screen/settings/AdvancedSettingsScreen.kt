@@ -1485,6 +1485,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.inject_signature_metadata_after_patching,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.injectSignatureMetadataAfterPatching,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.inject_signature_metadata_after_patching,
+                        description = R.string.inject_signature_metadata_after_patching_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.patcher_log_mode,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

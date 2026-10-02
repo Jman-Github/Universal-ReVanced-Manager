@@ -210,6 +210,21 @@ class InstalledAppRepository(
 
     suspend fun get(packageName: String) = dao.get(packageName)
 
+    suspend fun updateSignatureWorkflow(packageName: String, enabled: Boolean): InstalledApp? {
+        val app = dao.get(packageName) ?: return null
+        val payload = app.selectionPayload ?: return null
+        if (!payload.signatureWorkflow.remembered ||
+            app.repatchSourcePath?.let { File(it).isFile } != true
+        ) return null
+        val updated = app.copy(
+            selectionPayload = payload.copy(
+                signatureWorkflow = payload.signatureWorkflow.copy(enabled = enabled)
+            )
+        )
+        dao.updateSelectionPayload(packageName, requireNotNull(updated.selectionPayload))
+        return updated
+    }
+
     suspend fun getByInstallType(installType: InstallType) =
         dao.getByInstallType(installType)
 
@@ -305,6 +320,10 @@ class InstalledAppRepository(
                 } else {
                     existingApp?.repatchSourcePath
                 }
+                check(
+                    selectionPayload?.signatureWorkflow?.remembered != true ||
+                        persistedRepatchSourcePath?.let { File(it).isFile } == true
+                ) { "Unable to retain the original signed input for future signature injection." }
                 dao.upsertApp(
                     InstalledApp(
                         currentPackageName = currentPackageName,

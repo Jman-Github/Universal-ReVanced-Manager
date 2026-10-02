@@ -161,6 +161,8 @@ data object Patcher : ComplexParameter<Patcher.ViewModelParams> {
         val profileId: Int? = null,
         val profileInstallerToken: String? = null,
         val autoInstall: Boolean = false,
+        val injectSignatureMetadata: Boolean = false,
+        val rememberSignatureWorkflow: Boolean = false,
         val sourceEntryKey: String? = null,
         val useMount: Boolean = false,
     ) : Parcelable

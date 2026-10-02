@@ -49,6 +49,7 @@ data class PatchProfileListItem(
     val autoPatch: Boolean,
     val installerToken: String?,
     val autoInstall: Boolean,
+    val signatureWorkflow: PatchProfilePayload.SignatureWorkflow,
     val bundleCount: Int,
     val bundleNames: List<String>,
     val createdAt: Long,
@@ -349,6 +350,7 @@ class PatchProfilesViewModel(
                 autoPatch = profile.autoPatch,
                 installerToken = profile.installerToken,
                 autoInstall = profile.autoInstall,
+                signatureWorkflow = workingPayload.signatureWorkflow,
                 bundleCount = workingPayload.bundles.size,
                 bundleNames = bundleNames,
                 createdAt = profile.createdAt,
@@ -534,6 +536,13 @@ class PatchProfilesViewModel(
                 ?.let { File(it).delete() }
             ApkSelectionResult.SUCCESS
         }
+
+    suspend fun updateProfileSignatureWorkflow(
+        profileId: Int,
+        workflow: PatchProfilePayload.SignatureWorkflow
+    ): Boolean = withContext(Dispatchers.IO) {
+        patchProfileRepository.updateProfileSignatureWorkflow(profileId, workflow) != null
+    }
 
     suspend fun updateProfileAutoPatch(profileId: Int, enabled: Boolean): Boolean =
         withContext(Dispatchers.IO) {
