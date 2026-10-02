@@ -7,7 +7,8 @@ import android.os.Build
 import android.util.Log
 import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
-import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
+import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
+import app.urv.manager.patcher.worker.parsePatcherResourceUsage
 import app.urv.manager.patcher.runtime.ProcessAttemptLogSpool
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.tag
@@ -221,6 +222,10 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                                 onSubSteps(subSteps.toList())
                             }
 
+                            line.startsWith(PatcherResourceMonitor.LOG_PREFIX) -> {
+                                parsePatcherResourceUsage(line)?.let(onMemoryUsage)
+                            }
+
                             line.startsWith(MEMORY_PREFIX) -> {
                                 parseMemoryUsageSample(line.removePrefix(MEMORY_PREFIX))
                                     ?.let(onMemoryUsage)
@@ -409,8 +414,8 @@ object SplitMergeProcess {
             ?.map(String::trim)
             ?.filter(String::isNotBlank)
             ?.toSet()
-        val memoryMonitor = PatcherMemoryMonitor.start { usedMb, maxMb ->
-            println("${SplitMergeProcessRuntime.MEMORY_PREFIX}$usedMb:$maxMb")
+        val resourceMonitor = PatcherResourceMonitor.start { sample ->
+            println(sample)
             System.out.flush()
         }
         runBlocking {
@@ -444,7 +449,7 @@ object SplitMergeProcess {
                     preparation.cleanup()
                 }
             } finally {
-                memoryMonitor.stop()
+                resourceMonitor.stop()
             }
         }
     }

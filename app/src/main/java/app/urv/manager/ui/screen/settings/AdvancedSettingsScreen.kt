@@ -1562,6 +1562,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.patcher_resource_graphs_compact_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.compactPatcherResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.patcher_resource_graphs_compact_title,
+                        description = R.string.patcher_resource_graphs_compact_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
 
                     targetKey = R.string.patcher_auto_collapse_steps,
                     activeKey = highlightTarget,
@@ -1666,7 +1680,20 @@ fun AdvancedSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
-
+                    targetKey = R.string.merger_resource_graphs_compact_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.compactSplitMergeResourceGraphs,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.merger_resource_graphs_compact_title,
+                        description = R.string.merger_resource_graphs_compact_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.merge_split_auto_collapse_steps,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

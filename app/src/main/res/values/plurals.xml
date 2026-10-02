@@ -27,4 +27,8 @@
         <item quantity="one">Are you sure you want to delete the selected patch profile?</item>
         <item quantity="other">Are you sure you want to delete the selected patch profiles?</item>
         </plurals>
-    </resources>
+        <plurals name="patcher_cpu_core_count">
+        <item quantity="one">%d core</item>
+        <item quantity="other">%d cores</item>
+    </plurals>
+</resources>

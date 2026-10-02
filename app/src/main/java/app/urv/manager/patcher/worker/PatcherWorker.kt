@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.worker
 
+import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
+
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Notification
@@ -1422,6 +1424,14 @@ class PatcherWorker(
         val reportedSplitPreparationLogs = ConcurrentHashMap.newKeySet<String>()
         val workerLogger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
+                // Code adapted from Morphe, see third-party/NOTICE for more information.
+                // https://github.com/MorpheApp/morphe-manager/blob/03fe5f5a3cb89d87bb9898933d39430e4134f154/app/src/main/java/app/morphe/manager/ui/model/PatchRunProgress.kt
+                if (message.startsWith(PatcherResourceMonitor.LOG_PREFIX)) {
+                    parsePatcherResourceUsage(message)?.let { sample ->
+                        publishPatcherMemoryUsage(sample, args.onEvent)
+                    }
+                    return
+                }
                 if (!patcherLogMode.allows(level)) return
                 if (isRepeatableSplitPreparationLog(message)) {
                     val key = "${level.name}\u0000$message"

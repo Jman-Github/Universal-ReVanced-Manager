@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Parcelable
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
@@ -52,7 +53,10 @@ import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.urv.manager.patcher.split.SplitApkPreparer
+import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitMergeProcessRuntime
+import app.urv.manager.patcher.split.SplitMergeSessionInfo
+import com.reandroid.arsc.ARSCLib
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import app.urv.manager.util.PM
 import app.urv.manager.util.announcementTagKey
@@ -991,6 +995,15 @@ class DashboardViewModel(
         pendingSplitMergeSource = pendingSource
 
         try {
+            val appDisplay = try {
+                SplitArchiveDisplayResolver.resolve(
+                    inputFile, splitMergeWorkspace, app, pm, includeIcon = false
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            }
             updateSplitMergeStateForCurrentOwner(coroutineContext[Job]) { current ->
                 SplitMergeState(
                     inProgress = false,
@@ -1015,7 +1028,11 @@ class DashboardViewModel(
                     selection = inspection,
                     selectionIncludedModules = defaultSelection.includedModules,
                     selectionStripNativeLibs = defaultSelection.excludeExtraNativeLibs,
-                    selectionPresetKey = defaultSelection.presetKey
+                    selectionPresetKey = defaultSelection.presetKey,
+                    sessionInfo = SplitMergeSessionInfo(
+                        appName = appDisplay?.label?.takeIf(String::isNotBlank),
+                        packageName = appDisplay?.packageInfo?.packageName?.takeIf(String::isNotBlank)
+                    )
                 )
             }
             appendSplitMergeLog(app.getString(R.string.merge_split_apk_selection_ready))
@@ -1505,6 +1522,7 @@ class DashboardViewModel(
     private fun cancelledSplitMergeState(previous: SplitMergeState): SplitMergeState {
         val cancelledMessage = app.getString(R.string.merge_split_apk_cancelled)
         return previous.copy(
+            sessionInfo = previous.sessionInfo.finished(SystemClock.elapsedRealtime()),
             preparingSelection = false,
             inProgress = false,
             completed = false,
@@ -1627,7 +1645,20 @@ class DashboardViewModel(
                     selectionIncludedModules = includedModules.orEmpty(),
                     selectionStripNativeLibs = stripNativeLibs,
                     excludedModules = excludedModules,
-                    memoryUsageSamples = emptyList()
+                    memoryUsageSamples = emptyList(),
+                    sessionInfo = SplitMergeSessionInfo(
+                        inputApkSizeBytes = inputFile.length(),
+                        arscLibVersion = runCatching { ARSCLib.getVersion() }
+                            .getOrNull()?.takeIf(String::isNotBlank),
+                        startedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
+                        memoryLimitMb = processMemoryLimit,
+                        includedSplitCount = current.selection?.modules?.count {
+                            includedModules == null || it.name in includedModules
+                        },
+                        totalSplitCount = current.selection?.modules?.size,
+                        appName = current.sessionInfo.appName,
+                        packageName = current.sessionInfo.packageName
+                    )
                 )
             }
             appendSplitMergeLog("Starting split merge: $inputDisplayName")
@@ -1739,6 +1770,9 @@ class DashboardViewModel(
                             canSaveAgain = true,
                             error = null,
                             outputName = mergedOutputName,
+                            sessionInfo = current.sessionInfo
+                                .finished(SystemClock.elapsedRealtime())
+                                .copy(outputApkSizeBytes = signedCopy.length()),
                             mergeStep = current.mergeStep.copy(
                                 status = SplitMergeStepStatus.COMPLETED,
                                 message = app.getString(R.string.merge_split_apk_merged)
@@ -1775,6 +1809,7 @@ class DashboardViewModel(
                     completed = false,
                     canSaveAgain = cachedMergedApk?.exists() == true,
                     error = resolvedErrorMessage,
+                    sessionInfo = current.sessionInfo.finished(SystemClock.elapsedRealtime()),
                     mergeStep = current.mergeStep.copy(
                         status = if (
                             current.writeStep.status != SplitMergeStepStatus.WAITING ||
@@ -1853,7 +1888,10 @@ class DashboardViewModel(
         )
         updateSplitMergeStateIfCurrent(ownerJob) { current ->
             current.copy(
-                memoryUsageSamples = current.memoryUsageSamples + normalized
+                memoryUsageSamples = current.memoryUsageSamples + normalized,
+                sessionInfo = current.sessionInfo.copy(
+                    memoryLimitMb = normalized.maxMb.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                )
             )
         }
     }
@@ -2683,7 +2721,8 @@ data class SplitMergeState(
     val mergeStep: SplitMergeStepState = SplitMergeStepState(),
     val writeStep: SplitMergeStepState = SplitMergeStepState(),
     val signStep: SplitMergeStepState = SplitMergeStepState(),
-    val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList()
+    val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList(),
+    val sessionInfo: SplitMergeSessionInfo = SplitMergeSessionInfo()
 )
 
 private data class PendingSplitMergeSource(

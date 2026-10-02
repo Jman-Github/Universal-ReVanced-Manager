@@ -31,6 +31,12 @@ object PatcherWorkerProgressState {
         "patching_progress_memory_requested_max_mb"
     private const val PROGRESS_MEMORY_SAMPLE_TIME_KEY = "patching_progress_memory_sample_time"
     private const val PROGRESS_FAILED_PATCH_INDEXES_KEY = "patching_progress_failed_patch_indexes"
+    private const val PROGRESS_RESOURCE_TIME_KEY = "patching_progress_resource_time"
+    private const val PROGRESS_CPU_CORES_KEY = "patching_progress_cpu_cores"
+    private const val PROGRESS_CPU_SYSTEM_KEY = "patching_progress_cpu_system"
+    private const val PROGRESS_IO_READ_KEY = "patching_progress_io_read"
+    private const val PROGRESS_IO_WRITE_KEY = "patching_progress_io_write"
+    private const val PROGRESS_IO_BLOCK_KEY = "patching_progress_io_block"
 
     fun toWorkData(
         active: Boolean,
@@ -59,6 +65,14 @@ object PatcherWorkerProgressState {
                     PROGRESS_MEMORY_SAMPLE_TIME_KEY,
                     memory.sampledAtElapsedRealtimeMs
                 )
+                memory.resourceSampleTimeMs?.let { builder.putLong(PROGRESS_RESOURCE_TIME_KEY, it) }
+                if (memory.cpuCoreLoads.isNotEmpty()) {
+                    builder.putIntArray(PROGRESS_CPU_CORES_KEY, memory.cpuCoreLoads.toIntArray())
+                    builder.putBoolean(PROGRESS_CPU_SYSTEM_KEY, memory.cpuSystemWide)
+                }
+                memory.ioReadKbPerSec?.let { builder.putInt(PROGRESS_IO_READ_KEY, it) }
+                memory.ioWriteKbPerSec?.let { builder.putInt(PROGRESS_IO_WRITE_KEY, it) }
+                builder.putBoolean(PROGRESS_IO_BLOCK_KEY, memory.ioBlockAccounting)
             }
             if (snapshot.failedPatchIndexes.isNotEmpty()) {
                 builder.putIntArray(
@@ -100,7 +114,13 @@ object PatcherWorkerProgressState {
                 sampledAtElapsedRealtimeMs = data.getLong(
                     PROGRESS_MEMORY_SAMPLE_TIME_KEY,
                     System.nanoTime() / 1_000_000L
-                )
+                ),
+                resourceSampleTimeMs = data.getLong(PROGRESS_RESOURCE_TIME_KEY, -1L).takeIf { it >= 0L },
+                cpuCoreLoads = data.getIntArray(PROGRESS_CPU_CORES_KEY)?.toList().orEmpty(),
+                cpuSystemWide = data.getBoolean(PROGRESS_CPU_SYSTEM_KEY, false),
+                ioReadKbPerSec = data.getInt(PROGRESS_IO_READ_KEY, -1).takeIf { it >= 0 },
+                ioWriteKbPerSec = data.getInt(PROGRESS_IO_WRITE_KEY, -1).takeIf { it >= 0 },
+                ioBlockAccounting = data.getBoolean(PROGRESS_IO_BLOCK_KEY, true)
             )
         } else {
             null
