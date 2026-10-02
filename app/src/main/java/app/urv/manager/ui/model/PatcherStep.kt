@@ -34,7 +34,14 @@ data class StepDetail(
     val progress: Pair<Long, Long?>? = null,
     val skipped: Boolean = false,
     val expandable: Boolean = false,
-    val children: List<StepDetail> = emptyList()
+    val children: List<StepDetail> = emptyList(),
+    val log: StepLog? = null
+)
+
+data class StepLog(
+    val entries: List<String>,
+    val revision: Long,
+    val sessionId: Long
 )
 
 fun Step.withState(

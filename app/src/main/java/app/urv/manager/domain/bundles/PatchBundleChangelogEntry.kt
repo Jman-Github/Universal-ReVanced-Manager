@@ -10,10 +10,14 @@ data class PatchBundleChangelogEntry(
     val version: String,
     val description: String,
     val publishedAtMillis: Long? = null,
-    val pageUrl: String? = null
+    val pageUrl: String? = null,
+    val hasReleaseBody: Boolean = false
 ) {
     companion object {
-        fun fromAsset(asset: ReVancedAsset): PatchBundleChangelogEntry {
+        fun fromAsset(
+            asset: ReVancedAsset,
+            hasReleaseBody: Boolean = false
+        ): PatchBundleChangelogEntry {
             val publishedAt = runCatching {
                 asset.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
             }.getOrNull()
@@ -22,7 +26,8 @@ data class PatchBundleChangelogEntry(
                 version = asset.version,
                 description = asset.description,
                 publishedAtMillis = publishedAt,
-                pageUrl = asset.pageUrl
+                pageUrl = asset.pageUrl,
+                hasReleaseBody = hasReleaseBody
             )
         }
     }

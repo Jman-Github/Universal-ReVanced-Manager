@@ -47,6 +47,7 @@ import androidx.navigation.compose.navigation
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import androidx.appcompat.app.AppCompatActivity
+import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.batch.ManualBatchPatchQueue
 import app.urv.manager.domain.repository.resolvePatchProfileAppVersion
 import app.urv.manager.util.LocalPreventAccidentalTouching
@@ -794,6 +795,7 @@ private fun ReVancedManager(
                             apiHost = bundle.apiHost,
                             sourceUrl = bundle.sourceUrl,
                             version = bundle.version,
+                            fileHash = bundle.fileHash,
                             isPrerelease = bundle.isPrerelease,
                             patchCount = bundle.patchCount,
                             ownerName = bundle.ownerName,
@@ -811,6 +813,7 @@ private fun ReVancedManager(
                 apiHost = data.apiHost,
                 sourceUrl = data.sourceUrl,
                 version = data.version,
+                fileHash = data.fileHash,
                 isPrerelease = data.isPrerelease,
                 patchCount = data.patchCount,
                 ownerName = data.ownerName,
@@ -879,6 +882,11 @@ private fun ReVancedManager(
                                     selection = patcherParams.selectedPatches,
                                     options = patcherParams.options,
                                     useMount = patcherParams.useMount,
+                                    signatureWorkflow = PatchProfilePayload.SignatureWorkflow(
+                                        enabled = patcherParams.injectSignatureMetadata,
+                                        remembered = patcherParams.rememberSignatureWorkflow
+                                    ),
+                                    sourceEntryKey = patcherParams.sourceEntryKey,
                                 )
                                 returnToManualBatchSelector()
                             } else {
@@ -1009,6 +1017,11 @@ private fun ReVancedManager(
                                     selection = patcherParams.selectedPatches,
                                     options = patcherParams.options,
                                     useMount = patcherParams.useMount,
+                                    signatureWorkflow = PatchProfilePayload.SignatureWorkflow(
+                                        enabled = patcherParams.injectSignatureMetadata,
+                                        remembered = patcherParams.rememberSignatureWorkflow
+                                    ),
+                                    sourceEntryKey = patcherParams.sourceEntryKey,
                                 )
                                 returnToManualBatchSelector()
                             } else {

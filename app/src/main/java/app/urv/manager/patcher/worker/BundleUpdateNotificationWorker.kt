@@ -155,17 +155,18 @@ class BundleUpdateNotificationWorker(
                 patchBundleRepository.fetchUpdatesAndNotify(
                     applicationContext,
                     predicate = { bundle -> !bundle.autoUpdate },
-                    onAlreadyNotified = { bundle, bundleVersion ->
-                        if (!isManualUpdateDismissed(bundle.uid, bundleVersion)) {
+                    onAlreadyNotified = { bundle, bundleVersion, notificationIdentity ->
+                        if (!isManualUpdateDismissed(bundle.uid, notificationIdentity)) {
                             manualUpdates[bundle.uid] = BundleUpdateNotificationEntry(
                                 uid = bundle.uid,
                                 name = bundle.displayTitle,
-                                version = bundleVersion
+                                version = bundleVersion,
+                                notificationIdentity = notificationIdentity
                             )
                         }
                     }
-                ) { bundle, bundleVersion ->
-                    manualUpdateDismissalMarker(bundle.uid, bundleVersion)?.let { marker ->
+                ) { bundle, bundleVersion, notificationIdentity ->
+                    manualUpdateDismissalMarker(bundle.uid, notificationIdentity)?.let { marker ->
                         BundleUpdateNotificationDismissReceiver.clearDismissedMarkers(
                             applicationContext,
                             setOf(marker)
@@ -174,7 +175,8 @@ class BundleUpdateNotificationWorker(
                     manualUpdates[bundle.uid] = BundleUpdateNotificationEntry(
                         uid = bundle.uid,
                         name = bundle.displayTitle,
-                        version = bundleVersion
+                        version = bundleVersion,
+                        notificationIdentity = notificationIdentity
                     )
                     true
                 }
@@ -299,7 +301,8 @@ class BundleUpdateNotificationWorker(
     private data class BundleUpdateNotificationEntry(
         val uid: Int,
         val name: String,
-        val version: String
+        val version: String,
+        val notificationIdentity: String = version
     ) {
         val displayLine: String
             get() = listOf(
@@ -428,10 +431,12 @@ class BundleUpdateNotificationWorker(
     }
 
     private fun List<BundleUpdateNotificationEntry>.dismissalMarkers(): Array<String> =
-        mapNotNull { manualUpdateDismissalMarker(it.uid, it.version) }.distinct().toTypedArray()
+        mapNotNull { manualUpdateDismissalMarker(it.uid, it.notificationIdentity) }
+            .distinct()
+            .toTypedArray()
 
-    private fun isManualUpdateDismissed(uid: Int, version: String): Boolean {
-        val marker = manualUpdateDismissalMarker(uid, version) ?: return false
+    private fun isManualUpdateDismissed(uid: Int, notificationIdentity: String): Boolean {
+        val marker = manualUpdateDismissalMarker(uid, notificationIdentity) ?: return false
         return BundleUpdateNotificationDismissReceiver.dismissedMarkers(applicationContext).contains(marker)
     }
 
@@ -443,14 +448,32 @@ class BundleUpdateNotificationWorker(
             }
         }.joinToString("\n")
 
-    private fun manualUpdateDismissalMarker(uid: Int, version: String): String? {
-        val normalizedVersion = version.trim()
+    private fun manualUpdateDismissalMarker(uid: Int, notificationIdentity: String): String? {
+        val trimmedIdentity = notificationIdentity.trim().takeIf { it.isNotBlank() } ?: return null
+        val normalizedVersion = trimmedIdentity
+            .substringBefore('|')
+            .trim()
             .removePrefix("v")
             .removePrefix("V")
             .substringBefore('+')
             .trim()
             .lowercase()
             .takeIf { it.isNotBlank() } ?: return null
-        return "$uid:$normalizedVersion"
+        val artifactIdentity = trimmedIdentity
+            .substringAfter('|', missingDelimiterValue = "")
+            .trim()
+        val normalizedArtifactIdentity = when {
+            artifactIdentity.isBlank() -> ""
+            artifactIdentity.startsWith("sha256:", ignoreCase = true) -> artifactIdentity.lowercase()
+            artifactIdentity.startsWith("url:", ignoreCase = true) ->
+                "url:${artifactIdentity.substring(4)}"
+            else -> artifactIdentity
+        }
+        val normalizedIdentity = if (normalizedArtifactIdentity.isBlank()) {
+            normalizedVersion
+        } else {
+            "$normalizedVersion|$normalizedArtifactIdentity"
+        }
+        return "$uid:$normalizedIdentity"
     }
 }

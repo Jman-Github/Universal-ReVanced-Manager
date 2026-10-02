@@ -150,6 +150,16 @@
         </service>
 
         <service
+            android:name="app.urv.manager.service.SplitMergeTaskMonitorService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="split_apk_merging" />
+        </service>
+
+        <service
             android:name="app.urv.manager.service.PatchingTaskMonitorService"
             android:exported="false" />
 

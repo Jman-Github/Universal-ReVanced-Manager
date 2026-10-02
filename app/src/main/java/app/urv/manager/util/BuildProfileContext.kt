@@ -83,7 +83,7 @@ class BuildProfileContext(base: Context) : ContextWrapper(base) {
 
     companion object {
         fun wrap(context: Context): Context =
-            if (BuildConfig.IS_PR_TEST_BUILD) BuildProfileContext(context) else context
+            if (BuildConfig.IS_PR_TEST_BUILD && context !is BuildProfileContext) BuildProfileContext(context) else context
     }
 }
 
@@ -91,8 +91,12 @@ internal const val PR_PROFILE_DIRECTORY = "pr_profile"
 internal val PR_SCHEMA_DIRECTORY = "schema-${BuildConfig.DATABASE_VERSION}"
 internal fun prPreferenceName(name: String): String = "pr_profile_${BuildConfig.DATABASE_VERSION}_$name"
 
-/** Contexts belonging to activities/providers still have the platform's unscoped paths. */
-val Context.managerStorageContext: Context get() = applicationContext
+/**
+ * Activities/providers use the Application's selected storage profile. Standalone app_process
+ * package contexts have no Application, so select the profile directly for those contexts.
+ */
+val Context.managerStorageContext: Context
+    get() = applicationContext ?: BuildProfileContext.wrap(this)
 
 /** Used by the storage screen instead of applicationInfo.dataDir, which is always package-wide. */
 val Context.managerStorageRoot: File get() =

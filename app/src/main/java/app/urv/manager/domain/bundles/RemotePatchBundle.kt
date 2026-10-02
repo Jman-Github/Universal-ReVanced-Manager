@@ -44,6 +44,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.util.Locale
 import java.util.jar.JarFile
 import java.util.zip.ZipInputStream
 import okhttp3.Protocol
@@ -52,6 +53,11 @@ data class PatchBundleDownloadResult(
     val versionSignature: String,
     val assetCreatedAtMillis: Long?,
     val changelogAsset: ReVancedAsset? = null
+)
+
+data class PatchBundleChangelogResult(
+    val asset: ReVancedAsset,
+    val hasReleaseBody: Boolean = false
 )
 
 typealias PatchBundleDownloadProgress = (bytesRead: Long, bytesTotal: Long?) -> Unit
@@ -179,6 +185,23 @@ sealed class RemotePatchBundle(
         return refreshLatestReleaseInfo()
     }
 
+    suspend fun fetchLatestChangelog(): PatchBundleChangelogResult {
+        val asset = fetchLatestReleaseInfo()
+        val fallback = PatchBundleChangelogResult(asset)
+        if (this is GitHubPullRequestBundle) return fallback
+        val repoUrl = inferGitHubRepoUrl(asset.pageUrl, asset.downloadUrl, endpoint) ?: return fallback
+        val releaseApi: ReVancedAPI by inject()
+        val release = try {
+            releaseApi.getRepositoryReleaseByTag(repoUrl, asset.version).getOrNull()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        } ?: return fallback
+        val body = release.body?.takeIf { it.isNotBlank() } ?: return fallback
+        return PatchBundleChangelogResult(asset.copy(description = body), hasReleaseBody = true)
+    }
+
     protected suspend fun refreshLatestReleaseInfo(): ReVancedAsset {
         val key = "$uid|${latestInfoCacheIdentity()}"
         val now = System.currentTimeMillis()
@@ -255,18 +278,6 @@ sealed class RemotePatchBundle(
         val repo = ownerRepo.second.removeSuffix(".git")
         if (owner.isBlank() || repo.isBlank()) return null
         return "https://github.com/$owner/$repo"
-    }
-
-    private fun GitHubRelease.toChangelogEntry(repoUrl: String): PatchBundleChangelogEntry {
-        val publishedAtMillis = (publishedAt ?: createdAt)
-            ?.let { timestamp -> runCatching { Instant.parse(timestamp).toEpochMilliseconds() }.getOrNull() }
-        val description = body?.ifBlank { name.orEmpty() } ?: name.orEmpty()
-        return PatchBundleChangelogEntry(
-            version = tagName,
-            description = description,
-            publishedAtMillis = publishedAtMillis,
-            pageUrl = "${repoUrl.removeSuffix("/")}/releases/tag/$tagName"
-        )
     }
 
     companion object {
@@ -362,14 +373,15 @@ class JsonPatchBundle(
             return@withContext requestManifest(endpoint)
         }
 
-        val stable = runCatching { requestManifest(endpoint) }.getOrNull()
-        val latest = runCatching {
-            requestLatestRepositoryRelease(
-                source = releaseSource,
-                preferredExtension = stable?.downloadUrl?.patchBundleExtension()
-            )
-        }.getOrNull()
-        latest ?: stable ?: requestManifest(endpoint)
+        resolveRepositoryBundleRelease(
+            requestManifest = { requestManifest(endpoint) },
+            requestRelease = { manifest ->
+                requestLatestRepositoryRelease(
+                    source = releaseSource,
+                    preferredExtension = manifest?.downloadUrl?.patchBundleExtension()
+                )
+            }
+        )
     }
 
     override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
@@ -445,12 +457,12 @@ class JsonPatchBundle(
     ): ReVancedAsset? = when (source) {
         is RepositoryReleaseSource.GitHub -> releaseApi
             .getRepositoryReleaseHistory(source.repositoryUrl, prerelease = null, limit = 50)
-            .getOrNull()
-            ?.asSequence()
-            ?.mapNotNull { release ->
+            .getOrThrow()
+            .asSequence()
+            .mapNotNull { release ->
                 release.toPatchBundleAsset(source.repositoryUrl, preferredExtension)
             }
-            ?.maxByOrNull { it.createdAt }
+            .maxByOrNull { it.createdAt }
 
         is RepositoryReleaseSource.GitLab -> {
             val encodedProject = URLEncoder.encode(
@@ -459,13 +471,13 @@ class JsonPatchBundle(
             ).replace("+", "%20")
             http.request<List<GitLabRelease>> {
                 url("https://gitlab.com/api/v4/projects/$encodedProject/releases?per_page=50")
-            }.getOrNull()
-                ?.asSequence()
-                ?.filterNot { it.upcomingRelease }
-                ?.mapNotNull { release ->
+            }.getOrThrow()
+                .asSequence()
+                .filterNot { it.upcomingRelease }
+                .mapNotNull { release ->
                     release.toPatchBundleAsset(source.repositoryPath, preferredExtension)
                 }
-                ?.maxByOrNull { it.createdAt }
+                .maxByOrNull { it.createdAt }
         }
     }
 
@@ -860,6 +872,7 @@ class ExternalGraphqlPatchBundle(
     private val api: ExternalBundlesApi by inject()
     private val officialApi: ReVancedAPI by inject()
     override val supportsHistoricalChangelog: Boolean = true
+    private val installedArtifactUrlFile = directory.resolve("installed_artifact_url")
     private data class EndpointMetadata(
         val owner: String?,
         val repo: String?,
@@ -914,6 +927,25 @@ class ExternalGraphqlPatchBundle(
                 ExternalBundleMetadataStore.write(directory, metadata)
                 return@withContext snapshotToAsset(latestFromServices)
             }
+
+            val endpointHost = externalBundlesHost()
+            val matchingServiceSnapshot = latestFromServices
+                ?.takeIf {
+                    it.version.trim() == endpointAsset.version.trim() &&
+                        it.apiHost.equals(endpointHost, ignoreCase = true)
+                }
+            if (
+                matchingServiceSnapshot != null &&
+                snapshotArtifactDiffers(endpointAsset, matchingServiceSnapshot)
+            ) {
+                metadata = metadataFromSnapshot(
+                    snapshot = matchingServiceSnapshot,
+                    preserveChannelSelection = trackLatestAcrossChannels
+                )
+                ExternalBundleMetadataStore.write(directory, metadata)
+                return@withContext snapshotToAsset(matchingServiceSnapshot)
+            }
+
             metadata = metadata.copy(
                 downloadUrl = endpointAsset.downloadUrl,
                 signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
@@ -925,7 +957,14 @@ class ExternalGraphqlPatchBundle(
                 isPrerelease = prerelease
             )
             ExternalBundleMetadataStore.write(directory, metadata)
-            return@withContext endpointAsset
+            val endpointFileHash = matchingServiceSnapshot
+                ?.takeIf {
+                    it.downloadUrl?.trim().orEmpty() == endpointAsset.downloadUrl.trim()
+                }
+                ?.fileHash
+            return@withContext endpointAsset.copy(
+                fileHash = endpointAsset.fileHash ?: endpointFileHash
+            )
         }
         if (owner.equals("ReVanced", ignoreCase = true) && repo.equals("revanced-patches", ignoreCase = true)) {
             val officialAsset = if (prerelease == null) {
@@ -945,7 +984,15 @@ class ExternalGraphqlPatchBundle(
                     isPrerelease = prerelease
                 )
                 ExternalBundleMetadataStore.write(directory, metadata)
-                return@withContext officialAsset
+                val officialFileHash = latestFromServices
+                    ?.takeIf {
+                        it.version.trim() == officialAsset.version.trim() &&
+                            it.downloadUrl?.trim().orEmpty() == officialAsset.downloadUrl.trim()
+                    }
+                    ?.fileHash
+                return@withContext officialAsset.copy(
+                    fileHash = officialAsset.fileHash ?: officialFileHash
+                )
             }
         }
         val latest = latestFromServices
@@ -958,6 +1005,64 @@ class ExternalGraphqlPatchBundle(
             ExternalBundleMetadataStore.write(directory, metadata)
         }
         snapshotToAsset(latest)
+    }
+
+    protected override suspend fun download(
+        info: ReVancedAsset,
+        onProgress: PatchBundleDownloadProgress?
+    ): PatchBundleDownloadResult {
+        val result = super.download(info, onProgress)
+        writeInstalledArtifactUrl(info.downloadUrl)
+        return result
+    }
+
+    fun artifactDiffers(info: ReVancedAsset, installedSha256: String?): Boolean {
+        val expectedSha256 = artifactSha256(info)
+        if (expectedSha256 != null) {
+            val installed = installedSha256?.trim()?.lowercase(Locale.US)
+            return installed != expectedSha256
+        }
+
+        val expectedUrl = info.downloadUrl.trim()
+        if (expectedUrl.isBlank()) return false
+        return readInstalledArtifactUrl() != expectedUrl
+    }
+
+    fun artifactSha256(info: ReVancedAsset): String? =
+        normalizeSha256FileHash(info.fileHash)
+
+    fun artifactNotificationIdentity(info: ReVancedAsset): String? =
+        artifactSha256(info)?.let { "sha256:$it" }
+            ?: info.downloadUrl.trim().takeIf { it.isNotBlank() }?.let { "url:$it" }
+
+    private fun readInstalledArtifactUrl(): String? =
+        runCatching { installedArtifactUrlFile.readText().trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+
+    private fun writeInstalledArtifactUrl(url: String) {
+        val normalized = url.trim()
+        if (normalized.isBlank()) return
+        runCatching { installedArtifactUrlFile.writeText(normalized) }
+    }
+
+    private fun snapshotArtifactDiffers(
+        endpointAsset: ReVancedAsset,
+        snapshot: ExternalBundleSnapshot
+    ): Boolean {
+        val endpointHash = endpointAsset.fileHash?.trim().orEmpty()
+        val snapshotHash = snapshot.fileHash?.trim().orEmpty()
+        if (
+            endpointHash.isNotBlank() &&
+            snapshotHash.isNotBlank() &&
+            endpointHash != snapshotHash
+        ) {
+            return true
+        }
+
+        val snapshotDownloadUrl = snapshot.downloadUrl?.trim().orEmpty()
+        return snapshotDownloadUrl.isNotBlank() &&
+            endpointAsset.downloadUrl.trim() != snapshotDownloadUrl
     }
 
     private suspend fun findLatestExternalSnapshot(
@@ -986,63 +1091,29 @@ class ExternalGraphqlPatchBundle(
         } else {
             metadata.isPrerelease ?: endpointMetadata.prerelease
         }
-        var history = fetchExternalHistory(
+        val history = fetchExternalHistory(
             source = historySource,
             prerelease = prerelease,
             limit = limit
         )
-        if (history.size < limit && prerelease != null) {
-            history = mergeHistoryEntries(
-                history,
-                fetchExternalHistory(
-                    source = historySource,
-                    prerelease = null,
-                    limit = limit
-                ),
-                limit
+        // Prefer complete release notes without crossing the selected channel.
+        // Optional GitHub backfilling must not discard successfully fetched service history.
+        val githubHistory = try {
+            fetchGitHubChangelogHistory(
+                limit,
+                prerelease,
+                historySource.repoUrl,
+                historySource.sourceUrl,
+                endpoint,
+                metadata.downloadUrl
             )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            if (history.isEmpty()) throw error
+            emptyList()
         }
-        if (history.size < limit && !historySource.repoUrl.isNullOrBlank()) {
-            history = mergeHistoryEntries(
-                history,
-                fetchGitHubChangelogHistory(
-                    limit,
-                    prerelease,
-                    historySource.repoUrl,
-                    historySource.sourceUrl,
-                    endpoint,
-                    metadata.downloadUrl
-                ),
-                limit
-            )
-        }
-        if (history.size < limit && prerelease != null && !historySource.repoUrl.isNullOrBlank()) {
-            history = mergeHistoryEntries(
-                history,
-                fetchGitHubChangelogHistory(
-                    limit,
-                    null,
-                    historySource.repoUrl,
-                    historySource.sourceUrl,
-                    endpoint,
-                    metadata.downloadUrl
-                ),
-                limit
-            )
-        }
-        if (history.isNotEmpty()) {
-            return@withContext history
-        }
-        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
-        fetchGitHubChangelogHistory(
-            limit,
-            prerelease,
-            historySource.repoUrl,
-            historySource.sourceUrl,
-            latest?.pageUrl,
-            latest?.downloadUrl,
-            endpoint
-        )
+        mergePatchBundleChangelogs(history, githubHistory, limit)
     }
 
     override suspend fun historicalInfoCacheIdentity(): String {
@@ -1119,8 +1190,21 @@ class ExternalGraphqlPatchBundle(
             signatureDownloadUrl = signatureUrl,
             pageUrl = snapshot?.sourceUrl,
             description = description,
-            version = version
+            version = version,
+            fileHash = snapshot?.fileHash
         )
+    }
+
+    private fun normalizeSha256FileHash(raw: String?): String? {
+        val trimmed = raw?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val digest = when {
+            trimmed.startsWith("sha256:", ignoreCase = true) -> trimmed.substringAfter(':')
+            ':' !in trimmed -> trimmed
+            else -> return null
+        }
+        if (!digest.matches(Regex("^[0-9a-fA-F]{64}$"))) return null
+        return digest.lowercase(Locale.US)
     }
 
     private fun ExternalBundleSnapshot.toChangelogEntry(): PatchBundleChangelogEntry {
@@ -1187,22 +1271,6 @@ class ExternalGraphqlPatchBundle(
             .getOrNull()
             .orEmpty()
             .map { snapshot -> snapshot.toChangelogEntry() }
-    }
-
-    private fun mergeHistoryEntries(
-        current: List<PatchBundleChangelogEntry>,
-        incoming: List<PatchBundleChangelogEntry>,
-        limit: Int
-    ): List<PatchBundleChangelogEntry> {
-        val targetLimit = limit.coerceAtLeast(1)
-        if (incoming.isEmpty()) return current.take(targetLimit)
-        return (current + incoming)
-            .sortedWith(compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE })
-            .distinctBy { entry ->
-                entry.version.trim().lowercase().takeIf { it.isNotBlank() }
-                    ?: "${entry.publishedAtMillis ?: Long.MIN_VALUE}|${entry.description.trim()}"
-            }
-            .take(targetLimit)
     }
 
     private fun parseEndpointMetadata(): EndpointMetadata {

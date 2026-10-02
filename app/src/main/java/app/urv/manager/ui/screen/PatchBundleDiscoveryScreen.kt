@@ -132,8 +132,16 @@ fun PatchBundleDiscoveryScreen(
     val storageRoots = remember { filesystem.storageRoots() }
     val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
     val sources by patchBundleRepository.sources.collectAsStateWithLifecycle(emptyList())
+    val bundleInfos by patchBundleRepository.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val existingEndpoints = remember(sources) {
         sources.filterIsInstance<RemotePatchBundle>().map { it.endpoint }.toSet()
+    }
+    val localPatchSources = remember(sources, bundleInfos) {
+        sources.mapNotNull { source ->
+            val remote = source as? RemotePatchBundle ?: return@mapNotNull null
+            val patchCount = bundleInfos[source.uid]?.patches?.size ?: 0
+            if (patchCount <= 0) null else remote to patchCount
+        }
     }
     val bundles = viewModel.bundles
     val isLoading = viewModel.isLoading
@@ -318,8 +326,8 @@ fun PatchBundleDiscoveryScreen(
             version = latest.version.ifBlank { fallback.version },
             downloadUrl = latest.downloadUrl ?: fallback.downloadUrl,
             signatureDownloadUrl = latest.signatureDownloadUrl ?: fallback.signatureDownloadUrl,
-            patchCount = if (latest.patchCount == 0) fallback.patchCount else latest.patchCount,
-            patches = if (latest.patches.isEmpty()) fallback.patches else latest.patches
+            patchCount = latest.patchCount,
+            patches = latest.patches
         )
     }
 
@@ -901,6 +909,11 @@ fun PatchBundleDiscoveryScreen(
                             isImported = { bundle ->
                                 viewModel.bundleEndpoints(bundle).any { it in existingEndpoints }
                             },
+                            localPatchCount = { bundle ->
+                                localPatchSources.firstOrNull { (source, _) ->
+                                    viewModel.matchesLocalPatchSource(bundle, source)
+                                }?.second
+                            },
                             onImport = { bundle ->
                                 viewModel.importBundle(
                                     bundle,
@@ -1012,6 +1025,7 @@ private fun BundleDiscoveryItem(
     useLatest: Boolean,
     latestLocked: Boolean,
     isImported: (ExternalBundleSnapshot) -> Boolean,
+    localPatchCount: (ExternalBundleSnapshot) -> Int?,
     onImport: (ExternalBundleSnapshot) -> Unit,
     onViewPatches: (ExternalBundleSnapshot) -> Unit,
     onMenuRequest: (BundleMenuState) -> Unit,
@@ -1048,7 +1062,8 @@ private fun BundleDiscoveryItem(
             .ifBlank { bundle.sourceUrl }
     }
     val description = bundle.repoDescription?.takeIf { it.isNotBlank() }
-    val patchCount = if (bundle.patches.isNotEmpty()) bundle.patches.size else bundle.patchCount
+    val remotePatchCount = if (bundle.patches.isNotEmpty()) bundle.patches.size else bundle.patchCount
+    val patchCount = localPatchCount(bundle) ?: remotePatchCount
     val isSupported = !bundle.isBundleV3
     val lastUpdatedLabel = remember(bundle.repoPushedAt) {
         formatRepoUpdatedLabel(context, bundle.repoPushedAt)

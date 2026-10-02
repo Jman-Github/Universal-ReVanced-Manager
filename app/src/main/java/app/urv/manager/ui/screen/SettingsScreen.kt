@@ -120,6 +120,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.choose_split_apks_before_patching,
                     R.string.continue_on_patch_error,
                     R.string.skip_apk_signing,
+                    R.string.inject_signature_metadata_after_patching,
                     R.string.patcher_log_mode,
                     R.string.morphe_bytecode_mode,
                     R.string.patcher_memory_usage_graph_title,
@@ -463,6 +464,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.choose_split_apks_before_patching, R.string.choose_split_apks_before_patching_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.continue_on_patch_error, R.string.continue_on_patch_error_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.skip_apk_signing, R.string.skip_apk_signing_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(R.string.inject_signature_metadata_after_patching, R.string.inject_signature_metadata_after_patching_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_log_mode, R.string.patcher_log_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.morphe_bytecode_mode, R.string.morphe_bytecode_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_memory_usage_graph_title, R.string.patcher_memory_usage_graph_description, R.string.patcher_category, Settings.Patcher),
@@ -599,7 +601,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                 ) {
                     ExpressiveSettingsItem(
                         headlineContent = stringResource(R.string.about_revanced_manager),
-                        supportingContent = BuildConfig.VERSION_NAME,
+                        supportingContent = "v${BuildConfig.VERSION_NAME.removePrefix("v").removePrefix("V")}",
                         leadingContent = {
                             AppIcon(
                                 packageInfo = null,

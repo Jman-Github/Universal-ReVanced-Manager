@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.ui.component.CenteredDialogTitle
 
 @Composable
 fun ProcessMemoryLimitDialog(
@@ -48,7 +49,7 @@ fun ProcessMemoryLimitDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.process_memory_limit)) },
+        title = { CenteredDialogTitle(stringResource(R.string.process_memory_limit)) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.close))

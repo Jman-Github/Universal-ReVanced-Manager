@@ -52,16 +52,19 @@ class ExternalBundlesApi(
         apiHost: String? = null
     ): APIResponse<ExternalBundlesPage> {
         val variables = buildBundleVariables(packageNameQuery, limit, offset)
+        val requireVerifiedPatchMetadata = !packageNameQuery.isNullOrBlank()
         endpointForHost(apiHost.orEmpty())?.let { endpoint ->
-            return graphqlWithDeadline<BundlesQueryData>(
-                endpoint.graphqlUrl,
+            return queryBundlesWithFreshness(
+                endpoint,
                 BUNDLES_QUERY,
-                variables
+                variables,
+                requireVerifiedPatchMetadata = requireVerifiedPatchMetadata
             ).transform { data -> data.toDiscoveryPage(endpoint) }
         }
-        return queryPreferred<BundlesQueryData, ExternalBundlesPage>(
+        return queryPreferred(
             BUNDLES_QUERY,
-            variables
+            variables,
+            requireVerifiedPatchMetadata = requireVerifiedPatchMetadata
         ) { data, endpoint -> data.toDiscoveryPage(endpoint) }
     }
 
@@ -73,8 +76,8 @@ class ExternalBundlesApi(
             put("id", JsonPrimitive(bundleId))
         }
         val endpoint = endpointForHost(apiHost) ?: STABLE_ENDPOINT
-        return graphqlWithDeadline<BundlesQueryData>(
-            endpoint.graphqlUrl,
+        return queryBundlesWithFreshness(
+            endpoint,
             BUNDLE_BY_ID_QUERY,
             variables
         ).transform { data ->
@@ -97,7 +100,7 @@ class ExternalBundlesApi(
             put("repo", JsonPrimitive(trimmedRepo))
             put("prerelease", JsonPrimitive(prerelease))
         }
-        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+        return queryPreferred(
             BUNDLE_LATEST_QUERY,
             variables
         ) { data, endpoint ->
@@ -118,7 +121,7 @@ class ExternalBundlesApi(
             put("owner", JsonPrimitive(trimmedOwner))
             put("repo", JsonPrimitive(trimmedRepo))
         }
-        return queryPreferred<BundlesQueryData, ExternalBundleSnapshot?>(
+        return queryPreferred(
             BUNDLE_LATEST_ANY_QUERY,
             variables
         ) { data, endpoint ->
@@ -145,20 +148,68 @@ class ExternalBundlesApi(
             trimmedOwner,
             trimmedRepo,
             prerelease,
-            targetLimit
+            targetLimit,
+            requireCurrentPatchMetadataSchema = true
         )
         if (preferredResponse is APIResponse.Success) return preferredResponse
 
         val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
-        return getBundleHistory(
+        val fallbackResponse = getBundleHistory(
+            fallbackEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit,
+            requireCurrentPatchMetadataSchema = true
+        )
+        if (fallbackResponse is APIResponse.Success) {
+            cacheDegradedEndpoint(fallbackEndpoint)
+            return fallbackResponse
+        }
+
+        val preferredFreshResponse = getBundleHistory(
+            preferredEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit,
+            requireVerifiedPatchMetadata = true
+        )
+        if (preferredFreshResponse is APIResponse.Success) return preferredFreshResponse
+
+        val fallbackFreshResponse = getBundleHistory(
+            fallbackEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit,
+            requireVerifiedPatchMetadata = true
+        )
+        if (fallbackFreshResponse is APIResponse.Success) {
+            cacheDegradedEndpoint(fallbackEndpoint)
+            return fallbackFreshResponse
+        }
+
+        val preferredLegacyResponse = getBundleHistory(
+            preferredEndpoint,
+            trimmedOwner,
+            trimmedRepo,
+            prerelease,
+            targetLimit
+        )
+        if (preferredLegacyResponse is APIResponse.Success) return preferredLegacyResponse
+
+        val fallbackLegacyResponse = getBundleHistory(
             fallbackEndpoint,
             trimmedOwner,
             trimmedRepo,
             prerelease,
             targetLimit
-        ).also { response ->
-            if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
+        )
+        if (fallbackLegacyResponse is APIResponse.Success) {
+            cacheDegradedEndpoint(fallbackEndpoint)
         }
+        return fallbackLegacyResponse
     }
 
     private suspend fun getBundleHistory(
@@ -166,7 +217,9 @@ class ExternalBundlesApi(
         owner: String,
         repo: String,
         prerelease: Boolean?,
-        limit: Int
+        limit: Int,
+        requireCurrentPatchMetadataSchema: Boolean = false,
+        requireVerifiedPatchMetadata: Boolean = false
     ): APIResponse<List<ExternalBundleSnapshot>> {
         val history = mutableListOf<ExternalBundleSnapshot>()
         var offset = 0
@@ -180,7 +233,22 @@ class ExternalBundlesApi(
                 offset = offset,
                 prerelease = prerelease
             )
-            when (val response = graphqlWithDeadline<BundlesQueryData>(endpoint.graphqlUrl, BUNDLES_QUERY, variables)) {
+            when (
+                val response = if (requireCurrentPatchMetadataSchema) {
+                    graphqlWithDeadline<BundlesQueryData>(
+                        endpoint.graphqlUrl,
+                        BUNDLES_QUERY,
+                        variables
+                    )
+                } else {
+                    queryBundlesWithFreshness(
+                        endpoint,
+                        BUNDLES_QUERY,
+                        variables,
+                        requireVerifiedPatchMetadata = requireVerifiedPatchMetadata
+                    )
+                }
+            ) {
                 is APIResponse.Success -> {
                     val batch = response.data.bundle.map { it.toSnapshot(endpoint.host) }
                     history += batch
@@ -201,49 +269,232 @@ class ExternalBundlesApi(
         }
         val preferredEndpoint = endpointForHost(bundle.apiHost) ?: STABLE_ENDPOINT
         val fallbackEndpoint = if (preferredEndpoint == STABLE_ENDPOINT) DEV_ENDPOINT else STABLE_ENDPOINT
-        val preferredResponse = graphqlWithDeadline<BundlesQueryData>(
-            preferredEndpoint.graphqlUrl,
+        val preferredResponse = queryBundlesWithFreshness(
+            preferredEndpoint,
             BUNDLE_PATCHES_QUERY,
             variables
         )
-        val preferredPatches = (preferredResponse as? APIResponse.Success)
+        val preferredBundle = (preferredResponse as? APIResponse.Success)
             ?.data
             ?.bundle
             ?.firstOrNull()
+        val preferredIdentityMatches = preferredBundle?.matchesSnapshotIdentity(bundle)
+        val preferredMetadataCurrent =
+            preferredIdentityMatches == true &&
+                preferredBundle.hasCurrentPatchMetadata()
+        val preferredPatches = preferredBundle
+            ?.takeIf { preferredMetadataCurrent }
             ?.patches
             ?.map { it.toPatch() }
-        if (preferredPatches != null && (preferredPatches.isNotEmpty() || bundle.patchCount <= 0)) {
+        if (
+            preferredMetadataCurrent &&
+            preferredPatches != null &&
+            (preferredPatches.isNotEmpty() || bundle.patchCount <= 0)
+        ) {
             return APIResponse.Success(preferredPatches)
         }
 
-        val fallbackVariables = buildBundleIdentityVariables(bundle)
-            ?: return preferredPatches?.let { APIResponse.Success(it) }
-                ?: preferredResponse.transform { data ->
-                    data.bundle.firstOrNull()?.patches?.map { it.toPatch() }.orEmpty()
+        val identityVariables = buildBundleIdentityVariables(bundle)
+            ?: return when (preferredResponse) {
+                is APIResponse.Error -> APIResponse.Error(preferredResponse.error)
+                is APIResponse.Failure -> APIResponse.Failure(preferredResponse.error)
+                is APIResponse.Success -> when {
+                    !preferredMetadataCurrent -> patchMetadataUnavailable(bundle)
+                    preferredPatches?.isNotEmpty() == true -> APIResponse.Success(preferredPatches)
+                    bundle.patchCount > 0 -> patchMetadataUnavailable(bundle)
+                    else -> APIResponse.Success(preferredPatches.orEmpty())
                 }
-        val fallbackResponse = graphqlWithDeadline<BundlesQueryData>(
-            fallbackEndpoint.graphqlUrl,
+            }
+
+        // Bundle IDs are scoped to one external-bundles database. Verify a successful but
+        // stale/mismatched ID by repository/version identity. If the preferred host itself failed,
+        // do not immediately retry that host before consulting the alternate service.
+        val shouldRetryPreferredByIdentity =
+            preferredResponse is APIResponse.Success && preferredIdentityMatches != true
+        val preferredIdentityResponse =
+            if (shouldRetryPreferredByIdentity) {
+                queryBundlesWithFreshness(
+                    preferredEndpoint,
+                    BUNDLE_PATCHES_BY_IDENTITY_QUERY,
+                    identityVariables
+                )
+            } else {
+                preferredResponse
+            }
+        val preferredIdentityBundle =
+            if (preferredIdentityMatches == true) {
+                preferredBundle
+            } else {
+                (preferredIdentityResponse as? APIResponse.Success)
+                    ?.data
+                    ?.bundle
+                    ?.selectBestPatchIdentityCandidate(bundle)
+            }
+        val preferredIdentityMatchesSnapshot =
+            preferredIdentityBundle?.matchesSnapshotIdentity(bundle)
+        val preferredIdentityMetadataCurrent =
+            preferredIdentityMatchesSnapshot == true &&
+                preferredIdentityBundle.hasCurrentPatchMetadata()
+        val preferredIdentityPatches = preferredIdentityBundle
+            ?.takeIf { preferredIdentityMetadataCurrent }
+            ?.patches
+            ?.map { it.toPatch() }
+        if (preferredIdentityPatches?.isNotEmpty() == true) {
+            return APIResponse.Success(preferredIdentityPatches)
+        }
+
+        val preferredExplicitlyStale =
+            preferredIdentityMatchesSnapshot == true &&
+                preferredIdentityBundle.patchMetadataVerified &&
+                !preferredIdentityBundle.hasCurrentPatchMetadata()
+        if (preferredExplicitlyStale) {
+            return patchMetadataUnavailable(bundle)
+        }
+
+        val fallbackResponse = queryBundlesWithFreshness(
+            fallbackEndpoint,
             BUNDLE_PATCHES_BY_IDENTITY_QUERY,
-            fallbackVariables
+            identityVariables
         )
-        if (fallbackResponse is APIResponse.Success) {
-            val fallbackPatches = fallbackResponse.data.bundle
-                .firstOrNull()
-                ?.patches
-                ?.map { it.toPatch() }
-                .orEmpty()
-            if (fallbackPatches.isNotEmpty() || preferredPatches == null) {
-                return APIResponse.Success(fallbackPatches)
+        val fallbackBundle = (fallbackResponse as? APIResponse.Success)
+            ?.data
+            ?.bundle
+            ?.selectBestPatchIdentityCandidate(bundle)
+        val fallbackIdentityMatches = fallbackBundle?.matchesSnapshotIdentity(bundle)
+        val fallbackMetadataCurrent =
+            fallbackIdentityMatches == true &&
+                fallbackBundle.hasCurrentPatchMetadata()
+        val fallbackPatches = fallbackBundle
+            ?.takeIf { fallbackMetadataCurrent }
+            ?.patches
+            ?.map { it.toPatch() }
+        if (fallbackPatches?.isNotEmpty() == true) {
+            return APIResponse.Success(fallbackPatches)
+        }
+
+        if (bundle.patchCount > 0) {
+            val identityLookupSucceeded =
+                preferredIdentityResponse is APIResponse.Success ||
+                    fallbackResponse is APIResponse.Success
+            if (identityLookupSucceeded) {
+                return patchMetadataUnavailable(bundle)
+            }
+            return when (fallbackResponse) {
+                is APIResponse.Error -> APIResponse.Error(fallbackResponse.error)
+                is APIResponse.Failure -> APIResponse.Failure(fallbackResponse.error)
+                is APIResponse.Success -> patchMetadataUnavailable(bundle)
             }
         }
 
-        preferredPatches?.let { return APIResponse.Success(it) }
+        // No patches were advertised by the snapshot. A verified empty bundle is valid,
+        // but a returned bundle whose identity/artifact cannot be verified must not be collapsed
+        // into a legitimate zero-patch result.
+        preferredIdentityPatches?.let { return APIResponse.Success(it) }
+        if (preferredMetadataCurrent) {
+            preferredPatches?.let { return APIResponse.Success(it) }
+        }
+        fallbackPatches?.let { return APIResponse.Success(it) }
+
+        val unverifiedIdentityBundle =
+            (
+                preferredIdentityBundle != null &&
+                    (
+                        preferredIdentityMatchesSnapshot != true ||
+                            !preferredIdentityBundle.hasCurrentPatchMetadata()
+                        )
+                ) ||
+                (
+                    fallbackBundle != null &&
+                        (
+                            fallbackIdentityMatches != true ||
+                                !fallbackBundle.hasCurrentPatchMetadata()
+                            )
+                    )
+        if (unverifiedIdentityBundle) {
+            return patchMetadataUnavailable(bundle)
+        }
 
         return when (fallbackResponse) {
             is APIResponse.Error -> APIResponse.Error(fallbackResponse.error)
             is APIResponse.Failure -> APIResponse.Failure(fallbackResponse.error)
-            is APIResponse.Success -> APIResponse.Success(emptyList())
+            is APIResponse.Success -> patchMetadataUnavailable(bundle)
         }
+    }
+
+    private fun patchMetadataUnavailable(
+        bundle: ExternalBundleSnapshot
+    ): APIResponse<List<ExternalBundlePatch>> = APIResponse.Failure(
+        APIFailure(
+            GraphqlException(
+                "Patch metadata could not be verified for ${bundle.sourceUrl} ${bundle.version}; " +
+                    "the bundle snapshot advertised ${bundle.patchCount} patch(es)"
+            ),
+            null
+        )
+    )
+
+    private suspend fun queryBundlesWithFreshness(
+        endpoint: Endpoint,
+        query: String,
+        variables: JsonObject?,
+        requireVerifiedPatchMetadata: Boolean = false
+    ): APIResponse<BundlesQueryData> {
+        var response = graphqlWithDeadline<BundlesQueryData>(
+            endpoint.graphqlUrl,
+            query,
+            variables
+        )
+
+        var fallbackQuery = query
+        var patchMetadataSchemaComplete = true
+        repeat(PATCH_METADATA_SCHEMA_FIELDS.size) {
+            val unsupportedFields = response.unsupportedPatchMetadataFields()
+            if (unsupportedFields.isEmpty()) return response
+            if (
+                requireVerifiedPatchMetadata &&
+                unsupportedFields.any(REQUIRED_PATCH_METADATA_SCHEMA_FIELDS::contains)
+            ) {
+                return response
+            }
+
+            var queryChanged = false
+            unsupportedFields.forEach { field ->
+                val updatedQuery = fallbackQuery.removeGraphqlFieldSelection(field)
+                if (updatedQuery != fallbackQuery) {
+                    fallbackQuery = updatedQuery
+                    queryChanged = true
+                    if (field in REQUIRED_PATCH_METADATA_SCHEMA_FIELDS) {
+                        patchMetadataSchemaComplete = false
+                    }
+                }
+            }
+            if (!queryChanged) return response
+
+            response = graphqlWithDeadline(
+                endpoint.graphqlUrl,
+                fallbackQuery,
+                variables
+            )
+            if (response is APIResponse.Success) {
+                if (patchMetadataSchemaComplete) return response
+
+                // Older schemas cannot prove whether retained patch rows are still current.
+                // Keep the bundle discoverable, but mark patch metadata as unverified so stale
+                // patch counts and patch lists are not exposed as authoritative.
+                return response.transform { data ->
+                    data.copy(
+                        bundle = data.bundle.map {
+                            it.copy(
+                                needPatchesUpdate = true,
+                                patchMetadataVerified = false
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        return response
     }
 
     private suspend inline fun <reified T> graphql(
@@ -288,9 +539,14 @@ class ExternalBundlesApi(
     private fun BundleNode.toSnapshot(bundlesHost: String): ExternalBundleSnapshot {
         val metadata = source?.sourceMetadata
         val bundleTypeValue = bundleType?.trim().orEmpty()
-        val patchCount = patchesAggregate?.aggregate?.count
-            ?: patches?.size
-            ?: 0
+        val patchMetadataCurrent = hasCurrentPatchMetadata()
+        val patchCount = if (patchMetadataCurrent) {
+            patchesAggregate?.aggregate?.count
+                ?: patches?.size
+                ?: 0
+        } else {
+            0
+        }
         val resolved = resolveBundleMetadata(
             bundleTypeValue,
             rawVersion = version
@@ -316,10 +572,15 @@ class ExternalBundlesApi(
             version = resolved.version,
             downloadUrl = normalizedDownloadUrl,
             signatureDownloadUrl = normalizedSignatureUrl,
+            fileHash = fileHash,
             isPrerelease = isPrerelease,
             isBundleV3 = resolved.isBundleV3,
             patchCount = patchCount,
-            patches = patches?.map { it.toPatch() }.orEmpty(),
+            patches = if (patchMetadataCurrent) {
+                patches?.map { it.toPatch() }.orEmpty()
+            } else {
+                emptyList()
+            },
         )
     }
 
@@ -393,6 +654,12 @@ class ExternalBundlesApi(
         } else {
             buildJsonObject {
                 put("where", buildJsonObject {
+                    put("need_patches_update", buildJsonObject {
+                        put("_eq", JsonPrimitive(false))
+                    })
+                    put("patcher_failure_fingerprint", buildJsonObject {
+                        put("_is_null", JsonPrimitive(true))
+                    })
                     put("patches", buildJsonObject {
                         put("patch_packages", buildJsonObject {
                             put("package", buildJsonObject {
@@ -478,13 +745,14 @@ class ExternalBundlesApi(
         val version: String
     )
 
-    private suspend inline fun <reified T, R> queryPreferred(
+    private suspend inline fun <R> queryPreferred(
         query: String,
         variables: JsonObject?,
-        crossinline transform: (T, Endpoint) -> R
+        requireVerifiedPatchMetadata: Boolean = false,
+        crossinline transform: (BundlesQueryData, Endpoint) -> R
     ): APIResponse<R> {
         val preferredEndpoint = preferredEndpoint()
-        val preferredResponse = graphqlWithDeadline<T>(
+        val preferredResponse = graphqlWithDeadline<BundlesQueryData>(
             preferredEndpoint.graphqlUrl,
             query,
             variables
@@ -494,11 +762,81 @@ class ExternalBundlesApi(
         }
 
         val fallbackEndpoint = alternateEndpoint(preferredEndpoint)
-        return graphqlWithDeadline<T>(fallbackEndpoint.graphqlUrl, query, variables)
-            .transform { data -> transform(data, fallbackEndpoint) }
+        val fallbackResponse = graphqlWithDeadline<BundlesQueryData>(
+            fallbackEndpoint.graphqlUrl,
+            query,
+            variables
+        )
+        if (fallbackResponse is APIResponse.Success) {
+            cacheDegradedEndpoint(fallbackEndpoint)
+            return APIResponse.Success(transform(fallbackResponse.data, fallbackEndpoint))
+        }
+
+        val preferredCompatibleResponse = queryBundlesWithFreshness(
+            preferredEndpoint,
+            query,
+            variables,
+            requireVerifiedPatchMetadata = true
+        ).transform { data -> transform(data, preferredEndpoint) }
+        if (preferredCompatibleResponse is APIResponse.Success) {
+            return preferredCompatibleResponse
+        }
+
+        val fallbackCompatibleResponse = queryBundlesWithFreshness(
+            fallbackEndpoint,
+            query,
+            variables,
+            requireVerifiedPatchMetadata = true
+        ).transform { data -> transform(data, fallbackEndpoint) }
+        if (fallbackCompatibleResponse is APIResponse.Success) {
+            cacheDegradedEndpoint(fallbackEndpoint)
+            return fallbackCompatibleResponse
+        }
+
+        if (requireVerifiedPatchMetadata) {
+            return fallbackCompatibleResponse
+        }
+
+        val preferredLegacyResponse = queryBundlesWithFreshness(
+            preferredEndpoint,
+            query,
+            variables
+        ).transform { data -> transform(data, preferredEndpoint) }
+        if (preferredLegacyResponse is APIResponse.Success) {
+            return preferredLegacyResponse
+        }
+
+        return queryBundlesWithFreshness(
+            fallbackEndpoint,
+            query,
+            variables
+        ).transform { data -> transform(data, fallbackEndpoint) }
             .also { response ->
                 if (response is APIResponse.Success) cacheDegradedEndpoint(fallbackEndpoint)
             }
+    }
+
+    private fun APIResponse<*>.unsupportedPatchMetadataFields(): Set<String> {
+        val message = when (this) {
+            is APIResponse.Failure -> error.message
+            is APIResponse.Error -> error.message
+            is APIResponse.Success -> null
+        }.orEmpty()
+        val missingFieldError =
+            message.contains("not found", ignoreCase = true) ||
+                message.contains("unknown field", ignoreCase = true) ||
+                message.contains("does not exist", ignoreCase = true)
+        if (!missingFieldError) return emptySet()
+
+        return PATCH_METADATA_SCHEMA_FIELDS.filterTo(linkedSetOf()) { field ->
+            message.contains(field, ignoreCase = true)
+        }
+    }
+
+    private fun String.removeGraphqlFieldSelection(field: String): String {
+        val lines = lines()
+        if (lines.none { it.trim() == field }) return this
+        return lines.filterNot { it.trim() == field }.joinToString("\n")
     }
 
     private suspend fun preferredEndpoint(): Endpoint {
@@ -591,6 +929,18 @@ class ExternalBundlesApi(
         )
         private const val ENDPOINT_SELECTION_TTL_MS = 15 * 60 * 1_000L
         private const val DEGRADED_ENDPOINT_SELECTION_TTL_MS = 30 * 1_000L
+        private const val FILE_HASH_FIELD = "file_hash"
+        private const val NEED_PATCHES_UPDATE_FIELD = "need_patches_update"
+        private const val PATCHER_FAILURE_FINGERPRINT_FIELD = "patcher_failure_fingerprint"
+        private val PATCH_METADATA_SCHEMA_FIELDS = listOf(
+            FILE_HASH_FIELD,
+            NEED_PATCHES_UPDATE_FIELD,
+            PATCHER_FAILURE_FINGERPRINT_FIELD
+        )
+        private val REQUIRED_PATCH_METADATA_SCHEMA_FIELDS = setOf(
+            NEED_PATCHES_UPDATE_FIELD,
+            PATCHER_FAILURE_FINGERPRINT_FIELD
+        )
         private const val BUNDLES_QUERY = """
             query BundleDiscovery(${"$"}where: bundle_bool_exp, ${"$"}limit: Int, ${"$"}offset: Int) {
               refresh_jobs(
@@ -614,6 +964,9 @@ class ExternalBundlesApi(
                 description
                 download_url
                 signature_download_url
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
                 is_prerelease
                 version
                 source {
@@ -640,6 +993,16 @@ class ExternalBundlesApi(
             query BundlePatches(${"$"}id: Int!) {
               bundle(where: { id: { _eq: ${"$"}id } }) {
                 id
+                bundle_type
+                download_url
+                version
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
+                is_prerelease
+                source {
+                  url
+                }
                 patches {
                   name
                   description
@@ -666,9 +1029,18 @@ class ExternalBundlesApi(
                   is_prerelease: { _eq: ${"$"}prerelease }
                 }
                 order_by: { created_at: desc }
-                limit: 1
               ) {
                 id
+                bundle_type
+                download_url
+                version
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
+                is_prerelease
+                source {
+                  url
+                }
                 patches {
                   name
                   description
@@ -691,6 +1063,9 @@ class ExternalBundlesApi(
                 description
                 download_url
                 signature_download_url
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
                 is_prerelease
                 version
                 source {
@@ -734,6 +1109,9 @@ class ExternalBundlesApi(
                 description
                 download_url
                 signature_download_url
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
                 is_prerelease
                 version
                 source {
@@ -776,6 +1154,9 @@ class ExternalBundlesApi(
                 description
                 download_url
                 signature_download_url
+                file_hash
+                need_patches_update
+                patcher_failure_fingerprint
                 is_prerelease
                 version
                 source {
@@ -802,4 +1183,65 @@ class ExternalBundlesApi(
     }
 
     private class GraphqlException(message: String) : Exception(message)
+}
+
+internal fun BundleNode.matchesSnapshotIdentity(bundle: ExternalBundleSnapshot): Boolean? {
+    val expectedSourceUrl = bundle.sourceUrl.trim().removeSuffix("/")
+    val expectedVersion = bundle.version.trim()
+    if (expectedSourceUrl.isBlank() || expectedVersion.isBlank()) return null
+
+    val actualSourceUrl = source?.url?.trim()?.removeSuffix("/").orEmpty()
+    val actualVersion = version?.trim().orEmpty()
+    if (
+        actualSourceUrl != expectedSourceUrl ||
+        actualVersion != expectedVersion ||
+        isPrerelease != bundle.isPrerelease
+    ) {
+        return false
+    }
+
+    val expectedFileHash = bundle.fileHash
+    if (!expectedFileHash.isNullOrBlank()) {
+        val actualFileHash = fileHash
+        if (actualFileHash.isNullOrBlank()) return null
+        if (actualFileHash != expectedFileHash) return false
+    }
+
+    val expectedDownloadUrl = bundle.downloadUrl?.trim().orEmpty()
+    if (expectedDownloadUrl.isNotBlank()) {
+        val actualDownloadUrl = downloadUrl?.trim().orEmpty()
+        if (actualDownloadUrl.isBlank()) return null
+        if (actualDownloadUrl != expectedDownloadUrl) return false
+    }
+
+    val expectedBundleType = bundle.bundleType.trim()
+    if (expectedBundleType.isNotBlank()) {
+        val actualBundleType = bundleType?.trim().orEmpty()
+        if (actualBundleType.isBlank()) return null
+        if (actualBundleType != expectedBundleType) return false
+    }
+
+    return true
+}
+
+internal fun BundleNode.hasCurrentPatchMetadata(): Boolean =
+    patchMetadataVerified &&
+        !needPatchesUpdate &&
+        patcherFailureFingerprint.isNullOrBlank()
+
+internal fun List<BundleNode>.selectBestPatchIdentityCandidate(
+    bundle: ExternalBundleSnapshot
+): BundleNode? {
+    val expectedSourceUrl = bundle.sourceUrl.trim()
+    val exactSourceCandidates = filter {
+        it.source?.url?.trim() == expectedSourceUrl
+    }
+    val candidates = exactSourceCandidates.ifEmpty { this }
+
+    return candidates.firstOrNull {
+        it.matchesSnapshotIdentity(bundle) == true &&
+            it.hasCurrentPatchMetadata()
+    } ?: candidates.firstOrNull {
+        it.matchesSnapshotIdentity(bundle) == true
+    } ?: candidates.firstOrNull()
 }

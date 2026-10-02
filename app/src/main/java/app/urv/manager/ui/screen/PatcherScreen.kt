@@ -52,6 +52,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.derivedStateOf
@@ -97,6 +98,7 @@ import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
+import app.urv.manager.ui.model.signatureMetadataPatcherProgress
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.ui.viewmodel.PatcherViewModel
 import app.urv.manager.data.room.apps.installed.InstallType
@@ -129,6 +131,15 @@ fun PatcherScreen(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val signatureProgress by viewModel.signatureWorkflowProgress.collectAsState()
+    val patcherProgress = signatureMetadataPatcherProgress(
+        context = context,
+        steps = viewModel.steps.toList(),
+        subStepsById = viewModel.stepSubSteps.mapValues { it.value.toList() },
+        progress = viewModel.progress,
+        enabled = viewModel.signatureInjectionEnabled,
+        injection = signatureProgress
+    )
     val prefs: PreferencesManager = koinInject()
     val exportFormat by prefs.patchedAppExportFormat.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
@@ -160,13 +171,17 @@ fun PatcherScreen(
     }
 
     val patcherSucceeded by viewModel.patcherSucceeded.observeAsState(null)
-    val isPatchingActive by viewModel.isPatchingActive.observeAsState(false)
+    val workerIsPatchingActive by viewModel.isPatchingActive.observeAsState(false)
+    val isPatchingActive = workerIsPatchingActive || viewModel.signatureWorkflowRunning
 
     LaunchedEffect(patcherSucceeded) {
         if (patcherSucceeded == true) viewModel.maybeAutoInstall()
     }
     val isMounting = viewModel.activeInstallType == InstallType.MOUNT
-    val canInstall by remember { derivedStateOf { patcherSucceeded == true && (viewModel.installedPackageName != null || !viewModel.isInstalling) } }
+    val canInstall by remember { derivedStateOf {
+        patcherSucceeded == true && !viewModel.signatureWorkflowRunning &&
+            (viewModel.installedPackageName != null || !viewModel.isInstalling)
+    } }
     val supportsRootMount = viewModel.supportsRootMount
     val mountModeSupportsRootMount = viewModel.usingMountInstall && supportsRootMount
     var mountInstallerAvailable by remember { mutableStateOf(false) }
@@ -434,11 +449,7 @@ fun PatcherScreen(
         }
     }
 
-    val steps by remember {
-        derivedStateOf {
-            viewModel.steps.groupBy { it.category }
-        }
-    }
+    val steps = patcherProgress.steps.groupBy { it.category }
 
     if (isPatchingActive) {
         DisposableEffect(Unit) {
@@ -1378,7 +1389,7 @@ fun PatcherScreen(
                 onBackClick = ::onPageBack,
                 onBackLongClick = ::onPageBackToDashboard,
                 actions = {
-                    ProgressPercentageBadge(progress = viewModel.progress)
+                    ProgressPercentageBadge(progress = patcherProgress.progress)
                 }
             )
         },
@@ -1387,7 +1398,7 @@ fun PatcherScreen(
                 actions = {
                     IconButton(
                         onClick = ::openExportPicker,
-                        enabled = patcherSucceeded == true
+                        enabled = patcherSucceeded == true && !viewModel.signatureWorkflowRunning
                     ) {
                     Icon(Icons.Outlined.Save, stringResource(id = R.string.save_apk))
                 }
@@ -1524,7 +1535,7 @@ fun PatcherScreen(
             }
 
             LinearProgressIndicator(
-                progress = { viewModel.progress },
+                progress = { patcherProgress.progress },
                 modifier = Modifier.fillMaxWidth(),
                 drawStopIndicator = {}
             )
@@ -1569,7 +1580,7 @@ fun PatcherScreen(
                     Steps(
                         category = category,
                         steps = steps,
-                        subStepsById = viewModel.stepSubSteps,
+                        subStepsById = patcherProgress.subStepsById,
                         isExpanded = expandedCategories.contains(category),
                         autoExpandRunning = autoExpandRunningSteps,
                         autoExpandRunningMainOnly = useExclusiveAutoExpand,

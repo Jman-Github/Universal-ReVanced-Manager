@@ -7,6 +7,7 @@ import androidx.room.MapColumn
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import app.urv.manager.data.room.profile.PatchProfilePayload
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -31,6 +32,9 @@ interface InstalledAppDao {
 
     @Query("UPDATE installed_app SET sort_order = :sortOrder WHERE current_package_name = :packageName")
     suspend fun updateSortOrder(packageName: String, sortOrder: Int)
+
+    @Query("UPDATE installed_app SET selection_payload = :payload WHERE current_package_name = :packageName")
+    suspend fun updateSelectionPayload(packageName: String, payload: PatchProfilePayload)
 
     @Query("UPDATE installed_app SET repatch_source_path = NULL WHERE repatch_source_path IS NOT NULL")
     suspend fun clearRepatchSourcePaths()

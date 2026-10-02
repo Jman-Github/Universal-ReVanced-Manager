@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.network.api.ExternalBundlesApi
 import app.urv.manager.network.api.ExternalBundlesEndpoints
@@ -149,7 +150,8 @@ class BundleDiscoveryViewModel(
                         val entry = BundleCacheEntry(
                             bundles = updatedBundles,
                             fingerprint = fingerprint(updatedBundles),
-                            apiHost = cached.apiHost
+                            apiHost = cached.apiHost,
+                            schemaVersion = BUNDLE_CACHE_SCHEMA_VERSION
                         )
                         bundleCache[key] = entry
                         bundles = entry.bundles
@@ -163,7 +165,8 @@ class BundleDiscoveryViewModel(
                         val entry = BundleCacheEntry(
                             bundles = resolvedSnapshot,
                             fingerprint = fingerprint,
-                            apiHost = page.apiHost
+                            apiHost = page.apiHost,
+                            schemaVersion = BUNDLE_CACHE_SCHEMA_VERSION
                         )
                         bundleCache[key] = entry
                         bundles = entry.bundles
@@ -355,6 +358,50 @@ class BundleDiscoveryViewModel(
         legacyV2Endpoint(bundle, useDev = true)?.let { endpoints.add(it) }
         legacyEndpoint(bundle.bundleId, bundleApiHost(bundle)).let(endpoints::add)
         return endpoints
+    }
+
+    fun matchesLocalPatchSource(bundle: ExternalBundleSnapshot, source: RemotePatchBundle): Boolean {
+        if (source.endpoint !in bundleEndpoints(bundle)) return false
+
+        val installedVersion = source.installedVersionSignature?.trim().orEmpty()
+        val bundleVersion = bundle.version.trim()
+        val versionVerified = installedVersion.isNotBlank() && bundleVersion.isNotBlank()
+        if (versionVerified) {
+            if (installedVersion != bundleVersion) return false
+        }
+
+        val rawExpectedFileHash = bundle.fileHash?.trim().orEmpty()
+        var fileHashVerified = false
+        if (rawExpectedFileHash.isNotBlank()) {
+            val expectedSha256 = normalizeSha256FileHash(rawExpectedFileHash) ?: return false
+            val installedSha256 = patchBundleRepository.installedBundleSha256(source.uid)
+                ?.trim()
+                ?.lowercase(Locale.US)
+            if (installedSha256 != expectedSha256) return false
+            fileHashVerified = true
+        }
+
+        if (versionVerified || fileHashVerified) {
+            if (versionVerified && !fileHashVerified) {
+                val sourceHost = runCatching { URI(source.endpoint).host }
+                    .getOrNull()
+                    ?.trim()
+                    ?.lowercase(Locale.US)
+                if (
+                    sourceHost != null &&
+                    ExternalBundlesEndpoints.isExternalBundlesHost(sourceHost) &&
+                    !sourceHost.equals(bundleApiHost(bundle), ignoreCase = true)
+                ) {
+                    return false
+                }
+            }
+            return true
+        }
+
+        // An any-channel endpoint can resolve to either release or prerelease. Without a
+        // verified installed version or artifact hash there is no safe way to know which
+        // discovery card its local patches belong to, so do not reuse them across channels.
+        return !ANY_CHANNEL_QUERY.containsMatchIn(source.endpoint)
     }
 
     fun discoverySiteUrl(): String {
@@ -569,13 +616,15 @@ class BundleDiscoveryViewModel(
                     cached.copy(
                         bundles = updated,
                         fingerprint = fingerprint(updated),
-                        apiHost = selectedHost
+                        apiHost = selectedHost,
+                        schemaVersion = BUNDLE_CACHE_SCHEMA_VERSION
                     )
                 } else {
                     BundleCacheEntry(
                         bundles = updated,
                         fingerprint = fingerprint(updated),
-                        apiHost = selectedHost
+                        apiHost = selectedHost,
+                        schemaVersion = BUNDLE_CACHE_SCHEMA_VERSION
                     )
                 }
                 bundleCache[key] = entry
@@ -651,6 +700,8 @@ class BundleDiscoveryViewModel(
                 bundle.version,
                 bundle.downloadUrl,
                 bundle.signatureDownloadUrl,
+                bundle.fileHash,
+                bundle.patchCount,
                 bundle.isPrerelease,
                 bundle.isBundleV3,
                 bundle.bundleType,
@@ -686,7 +737,9 @@ class BundleDiscoveryViewModel(
 
     private fun patchStateKey(bundle: ExternalBundleSnapshot) = BundleInstanceKey(
         apiHost = bundle.apiHost.trim().lowercase(Locale.US),
-        bundleId = bundle.bundleId
+        bundleId = bundle.bundleId,
+        fileHash = bundle.fileHash?.takeUnless(String::isBlank),
+        patchCount = bundle.patchCount
     )
 
     private fun invalidatePatchState() {
@@ -708,7 +761,8 @@ class BundleDiscoveryViewModel(
     private data class BundleCacheEntry(
         val bundles: List<ExternalBundleSnapshot>,
         val fingerprint: String,
-        val apiHost: String = ""
+        val apiHost: String = "",
+        val schemaVersion: Int = 0
     )
 
     data class BundleExportProgress(val bytesRead: Long, val bytesTotal: Long?)
@@ -720,7 +774,9 @@ class BundleDiscoveryViewModel(
 
     private data class BundleInstanceKey(
         val apiHost: String,
-        val bundleId: Int
+        val bundleId: Int,
+        val fileHash: String?,
+        val patchCount: Int
     )
 
     private fun cacheFileForKey(key: String): File {
@@ -734,7 +790,9 @@ class BundleDiscoveryViewModel(
         if (!file.exists()) return null
         return runCatching {
             json.decodeFromString<BundleCacheEntry>(file.readText())
-        }.getOrNull()
+        }.getOrNull()?.takeIf { entry ->
+            entry.schemaVersion == BUNDLE_CACHE_SCHEMA_VERSION
+        }
     }
 
     private fun persistDiskCache(key: String, entry: BundleCacheEntry) {
@@ -748,5 +806,18 @@ class BundleDiscoveryViewModel(
 
     private companion object {
         const val PAGE_SIZE = 30
+        const val BUNDLE_CACHE_SCHEMA_VERSION = 1
+        val ANY_CHANNEL_QUERY = Regex("(?:[?&])channel=any(?:&|$)", RegexOption.IGNORE_CASE)
+        val SHA256_HEX = Regex("^[0-9a-fA-F]{64}$")
+
+        fun normalizeSha256FileHash(raw: String): String? {
+            val trimmed = raw.trim()
+            val digest = when {
+                trimmed.startsWith("sha256:", ignoreCase = true) -> trimmed.substringAfter(':')
+                ':' !in trimmed -> trimmed
+                else -> return null
+            }
+            return digest.takeIf(SHA256_HEX::matches)?.lowercase(Locale.US)
+        }
     }
 }

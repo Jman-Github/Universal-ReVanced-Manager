@@ -112,7 +112,10 @@ fun BundleItem(
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
-    var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
+    var changelogHistoryRefreshKey by remember { mutableStateOf(0) }
+    var changelogHistory by remember(src.uid, src.asRemoteOrNull?.endpoint) {
+        mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList())
+    }
     var changelogHistoryLoading by remember { mutableStateOf(false) }
     var changelogHistoryError by remember { mutableStateOf<Throwable?>(null) }
     val remoteSource = src.asRemoteOrNull
@@ -161,23 +164,10 @@ fun BundleItem(
 
     if (showBundleChangelogHistory && supportsHistoricalChangelog) {
         BundleChangelogHistoryDialog(
-            entries = changelogHistory.drop(1),
+            entries = changelogHistory,
             isRefreshing = changelogHistoryLoading,
             error = changelogHistoryError,
-            onRetry = {
-                changelogHistoryError = null
-                coroutineScope.launch {
-                    changelogHistoryLoading = true
-                    changelogHistory = bundleRepo.getChangelogHistory(src)
-                    try {
-                        changelogHistory = bundleRepo.synchronizeChangelogHistory(historicalChangelogSource!!)
-                    } catch (t: Throwable) {
-                        changelogHistoryError = t
-                    } finally {
-                        changelogHistoryLoading = false
-                    }
-                }
-            },
+            onRetry = { changelogHistoryRefreshKey++ },
             onDismissRequest = { showBundleChangelogHistory = false }
         )
     }
@@ -284,28 +274,23 @@ fun BundleItem(
         !latest.isNullOrBlank() && baseline != null && latest != baseline
     }
 
-    fun refreshChangelogHistory() {
-        changelogHistoryError = null
-        coroutineScope.launch {
+    LaunchedEffect(
+        showBundleChangelogHistory, historicalChangelogSource,
+        src.uid, src.updatedAt, changelogHistoryRefreshKey
+    ) {
+        if (showBundleChangelogHistory && historicalChangelogSource != null) {
             changelogHistoryLoading = true
-            changelogHistory = bundleRepo.getChangelogHistory(src)
+            changelogHistoryError = null
             try {
-                changelogHistory = if (historicalChangelogSource != null) {
-                    bundleRepo.synchronizeChangelogHistory(historicalChangelogSource)
-                } else {
-                    bundleRepo.getChangelogHistory(src)
-                }
-            } catch (t: Throwable) {
-                changelogHistoryError = t
+                changelogHistory = bundleRepo.getChangelogHistory(src)
+                changelogHistory = bundleRepo.synchronizeChangelogHistory(historicalChangelogSource)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                changelogHistoryError = error
             } finally {
                 changelogHistoryLoading = false
             }
-        }
-    }
-
-    LaunchedEffect(showBundleChangelogHistory, supportsHistoricalChangelog, src.uid, src.updatedAt) {
-        if (showBundleChangelogHistory && supportsHistoricalChangelog) {
-            refreshChangelogHistory()
         }
     }
 

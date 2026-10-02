@@ -156,7 +156,12 @@ fun SelectedAppInfoScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.removed_saved_patches_message))
+                    Text(
+                        pluralStringResource(
+                            R.plurals.removed_saved_patches_message_quantity,
+                            notice.patchNames.size
+                        )
+                    )
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()

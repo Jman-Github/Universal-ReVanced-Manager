@@ -39,6 +39,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -66,6 +68,8 @@ import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
+import app.urv.manager.ui.model.signatureMetadataPatcherProgress
+import app.urv.manager.domain.manager.SignatureMetadataWorkflowProgress
 import app.urv.manager.ui.model.withState
 import app.urv.manager.ui.viewmodel.BatchPatcherViewModel
 import app.urv.manager.ui.viewmodel.PatcherViewModel
@@ -101,6 +105,8 @@ fun BatchPatchDetailsScreen(
     val useExclusiveAutoExpand =
         autoExpandRunningSteps && autoExpandRunningStepsExclusive
     val item = state?.items?.firstOrNull { it.packageName == packageName }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsState()
     val awaitingProgress = item?.let {
         it.state == BatchItemState.RUNNING &&
             (it.input == null ||
@@ -225,10 +231,13 @@ fun BatchPatchDetailsScreen(
             item.progressEvents,
             item.memoryUsageSamples,
             item.state,
+            item.signatureWorkflow,
+            item.signatureInjection,
             skipApkSigning
         ) {
             input?.takeIf {
-                item.progressEvents.isNotEmpty() || item.memoryUsageSamples.isNotEmpty()
+                item.progressEvents.isNotEmpty() || item.memoryUsageSamples.isNotEmpty() ||
+                    !item.state.isTerminal
             }?.let { selectedApp ->
                 buildBatchProgressUiState(
                     context = context,
@@ -240,7 +249,12 @@ fun BatchPatchDetailsScreen(
                     skipApkSigning = skipApkSigning,
                     events = item.progressEvents,
                     cancelled = item.state == BatchItemState.CANCELLED,
-                    cancelledMessage = context.getString(R.string.batch_patch_state_cancelled)
+                    cancelledMessage = context.getString(R.string.batch_patch_state_cancelled),
+                    signatureInjectionEnabled = item.signatureWorkflow.enabled,
+                    signatureInjection = item.signatureInjection.copy(
+                        completed = item.signatureInjection.completed ||
+                            (item.state == BatchItemState.SUCCEEDED && item.signatureWorkflow.injected)
+                    )
                 )
             }
         }
@@ -396,7 +410,7 @@ fun BatchPatchDetailsScreen(
         }
     }
 
-    if (showLoadingOverlay) {
+    if (showLoadingOverlay && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
         TransparentLoadingDialog()
     }
 }
@@ -436,14 +450,17 @@ private fun buildBatchProgressUiState(
     skipApkSigning: Boolean,
     events: List<ProgressEvent>,
     cancelled: Boolean,
-    cancelledMessage: String
+    cancelledMessage: String,
+    signatureInjectionEnabled: Boolean,
+    signatureInjection: SignatureMetadataWorkflowProgress
 ): BatchProgressUiState {
     val steps = PatcherViewModel.generateSteps(
         context = context,
         selectedApp = selectedApp,
         selectedPatches = selectedPatches,
         splitStepActive = splitStepActive,
-        skipApkSigning = skipApkSigning
+        skipApkSigning = skipApkSigning,
+        injectSignatureMetadata = signatureInjectionEnabled
     ).toMutableList()
     val subStepsById = mutableMapOf<StepId, List<StepDetail>>()
     var visualProgress = 0f
@@ -538,10 +555,15 @@ private fun buildBatchProgressUiState(
                 }
 
                 is ProgressEvent.Completed -> {
-                    if (step.state == State.FAILED) {
+                    val recoveredPatch = step.state == State.FAILED && eventStepId is StepId.ExecutePatch
+                    if (step.state == State.FAILED && !recoveredPatch) {
                         null
                     } else {
-                        step.withState(State.COMPLETED, progress = null)
+                        step.withState(
+                            State.COMPLETED,
+                            message = if (recoveredPatch) null else step.message,
+                            progress = null
+                        )
                     }
                 }
 
@@ -584,10 +606,18 @@ private fun buildBatchProgressUiState(
         }
     }
 
+    val displayed = signatureMetadataPatcherProgress(
+        context, steps, subStepsById, visualProgress, signatureInjectionEnabled, signatureInjection
+    )
     return BatchProgressUiState(
-        steps = steps,
-        subStepsById = subStepsById,
-        progress = visualProgress
+        steps = displayed.steps,
+        subStepsById = displayed.subStepsById,
+        progress = if (signatureInjectionEnabled && signatureInjection.completed) {
+            maxOf(
+                displayed.progress,
+                calculateBatchProgress(displayed.steps, displayed.subStepsById)
+            )
+        } else displayed.progress
     )
 }
 

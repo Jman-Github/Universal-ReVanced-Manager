@@ -5,9 +5,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -25,7 +26,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
-import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.settings.Changelog
 import app.urv.manager.util.relativeTime
@@ -63,7 +63,10 @@ fun BundleChangelogHistoryDialog(
             when {
                 entries.isNotEmpty() -> BundleChangelogHistoryContent(
                     paddingValues = paddingValues,
-                    entries = entries
+                    entries = entries,
+                    isRefreshing = isRefreshing,
+                    error = error,
+                    onRetry = onRetry
                 )
                 isRefreshing -> BundleChangelogHistoryLoading(paddingValues)
                 error != null -> BundleChangelogHistoryError(
@@ -147,20 +150,40 @@ private fun BundleChangelogHistoryEmpty(paddingValues: PaddingValues) {
 @Composable
 private fun BundleChangelogHistoryContent(
     paddingValues: PaddingValues,
-    entries: List<PatchBundleChangelogEntry>
+    entries: List<PatchBundleChangelogEntry>,
+    isRefreshing: Boolean,
+    error: Throwable?,
+    onRetry: (() -> Unit)?
 ) {
     val context = LocalContext.current
 
-    ColumnWithScrollbar(
+    LazyColumn(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(paddingValues)
+            .fillMaxSize()
+            .padding(paddingValues),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            entries.forEach { entry ->
+        if (isRefreshing) {
+            item { CircularProgressIndicator() }
+        }
+        if (error != null) {
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        stringResource(R.string.bundle_changelog_error, error.simpleMessage().orEmpty()),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    if (onRetry != null) {
+                        Button(onClick = onRetry) {
+                            Text(stringResource(R.string.bundle_changelog_retry))
+                        }
+                    }
+                }
+            }
+        }
+        items(entries) { entry ->
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val publishDate = remember(entry.publishedAtMillis) {
                     entry.publishedAtMillis?.relativeTime(context)
                         ?: context.getString(R.string.invalid_date)

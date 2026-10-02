@@ -2133,6 +2133,16 @@ class InstalledAppInfoViewModel(
         ReplaceSavedBundleResult.SUCCESS
     }
 
+    fun setSignatureInjectionEnabled(enabled: Boolean) {
+        val entryKey = installedApp?.currentPackageName ?: return
+        viewModelScope.launch {
+            val updated = installedAppRepository.updateSignatureWorkflow(entryKey, enabled)
+            if (updated != null && installedApp?.currentPackageName == entryKey) {
+                installedApp = updated
+            }
+        }
+    }
+
     fun dismissSignatureMismatchPrompt() {
         signatureMismatchPackage = null
         pendingSignatureMismatchPackage = null

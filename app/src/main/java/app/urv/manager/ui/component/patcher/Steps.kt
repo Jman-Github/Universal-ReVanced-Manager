@@ -45,6 +45,7 @@ import app.urv.manager.ui.model.State
 import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
+import app.urv.manager.ui.model.StepLog
 import java.util.Locale
 import kotlin.math.floor
 
@@ -96,9 +97,10 @@ fun Steps(
         }
     }
 
-    LaunchedEffect(autoCollapseCompleted, state, isExpanded, hasFailedStep) {
-        if (autoCollapseCompleted && state == State.COMPLETED && !hasFailedStep && !autoCollapsed && isExpanded) {
-            onClick()
+    LaunchedEffect(autoCollapseCompleted, state, hasFailedStep) {
+        if (autoCollapseCompleted && state == State.COMPLETED && !hasFailedStep && !autoCollapsed) {
+            if (isExpanded) onClick()
+            // Consume completion even when collapsed so the next tap can reopen the section.
             autoCollapsed = true
         }
     }
@@ -201,8 +203,8 @@ private fun ExpandableSubStep(
         }
     }
 
-    LaunchedEffect(autoCollapseCompleted, step.state, expanded) {
-        if (autoCollapseCompleted && step.state == State.COMPLETED && !autoCollapsed && expanded) {
+    LaunchedEffect(autoCollapseCompleted, step.state) {
+        if (autoCollapseCompleted && step.state == State.COMPLETED && !autoCollapsed) {
             expanded = false
             autoCollapsed = true
         }
@@ -277,6 +279,7 @@ private fun ExpandableSubStep(
                             name = detail.title,
                             state = detail.state,
                             message = detail.message,
+                            log = detail.log,
                             progress = subProgress,
                             progressText = subProgressText,
                             skipped = detail.skipped,
@@ -317,8 +320,8 @@ private fun ExpandableDetailSubStep(
         }
     }
 
-    LaunchedEffect(autoCollapseCompleted, detail.state, expanded) {
-        if (autoCollapseCompleted && detail.state == State.COMPLETED && !autoCollapsed && expanded) {
+    LaunchedEffect(autoCollapseCompleted, detail.state) {
+        if (autoCollapseCompleted && detail.state == State.COMPLETED && !autoCollapsed) {
             expanded = false
             autoCollapsed = true
         }
@@ -455,6 +458,7 @@ fun SubStep(
     skipped: Boolean = false,
     isFirst: Boolean = false,
     isLast: Boolean = false,
+    log: StepLog? = null,
 ) {
     var messageExpanded by rememberSaveable { mutableStateOf(true) }
 
@@ -516,6 +520,7 @@ fun SubStep(
                 modifier = Modifier.padding(horizontal = 36.dp, vertical = 8.dp)
             )
         }
+        log?.takeIf { it.entries.isNotEmpty() }?.let { PatcherStepLog(it) }
     }
 }
 

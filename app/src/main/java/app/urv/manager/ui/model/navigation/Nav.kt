@@ -42,6 +42,7 @@ data class PatchBundleDiscoveryPatches(
     val apiHost: String = "",
     val sourceUrl: String = "",
     val version: String = "",
+    val fileHash: String? = null,
     val isPrerelease: Boolean = false,
     val patchCount: Int = 0,
     val ownerName: String = "",
@@ -160,6 +161,8 @@ data object Patcher : ComplexParameter<Patcher.ViewModelParams> {
         val profileId: Int? = null,
         val profileInstallerToken: String? = null,
         val autoInstall: Boolean = false,
+        val injectSignatureMetadata: Boolean = false,
+        val rememberSignatureWorkflow: Boolean = false,
         val sourceEntryKey: String? = null,
         val useMount: Boolean = false,
     ) : Parcelable

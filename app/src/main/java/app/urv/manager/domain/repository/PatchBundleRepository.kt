@@ -26,6 +26,7 @@ import app.urv.manager.domain.bundles.JsonPatchBundle
 import app.urv.manager.data.room.bundles.Source as SourceInfo
 import app.urv.manager.domain.bundles.LocalPatchBundle
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
+import app.urv.manager.domain.bundles.mergePatchBundleChangelogs
 import app.urv.manager.domain.bundles.PatchBundleDownloadProgress
 import app.urv.manager.domain.bundles.PatchBundleDownloadResult
 import app.urv.manager.domain.bundles.RemotePatchBundle
@@ -90,6 +91,8 @@ import java.security.MessageDigest
 import java.net.URI
 import java.net.URISyntaxException
 import java.util.Locale
+import app.urv.manager.util.bundleImportLabel
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.collections.LinkedHashSet
@@ -112,6 +115,7 @@ class PatchBundleRepository(
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private val store = Store(scope, State())
+    private val bundleDigestHashCache = ConcurrentHashMap<Int, String>()
 
     val sources = store.state.map { it.sources.values.toList() }
     val bundles = store.state.map {
@@ -508,7 +512,6 @@ class PatchBundleRepository(
     }
 
     suspend fun synchronizeChangelogHistory(source: RemotePatchBundle): List<PatchBundleChangelogEntry> {
-        val expectedIdentity = source.changelogHistoryIdentity()
         runCatching { source.fetchLatestReleaseInfo() }
             .getOrNull()
             ?.let { latestAsset ->
@@ -521,12 +524,16 @@ class PatchBundleRepository(
         return if (historyEntries.isEmpty()) {
             getChangelogHistory(source)
         } else {
-            mergeChangelogHistory(source.uid, historyEntries, expectedIdentity)
+            mergeChangelogHistory(source.uid, historyEntries, source.changelogHistoryIdentity())
         }
     }
 
-    suspend fun recordChangelog(source: RemotePatchBundle, asset: app.urv.manager.network.dto.ReVancedAsset) {
-        recordChangelog(source.uid, asset, source.changelogHistoryIdentity())
+    suspend fun recordChangelog(
+        source: RemotePatchBundle,
+        asset: app.urv.manager.network.dto.ReVancedAsset,
+        hasReleaseBody: Boolean = false
+    ) {
+        recordChangelog(source.uid, asset, source.changelogHistoryIdentity(), hasReleaseBody)
     }
 
     suspend fun recordChangelog(uid: Int, asset: app.urv.manager.network.dto.ReVancedAsset) {
@@ -536,104 +543,35 @@ class PatchBundleRepository(
     private suspend fun recordChangelog(
         uid: Int,
         asset: app.urv.manager.network.dto.ReVancedAsset,
-        expectedIdentity: String?
+        expectedIdentity: String?,
+        hasReleaseBody: Boolean = false
     ) {
-        val entry = PatchBundleChangelogEntry.fromAsset(asset)
+        val entry = PatchBundleChangelogEntry.fromAsset(asset, hasReleaseBody)
         withContext(Dispatchers.IO) {
             val storageLimit = normalizedChangelogStorageLimit()
             changelogHistoryMutex.withLock {
                 reconcileChangelogHistoryIdentityInternal(uid, expectedIdentity)
                 val current = trimChangelogHistoryEntries(readChangelogHistoryInternal(uid), storageLimit)
-                val updated = mergeChangelogHistoryEntries(current, listOf(entry), storageLimit)
+                val updated = mergePatchBundleChangelogs(
+                    current, listOf(entry), storageLimit
+                )
                 writeChangelogHistoryInternal(uid, updated)
             }
         }
-    }
-
-    private fun isSameChangelogEntry(
-        existing: PatchBundleChangelogEntry,
-        candidate: PatchBundleChangelogEntry
-    ): Boolean {
-        val existingVersion = existing.version.normalizedChangelogVersion()
-        val candidateVersion = candidate.version.normalizedChangelogVersion()
-        if (
-            existingVersion != null &&
-            candidateVersion != null &&
-            existingVersion.equals(candidateVersion, ignoreCase = true)
-        ) {
-            return true
-        }
-
-        val existingPageUrl = existing.pageUrl.normalizedChangelogPageUrl()
-        val candidatePageUrl = candidate.pageUrl.normalizedChangelogPageUrl()
-        if (
-            existingPageUrl != null &&
-            candidatePageUrl != null &&
-            existingPageUrl.equals(candidatePageUrl, ignoreCase = true)
-        ) {
-            return true
-        }
-
-        val published = candidate.publishedAtMillis
-        return published != null &&
-            published > 0 &&
-            existing.publishedAtMillis == published &&
-            (
-                existingVersion == null ||
-                    candidateVersion == null ||
-                    existing.description.trim() == candidate.description.trim()
-            )
     }
 
     private fun mergeChangelogHistoryEntries(
         current: List<PatchBundleChangelogEntry>,
         incoming: List<PatchBundleChangelogEntry>,
         maxEntries: Int
-    ): List<PatchBundleChangelogEntry> {
-        if (incoming.isEmpty()) return trimChangelogHistoryEntries(current, maxEntries)
-        val merged = current.toMutableList()
-        incoming.forEach { candidate ->
-            merged.removeAll { existing -> isSameChangelogEntry(existing, candidate) }
-            merged.add(candidate)
-        }
-        return trimChangelogHistoryEntries(merged, maxEntries)
-    }
+    ): List<PatchBundleChangelogEntry> =
+        mergePatchBundleChangelogs(current, incoming, maxEntries)
 
     private fun trimChangelogHistoryEntries(
         entries: List<PatchBundleChangelogEntry>,
         maxEntries: Int
-    ): List<PatchBundleChangelogEntry> {
-        val sorted = entries.sortedWith(
-            compareByDescending<PatchBundleChangelogEntry> { it.publishedAtMillis ?: Long.MIN_VALUE }
-        )
-        val unique = mutableListOf<PatchBundleChangelogEntry>()
-        sorted.forEach { candidate ->
-            if (unique.none { existing -> isSameChangelogEntry(existing, candidate) }) {
-                unique += candidate
-            }
-        }
-        return unique.take(maxEntries.coerceAtLeast(PreferencesManager.MIN_BUNDLE_CHANGELOG_HISTORY_LIMIT))
-    }
-
-    private fun String.normalizedChangelogVersion(): String? {
-        val trimmed = trim()
-        if (trimmed.isEmpty()) return null
-        return if (
-            trimmed.length > 1 &&
-            trimmed[0].equals('v', ignoreCase = true) &&
-            trimmed[1].isDigit()
-        ) {
-            trimmed.substring(1)
-        } else {
-            trimmed
-        }
-    }
-
-    private fun String?.normalizedChangelogPageUrl(): String? =
-        this
-            ?.trim()
-            ?.trimEnd('/')
-            ?.takeIf { it.isNotEmpty() }
+    ): List<PatchBundleChangelogEntry> =
+        mergePatchBundleChangelogs(emptyList(), entries, maxEntries)
 
     private suspend fun normalizedChangelogFetchLimit(): Int =
         prefs.bundleChangelogFetchLimit.get()
@@ -735,49 +673,9 @@ class PatchBundleRepository(
 
         val unnamed = app.getString(R.string.patches_name_fallback)
         if (bundle.name == unnamed) {
-            guessNameFromEndpoint(bundle.endpoint)?.let { return it }
+            return bundleImportLabel(bundle.endpoint)
         }
         return bundle.name
-    }
-
-    private fun guessNameFromEndpoint(endpoint: String): String? {
-        val uri = try {
-            URI(endpoint)
-        } catch (_: URISyntaxException) {
-            return null
-        }
-        val host = uri.host?.lowercase(Locale.US) ?: return null
-        val segments = uri.path?.trim('/')?.split('/')?.filter { it.isNotBlank() }.orEmpty()
-
-        // Prefer a segment containing "bundle" (case-insensitive), e.g. ".../piko-latest-patches-bundle.json".
-        val bundleCandidates = segments.filter { it.contains("bundle", ignoreCase = true) }
-        val chosen = bundleCandidates
-            .lastOrNull { seg ->
-                val normalized = seg.lowercase(Locale.US)
-                normalized !in setOf("bundle", "bundles")
-            }
-            ?: bundleCandidates.lastOrNull()
-
-        if (chosen != null) {
-            val withoutExt = chosen.replace(Regex("\\.[A-Za-z0-9]+$"), "")
-            val normalized = withoutExt
-                .replace(Regex("[._\\-]+"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .lowercase(Locale.US)
-
-            if (normalized.isNotBlank()) {
-                return normalized.replaceFirstChar { c -> c.titlecase(Locale.US) }
-            }
-        }
-
-        // Fallbacks for common GitHub URL patterns.
-        if (segments.isEmpty()) return host
-        return when {
-            host == "github.com" && segments.size >= 2 -> segments[1]
-            host == "api.github.com" && segments.size >= 3 && segments[0] == "repos" -> segments[2]
-            else -> host
-        }
     }
 
     suspend fun enforceOfficialOrderPreference() = withTrackedReload {
@@ -1039,6 +937,8 @@ class PatchBundleRepository(
         return BundleDigestInfo(hash, size, lastModified)
     }
 
+    fun installedBundleSha256(uid: Int): String? = bundleDigestHashCache[uid]
+
     private fun writeBundleDigestInfo(uid: Int, info: BundleDigestInfo) {
         val file = bundleDigestFile(uid)
         file.parentFile?.mkdirs()
@@ -1104,21 +1004,29 @@ class PatchBundleRepository(
     private suspend fun ensureBundleCacheValid(uid: Int, bundle: PatchBundle) {
         withContext(Dispatchers.IO) {
             val file = File(bundle.patchesJar)
-            if (!file.exists()) return@withContext
+            if (!file.exists()) {
+                bundleDigestHashCache.remove(uid)
+                return@withContext
+            }
 
             val size = runCatching { file.length() }.getOrDefault(0L)
             val lastModified = runCatching { file.lastModified() }.getOrDefault(0L)
             val existing = readBundleDigestInfo(uid)
             if (existing != null && existing.size == size && existing.lastModified == lastModified) {
+                bundleDigestHashCache[uid] = existing.hash
                 return@withContext
             }
 
-            val hash = computeBundleHash(file) ?: return@withContext
+            val hash = computeBundleHash(file) ?: run {
+                bundleDigestHashCache.remove(uid)
+                return@withContext
+            }
             val changed = existing == null || existing.hash != hash
             if (changed) {
                 clearBundleOdex(uid)
             }
             writeBundleDigestInfo(uid, BundleDigestInfo(hash, size, lastModified))
+            bundleDigestHashCache[uid] = hash
         }
     }
 
@@ -2243,6 +2151,7 @@ class PatchBundleRepository(
         createdAt: Long? = null,
         updatedAt: Long? = null,
         showInAppProgress: Boolean = false,
+        importLabel: String? = null,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         val normalizedUrl = try {
@@ -2278,7 +2187,7 @@ class PatchBundleRepository(
 
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification = downloadProgressNotifier.begin(
-            progressLabelFor(src).ifBlank { "Patch bundle" }
+            importLabel ?: bundleImportLabel(normalizedUrl)
         )
         val updated = try {
             updateNow(
@@ -2358,7 +2267,7 @@ class PatchBundleRepository(
         }
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification = downloadProgressNotifier.begin(
-            bundle.repoName.ifBlank { bundle.ownerName.ifBlank { "Patch bundle" } }
+            discoveryImportLabel(bundle, preferLatestAcrossChannels)
         )
         val updated = try {
             updateNow(
@@ -2723,8 +2632,16 @@ class PatchBundleRepository(
     suspend fun fetchUpdatesAndNotify(
         context: Context,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-        onAlreadyNotified: ((bundle: RemotePatchBundle, bundleVersion: String) -> Unit)? = null,
-        onNotification: (bundle: RemotePatchBundle, bundleVersion: String) -> Boolean
+        onAlreadyNotified: ((
+            bundle: RemotePatchBundle,
+            bundleVersion: String,
+            notificationIdentity: String
+        ) -> Unit)? = null,
+        onNotification: (
+            bundle: RemotePatchBundle,
+            bundleVersion: String,
+            notificationIdentity: String
+        ) -> Boolean
     ): Boolean = coroutineScope {
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
         if (!allowMeteredUpdates && !networkInfo.isSafe()) {
@@ -2748,22 +2665,65 @@ class PatchBundleRepository(
                 val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
                 val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                 val manifestSignature = normalizeVersionForCompare(bundle.version)
+                val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+                    ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+                    ?: false
                 if (
-                    (installedSignature != null && installedSignature == latestSignature) ||
-                    (manifestSignature != null && manifestSignature == latestSignature)
+                    !artifactChanged &&
+                    (
+                        (installedSignature != null && installedSignature == latestSignature) ||
+                            (manifestSignature != null && manifestSignature == latestSignature)
+                        )
                 ) {
                     return@forEach
                 }
 
                 val versionLabel = latestSignature
-                if (normalizeVersionForCompare(bundle.lastNotifiedVersion) == versionLabel) {
-                    onAlreadyNotified?.invoke(bundle, info.version)
+                val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
+                    ?.artifactNotificationIdentity(info)
+                val notificationIdentity = artifactIdentity?.let {
+                    "$versionLabel|$it"
+                } ?: versionLabel
+                val persistedNotificationIdentity = bundle.lastNotifiedVersion
+                    ?.trim()
+                    .orEmpty()
+                val alreadyNotified = when {
+                    artifactIdentity == null ->
+                        normalizeVersionForCompare(
+                            persistedNotificationIdentity.substringBefore('|')
+                        ) == versionLabel
+
+                    artifactIdentity.startsWith("sha256:", ignoreCase = true) ->
+                        persistedNotificationIdentity.equals(
+                            notificationIdentity,
+                            ignoreCase = true
+                        )
+
+                    else -> {
+                        val persistedVersion = normalizeVersionForCompare(
+                            persistedNotificationIdentity.substringBefore('|')
+                        )
+                        val persistedArtifactIdentity = persistedNotificationIdentity
+                            .substringAfter('|', missingDelimiterValue = "")
+                        persistedVersion == versionLabel &&
+                            persistedArtifactIdentity == artifactIdentity
+                    }
+                }
+                if (alreadyNotified) {
+                    val effectiveNotificationIdentity = persistedNotificationIdentity
+                        .takeIf { it.isNotBlank() }
+                        ?: notificationIdentity
+                    onAlreadyNotified?.invoke(
+                        bundle,
+                        info.version,
+                        effectiveNotificationIdentity
+                    )
                     return@forEach
                 }
 
-                val notified = onNotification(bundle, info.version)
+                val notified = onNotification(bundle, info.version, notificationIdentity)
                 if (notified) {
-                    updateLastNotifiedVersion(bundle.uid, versionLabel)
+                    updateLastNotifiedVersion(bundle.uid, notificationIdentity)
                     notifiedAny = true
                 }
             }
@@ -3009,7 +2969,26 @@ class PatchBundleRepository(
                     var bundleFailed = false
                     val result = try {
                         withTimeout(REMOTE_BUNDLE_UPDATE_TIMEOUT_MS) {
-                            if (force) bundle.downloadLatest(onProgress) else bundle.update(onProgress)
+                            if (force) {
+                                bundle.downloadLatest(onProgress)
+                            } else {
+                                val external = bundle as? ExternalGraphqlPatchBundle
+                                if (external == null) {
+                                    bundle.update(onProgress)
+                                } else {
+                                    val latest = external.fetchLatestReleaseInfo()
+                                    if (
+                                        external.artifactDiffers(
+                                            latest,
+                                            installedBundleSha256(external.uid)
+                                        )
+                                    ) {
+                                        external.downloadLatest(onProgress)
+                                    } else {
+                                        external.update(onProgress)
+                                    }
+                                }
+                            }
                         }
                     } catch (e: BundleUpdateCancelled) {
                         null
@@ -3175,10 +3154,15 @@ class PatchBundleRepository(
                                 ?: return@async bundle.uid to null
                             val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
                             val manifestSignature = normalizeVersionForCompare(bundle.version)
+                            val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+                                ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+                                ?: false
                             val hasMatchingInstalledSignature =
                                 (installedSignature != null && installedSignature == latestSignature) ||
                                     (manifestSignature != null && manifestSignature == latestSignature)
-                            if (hasMatchingInstalledSignature) return@async bundle.uid to null
+                            if (hasMatchingInstalledSignature && !artifactChanged) {
+                                return@async bundle.uid to null
+                            }
                             bundle.uid to ManualBundleUpdateInfo(
                                 latestVersion = info.version,
                                 pageUrl = info.pageUrl
@@ -3441,7 +3425,7 @@ class PatchBundleRepository(
             } ?: break
 
             val bundleKey = request.key
-            val label = discoveryImportLabel(request.bundle)
+            val label = discoveryImportLabel(request.bundle, request.preferLatestAcrossChannels)
             discoveryImportProgressFlow.update { current ->
                 current + (bundleKey to DiscoveryImportProgress(0L, null, DiscoveryImportStatus.Importing))
             }
@@ -3523,11 +3507,20 @@ class PatchBundleRepository(
         )
     }
 
-    private fun discoveryImportLabel(bundle: ExternalBundleSnapshot): String {
+    private fun discoveryImportLabel(
+        bundle: ExternalBundleSnapshot,
+        preferLatestAcrossChannels: Boolean
+    ): String {
         val owner = bundle.ownerName.trim()
         val repo = bundle.repoName.trim()
-        return listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/").ifBlank {
+        val identity = listOf(owner, repo).filter { it.isNotBlank() }.joinToString("/").ifBlank {
             bundle.sourceUrl
         }
+        val channel = when {
+            preferLatestAcrossChannels -> "latest"
+            bundle.isPrerelease -> "pre-release"
+            else -> "release"
+        }
+        return "$identity $channel patch bundle"
     }
 }

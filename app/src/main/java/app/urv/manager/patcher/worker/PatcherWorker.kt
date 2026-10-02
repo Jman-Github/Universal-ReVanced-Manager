@@ -30,6 +30,7 @@ import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.manager.SignatureMetadataInjectorManager
 import app.urv.manager.domain.repository.DownloadResult
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
@@ -93,6 +94,7 @@ import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
+import java.io.IOException
 import java.util.LinkedHashSet
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -115,6 +117,7 @@ class PatcherWorker(
     private val downloadedAppRepository: DownloadedAppRepository by inject()
     private val pm: PM by inject()
     private val fs: Filesystem by inject()
+    private val signatureMetadataInjector: SignatureMetadataInjectorManager by inject()
     private val installedAppRepository: InstalledAppRepository by inject()
     private val rootMountCoordinator: RootMountTransactionCoordinator by inject()
     private val patchBundleRepository: PatchBundleRepository by inject()
@@ -201,7 +204,8 @@ class PatcherWorker(
         val queuePosition: Int? = null,
         val queueSize: Int? = null,
         val appName: String? = null,
-        val allowBackgroundExecution: Boolean = false
+        val allowBackgroundExecution: Boolean = false,
+        val signatureMetadataOutput: String? = null
     ) {
         val packageName get() = input.packageName
     }
@@ -792,6 +796,10 @@ class PatcherWorker(
         if (event is ProgressEvent.Failed) {
             val patchStepId = event.stepId as? StepId.ExecutePatch ?: return
             failedPatchIndexes += patchStepId.index
+        } else if (event is ProgressEvent.Completed) {
+            (event.stepId as? StepId.ExecutePatch)?.let { patchStepId ->
+                failedPatchIndexes -= patchStepId.index
+            }
         }
 
         cacheExpandableSubSteps(event)
@@ -1409,6 +1417,8 @@ class PatcherWorker(
         requestedPatcherMemoryLimitMb = null
         val patchedApk = fs.tempDir.resolve("patched.apk")
         var downloadCleanup: (() -> Unit)? = null
+        val signatureMetadataOutput = args.signatureMetadataOutput?.let(::File)
+        var retainSignatureMetadata = false
         patchNotificationSteps = args.selectedPatches.values
             .asSequence()
             .flatten()
@@ -1443,6 +1453,7 @@ class PatcherWorker(
 
         val startTime = SystemClock.elapsedRealtime()
         return try {
+            signatureMetadataOutput?.delete()
             workerLogger.info("Patching session started elapsedRealtime=${startTime}ms")
             val autoSaveDownloads = prefs.autoSaveDownloaderApks.get()
 
@@ -1585,6 +1596,17 @@ class PatcherWorker(
                 file = inputFile,
                 checkCancelled = checkCancelled
             )
+            if (signatureMetadataOutput != null) {
+                workerLogger.info("Caching original signature metadata before split preparation")
+                try {
+                    signatureMetadataInjector.cacheSignatureMetadata(inputFile, signatureMetadataOutput)
+                } catch (error: IllegalArgumentException) {
+                    throw IOException(
+                        applicationContext.getString(R.string.patcher_signature_workflow_unsigned_source),
+                        error
+                    )
+                }
+            }
             val sourceInfo = try {
                 SplitArchiveDisplayResolver.resolvePackageInfo(
                     source = inputFile,
@@ -1944,7 +1966,11 @@ class PatcherWorker(
                     }
                 }
                 .build()
-            Result.success(resultData)
+            // The caller owns the cache after success and removes it after injection.
+            val result = Result.success(resultData)
+            currentCoroutineContext().ensureActive()
+            retainSignatureMetadata = true
+            result
         } catch (e: CancellationException) {
             Log.i(tag, "Patching cancelled".logFmt())
             throw e
@@ -2169,6 +2195,7 @@ class PatcherWorker(
             patchNotificationSteps = emptyList()
             foregroundStarted = false
             patchedApk.delete()
+            if (!retainSignatureMetadata) signatureMetadataOutput?.delete()
             downloadCleanup?.invoke()
             cleanupTemporarySplitArtifacts()
         }

@@ -80,7 +80,7 @@ class PatchProfileRepository(
             packageName = packageName,
             appVersion = appVersion,
             name = name,
-            payload = payload,
+            payload = payload.copy(signatureWorkflow = existing.payload.signatureWorkflow),
             useSelectedApkVersion = useSelectedApkVersion ?: existing.useSelectedApkVersion,
             autoPatch = existing.autoPatch,
             sortOrder = existing.sortOrder
@@ -104,6 +104,18 @@ class PatchProfileRepository(
             apkSourcePath = apkSourcePath,
             apkVersion = apkVersion,
             useSelectedApkVersion = useSelectedApkVersion ?: existing.useSelectedApkVersion
+        )
+        dao.upsert(entity)
+        return entity.toDomain()
+    }
+
+    suspend fun updateProfileSignatureWorkflow(
+        uid: Int,
+        workflow: PatchProfilePayload.SignatureWorkflow
+    ): PatchProfile? {
+        val existing = dao.get(uid) ?: return null
+        val entity = existing.copy(
+            payload = existing.payload.copy(signatureWorkflow = workflow)
         )
         dao.upsert(entity)
         return entity.toDomain()

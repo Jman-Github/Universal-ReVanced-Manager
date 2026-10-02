@@ -1719,6 +1719,11 @@ class SelectedAppInfoViewModel(
                 )
             )
         }
+        val globalSignatureWorkflow = prefs.injectSignatureMetadataAfterPatching.get()
+        val rememberedWorkflow = inputSelectionPayload?.signatureWorkflow?.takeIf { it.remembered }
+        val injectSignature = rememberedWorkflow?.enabled
+            ?: profile?.payload?.signatureWorkflow?.enabled
+            ?: globalSignatureWorkflow
         return Patcher.ViewModelParams(
             selectedApp = selectedApp,
             selectedPatches = getPatches(bundles, allowIncompatible),
@@ -1726,6 +1731,9 @@ class SelectedAppInfoViewModel(
             profileId = profile?.uid,
             profileInstallerToken = profileInstallerToken,
             autoInstall = profile?.autoInstall == true && profileInstallerToken != null,
+            injectSignatureMetadata = injectSignature,
+            rememberSignatureWorkflow = rememberedWorkflow != null ||
+                (globalSignatureWorkflow && injectSignature),
             sourceEntryKey = sourceEntryKey,
             useMount = usingMountInstall,
         )
@@ -2198,9 +2206,8 @@ private sealed interface SelectionState : Parcelable {
             installerType: app.urv.manager.patcher.patch.PatchInstallerType,
             availabilityEnabled: Boolean,
             removeGmsCore: Boolean,
-        ) = bundles.toPatchSelection(
-                allowIncompatible
-            ) { uid, patch ->
+        ) = bundles.filter { it.uid in patchSelection }
+            .toPatchSelection(allowIncompatible) { uid, patch ->
                 patchSelection[uid]?.contains(patch.name) ?: false
             }
             .applyAvailability(

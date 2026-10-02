@@ -375,8 +375,8 @@ fun DashboardScreen(
         if (uri != null) {
             pickerScope.launch {
                 prefs.dashboardApkInputLastDirectory.update(uri.toPickerDirectoryUri().toString())
+                storageVm.handleStorageResult(uri)
             }
-            storageVm.handleStorageResult(uri)
         }
     }
     val openStoragePicker = {
@@ -1258,7 +1258,7 @@ fun DashboardScreen(
                                         val step = collapsedCount
                                         stringResource(R.string.import_patch_bundles_banner_steps, step, total)
                                     } else {
-                                        stringResource(R.string.import_patch_bundles_banner_subtitle, collapsedCount, total)
+                                        pluralStringResource(R.plurals.bundle_update_progress_quantity, total, collapsedCount, total)
                                     }
                                     add(stepLabel)
                                     val name = progress.currentBundleName?.takeIf { it.isNotBlank() } ?: return@buildList
@@ -1687,7 +1687,7 @@ fun DashboardScreen(
         }
     }
     if (showSplitPluginDialog) {
-        MergeSplitPluginDialog(
+        DownloaderPluginInputDialog(
             plugins = downloaderPlugins,
             activePluginId = vm.activeSplitMergePluginId,
             packageName = splitPluginPackageName,
@@ -3798,7 +3798,7 @@ private fun MergeSplitInstalledStatusChip(label: String) {
 }
 
 @Composable
-private fun MergeSplitPluginDialog(
+internal fun DownloaderPluginInputDialog(
     plugins: List<LoadedDownloaderPlugin>,
     activePluginId: String?,
     packageName: String,

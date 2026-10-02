@@ -69,6 +69,10 @@
     <string name="bundle_update_manual_available">Update available</string>
     <string name="bundle_update_manual_available_with_version">Update available: %1$s</string>
     <string name="saved_app_bundle_update_badge">Bundle update</string>
+    <plurals name="saved_app_bundle_update_badge_quantity">
+        <item quantity="one">Bundle update</item>
+        <item quantity="other">Bundle updates</item>
+    </plurals>
     <string name="patch_bundle_force_redownload_title">Force redownload</string>
     <string name="patch_bundle_force_redownload_description">Redownload %1$s and overwrite the local copy?</string>
     <string name="patch_bundle_experimental_version_label">EXPERIMENTAL</string>
@@ -584,6 +588,7 @@
     <string name="export_patch_bundles">Export patch bundles</string>
     <string name="export_patch_bundles_description">Save imported remote patch bundles to a JSON file</string>
     <string name="export_patch_bundles_fail">Could not export patch bundles: %s</string>
+    <string name="export_patch_bundles_empty">There are no patch bundles to export</string>
     <plurals name="export_patch_bundles_success_quantity">
         <item quantity="one">Exported %d patch bundle</item>
         <item quantity="other">Exported %d patch bundles</item>
@@ -602,13 +607,13 @@
     <string name="bundle_refreshed_at">Last checked %1$s</string>
     <string name="bundle_changelog">Changelog</string>
     <string name="bundle_latest_changelog">Latest Changelog</string>
-    <string name="bundle_previous_changelogs">Previous Changelogs</string>
+    <string name="bundle_previous_changelogs">Changelog History</string>
     <string name="bundle_view_changelog">View the latest changelog</string>
     <string name="bundle_view_previous_changelogs">View cached changelogs</string>
     <string name="bundle_changelog_error">Failed to load changelog: %s</string>
     <string name="bundle_changelog_retry">Retry</string>
     <string name="bundle_changelog_empty">No changelog available</string>
-    <string name="bundle_previous_changelogs_empty">No previous changelogs</string>
+    <string name="bundle_previous_changelogs_empty">No changelog history available</string>
     <string name="export_patch_profiles">Export patch profiles</string>
     <string name="export_patch_profiles_description">Export all patch profiles to a JSON file</string>
     <string name="export_patch_profiles_fail">Could not export patch profiles: %s</string>
@@ -1162,7 +1167,7 @@ Patch profiles are not affected.</string>
     <string name="tools_signature_metadata_injector_title">Signature metadata injector &amp; cloner</string>
     <string name="tools_signature_metadata_injector_info">Select signature metadata from a ZIP, APK, or split APK container, then choose a target. Split targets can be merged into one APK or kept as a split container.</string>
     <string name="tools_signature_metadata_injector_select_zip">Select signature source</string>
-    <string name="tools_signature_metadata_injector_select_apk">Select target APK or split container</string>
+    <string name="tools_signature_metadata_injector_select_apk">Select target source</string>
     <string name="tools_signature_metadata_injector_zip_label">Signature source</string>
     <string name="tools_signature_metadata_injector_apk_label">Target APK or split container</string>
     <string name="tools_signature_metadata_injector_invalid_zip">Select an .apk, .apks, .xapk, .apkm, or .zip signature source.</string>
@@ -1354,7 +1359,7 @@ Patch profiles are not affected.</string>
     <string name="merge_split_apk_log_export_failed">Failed to export merge log.</string>
     <string name="merge_split_apk_installed_not_split">This installed app is not using split APKs.</string>
     <string name="merge_split_apk_selection_title">Choose splits to merge</string>
-    <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge. All splits are selected by default.</string>
+    <string name="merge_split_apk_selection_description">Choose which split modules to include for this merge.</string>
     <string name="merge_split_apk_selection_preset_all">All</string>
     <string name="merge_split_apk_selection_strip_native_libs_title">Exclude extra native libraries</string>
     <string name="merge_split_apk_selection_confirm">Start merge</string>
@@ -1540,6 +1545,10 @@ You can remove them automatically, adjust the selection, or continue anyway.</st
 %1$s
 Enable them again (or pick alternatives) and then try patching once more.</string>
     <string name="removed_saved_patches_message">These patches are no longer available and were removed from your saved selection:</string>
+    <plurals name="removed_saved_patches_message_quantity">
+        <item quantity="one">This patch is no longer available and was removed from your saved selection:</item>
+        <item quantity="other">These patches are no longer available and were removed from your saved selection:</item>
+    </plurals>
     <string name="patch_profile_delete_multiple_dialog_description">Are you sure you want to delete the selected patch profiles?</string>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>
@@ -1561,7 +1570,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="selected_file_not_supported_apk_file">Selected file must be an APK file (.apk).</string>
     <string name="selected_file_not_supported_json">Selected file must be a JSON file (.json)</string>
     <string name="selected_file_not_supported_keystore">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks)</string>
-    <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks).</string>
+    <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
+    <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
     <string name="patch_bundle_url_invalid_json_or_external">Patch bundle URL must point to a .json file or a supported external bundles API URL</string>
     <string name="patch_bundle_url_invalid_external">Patch bundle URL must point to a supported external bundles API URL</string>
     <string name="selected_file_not_supported_image">Selected file is not a supported image type</string>
@@ -1793,6 +1803,10 @@ Details: %2$s</string>
     <string name="install_app">Install</string>
     <string name="install_base_and_mount">Install base &amp; mount</string>
     <string name="install_app_success">Installed successfully</string>
+    <string name="installing_patched_app">Installing patched app…</string>
+    <string name="installing_merged_app">Installing merged app…</string>
+    <string name="patched_app_install_success">Patched app installed successfully</string>
+    <string name="merged_app_install_success">Merged app installed successfully</string>
     <string name="install_app_fail_title">Installation failed</string>
     <string name="uninstall_app_fail_title">Uninstall failed</string>
     <string name="install_app_fail">Failed to install app: %s</string>
@@ -2367,6 +2381,32 @@ Details: %2$s</string>
     <string name="batch_patch_edit_apk">Edit APK</string>
     <string name="batch_patch_metadata_save_failed">Installed, but URV Manager could not save the app metadata: %1$s</string>
     <string name="manager_update_incompatible_pr">This release is incompatible with this PR build. Please wait for a newer manager release. Your data has not been changed.</string>
+    <string name="tools_signature_input_downloaded_description">Choose an APK downloaded by the manager.</string>
+    <string name="tools_signature_input_installed">Installed apps</string>
+    <string name="tools_signature_input_installed_description">Use the APKs from an app installed on this device.</string>
+    <string name="tools_signature_input_storage">Select from storage</string>
+    <string name="tools_signature_input_storage_description">Choose an APK or split archive from a file picker.</string>
+    <string name="tools_signature_input_no_apps">No matching apps found.</string>
+    <string name="tools_signature_input_unavailable">The downloaded APK is no longer available.</string>
+    <string name="tools_signature_input_split_apks">Split APKs</string>
+    <string name="patch_profile_signature_workflow_title">Signature metadata workflow</string>
+    <string name="patch_profile_signature_workflow_enable">Inject after patching</string>
+    <string name="patch_profile_signature_workflow_enable_description">Clone metadata from the original APK into the patched APK after this profile finishes patching.</string>
+    <string name="patcher_signature_workflow_title">Inject source signature metadata</string>
+    <string name="patcher_signature_workflow_description">Use the original APK as the signature source and this patched APK as the target.</string>
+    <string name="patcher_signature_workflow_running">Injecting signature metadata…</string>
+    <string name="patcher_signature_workflow_failed">Signature metadata injection failed</string>
+    <string name="patcher_signature_workflow_source_missing">The original APK is no longer available. Patch again to use this workflow.</string>
+    <string name="patcher_signature_workflow_output_missing">The patched APK is no longer available.</string>
+    <string name="inject_signature_metadata_after_patching">Inject signature metadata after patching</string>
+    <string name="inject_signature_metadata_after_patching_description">Clone signature metadata from the original signed input into the final patched APK. Remember this choice when the app is saved for future repatches. Unsigned merged APKs cannot be used as signature sources</string>
+    <string name="saved_app_signature_workflow_description">Use the retained original signature metadata when repatching this app, including automatic and batch repatching. This choice overrides the global setting.</string>
+    <string name="patcher_signature_workflow_unsigned_source">This input has no original signature metadata. Select an original signed APK or split archive instead of an unsigned merged APK.</string>
+    <string name="tools_signature_input_plugin_description">Use a downloader plugin to select an APK or split archive.</string>
+    <string name="tools_signature_input_preparing">Preparing selected input…</string>
+    <string name="saved_app_signature_workflow_applied">Signature metadata was injected into this saved APK.</string>
+    <string name="saved_app_signature_workflow_not_applied">Signature metadata was not injected into this saved APK.</string>
+    <string name="patcher_step_inject_signature_metadata">Injecting signature metadata</string>
 </resources>
 
 

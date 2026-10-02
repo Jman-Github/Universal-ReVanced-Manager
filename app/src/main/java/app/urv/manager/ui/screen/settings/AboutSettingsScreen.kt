@@ -81,7 +81,7 @@ fun AboutSettingsScreen(
     var showLicensesDialog by rememberSaveable { mutableStateOf(false) }
     val managerVersion = remember { BuildConfig.VERSION_NAME }
     val managerVersionWithCode = remember(managerVersion) {
-        "$managerVersion (${BuildConfig.VERSION_CODE})"
+        "v${managerVersion.removePrefix("v").removePrefix("V")} (${BuildConfig.VERSION_CODE})"
     }
     // painterResource() is broken on release builds for some reason.
     val icon = rememberDrawablePainter(drawable = remember {
@@ -219,12 +219,6 @@ fun AboutSettingsScreen(
                                 .wrapContentWidth(Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "${stringResource(R.string.version)} ",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
                             Text(
                                 text = managerVersionWithCode,
                                 style = MaterialTheme.typography.bodyMedium,

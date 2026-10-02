@@ -429,7 +429,7 @@ fun InstalledAppInfoScreen(
         if (appliedBundles.isEmpty()) ""
         else appliedBundles.joinToString("\n") { bundle ->
             val version = bundle.version?.takeIf { it.isNotBlank() }
-            if (version != null) "${bundle.title} ($version)" else bundle.title
+            if (version != null) "${bundle.title} (v${version.removePrefix("v").removePrefix("V")})" else bundle.title
         }
     }
 
@@ -1138,6 +1138,7 @@ fun InstalledAppInfoScreen(
                 AppVersion(
                     appInfo = viewModel.appInfo,
                     versionName = installedApp.version,
+                    prefixVersion = true,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 viewModel.savedApkAbiLabel?.let { abiLabel ->
@@ -1810,6 +1811,28 @@ fun InstalledAppInfoScreen(
                                 checked = appLauncherShortcutEnabled,
                                 enabled = canChangeLauncherShortcut,
                                 onCheckedChange = viewModel::setLauncherShortcutEnabledForApp
+                            )
+                        }
+                    )
+                }
+
+                val signatureWorkflow = installedApp.selectionPayload?.signatureWorkflow
+                if (signatureWorkflow?.remembered == true &&
+                    installedApp.repatchSourcePath?.let { File(it).isFile } == true
+                ) {
+                    SettingsListItem(
+                        modifier = Modifier.clickable {
+                            viewModel.setSignatureInjectionEnabled(!signatureWorkflow.enabled)
+                        },
+                        headlineContent = stringResource(R.string.patch_profile_signature_workflow_enable),
+                        supportingContent = stringResource(
+                            if (signatureWorkflow.injected) R.string.saved_app_signature_workflow_applied
+                            else R.string.saved_app_signature_workflow_not_applied
+                        ) + "\n" + stringResource(R.string.saved_app_signature_workflow_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = signatureWorkflow.enabled,
+                                onCheckedChange = viewModel::setSignatureInjectionEnabled
                             )
                         }
                     )
