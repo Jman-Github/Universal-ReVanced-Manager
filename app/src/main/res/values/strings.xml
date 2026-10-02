@@ -961,16 +961,16 @@ Patch profiles are not affected.</string>
     <string name="morphe_bytecode_mode_full_description">Uses the legacy full bytecode pipeline. Slower and more memory intensive, but useful if fast mode causes issues</string>
     <string name="reset_to_recommended">Reset to recommended</string>
     <string name="reset_to_default">Reset to default</string>
-    <string name="patcher_memory_usage_graph_title">Show patcher memory graph</string>
-    <string name="patcher_memory_usage_graph_description">Show live memory usage above the patcher progress steps</string>
+    <string name="patcher_memory_usage_graph_title">Show patcher resource graphs</string>
+    <string name="patcher_memory_usage_graph_description">Show live memory, CPU and storage I/O usage above the patcher progress steps</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
     <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
-    <string name="merge_split_memory_usage_graph_title">Show merger memory graph</string>
-    <string name="merge_split_memory_usage_graph_description">Show live memory usage above the split APK merger progress steps</string>
+    <string name="merge_split_memory_usage_graph_title">Show merger resource graphs</string>
+    <string name="merge_split_memory_usage_graph_description">Show live memory, CPU, and storage I/O usage above the split APK merger progress steps</string>
     <string name="merge_split_auto_collapse_steps">Auto-collapse completed merger steps</string>
     <string name="merge_split_auto_collapse_steps_description">Automatically collapse each merger progress widget after all of its steps finish</string>
     <string name="merge_split_auto_expand_steps">Auto-expand running merger steps</string>
@@ -2385,6 +2385,27 @@ Details: %2$s</string>
     <string name="batch_patch_edit_apk">Edit APK</string>
     <string name="batch_patch_metadata_save_failed">Installed, but URV Manager could not save the app metadata: %1$s</string>
     <string name="manager_update_incompatible_pr">This release is incompatible with this PR build. Please wait for a newer manager release. Your data has not been changed.</string>
+    <string name="patcher_resource_graphs_compact_title">Compact patcher graphs</string>
+    <string name="patcher_resource_graphs_compact_description">Show memory, CPU and storage I/O graphs side by side, including on phone screens</string>
+    <string name="patcher_cpu_usage">CPU usage</string>
+    <string name="patcher_storage_io_usage">Storage I/O</string>
+    <string name="patcher_resource_unavailable">No readings available from the device</string>
+    <string name="patcher_resource_unavailable_short">Unavailable</string>
+    <string name="patcher_resource_unavailable_accessibility">%1$s history. No current readings available. %2$s.</string>
+    <string name="patcher_resource_latest_compact">Latest</string>
+    <string name="patcher_cpu_system">Device CPU load</string>
+    <string name="patcher_cpu_process">Estimated patcher CPU load</string>
+    <string name="patcher_cpu_percent">%1$d%%</string>
+    <string name="patcher_cpu_peak">Peak %1$d%%</string>
+    <string name="patcher_cpu_accessibility">CPU history. Current average %1$d percent. Peak average %2$d percent. %3$s.</string>
+    <string name="patcher_cpu_core_accessibility">Core %1$d: %2$d percent</string>
+    <string name="patcher_io_storage">Patcher storage throughput</string>
+    <string name="patcher_io_cached">Patcher I/O, including cache</string>
+    <string name="patcher_io_rates">↓ Read %1$s\n↑ Write %2$s</string>
+    <string name="patcher_io_peak">Peak %1$s</string>
+    <string name="patcher_io_rate_kb">%1$d KB/s</string>
+    <string name="patcher_io_rate_mb">%1$.1f MB/s</string>
+    <string name="patcher_io_accessibility">Storage I/O history. Read %1$s. Write %2$s. Peak total %3$s. %4$s.</string>
     <string name="tools_signature_input_downloaded_description">Choose an APK downloaded by the manager.</string>
     <string name="tools_signature_input_installed">Installed apps</string>
     <string name="tools_signature_input_installed_description">Use the APKs from an app installed on this device.</string>
@@ -2411,8 +2432,18 @@ Details: %2$s</string>
     <string name="saved_app_signature_workflow_applied">Signature metadata was injected into this saved APK.</string>
     <string name="saved_app_signature_workflow_not_applied">Signature metadata was not injected into this saved APK.</string>
     <string name="patcher_step_inject_signature_metadata">Injecting signature metadata</string>
+    <string name="merger_resource_graphs_compact_title">Compact merger resource graphs</string>
+    <string name="merger_resource_graphs_compact_description">Show memory, CPU, and storage I/O graphs side by side, including on phone screens</string>
+    <string name="merger_information">Merger information</string>
+    <string name="merger_information_expand">Expand merger information</string>
+    <string name="merger_information_collapse">Collapse merger information</string>
+    <string name="merger_information_app">App name</string>
+    <string name="merger_information_input_size">Input APK size</string>
+    <string name="merger_information_output_size">Output APK size</string>
+    <string name="merger_information_arsclib">ARSCLib</string>
+    <string name="merger_information_splits">Splits being merged</string>
+    <string name="merger_information_splits_format">%1$d/%2$d</string>
+    <string name="merger_cpu_process">Estimated merger CPU load</string>
+    <string name="merger_io_storage">Merger storage throughput</string>
+    <string name="merger_io_cached">Merger I/O (includes cached data)</string>
 </resources>
-
-
-
-

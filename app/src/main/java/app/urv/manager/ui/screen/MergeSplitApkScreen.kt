@@ -89,7 +89,8 @@ import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
-import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
+import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.urv.manager.ui.component.patcher.MergerInformationCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
@@ -131,6 +132,8 @@ fun MergeSplitApkScreen(
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
+    val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
+    val mergerInformationExpanded by prefs.splitMergeInformationExpanded.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
     val splitMergeAutoExpandRunningStepsExclusive by
         prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
@@ -691,10 +694,26 @@ fun MergeSplitApkScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
-                    item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(
+                    item(key = "resource-usage") {
+                        PatcherResourceUsageCards(
                             samples = state.memoryUsageSamples,
-                            isActive = state.inProgress
+                            isActive = state.inProgress &&
+                                state.writeStep.status != SplitMergeStepStatus.COMPLETED,
+                            compact = compactResourceGraphs,
+                            merger = true
+                        )
+                    }
+                }
+                if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
+                    item(key = "merger-information") {
+                        MergerInformationCard(
+                            information = state.sessionInfo,
+                            expanded = mergerInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                coroutineScope.launch {
+                                    prefs.splitMergeInformationExpanded.update(expanded)
+                                }
+                            }
                         )
                     }
                 }

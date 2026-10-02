@@ -58,6 +58,11 @@ android {
         }
     }
 
+    // Share the resource sampler with the host so both process modes report the same metrics.
+    sourceSets.named("main") {
+        kotlin.directories += "../app/src/main/java/app/urv/manager/patcher/runtime/usage"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

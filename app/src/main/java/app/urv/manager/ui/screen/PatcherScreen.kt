@@ -95,7 +95,7 @@ import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
-import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
+import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.signatureMetadataPatcherProgress
@@ -150,6 +150,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
@@ -1547,7 +1548,8 @@ fun PatcherScreen(
             ) {
                 if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
                     item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(
+                        PatcherResourceUsageCards(
+                            compact = compactResourceGraphs,
                             samples = viewModel.patcherMemoryUsageSamples,
                             isActive = isPatchingActive
                         )

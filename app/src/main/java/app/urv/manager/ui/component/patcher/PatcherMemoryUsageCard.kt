@@ -1,11 +1,12 @@
+/*
+ * Copyright 2026 Morphe.
+ * https://github.com/MorpheApp/morphe-manager
+ */
+
 package app.urv.manager.ui.component.patcher
 
-import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.util.AttributeSet
-import android.view.View
 import androidx.annotation.StringRes
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -22,7 +23,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -32,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -43,22 +47,42 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.key
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 @Composable
 fun PatcherMemoryUsageCard(
     samples: List<PatcherMemoryUsage>,
     isActive: Boolean,
-    @StringRes titleRes: Int = R.string.patcher_memory_usage
+    @StringRes titleRes: Int = R.string.patcher_memory_usage,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    layout: ResourceGraphLayout? = null,
+    pageControls: (@Composable () -> Unit)? = null
 ) {
+    if (samples.isEmpty()) return
     val latest = samples.last()
     val requestedMaxMb = latest.requestedMaxMb.coerceAtLeast(1L)
     val peakMb = samples.maxOf { sample -> sample.usedMb }
@@ -79,18 +103,71 @@ fun PatcherMemoryUsageCard(
         status
     )
     val graphBars = buildMemoryGraphBars(samples, requestedMaxMb)
+    PatcherHistoryUsageCard(
+        samples = samples,
+        isActive = isActive,
+        title = stringResource(titleRes),
+        headline = stringResource(R.string.patcher_memory_usage_format, latest.usedMb, requestedMaxMb),
+        peak = stringResource(R.string.patcher_memory_usage_peak_format, peakMb),
+        accessibilityText = accessibilityText,
+        graphBars = graphBars,
+        modifier = modifier,
+        compact = compact,
+        layout = layout,
+        pageControls = pageControls
+    )
+}
+
+@Composable
+internal fun PatcherHistoryUsageCard(
+    samples: List<PatcherMemoryUsage>,
+    isActive: Boolean,
+    title: String,
+    headline: String,
+    peak: String,
+    accessibilityText: String,
+    graphBars: List<ResourceGraphBar>,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false,
+    detail: String? = null,
+    scrollableDetailLines: List<String> = emptyList(),
+    coreLoads: List<Int> = emptyList(),
+    currentAvailable: Boolean = true,
+    layout: ResourceGraphLayout? = null,
+    pageControls: (@Composable () -> Unit)? = null
+) {
+    val status = stringResource(
+        when {
+            !currentAvailable -> R.string.patcher_resource_unavailable_short
+            isActive -> R.string.patcher_memory_usage_live
+            else -> R.string.patcher_memory_usage_final
+        }
+    )
     val graphScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val sessionStartTime = samples.first().sampledAtElapsedRealtimeMs
-    val latestSampleTime = latest.sampledAtElapsedRealtimeMs
+    val latestSampleTime = samples.last().sampledAtElapsedRealtimeMs
     val isGraphDragged by graphScrollState.interactionSource.collectIsDraggedAsState()
-    var followLatest by remember(sessionStartTime) { mutableStateOf(true) }
+    var followLatest by rememberSaveable(sessionStartTime) { mutableStateOf(true) }
     var programmaticScrollCount by remember(sessionStartTime) { mutableIntStateOf(0) }
     val showJumpToLatest = !followLatest
-    val normalColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.82f).toArgb()
-    val warningColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f).toArgb()
-    val dangerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f).toArgb()
-    val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f).toArgb()
+    val historyScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ) = Offset(available.x, 0f)
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity) =
+                Velocity(available.x, 0f)
+        }
+    }
+    val density = LocalDensity.current
+    val normalColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.82f)
+    val warningColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.9f)
+    val dangerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.9f)
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
 
     LaunchedEffect(graphScrollState, sessionStartTime) {
         var userScrollObserved = false
@@ -114,7 +191,8 @@ fun PatcherMemoryUsageCard(
             }
         }
     }
-    LaunchedEffect(graphScrollState, sessionStartTime, latestSampleTime) {
+    // Resizing changes the history's end even when a finished session has no new samples.
+    LaunchedEffect(graphScrollState, sessionStartTime, latestSampleTime, graphScrollState.maxValue) {
         if (!followLatest) return@LaunchedEffect
         withFrameNanos { }
         if (followLatest && !isGraphDragged) {
@@ -127,123 +205,211 @@ fun PatcherMemoryUsageCard(
         }
     }
 
+    val jumpToLatest: () -> Unit = {
+        coroutineScope.launch {
+            var reachedLatest = false
+            programmaticScrollCount++
+            try {
+                withFrameNanos { }
+                graphScrollState.scrollTo(graphScrollState.maxValue)
+                reachedLatest = !graphScrollState.canScrollForward
+            } finally {
+                programmaticScrollCount = (programmaticScrollCount - 1).coerceAtLeast(0)
+                followLatest = reachedLatest
+            }
+        }
+    }
+
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth()
+        modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(if (compact) 8.dp else 16.dp),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            ResourceGraphSection(
+                minHeight = layout?.headerHeight,
+                onMeasured = layout?.onHeaderMeasured,
+                onPlaced = layout?.onHeaderPlaced,
+                compact = compact
             ) {
+                pageControls?.invoke()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = if (compact) MaterialTheme.typography.labelLarge else MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (!compact) {
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = status,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (isActive && currentAvailable) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+                if (compact) {
+                    Text(
+                        text = status,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (isActive && currentAvailable) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = stringResource(titleRes),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
+                    text = headline,
+                    style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = status,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isActive) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                if (scrollableDetailLines.isNotEmpty()) {
+                    Column {
+                        scrollableDetailLines.forEach { line ->
+                            Text(
+                                text = line,
+                                modifier = Modifier.fillMaxWidth()
+                                    .nestedScroll(historyScrollConnection)
+                                    .horizontalScroll(rememberScrollState()),
+                                softWrap = false,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                )
+                }
+                detail?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (coreLoads.isNotEmpty()) {
+                    CpuCoreLoadBars(loads = coreLoads, historyScrollConnection = historyScrollConnection)
+                }
             }
-            Text(
-                text = stringResource(
-                    R.string.patcher_memory_usage_format,
-                    latest.usedMb,
-                    requestedMaxMb
-                ),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface
-            )
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                val slotCount = maxOf(MEMORY_USAGE_VISIBLE_BAR_COUNT, graphBars.size)
-                val graphWidth = maxWidth * (
-                    slotCount.toFloat() / MEMORY_USAGE_VISIBLE_BAR_COUNT.toFloat()
-                )
+                // Reveal only after the current viewport and initial history position are measured.
+                val viewportWidthPx = with(density) { maxWidth.roundToPx() }
+                val historyPrepared = graphScrollState.viewportSize == viewportWidthPx &&
+                    viewportWidthPx > 0 && (!followLatest || !graphScrollState.canScrollForward)
+                SideEffect { layout?.onHistoryReady?.invoke(historyPrepared) }
+                // Keep the same bar pitch in every layout; narrow cards show less history at once.
+                val visibleSlots = ceil(maxWidth / RESOURCE_HISTORY_BAR_SLOT_WIDTH).toInt().coerceAtLeast(1)
+                val slotCount = maxOf(visibleSlots, graphBars.size)
+                val graphWidth = RESOURCE_HISTORY_BAR_SLOT_WIDTH * slotCount
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .nestedScroll(historyScrollConnection)
                         .horizontalScroll(graphScrollState)
                 ) {
-                    AndroidView(
-                        modifier = Modifier
-                            .width(graphWidth)
-                            .height(64.dp)
-                            .clearAndSetSemantics {
-                                contentDescription = accessibilityText
-                            },
-                        factory = { context -> MemoryUsageGraphView(context) },
-                        update = { view ->
-                            view.normalColor = normalColor
-                            view.warningColor = warningColor
-                            view.dangerColor = dangerColor
-                            view.trackColor = trackColor
-                            view.bars = graphBars
-                        }
+                    ResourceHistoryPlot(
+                        bars = graphBars,
+                        slotCount = slotCount,
+                        normalColor = normalColor,
+                        warningColor = warningColor,
+                        dangerColor = dangerColor,
+                        trackColor = trackColor,
+                        modifier = Modifier.width(graphWidth).height(64.dp)
+                            .clearAndSetSemantics { contentDescription = accessibilityText }
                     )
                 }
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            ResourceGraphSection(
+                minHeight = layout?.footerHeight,
+                onMeasured = layout?.onFooterMeasured,
+                onPlaced = layout?.onFooterPlaced,
+                compact = compact
             ) {
-                Text(
-                    text = stringResource(R.string.patcher_memory_usage_history),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                AnimatedVisibility(
-                    visible = showJumpToLatest,
-                    enter = expandHorizontally(expandFrom = Alignment.End) +
-                        slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth }) +
-                        fadeIn(),
-                    exit = shrinkHorizontally(shrinkTowards = Alignment.End) +
-                        slideOutHorizontally(targetOffsetX = { fullWidth -> fullWidth }) +
-                        fadeOut()
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    var reachedLatest = false
-                                    programmaticScrollCount++
-                                    try {
-                                        withFrameNanos { }
-                                        graphScrollState.scrollTo(graphScrollState.maxValue)
-                                        reachedLatest = !graphScrollState.canScrollForward
-                                    } finally {
-                                        programmaticScrollCount =
-                                            (programmaticScrollCount - 1).coerceAtLeast(0)
-                                        followLatest = reachedLatest
+                if (compact) {
+                    // The caption reserves its natural height even while Latest fades over it.
+                    val historyCaption = stringResource(R.string.patcher_memory_usage_history)
+                    Box(Modifier.fillMaxWidth().heightIn(min = 32.dp)) {
+                        Text(
+                            text = historyCaption,
+                            modifier = Modifier.fillMaxWidth().alpha(0f).clearAndSetSemantics { },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Crossfade(
+                            targetState = showJumpToLatest,
+                            modifier = Modifier.matchParentSize(),
+                            animationSpec = tween(180),
+                            label = "resource_latest"
+                        ) { showLatest ->
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                                if (showLatest) {
+                                    TextButton(
+                                        onClick = jumpToLatest,
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Text(stringResource(R.string.patcher_resource_latest_compact))
                                     }
+                                } else {
+                                    Text(
+                                        text = historyCaption,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            },
-                            modifier = Modifier.height(32.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Text(text = stringResource(R.string.patcher_memory_usage_latest))
+                            }
                         }
+                    }
+                    Text(
+                        text = peak,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.patcher_memory_usage_history),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
+                        AnimatedVisibility(
+                            visible = showJumpToLatest,
+                            enter = expandHorizontally(expandFrom = Alignment.End) +
+                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                            exit = shrinkHorizontally(shrinkTowards = Alignment.End) +
+                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(
+                                    onClick = jumpToLatest,
+                                    modifier = Modifier.height(32.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    Text(stringResource(R.string.patcher_memory_usage_latest))
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                        }
+                        Text(
+                            text = peak,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-                Text(
-                    text = stringResource(R.string.patcher_memory_usage_peak_format, peakMb),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
@@ -274,8 +440,8 @@ private fun memoryTrendRes(
 private fun buildMemoryGraphBars(
     samples: List<PatcherMemoryUsage>,
     requestedMaxMb: Long
-): List<MemoryGraphBar> {
-    val bars = ArrayList<MemoryGraphBar>(samples.size)
+): List<ResourceGraphBar> {
+    val bars = ArrayList<ResourceGraphBar>(samples.size)
     var rollingStartIndex = 0
     var rollingUsedMb = 0.0
     samples.forEachIndexed { index, sample ->
@@ -289,7 +455,7 @@ private fun buildMemoryGraphBars(
             rollingStartIndex++
         }
         val rollingSampleCount = index - rollingStartIndex + 1
-        bars += MemoryGraphBar(
+        bars += ResourceGraphBar(
             heightFraction = (
                 sample.usedMb.toDouble() / requestedMaxMb.toDouble()
             ).toFloat().coerceIn(0f, 1f),
@@ -302,70 +468,102 @@ private fun buildMemoryGraphBars(
     return bars
 }
 
-private data class MemoryGraphBar(
+internal data class ResourceGraphBar(
     val heightFraction: Float,
     val pressureFraction: Float
 )
 
-private class MemoryUsageGraphView @JvmOverloads constructor(
-    context: Context,
-    attrs: AttributeSet? = null
-) : View(context, attrs) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    var bars: List<MemoryGraphBar> = emptyList()
-        set(value) {
-            field = value
-            invalidate()
-        }
-    var normalColor: Int = 0
-    var warningColor: Int = 0
-    var dangerColor: Int = 0
-    var trackColor: Int = 0
-
-    override fun onDraw(canvas: Canvas) {
-        super.onDraw(canvas)
-        if (width <= 0 || height <= 0) return
-
-        val density = resources.displayMetrics.density
-        val count = maxOf(MEMORY_USAGE_VISIBLE_BAR_COUNT, bars.size)
-        val gap = minOf(3f * density, width.toFloat() / (count * 3f))
-        val barWidth = (
-            (width - gap * (count - 1)) / count
-        ).coerceAtLeast(0.5f)
-        val graphHeight = height.toFloat()
+/** Draw history in the same Compose frame as the card and its measured scroll viewport. */
+@Composable
+private fun ResourceHistoryPlot(
+    bars: List<ResourceGraphBar>,
+    slotCount: Int,
+    normalColor: Color,
+    warningColor: Color,
+    dangerColor: Color,
+    trackColor: Color,
+    modifier: Modifier
+) {
+    Canvas(modifier) {
+        if (size.width <= 0f || size.height <= 0f) return@Canvas
+        val count = maxOf(slotCount, bars.size, 1)
+        val gap = minOf(3.dp.toPx(), size.width / (count * 3f))
+        val barWidth = ((size.width - gap * (count - 1)) / count).coerceAtLeast(0.5f)
 
         repeat(count) { index ->
             val left = index * (barWidth + gap)
-            val right = minOf(width.toFloat(), left + barWidth)
-            val radius = barWidth / 2f
-            paint.color = trackColor
-            canvas.drawRoundRect(left, 0f, right, graphHeight, radius, radius, paint)
+            val width = minOf(size.width - left, barWidth).coerceAtLeast(0f)
+            val radius = CornerRadius(barWidth / 2f, barWidth / 2f)
+            drawRoundRect(trackColor, Offset(left, 0f), Size(width, size.height), radius)
 
             val barIndex = index - (count - bars.size)
             val bar = bars.getOrNull(barIndex) ?: return@repeat
             if (bar.heightFraction <= 0f) return@repeat
-            val barHeight = graphHeight * bar.heightFraction
-            paint.color = when {
+            val barHeight = size.height * bar.heightFraction.coerceIn(0f, 1f)
+            val color = when {
                 bar.pressureFraction >= DANGER_PRESSURE_FRACTION -> dangerColor
                 bar.pressureFraction >= WARNING_PRESSURE_FRACTION -> warningColor
                 else -> normalColor
             }
-            canvas.drawRoundRect(
-                left,
-                graphHeight - barHeight,
-                right,
-                graphHeight,
-                radius,
-                radius,
-                paint
+            drawRoundRect(
+                color, Offset(left, size.height - barHeight), Size(width, barHeight), radius
             )
         }
     }
 }
 
-private const val MEMORY_USAGE_VISIBLE_BAR_COUNT = 80
+private val RESOURCE_HISTORY_BAR_SLOT_WIDTH = 4.dp
 private const val PRESSURE_ROLLING_WINDOW_MS = 2_000L
 private const val TREND_SAMPLE_COUNT = 3
 private const val TREND_CHANGE_FRACTION = 0.03
 private const val WARNING_PRESSURE_FRACTION = 0.70f
 private const val DANGER_PRESSURE_FRACTION = 0.85f
+
+
+// Code adapted from Morphe, see third-party/NOTICE for more information.
+// https://github.com/MorpheApp/morphe-manager/blob/dcdce54ba920532f90204617fe7710c9b68d1dd9/app/src/main/java/app/morphe/manager/ui/screen/patcher/PatchingUsageGraphs.kt
+@Composable
+private fun CpuCoreLoadBars(loads: List<Int>, historyScrollConnection: NestedScrollConnection) {
+    val normal = MaterialTheme.colorScheme.primary
+    val warning = MaterialTheme.colorScheme.error
+    val track = MaterialTheme.colorScheme.surfaceVariant
+    val coreDescriptions = loads.mapIndexed { core, load ->
+        stringResource(R.string.patcher_cpu_core_accessibility, core, load)
+    }.joinToString(", ")
+    // Preserve core indices, including idle cores, instead of sorting readings by load.
+    val fractions = loads.mapIndexed { core, load ->
+        key(core) {
+            animateFloatAsState(
+                targetValue = load.coerceIn(0, 100) / 100f,
+                animationSpec = tween(600),
+                label = "cpu_core_load"
+            ).value
+        }
+    }
+    val scrollState = rememberScrollState()
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val graphWidth = maxOf(maxWidth, 20.dp * loads.size)
+        Box(
+            Modifier.fillMaxWidth().nestedScroll(historyScrollConnection).horizontalScroll(scrollState)
+        ) {
+            Canvas(
+                modifier = Modifier.width(graphWidth).height(36.dp)
+                    .clearAndSetSemantics { contentDescription = coreDescriptions }
+            ) {
+                if (fractions.isEmpty()) return@Canvas
+                val slotWidth = size.width / fractions.size
+                val barWidth = 12.dp.toPx()
+                fractions.forEachIndexed { core, fraction ->
+                    val x = core * slotWidth + (slotWidth - barWidth) / 2f
+                    drawRect(track, Offset(x, 0f), Size(barWidth, size.height))
+                    val height = size.height * fraction
+                    drawRect(
+                        lerp(normal, warning, ((fraction - 0.7f) / 0.3f).coerceIn(0f, 1f)),
+                        Offset(x, size.height - height),
+                        Size(barWidth, height)
+                    )
+                }
+            }
+        }
+    }
+}
