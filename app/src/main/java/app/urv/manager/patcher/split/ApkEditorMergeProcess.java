@@ -3,7 +3,6 @@ package app.urv.manager.patcher.split;
 import com.reandroid.apk.APKLogger;
 import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
-import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
 import com.reandroid.arsc.chunk.TableBlock;
 
 import java.io.Closeable;
@@ -91,6 +90,18 @@ public final class ApkEditorMergeProcess {
             APKLogger logger,
             Runnable cancellationCheckpoint
     ) throws Exception {
+        merge(apkDir, outputApk, skipModules, sortApkEntries, logger, cancellationCheckpoint, false);
+    }
+
+    public static void merge(
+            File apkDir,
+            File outputApk,
+            Set<String> skipModules,
+            boolean sortApkEntries,
+            APKLogger logger,
+            Runnable cancellationCheckpoint,
+            boolean compressNativeLibraries
+    ) throws Exception {
         List<Closeable> closeables = new ArrayList<>();
         try {
             runCancellationCheckpoint(cancellationCheckpoint);
@@ -128,7 +139,8 @@ public final class ApkEditorMergeProcess {
                         expectedVersionCode,
                         expectedResourceTable,
                         logger,
-                        cancellationCheckpoint
+                        cancellationCheckpoint,
+                        compressNativeLibraries
                 );
             } catch (Exception | CoderMalfunctionError error) {
                 throw normalizeMergeFailure(error);
@@ -221,7 +233,8 @@ public final class ApkEditorMergeProcess {
             int expectedVersionCode,
             boolean expectedResourceTable,
             APKLogger logger,
-            Runnable cancellationCheckpoint
+            Runnable cancellationCheckpoint,
+            boolean compressNativeLibraries
     ) throws IOException {
         mergedModule.setAPKLogger(logger);
         mergedModule.setLoadDefaultFramework(false);
@@ -235,8 +248,7 @@ public final class ApkEditorMergeProcess {
             mergedModule.getZipEntryMap().autoSortApkFiles();
         }
 
-        SplitManifestCleaner.clean(mergedModule);
-        applyExtractNativeLibs(mergedModule);
+        SplitManifestCleaner.clean(mergedModule, compressNativeLibraries);
         runCancellationCheckpoint(cancellationCheckpoint);
 
         File parent = outputApk.getParentFile();
@@ -363,13 +375,6 @@ public final class ApkEditorMergeProcess {
     private static String normalizeModuleName(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         return lower.endsWith(".apk") ? lower.substring(0, lower.length() - 4) : lower;
-    }
-
-    private static void applyExtractNativeLibs(ApkModule module) {
-        AndroidManifestBlock manifest = module.hasAndroidManifest() ? module.getAndroidManifest() : null;
-        Boolean value = manifest != null ? manifest.isExtractNativeLibs() : null;
-        System.out.println(LOG_TAG + ": Applying: extractNativeLibs=" + value);
-        module.setExtractNativeLibs(value);
     }
 
     private static APKLogger getLogger() {

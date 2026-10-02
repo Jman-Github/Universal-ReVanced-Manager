@@ -80,7 +80,8 @@ internal object Merger {
         skipModules: Set<String> = emptySet(),
         onProgress: ((String) -> Unit)? = null,
         onLog: ((String) -> Unit)? = null,
-        sortApkEntries: Boolean = false
+        sortApkEntries: Boolean = false,
+        compressNativeLibraries: Boolean = false
     ) {
         val mergeContext = coroutineContext
         mergeContext.ensureActive()
@@ -92,7 +93,8 @@ internal object Merger {
                 skipModules,
                 sortApkEntries,
                 logger,
-                Runnable { mergeContext.ensureActive() }
+                Runnable { mergeContext.ensureActive() },
+                compressNativeLibraries
             )
         }
         mergeContext.ensureActive()

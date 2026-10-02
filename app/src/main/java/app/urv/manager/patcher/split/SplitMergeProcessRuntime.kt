@@ -46,7 +46,8 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         onProgress: (String) -> Unit,
         onSubSteps: (List<String>) -> Unit,
         onLog: (String) -> Unit = {},
-        onMemoryUsage: (PatcherMemoryUsage) -> Unit = {}
+        onMemoryUsage: (PatcherMemoryUsage) -> Unit = {},
+        compressNativeLibraries: Boolean = false
     ): File {
         // Code adapted from Morphe, see third-party/NOTICE for more information
         // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
@@ -70,6 +71,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
                         skipUnneededSplits = skipUnneededSplits,
                         includedModules = includedModules,
                         memoryLimitMb = attemptLimitMb,
+                        compressNativeLibraries = compressNativeLibraries,
                         onProgress = { message ->
                             attemptProgressMessages += message
                             if (message !in priorAttemptProgressMessages) {
@@ -120,6 +122,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
         skipUnneededSplits: Boolean,
         includedModules: Set<String>?,
         memoryLimitMb: Int?,
+        compressNativeLibraries: Boolean,
         onProgress: (String) -> Unit,
         onSubSteps: (List<String>) -> Unit,
         onLog: (String) -> Unit,
@@ -193,6 +196,7 @@ class SplitMergeProcessRuntime(private val context: Context) : LibraryResolver()
             add(stripNativeLibs.toString())
             add(skipUnneededSplits.toString())
             add(selectedModulesFile.absolutePath)
+            add(compressNativeLibraries.toString())
         }
         val process = try {
             withContext(Dispatchers.IO) {
@@ -393,7 +397,7 @@ object SplitMergeProcess {
     @JvmStatic
     fun main(args: Array<String>) {
         require(args.size >= 5) {
-            "Expected args: <input> <workspace> <output> <stripNativeLibs> <skipUnneededSplits> [selectedModulesFile]"
+            "Expected args: <input> <workspace> <output> <stripNativeLibs> <skipUnneededSplits> [selectedModulesFile] [compressNativeLibraries]"
         }
 
         val input = File(args[0])
@@ -401,6 +405,7 @@ object SplitMergeProcess {
         val output = File(args[2])
         val stripNativeLibs = args[3].toBooleanStrictOrNull() ?: false
         val skipUnneededSplits = args[4].toBooleanStrictOrNull() ?: false
+        val compressNativeLibraries = args.getOrNull(6)?.toBooleanStrictOrNull() ?: false
         val selectedModules = args.getOrNull(5)
             ?.takeIf { it.isNotBlank() }
             ?.let(::File)
@@ -421,6 +426,7 @@ object SplitMergeProcess {
                     stripNativeLibs = stripNativeLibs,
                     skipUnneededSplits = skipUnneededSplits,
                     includedModules = selectedModules,
+                    compressNativeLibraries = compressNativeLibraries,
                     onProgress = { msg ->
                         println("${SplitMergeProcessRuntime.PROGRESS_PREFIX}$msg")
                     },

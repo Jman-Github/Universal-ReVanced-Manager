@@ -11,9 +11,21 @@ import com.reandroid.arsc.value.ValueType
 
 internal object SplitManifestCleaner {
     @JvmStatic
-    fun clean(module: ApkModule) {
+    @JvmOverloads
+    fun clean(module: ApkModule, compressNativeLibraries: Boolean = false) {
         val manifest = module.androidManifest
         manifest.apply {
+            if (compressNativeLibraries) {
+                // Permit extraction when installing standalone exports, following AntiSplit-M:
+                // https://github.com/AbdurazaaqMohammed/AntiSplit-M/blob/3ed96fc36872fa2deabafa4b8e141213c2e81abf/app/src/main/java/com/reandroid/Merger.java#L194-L196
+                arrayOf(applicationElement, manifestElement).forEach { element ->
+                    element.removeAttributeIf { attribute ->
+                        attribute.nameId == AndroidManifest.ID_extractNativeLibs ||
+                            attribute.name == AndroidManifest.NAME_extractNativeLibs
+                    }
+                }
+            }
+
             arrayOf(
                 AndroidManifest.ID_isSplitRequired,
                 AndroidManifest.ID_requiredSplitTypes,
@@ -72,6 +84,9 @@ internal object SplitManifestCleaner {
 
             refresh()
         }
+        // Reset the sanitizer's cached policy so the writer cannot restore a removed flag.
+        // Patcher inputs retain their original policy for compatibility with root mounts.
+        module.setExtractNativeLibs(if (compressNativeLibraries) null else manifest.isExtractNativeLibs)
         module.refreshTable()
         module.refreshManifest()
     }
