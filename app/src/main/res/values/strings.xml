@@ -1665,6 +1665,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="path_selector_files">Files</string>
     <string name="path_selector_favorites">Favorites</string>
     <string name="path_selector_search">Search current directory</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
+    <string name="path_selector_read_error">Cannot read this directory</string>
+    <string name="path_selector_no_files">No files in this directory</string>
+    <string name="path_selector_no_matches">No matching files or directories</string>
     <string name="path_selector_favorite_added">Added to favorites</string>
     <string name="path_selector_favorite_removed">Removed from favorites</string>
     <string name="path_selector_favorite_add_title">Add favorite?</string>
@@ -1672,6 +1677,9 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="path_selector_favorite_remove_title">Remove favorite?</string>
     <string name="path_selector_favorite_remove_description">Remove “%1$s” from favorites?</string>
     <string name="path_selector_sort_title">Sort by</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information
+         https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436 -->
+    <string name="path_selector_show_hidden_files">Show hidden files</string>
     <string name="path_selector_sort_name_asc">File name (A to Z)</string>
     <string name="path_selector_sort_name_desc">File name (Z to A)</string>
     <string name="path_selector_sort_modified_desc">Modified (newest first)</string>

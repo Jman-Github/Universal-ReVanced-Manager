@@ -2,10 +2,8 @@ package app.urv.manager.ui.screen
 
 import android.os.Build
 import android.net.Uri
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -81,6 +79,7 @@ import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.KeepScreenOn
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
@@ -451,15 +450,7 @@ fun PatcherScreen(
 
     val steps = patcherProgress.steps.groupBy { it.category }
 
-    if (isPatchingActive) {
-        DisposableEffect(Unit) {
-            val window = (context as Activity).window
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            onDispose {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        }
-    }
+    KeepScreenOn(isPatchingActive)
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(

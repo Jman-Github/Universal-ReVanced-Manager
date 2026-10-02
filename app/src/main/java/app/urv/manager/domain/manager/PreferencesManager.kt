@@ -2,6 +2,7 @@ package app.urv.manager.domain.manager
 
 import android.content.ComponentName
 import android.content.Context
+import android.util.Log
 import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.base.BasePreferencesManager
 import app.urv.manager.domain.manager.base.EditorContext
@@ -479,8 +480,65 @@ class PreferencesManager(
     val backgroundImageInputLastDirectory =
         stringPreference("file_picker_background_image_input_directory", "")
     val contentSelectorLastDirectory = stringPreference("file_picker_content_selector_directory", "")
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
+    // URV also remembers a separate folder for each import/export picker.
+    private val filePickerDirectoryPreferences by lazy {
+        mapOf(
+            "apkInputLastDirectory" to apkInputLastDirectory,
+            "selectedAppApkInputLastDirectory" to selectedAppApkInputLastDirectory,
+            "patchProfileApkInputLastDirectory" to patchProfileApkInputLastDirectory,
+            "dashboardApkInputLastDirectory" to dashboardApkInputLastDirectory,
+            "patchedApkExportLastDirectory" to patchedApkExportLastDirectory,
+            "savedAppExportLastDirectory" to savedAppExportLastDirectory,
+            "dashboardQuickExportLastDirectory" to dashboardQuickExportLastDirectory,
+            "dashboardBundleInputLastDirectory" to dashboardBundleInputLastDirectory,
+            "dashboardSplitInputLastDirectory" to dashboardSplitInputLastDirectory,
+            "dashboardSavedAppsExportLastDirectory" to dashboardSavedAppsExportLastDirectory,
+            "settingsBackupLastDirectory" to settingsBackupLastDirectory,
+            "keystoreImportLastDirectory" to keystoreImportLastDirectory,
+            "patchBundlesImportLastDirectory" to patchBundlesImportLastDirectory,
+            "patchProfilesImportLastDirectory" to patchProfilesImportLastDirectory,
+            "managerSettingsImportLastDirectory" to managerSettingsImportLastDirectory,
+            "everythingImportLastDirectory" to everythingImportLastDirectory,
+            "patchSelectionImportLastDirectory" to patchSelectionImportLastDirectory,
+            "patchBundlesExportLastDirectory" to patchBundlesExportLastDirectory,
+            "patchProfilesExportLastDirectory" to patchProfilesExportLastDirectory,
+            "everythingExportLastDirectory" to everythingExportLastDirectory,
+            "patchSelectionExportLastDirectory" to patchSelectionExportLastDirectory,
+            "currentKeystoreExportLastDirectory" to currentKeystoreExportLastDirectory,
+            "youtubeAssetsExportLastDirectory" to youtubeAssetsExportLastDirectory,
+            "mergedApkExportLastDirectory" to mergedApkExportLastDirectory,
+            "signedApkExportLastDirectory" to signedApkExportLastDirectory,
+            "signatureMetadataExportLastDirectory" to signatureMetadataExportLastDirectory,
+            "signatureMetadataLogExportLastDirectory" to signatureMetadataLogExportLastDirectory,
+            "createdKeystoreExportLastDirectory" to createdKeystoreExportLastDirectory,
+            "convertedKeystoreExportLastDirectory" to convertedKeystoreExportLastDirectory,
+            "apkSignerInputLastDirectory" to apkSignerInputLastDirectory,
+            "signatureMetadataSourceInputLastDirectory" to signatureMetadataSourceInputLastDirectory,
+            "signatureMetadataApkInputLastDirectory" to signatureMetadataApkInputLastDirectory,
+            "lsposedModuleInputLastDirectory" to lsposedModuleInputLastDirectory,
+            "youtubeImageInputLastDirectory" to youtubeImageInputLastDirectory,
+            "keystoreConverterInputLastDirectory" to keystoreConverterInputLastDirectory,
+            "patchOptionFileInputLastDirectory" to patchOptionFileInputLastDirectory,
+            "mergeLogExportLastDirectory" to mergeLogExportLastDirectory,
+            "patcherLogExportLastDirectory" to patcherLogExportLastDirectory,
+            "rootMountDiagnosticsExportLastDirectory" to rootMountDiagnosticsExportLastDirectory,
+            "patchBundleDiscoveryExportLastDirectory" to patchBundleDiscoveryExportLastDirectory,
+            "splitInstallerInputLastDirectory" to splitInstallerInputLastDirectory,
+            "splitInstallerLogExportLastDirectory" to splitInstallerLogExportLastDirectory,
+            "advancedLogExportLastDirectory" to advancedLogExportLastDirectory,
+            "downloadsExportLastDirectory" to downloadsExportLastDirectory,
+            "backgroundImageInputLastDirectory" to backgroundImageInputLastDirectory,
+            "contentSelectorLastDirectory" to contentSelectorLastDirectory,
+        )
+    }
+
     val pathSelectorSortMode = stringPreference("path_selector_sort_mode", "MODIFIED_DESC")
     val pathSelectorSearchQuery = stringPreference("path_selector_search_query", "")
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436
+    val pathSelectorShowHiddenFiles = booleanPreference("path_selector_show_hidden_files", false)
     val appSelectorFilterInstalledOnly = booleanPreference("app_selector_filter_installed_only", false)
     val appSelectorFilterPatchesAvailable = booleanPreference("app_selector_filter_patches_available", false)
     val splitMergeSelectionPreset = stringPreference("split_merge_selection_preset", "all")
@@ -526,6 +584,16 @@ class PreferencesManager(
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/domain/manager/PreferencesManager.kt
     init {
         runBlocking {
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/commit/3a07ae5ca114667e8f085802ff76c4addb7825db
+            // The marker stays on this device. Restored data (and the first upgrade to this
+            // policy) starts without a token, before repositories can issue network requests.
+            val credentialMarker = context.noBackupFilesDir.resolve(".credentials_initialized")
+            if (!credentialMarker.isFile) {
+                gitHubPat.update("")
+                runCatching { credentialMarker.writeText("1") }
+                    .onFailure { Log.w("PreferencesManager", "Could not mark credential initialization", it) }
+            }
             val storedLimit = processMemoryLimit.get()
             val configuredLimit = if (
                 storedLimit == MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_NOT_SET
@@ -668,6 +736,12 @@ class PreferencesManager(
         val autoSaveDownloaderLatestOnly: Boolean? = null,
         val pathSelectorFavorites: Set<String>? = null,
         val pathSelectorLastDirectory: String? = null,
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
+        val pathSelectorSortMode: String? = null,
+        val pathSelectorSearchQuery: String? = null,
+        val pathSelectorShowHiddenFiles: Boolean? = null,
+        val filePickerLastDirectories: Map<String, String>? = null,
         val appSelectorFilterInstalledOnly: Boolean? = null,
         val appSelectorFilterPatchesAvailable: Boolean? = null,
         val splitMergeSelectionPreset: String? = null,
@@ -913,7 +987,15 @@ class PreferencesManager(
             autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
             autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.get(),
             pathSelectorFavorites = pathSelectorFavorites.get(),
-            pathSelectorLastDirectory = pathSelectorLastDirectory.get().takeIf { it.isNotBlank() },
+            pathSelectorLastDirectory = pathSelectorLastDirectory.get(),
+            // Code adapted from Morphe, see third-party/NOTICE for more information
+            // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
+            pathSelectorSortMode = pathSelectorSortMode.get(),
+            pathSelectorSearchQuery = pathSelectorSearchQuery.get(),
+            pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.get(),
+            filePickerLastDirectories = filePickerDirectoryPreferences.mapValues { (_, preference) ->
+                preference.get()
+            },
             appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
             appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
             splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
@@ -936,6 +1018,21 @@ class PreferencesManager(
             patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
             searchEngineHost = searchEngineHost.get()
         )
+    }
+
+    private fun sanitizeImportedPickerDirectory(directory: String): String? {
+        if (directory.isEmpty()) return ""
+        if (directory.isBlank()) return null
+        return runCatching {
+            val resolved = Paths.get(directory)
+            if (!resolved.isAbsolute) return@runCatching null
+            val target = when {
+                resolved.isDirectory() -> resolved
+                resolved.parent?.isDirectory() == true -> resolved.parent
+                else -> null
+            }
+            target?.takeIf { it.isReadable() }?.toString()
+        }.getOrNull()
     }
 
     private fun EditorContext.importAppearanceSettings(snapshot: SettingsSnapshot) {
@@ -1154,18 +1251,23 @@ class PreferencesManager(
             }.toSet()
             pathSelectorFavorites.value = sanitized
         }
-        snapshot.pathSelectorLastDirectory?.let { lastDir ->
-            val resolved = runCatching { Paths.get(lastDir) }.getOrNull()
-            val target = when {
-                resolved == null -> null
-                resolved.isDirectory() -> resolved
-                resolved.parent?.isDirectory() == true -> resolved.parent
-                else -> null
-            }
-            if (target != null && target.isReadable()) {
-                pathSelectorLastDirectory.value = target.toString()
-            }
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
+        snapshot.pathSelectorLastDirectory?.let { directory ->
+            sanitizeImportedPickerDirectory(directory)?.let { pathSelectorLastDirectory.value = it }
         }
+        snapshot.pathSelectorSortMode?.takeIf {
+            it in setOf(
+                "NAME_ASC", "NAME_DESC", "MODIFIED_DESC", "MODIFIED_ASC",
+                "TYPE_ASC", "TYPE_DESC", "SIZE_DESC", "SIZE_ASC"
+            )
+        }?.let { pathSelectorSortMode.value = it }
+        snapshot.pathSelectorSearchQuery?.let { pathSelectorSearchQuery.value = it }
+        snapshot.filePickerLastDirectories?.forEach { (name, directory) ->
+            val preference = filePickerDirectoryPreferences[name] ?: return@forEach
+            sanitizeImportedPickerDirectory(directory)?.let { preference.value = it }
+        }
+        snapshot.pathSelectorShowHiddenFiles?.let { pathSelectorShowHiddenFiles.value = it }
         snapshot.appSelectorFilterInstalledOnly?.let { appSelectorFilterInstalledOnly.value = it }
         snapshot.appSelectorFilterPatchesAvailable?.let { appSelectorFilterPatchesAvailable.value = it }
         snapshot.splitMergeSelectionPreset?.takeIf { it.isNotBlank() }?.let {

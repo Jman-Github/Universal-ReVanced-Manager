@@ -377,17 +377,48 @@ class PM(
     }
 
     private fun cleanLabel(raw: String, packageName: String): String {
-        val trimmed = raw.trim()
-        if (trimmed.isEmpty()) return trimmed
-        // If the label contains the package name or a dotted class, strip to the last segment.
-        val hasDots = trimmed.contains('.')
-        val pkgMatch = packageName.isNotEmpty() && (trimmed.startsWith(packageName) || trimmed.contains(packageName))
-        val base = if (hasDots || pkgMatch) trimmed.substringAfterLast('.') else trimmed
-        val withoutSuffix = base.removeSuffix("Application")
-        val candidate = withoutSuffix.ifBlank { base }
-        return candidate.ifBlank { trimmed }
+        return cleanPackageLabel(raw, packageName)
     }
 
+}
+
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/068686f7cde2d2307eb19164a5837036a097039b
+/**
+ * Whether a label is an identifier the app never meant to show, rather than a name it chose.
+ *
+ * Apps without a real label fall back to their package or a launcher class, and only those are
+ * worth reducing to a last segment. A brand that simply contains a dot must survive, so a dotted
+ * label only qualifies with the shape of a package: no spaces, three or more segments that each
+ * start with a letter or underscore, and a lowercase top-level domain in front.
+ */
+private fun looksLikeIdentifierLabel(label: String, packageName: String): Boolean {
+    if (label.any(Char::isWhitespace)) return false
+    if (packageName.isNotEmpty() && label.contains(packageName)) return true
+    val segments = label.split('.')
+    if (segments.size < 3) return false
+    if (!segments.all(::isIdentifierSegment)) return false
+    return segments.first().none(Char::isUpperCase)
+}
+
+private fun isIdentifierSegment(segment: String): Boolean {
+    val first = segment.firstOrNull() ?: return false
+    return (first.isLetter() || first == '_') && segment.all { it.isLetterOrDigit() || it == '_' }
+}
+
+/**
+ * Reduces a launcher label to the part worth showing.
+ * Kept free of Android APIs so the identifier rules can be tested directly.
+ */
+internal fun cleanPackageLabel(raw: String, packageName: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return trimmed
+    if (!looksLikeIdentifierLabel(trimmed, packageName)) return trimmed
+
+    val base = trimmed.substringAfterLast('.')
+    val withoutSuffix = base.removeSuffix("Application")
+    val candidate = withoutSuffix.ifBlank { base }
+    return candidate.ifBlank { trimmed }
 }
 
 // Code adapted from Morphe, see third-party/NOTICE for more information
