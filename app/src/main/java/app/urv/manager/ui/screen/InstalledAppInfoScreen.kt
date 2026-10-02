@@ -1816,6 +1816,28 @@ fun InstalledAppInfoScreen(
                     )
                 }
 
+                val signatureWorkflow = installedApp.selectionPayload?.signatureWorkflow
+                if (signatureWorkflow?.remembered == true &&
+                    installedApp.repatchSourcePath?.let { File(it).isFile } == true
+                ) {
+                    SettingsListItem(
+                        modifier = Modifier.clickable {
+                            viewModel.setSignatureInjectionEnabled(!signatureWorkflow.enabled)
+                        },
+                        headlineContent = stringResource(R.string.patch_profile_signature_workflow_enable),
+                        supportingContent = stringResource(
+                            if (signatureWorkflow.injected) R.string.saved_app_signature_workflow_applied
+                            else R.string.saved_app_signature_workflow_not_applied
+                        ) + "\n" + stringResource(R.string.saved_app_signature_workflow_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = signatureWorkflow.enabled,
+                                onCheckedChange = viewModel::setSignatureInjectionEnabled
+                            )
+                        }
+                    )
+                }
+
                 if (autoPatchEnabled && viewModel.hasSavedCopy) {
                     val appAutoPatchEnabled =
                         installedApp.currentPackageName in autoPatchEnabledPackages

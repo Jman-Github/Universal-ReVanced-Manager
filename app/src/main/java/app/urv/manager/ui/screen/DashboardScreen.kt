@@ -1687,7 +1687,7 @@ fun DashboardScreen(
         }
     }
     if (showSplitPluginDialog) {
-        MergeSplitPluginDialog(
+        DownloaderPluginInputDialog(
             plugins = downloaderPlugins,
             activePluginId = vm.activeSplitMergePluginId,
             packageName = splitPluginPackageName,
@@ -3798,7 +3798,7 @@ private fun MergeSplitInstalledStatusChip(label: String) {
 }
 
 @Composable
-private fun MergeSplitPluginDialog(
+internal fun DownloaderPluginInputDialog(
     plugins: List<LoadedDownloaderPlugin>,
     activePluginId: String?,
     packageName: String,

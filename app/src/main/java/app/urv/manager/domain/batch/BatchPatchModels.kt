@@ -6,6 +6,7 @@
 package app.urv.manager.domain.batch
 
 import app.urv.manager.data.room.profile.PatchProfilePayload
+import app.urv.manager.domain.manager.SignatureMetadataWorkflowProgress
 import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
@@ -65,11 +66,14 @@ data class BatchPatchItem(
     val repatchSourcePath: String? = null,
     val sourceEntryKey: String? = null,
     val profileInstallerToken: String? = null,
+    val signatureWorkflow: PatchProfilePayload.SignatureWorkflow =
+        PatchProfilePayload.SignatureWorkflow(),
     val useMount: Boolean = false,
     val hadPatchFailures: Boolean = false,
     val progressEvents: List<ProgressEvent> = emptyList(),
     val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList(),
-    val logLines: List<String> = emptyList()
+    val logLines: List<String> = emptyList(),
+    val signatureInjection: SignatureMetadataWorkflowProgress = SignatureMetadataWorkflowProgress()
 ) {
     val patchCount get() = selection.values.sumOf { it.size }
     val hasAvailablePatchedFile get() =

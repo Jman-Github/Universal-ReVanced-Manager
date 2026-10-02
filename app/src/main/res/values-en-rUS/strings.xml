@@ -1167,7 +1167,7 @@ Patch profiles are not affected.</string>
     <string name="tools_signature_metadata_injector_title">Signature metadata injector &amp; cloner</string>
     <string name="tools_signature_metadata_injector_info">Select signature metadata from a ZIP, APK, or split APK container, then choose a target. Split targets can be merged into one APK or kept as a split container.</string>
     <string name="tools_signature_metadata_injector_select_zip">Select signature source</string>
-    <string name="tools_signature_metadata_injector_select_apk">Select target APK or split container</string>
+    <string name="tools_signature_metadata_injector_select_apk">Select target source</string>
     <string name="tools_signature_metadata_injector_zip_label">Signature source</string>
     <string name="tools_signature_metadata_injector_apk_label">Target APK or split container</string>
     <string name="tools_signature_metadata_injector_invalid_zip">Select an .apk, .apks, .xapk, .apkm, or .zip signature source.</string>
@@ -2381,6 +2381,32 @@ Details: %2$s</string>
     <string name="batch_patch_edit_apk">Edit APK</string>
     <string name="batch_patch_metadata_save_failed">Installed, but URV Manager could not save the app metadata: %1$s</string>
     <string name="manager_update_incompatible_pr">This release is incompatible with this PR build. Please wait for a newer manager release. Your data has not been changed.</string>
+    <string name="tools_signature_input_downloaded_description">Choose an APK downloaded by the manager.</string>
+    <string name="tools_signature_input_installed">Installed apps</string>
+    <string name="tools_signature_input_installed_description">Use the APKs from an app installed on this device.</string>
+    <string name="tools_signature_input_storage">Select from storage</string>
+    <string name="tools_signature_input_storage_description">Choose an APK or split archive from a file picker.</string>
+    <string name="tools_signature_input_no_apps">No matching apps found.</string>
+    <string name="tools_signature_input_unavailable">The downloaded APK is no longer available.</string>
+    <string name="tools_signature_input_split_apks">Split APKs</string>
+    <string name="patch_profile_signature_workflow_title">Signature metadata workflow</string>
+    <string name="patch_profile_signature_workflow_enable">Inject after patching</string>
+    <string name="patch_profile_signature_workflow_enable_description">Clone metadata from the original APK into the patched APK after this profile finishes patching.</string>
+    <string name="patcher_signature_workflow_title">Inject source signature metadata</string>
+    <string name="patcher_signature_workflow_description">Use the original APK as the signature source and this patched APK as the target.</string>
+    <string name="patcher_signature_workflow_running">Injecting signature metadata…</string>
+    <string name="patcher_signature_workflow_failed">Signature metadata injection failed</string>
+    <string name="patcher_signature_workflow_source_missing">The original APK is no longer available. Patch again to use this workflow.</string>
+    <string name="patcher_signature_workflow_output_missing">The patched APK is no longer available.</string>
+    <string name="inject_signature_metadata_after_patching">Inject signature metadata after patching</string>
+    <string name="inject_signature_metadata_after_patching_description">Clone signature metadata from the original signed input into the final patched APK. Remember this choice when the app is saved for future repatches. Unsigned merged APKs cannot be used as signature sources</string>
+    <string name="saved_app_signature_workflow_description">Use the retained original signature metadata when repatching this app, including automatic and batch repatching. This choice overrides the global setting.</string>
+    <string name="patcher_signature_workflow_unsigned_source">This input has no original signature metadata. Select an original signed APK or split archive instead of an unsigned merged APK.</string>
+    <string name="tools_signature_input_plugin_description">Use a downloader plugin to select an APK or split archive.</string>
+    <string name="tools_signature_input_preparing">Preparing selected input…</string>
+    <string name="saved_app_signature_workflow_applied">Signature metadata was injected into this saved APK.</string>
+    <string name="saved_app_signature_workflow_not_applied">Signature metadata was not injected into this saved APK.</string>
+    <string name="patcher_step_inject_signature_metadata">Injecting signature metadata</string>
 </resources>
 
 

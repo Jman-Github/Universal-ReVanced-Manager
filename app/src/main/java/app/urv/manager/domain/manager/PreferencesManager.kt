@@ -109,6 +109,7 @@ class PreferencesManager(
     val chooseSplitApksBeforePatching = booleanPreference("choose_split_apks_before_patching", false)
     val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
     val skipApkSigning = booleanPreference("skip_apk_signing", false)
+    val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
     val patchAvailabilityEnabled = booleanPreference("patch_availability_enabled", true)
@@ -563,6 +564,7 @@ class PreferencesManager(
         val chooseSplitApksBeforePatching: Boolean? = null,
         val continueOnPatchError: Boolean? = null,
         val skipApkSigning: Boolean? = null,
+        val injectSignatureMetadataAfterPatching: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
         val patchAvailabilityEnabled: Boolean? = null,
@@ -817,6 +819,7 @@ class PreferencesManager(
             chooseSplitApksBeforePatching = chooseSplitApksBeforePatching.get(),
             continueOnPatchError = continueOnPatchError.get(),
             skipApkSigning = skipApkSigning.get(),
+            injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.get(),
             morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
             patcherLogMode = patcherLogMode.get(),
             patchAvailabilityEnabled = patchAvailabilityEnabled.get(),
@@ -1008,6 +1011,7 @@ class PreferencesManager(
         snapshot.chooseSplitApksBeforePatching?.let { chooseSplitApksBeforePatching.value = it }
         snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
         snapshot.skipApkSigning?.let { skipApkSigning.value = it }
+        snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
