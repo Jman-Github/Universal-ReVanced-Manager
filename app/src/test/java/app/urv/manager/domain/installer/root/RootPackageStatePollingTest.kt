@@ -22,6 +22,15 @@ class RootPackageStatePollingTest {
     }
 
     @Test
+    fun `launcher visibility changes do not reset verified stock stability`() = runBlocking {
+        val states = ArrayDeque(listOf(expected.copy(launcherResolvable = true), expected))
+        assertEquals(expected, awaitStableRootPackageState(expected, 2, timeoutMs = 2_000, pollIntervalMs = 1) {
+            states.removeFirst()
+        })
+        assertTrue(states.isEmpty())
+    }
+
+    @Test
     fun `a stalled query is bounded by the overall deadline`() = runBlocking {
         assertFailsWith<IllegalStateException> {
             awaitStableRootPackageState(expected, 2, timeoutMs = 100, pollIntervalMs = 1) { awaitCancellation() }

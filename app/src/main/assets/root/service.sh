@@ -437,18 +437,6 @@ remove_zygote_payload_mounts() {
   return 0
 }
 
-boot_waited=0
-log_status "Waiting for Android boot completion before ownership verification"
-while [ "$boot_waited" -lt 300 ]; do
-  [ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] && break
-  sleep 1
-  boot_waited=$((boot_waited + 1))
-done
-[ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] || {
-  log_status "Android boot did not complete; deferring mount verification"
-  exit 0
-}
-
 load_state() {
   [ -f "$state_file" ] || { log_status "Missing committed state; leaving stock active"; return 1; }
   [ "$(stat -c %a "$state_file" 2>/dev/null)" = 600 ] || {
@@ -465,10 +453,6 @@ load_state() {
   [ "$URV_STATE_VERSION" = 1 ] || { log_status "Unsupported state version"; return 1; }
 }
 
-# Boot completion does not mean PackageManager has finished startup work. Keep
-# the package lock free while the phone settles, so Manager actions can proceed.
-log_status "Allowing five minutes for Android startup to settle"
-sleep 300
 load_state || exit 0
 locked_package="$URV_PACKAGE"
 
@@ -476,6 +460,54 @@ lock_dir="/data/adb/urv/locks"
 lock_path="$lock_dir/$URV_PACKAGE.lock.d"
 lock_owner="$lock_path/owner"
 transaction_dir="/data/adb/urv/transactions/$URV_PACKAGE"
+boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+boot_started_epoch="$(date +%s 2>/dev/null || echo 0)"
+boot_started_uptime="$(awk '{print int($1)}' /proc/uptime)"
+mkdir -p "$transaction_dir" || exit 0
+
+write_boot_status() {
+  status_epoch="$(date +%s 2>/dev/null || echo 0)"
+  status_uptime="$(awk '{print int($1)}' /proc/uptime)" || return 1
+  status_temp="$transaction_dir/boot-status.$$.tmp"
+  (
+    umask 077
+    {
+      printf '%s\n' "$1"
+      printf 'boot_id=%s\nsource=service\ntransaction_id=%s\n' "$boot_id" "$URV_TRANSACTION_ID"
+      printf 'started_epoch_seconds=%s\nupdated_epoch_seconds=%s\nelapsed_seconds=%s\n' \
+        "$boot_started_epoch" "$status_epoch" "$((status_uptime - boot_started_uptime))"
+    } >"$status_temp" && mv -f "$status_temp" "$transaction_dir/boot-status"
+  ) || {
+    rm -f "$status_temp"
+    log_status "Unable to record boot recovery status: $1"
+    return 1
+  }
+  boot_status="$1"
+  log_status "Boot recovery status: $boot_status; elapsed $((status_uptime - boot_started_uptime)) seconds"
+}
+
+finish_boot_service() {
+  case "$boot_status" in
+    WAITING_*|VERIFYING|MOUNTING) write_boot_status DEFERRED ;;
+  esac
+}
+
+boot_waited=0
+write_boot_status WAITING_FOR_BOOT
+trap finish_boot_service EXIT
+log_status "Waiting for Android boot completion before ownership verification"
+while [ "$boot_waited" -lt 300 ]; do
+  [ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] && break
+  sleep 1
+  boot_waited=$((boot_waited + 1))
+done
+[ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] || {
+  write_boot_status BOOT_TIMEOUT
+  log_status "Android boot did not complete; deferring mount verification"
+  exit 0
+}
+write_boot_status WAITING_FOR_PACKAGE_MANAGER
+log_status "Android boot completed; checking PackageManager readiness"
 canonical_dir="$transaction_dir/backup/payload"
 canonical_patched="$canonical_dir/patched"
 canonical_stock="$canonical_dir/stock"
@@ -570,7 +602,7 @@ release_package_lock() {
 
 if [ -f "$transaction_dir/active.json" ]; then
   log_status "Incomplete transaction present; deferring entirely to Manager recovery"
-  echo INCOMPLETE_TRANSACTION >"$transaction_dir/boot-status"
+  write_boot_status INCOMPLETE_TRANSACTION
   exit 0
 fi
 
@@ -637,11 +669,11 @@ read_package_state() {
     current_enabled=1
   fi
   launcher_line="$(timeout 10 cmd package resolve-activity --brief --user "$URV_USER_ID" \
-    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$URV_PACKAGE" 2>/dev/null)" || return 1
+    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$URV_PACKAGE" 2>/dev/null)" || launcher_line=''
   case "$launcher_line" in
     */*) current_launcher=1 ;;
     *"No activity found"*) current_launcher=0 ;;
-    *) return 1 ;;
+    *) current_launcher=0 ;;
   esac
 }
 
@@ -651,7 +683,10 @@ wait_for_package_manager() {
     ready_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
     [ "$((ready_now - ready_started))" -lt 300 ] || return 1
     [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 1
-    [ ! -f "$transaction_dir/active.json" ] || return 1
+    if [ -f "$transaction_dir/active.json" ]; then
+      write_boot_status INCOMPLETE_TRANSACTION
+      return 1
+    fi
     read_package_state && return 0
     sleep 5
   done
@@ -660,13 +695,14 @@ wait_for_package_manager() {
 acquire_ready_package_lock() {
   recovery_started="$(awk '{print int($1)}' /proc/uptime)" || return 1
   while wait_for_package_manager "$recovery_started"; do
+    write_boot_status WAITING_FOR_LOCK
     acquire_package_lock || return 1
     boot_lock_held=1
     # Every acquisition needs fresh state: Manager may have acted between retries.
     [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 1
     if [ -f "$transaction_dir/active.json" ]; then
       log_status "Transaction appeared before the boot lock was acquired; deferring to Manager"
-      echo INCOMPLETE_TRANSACTION >"$transaction_dir/boot-status"
+      write_boot_status INCOMPLETE_TRANSACTION
       return 1
     fi
     load_state || return 1
@@ -677,25 +713,27 @@ acquire_ready_package_lock() {
     log_status "PackageManager became unavailable; releasing lock before retry"
     release_package_lock || return 1
     boot_lock_held=0
+    write_boot_status WAITING_FOR_PACKAGE_MANAGER
     sleep 5
   done
   return 1
 }
 
 boot_lock_held=0
-trap '[ "$boot_lock_held" = 0 ] || release_package_lock || log_status "Unable to release transaction lock cleanly"' EXIT
+trap '[ "$boot_lock_held" = 0 ] || release_package_lock || log_status "Unable to release transaction lock cleanly"; finish_boot_service' EXIT
 trap 'exit 0' HUP INT TERM
 if ! acquire_ready_package_lock; then
   log_status "PackageManager not ready, transaction lock busy, or module changed; deferring verification"
   exit 0
 fi
+write_boot_status VERIFYING
 if ! echo "$installed_users" | grep -Fx "$URV_USER_ID" >/dev/null; then
   log_status "Committed Android user no longer owns the package; removing URV mounts"
   if ! stop_and_wait || ! remove_target_mounts; then
     log_status "Unable to remove the stale user mount safely"
-    echo REPAIR_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPAIR_REQUIRED
   else
-    echo REPATCH_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPATCH_REQUIRED
   fi
   disable_module || log_status "Unable to persist module disable marker"
   exit 0
@@ -705,9 +743,9 @@ if [ -n "$other_users" ]; then
   log_status "Package is installed for another Android user; removing URV mounts"
   if ! stop_and_wait || ! remove_target_mounts; then
     log_status "Unable to remove the cross-user mount safely"
-    echo REPAIR_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPAIR_REQUIRED
   else
-    echo REPATCH_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPATCH_REQUIRED
   fi
   disable_module || log_status "Unable to persist module disable marker"
   exit 0
@@ -726,7 +764,7 @@ if [ "$mount_count" -gt 0 ]; then
   [ "$mount_count" = 1 ] && target_matches_urv_inode && urv_mount_count=1
   if [ "$mount_count" != "$urv_mount_count" ]; then
     log_status "Non-URV mount conflict at stock target; leaving it unchanged"
-    echo REPAIR_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPAIR_REQUIRED
     disable_module || log_status "Unable to persist module disable marker"
     exit 0
   fi
@@ -736,12 +774,11 @@ if [ "$mount_count" -gt 0 ]; then
        [ "$current_version_code" = "$URV_VERSION_CODE" ] &&
        [ "$path_count" = "$expected_path_count" ] &&
        [ "$split_compatible" = 1 ] &&
-       [ "$current_enabled" = "$URV_ENABLED" ] &&
-       [ "$current_launcher" = "$URV_LAUNCHER_RESOLVABLE" ]; then
+       [ "$current_enabled" = "$URV_ENABLED" ]; then
       if mount_and_verify_zygotes && root_mount_layout_valid && split_set_matches refresh &&
          [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ]; then
         log_status "Early root and Zygote mounts verified"
-        echo VERIFIED >"$transaction_dir/boot-status"
+        write_boot_status VERIFIED
         exit 0
       fi
       log_status "Zygote namespace verification failed; retrying after package quiescence"
@@ -752,7 +789,7 @@ if [ "$mount_count" -gt 0 ]; then
       if mount_and_verify_zygotes && root_mount_layout_valid && split_set_matches refresh &&
          [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ]; then
         log_status "Early Zygote namespace repair succeeded"
-        echo VERIFIED >"$transaction_dir/boot-status"
+        write_boot_status VERIFIED
         exit 0
       fi
       log_status "Zygote namespace repair failed; falling back to verified stock"
@@ -814,7 +851,6 @@ if [ "$current_path" != "$URV_STOCK_PATH" ] ||
    [ "$current_version_code" != "$URV_VERSION_CODE" ] ||
    [ "$path_count" != "$expected_path_count" ] ||
    [ "$current_enabled" != "$URV_ENABLED" ] ||
-   [ "$current_launcher" != "$URV_LAUNCHER_RESOLVABLE" ] ||
    [ "$stock_hash" != "$URV_STOCK_SHA256" ] ||
    { [ "$URV_PRESERVE_STOCK" = 1 ] && [ "$shadow_hash" != "$URV_STOCK_SHADOW_SHA256" ]; } ||
    [ "$payload_hash" != "$URV_PATCHED_SHA256" ]; then
@@ -824,17 +860,18 @@ if [ "$current_path" != "$URV_STOCK_PATH" ] ||
   [ "$path_count" = "$expected_path_count" ] || log_status "Compatibility mismatch: APK topology changed"
   [ "$split_compatible" = 1 ] || log_status "Compatibility mismatch: split APK set changed"
   [ "$current_enabled" = "$URV_ENABLED" ] || log_status "Compatibility mismatch: enabled state changed"
-  [ "$current_launcher" = "$URV_LAUNCHER_RESOLVABLE" ] || log_status "Compatibility mismatch: launcher resolution changed"
-  [ "$stock_hash" = "$URV_STOCK_SHA256" ] || log_status "Compatibility mismatch: installed stock APK changed"
+  [ "$stock_hash" = "$URV_STOCK_SHA256" ] ||
+    log_status "Compatibility mismatch: installed stock APK changed (expected $URV_STOCK_SHA256, found $stock_hash)"
   [ "$URV_PRESERVE_STOCK" = 0 ] || [ "$shadow_hash" = "$URV_STOCK_SHADOW_SHA256" ] ||
     log_status "Compatibility mismatch: stock-shadow payload changed"
   [ "$payload_hash" = "$URV_PATCHED_SHA256" ] || log_status "Compatibility mismatch: patched payload changed"
   log_status "Compatibility changed; stock left active and repatching is required"
-  echo REPATCH_REQUIRED >"$transaction_dir/boot-status"
+  write_boot_status REPATCH_REQUIRED
   disable_module || log_status "Unable to persist module disable marker"
   exit 0
 fi
 
+write_boot_status MOUNTING
 stop_and_wait || {
   log_status "Package processes did not exit; leaving stock active"
   exit 0
@@ -851,7 +888,7 @@ if [ "$URV_PRESERVE_STOCK" = 1 ]; then
   mount -o private none "$URV_STOCK_PATH" || {
     log_status "Failed to isolate the stock shadow bind; restoring stock"
     remove_failed_urv_mounts || log_status "Unable to remove the partial stock-shadow mount"
-    echo VERIFY_FAILED >"$transaction_dir/boot-status"
+    write_boot_status VERIFY_FAILED
     disable_module || log_status "Unable to persist module disable marker"
     exit 0
   }
@@ -864,10 +901,10 @@ fi
 mount -o bind "$URV_PATCHED_PATH" "$URV_STOCK_PATH" || {
   log_status "Late patched bind mount failed; removing any stock-shadow layer"
   if remove_failed_urv_mounts && ! target_is_mounted; then
-    echo VERIFY_FAILED >"$transaction_dir/boot-status"
+    write_boot_status VERIFY_FAILED
   else
     log_status "Unable to remove the partial root mount; repair is required"
-    echo REPAIR_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPAIR_REQUIRED
   fi
   disable_module || log_status "Unable to persist module disable marker"
   exit 0
@@ -884,14 +921,14 @@ if { [ "$URV_PRESERVE_STOCK" = 1 ] && [ "$post_mount_shadow_hash" != "$URV_STOCK
   log_status "Late root or Zygote mount verification failed; restoring stock"
   remove_zygote_payload_mounts || log_status "Unable to remove every Zygote mount"
   if remove_failed_urv_mounts && ! target_is_mounted; then
-    echo VERIFY_FAILED >"$transaction_dir/boot-status"
+    write_boot_status VERIFY_FAILED
   else
     log_status "Unable to prove an unmounted stock target; repair is required"
-    echo REPAIR_REQUIRED >"$transaction_dir/boot-status"
+    write_boot_status REPAIR_REQUIRED
   fi
   disable_module || log_status "Unable to persist module disable marker"
   exit 0
 fi
 
 log_status "Late root and Zygote mounts verified; app remains stopped"
-echo VERIFIED >"$transaction_dir/boot-status"
+write_boot_status VERIFIED

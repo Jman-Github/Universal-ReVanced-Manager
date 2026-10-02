@@ -127,13 +127,13 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
             append("printf 'Package: %s\\n' ${shellQuote(packageName)}; ")
             append("printf 'Generated (UTC): '; ")
             append("date -u '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date; ")
-            append("echo 'Event timestamps use Unix epoch milliseconds.'; ")
+            append("echo 'Diagnostic event timestamps use Unix epoch milliseconds; boot service timestamps use seconds.'; ")
             append("echo 'Each source is limited to its newest 32 KiB.'; ")
 
             appendFileSection("Committed Mount State", committedPath)
             appendFileSection("Active Transaction", activePath)
             appendFileSection("Recent Diagnostic Events", diagnosticsPath, indentTabs = true)
-            appendFileSection("Boot Status", bootStatusPath)
+            appendBootStatusSection(bootStatusPath)
             appendFileSection("Root Module State", moduleStatePath)
             appendFileSection("Root Module Service Log", moduleLogPath)
 
@@ -146,6 +146,21 @@ class RootTransactionStore(private val shell: RootShellGateway) : RootTransactio
         val result = runStoreCommand(command)
         result.requireSuccess("Read root mount diagnostics")
         return result.output.trimEnd() + "\n"
+    }
+
+    private fun StringBuilder.appendBootStatusSection(path: String) {
+        appendFileSection("Boot Status", path)
+        append("current_boot_id=\$(cat /proc/sys/kernel/random/boot_id 2>/dev/null); ")
+        append("printf 'Current boot ID: %s\\n' \"\$current_boot_id\"; ")
+        append("if [ -f ${shellQuote(path)} ]; then ")
+        append("recorded_boot_id=\$(sed -n 's/^boot_id=//p' ${shellQuote(path)}); ")
+        append("if [ -z \"\$recorded_boot_id\" ] || [ -z \"\$current_boot_id\" ]; then ")
+        append("echo 'Boot status age is unknown: this record has no verifiable boot identity.'; ")
+        append("elif [ \"\$recorded_boot_id\" != \"\$current_boot_id\" ]; then ")
+        append("echo 'Boot status is from an earlier boot; it does not describe this boot.'; ")
+        append("else echo 'Boot status belongs to the current boot.'; fi; ")
+        append("echo 'This is the last boot-service checkpoint; Manager recovery may have changed the mount since then.'; ")
+        append("fi; ")
     }
 
     private fun StringBuilder.appendFileSection(

@@ -253,9 +253,6 @@ class RootMountVerifier(
         check(packageState.topology == expected.topology) { "Package topology changed during mount" }
         check(packageState.matchesSplits(expected.stockSplits)) { "Installed split APKs changed during mount" }
         check(packageState.enabled == expected.enabled) { "Package enabled state changed during mount" }
-        check(packageState.launcherResolvable == expected.launcherResolvable) {
-            "Package launcher resolution changed during mount"
-        }
         return packageState
     }
 

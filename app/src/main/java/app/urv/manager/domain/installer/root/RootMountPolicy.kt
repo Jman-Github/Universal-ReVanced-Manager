@@ -107,8 +107,7 @@ object RootMountPolicy {
             current.baseSha256 == committed.stockSha256 &&
             current.topology == committed.topology &&
             current.matchesSplits(committed.stockSplits) &&
-            current.enabled == committed.enabled &&
-            current.launcherResolvable == committed.launcherResolvable
+            current.enabled == committed.enabled
         return if (exact) ReconcileDecision.REMOUNT else ReconcileDecision.REPATCH_REQUIRED
     }
 

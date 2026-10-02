@@ -28,11 +28,12 @@ internal suspend fun awaitStableRootPackageState(
                 (expected.baseSha256 == null || current.baseSha256 == expected.baseSha256) &&
                 current.basePath != null && current.splitPaths == expected.splitPaths &&
                 current.splitSha256 == expected.splitSha256 &&
-                current.enabled == expected.enabled &&
-                current.launcherResolvable == expected.launcherResolvable
-            if (matches && current == previous) stable++ else stable = if (matches) 1 else 0
+                current.enabled == expected.enabled
+            // Launcher visibility can change independently of the verified APK set.
+            val comparable = current.copy(launcherResolvable = expected.launcherResolvable)
+            if (matches && comparable == previous) stable++ else stable = if (matches) 1 else 0
             if (stable >= consecutiveReads) verified = current else delay(pollIntervalMs)
-            previous = current
+            previous = comparable
         }
         verified
     } ?: throw IllegalStateException(

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Run from repository root. Production functions, mocked Android commands, no root.
 set -eu
-for function in installed_user_ids split_set_matches read_package_state wait_for_package_manager acquire_ready_package_lock; do
+for function in installed_user_ids split_set_matches read_package_state wait_for_package_manager acquire_ready_package_lock write_boot_status finish_boot_service; do
   eval "$(sed -n "/^$function() {/,/^}/p" app/src/main/assets/root/service.sh)"
 done
 URV_PACKAGE=com.example.app
@@ -48,16 +48,17 @@ cmd() {
     *) echo 'com.example.app/.MainActivity' ;;
   esac
 }
-for scenario in ready split disabled; do
+for scenario in ready split disabled launcher_failure launcher_empty; do
   read_package_state
   [ "$current_version_code" = 42 ]
   case "$scenario" in
     ready) [ "$path_count:$current_enabled:$current_launcher" = 1:1:1 ] ;;
     split) [ "$path_count" = 2 ] ;;
     disabled) [ "$current_enabled:$current_launcher" = 0:0 ] ;;
+    launcher_failure|launcher_empty) [ "$current_launcher" = 0 ] ;;
   esac
 done
-for scenario in users_failure packages_failure path_failure path_empty version_failure version_empty enabled_failure launcher_failure launcher_empty; do
+for scenario in users_failure packages_failure path_failure path_empty version_failure version_empty enabled_failure; do
   if read_package_state; then echo "Unexpected success: $scenario" >&2; exit 1; fi
 done
 scenario=absent
@@ -107,6 +108,30 @@ ticks=0
 attempts=0
 awk() { echo "$ticks"; }
 sleep() { ticks=$((ticks + $1)); }
+boot_id=test-boot
+URV_TRANSACTION_ID=test-transaction
+boot_started_epoch=1000
+boot_started_uptime=0
+log_status() { :; }
+# An old checkpoint is replaced by a record for this boot.
+printf 'INCOMPLETE_TRANSACTION\nboot_id=old-boot\n' >"$transaction_dir/boot-status"
+write_boot_status WAITING_FOR_PACKAGE_MANAGER
+[ "$(head -n 1 "$transaction_dir/boot-status")" = WAITING_FOR_PACKAGE_MANAGER ]
+grep -Fx 'boot_id=test-boot' "$transaction_dir/boot-status" >/dev/null
+ticks=15
+write_boot_status VERIFIED
+grep -Fx 'elapsed_seconds=15' "$transaction_dir/boot-status" >/dev/null
+finish_boot_service
+[ "$(head -n 1 "$transaction_dir/boot-status")" = VERIFIED ]
+write_boot_status MOUNTING
+finish_boot_service
+[ "$(head -n 1 "$transaction_dir/boot-status")" = DEFERRED ]
+# Readiness allows an immediate attempt, with no startup settling delay.
+ticks=0
+read_package_state() { attempts=$((attempts + 1)); return 0; }
+wait_for_package_manager
+[ "$attempts:$ticks" = 1:0 ]
+attempts=0
 read_package_state() { attempts=$((attempts + 1)); [ "$attempts" -ge 4 ]; }
 wait_for_package_manager
 [ "$attempts:$ticks" = 4:15 ]
@@ -159,7 +184,7 @@ for scenario in transient persistent interrupted; do
         [ "$ticks:$acquisitions:$releases:$boot_lock_held" = 300:60:60:0 ] ;;
       interrupted)
         [ "$acquisitions:$loads" = 2:1 ]
-        [ "$(cat "$transaction_dir/boot-status")" = INCOMPLETE_TRANSACTION ]
+        [ "$(head -n 1 "$transaction_dir/boot-status")" = INCOMPLETE_TRANSACTION ]
         rm "$transaction_dir/active.json" "$transaction_dir/boot-status" ;;
       *) exit 1 ;;
     esac

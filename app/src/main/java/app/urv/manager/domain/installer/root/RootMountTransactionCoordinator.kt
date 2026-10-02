@@ -260,13 +260,22 @@ class RootMountTransactionCoordinator(
         }
     }
 
-    private fun mountOnlyCommittedStateBlock(
+    private suspend fun mountOnlyCommittedStateBlock(
         request: RootMountRequest,
         previousCommitted: RootCommittedState?
     ): RootMountResult? {
         if (request.operation != RootMountOperation.MOUNT_ONLY) return null
         return when (previousCommitted?.status) {
-            "REPATCH_REQUIRED" -> changedStockRequiresRepatch()
+            "REPATCH_REQUIRED" -> {
+                // A boot-time query can fail even though the installed APK set is unchanged.
+                // A manual retry still has to prove every recorded stock identity field.
+                val current = packageStateReader.read(request.packageName, request.userId)
+                if (runCatching { checkCommittedIdentity(requireNotNull(previousCommitted), current) }.isSuccess) {
+                    null
+                } else {
+                    changedStockRequiresRepatch()
+                }
+            }
             "REPAIR_REQUIRED" -> error("Root mount repair is required before mounting")
             else -> null
         }
@@ -607,6 +616,22 @@ class RootMountTransactionCoordinator(
                                 )
                                 true to RootMountResult.Success(committed.transactionId)
                             } else {
+                                // Namespace repair needs an existing root mount. After reboot, restore
+                                // absent mounts through reconciliation without first stopping the app.
+                                val rootVerification = runCatchingPreservingCancellation {
+                                    mountVerifier.verifyRootMounted(committed)
+                                }
+                                if (rootVerification.isFailure) {
+                                    val mounts = mountVerifier.findUrvMounts(packageName, setOf(committed.stockPath))
+                                    val message = if (mounts.none { it.mountPoint == committed.stockPath }) {
+                                        "Committed mount is absent; restoring it through full reconciliation"
+                                    } else {
+                                        "Committed root mount verification failed; using full reconciliation: " +
+                                            rootVerification.exceptionOrNull()?.message
+                                    }
+                                    transactionStore.appendDiagnostic(packageName, scanId, message)
+                                    return@withLock false to null
+                                }
                                 // A package or Zygote namespace can lose a propagated bind while
                                 // the root mount itself remains correct. Repair the committed mount
                                 // in place first so background reconciliation does not tear down a
@@ -619,9 +644,7 @@ class RootMountTransactionCoordinator(
                                         // target is force-stopped again after Zygote is repaired.
                                     }
                                     requireExclusivePackageUser(packageName, userId)
-                                    // Prove the root mount and PackageManager identity before
-                                    // touching namespace state. If stock actually changed, fall
-                                    // through without remounting an obsolete patched payload.
+                                    // Recheck after stopping the app, before changing namespaces.
                                     mountVerifier.verifyRootMounted(committed)
                                     mountVerifier.mountEverywhere(committed)
                                     mountVerifier.verifyMounted(committed)
@@ -883,10 +906,15 @@ class RootMountTransactionCoordinator(
                     isVerifiedExternalStockUpdate(it, rawStock)
                 } == true
                 if (rawStock.installed) {
+                    check(rawStock.packageName == request.packageName && rawStock.userId == request.userId) {
+                        "Unmounted package identity mismatch"
+                    }
                     previousCommitted?.let {
-                        if (externalStockUpdate) {
+                        // Permanent removal leaves the current installed APK untouched. It
+                        // does not need compatibility with a payload that is being deleted.
+                        if (request.removeModuleAfterUnmount || externalStockUpdate) {
                             check(isStructurallyVerifiedExternalStock(rawStock)) {
-                                "Updated stock package state could not be verified after unmount"
+                                "Current stock package state could not be verified after unmount"
                             }
                         } else {
                             checkCommittedIdentity(it, rawStock)
@@ -2131,7 +2159,14 @@ class RootMountTransactionCoordinator(
             }
             RootMountPolicy.ReconcileDecision.REPATCH_REQUIRED -> {
                 moduleStore.disable(request.packageName)
-                transactionStore.markRepatchRequired(request.packageName, "External package change is incompatible")
+                transactionStore.markRepatchRequired(
+                    request.packageName,
+                    "External package change is incompatible: " +
+                        "stockPath=${current.basePath}, version=${current.versionName}/${current.versionCode}, " +
+                        "stockSha256=${current.baseSha256} (expected ${committed.stockSha256}), " +
+                        "signerSha256=${current.signerSha256} (expected ${committed.signerSha256}), " +
+                        "topology=${current.topology}, enabled=${current.enabled}"
+                )
                 completeReconciliation(
                     journal.copy(phase = RootMountPhase.COMPLETED),
                     committed.copy(active = false, status = "REPATCH_REQUIRED")
@@ -2225,12 +2260,15 @@ class RootMountTransactionCoordinator(
         check(current.userId == committed.userId) { "Android user mismatch" }
         check(current.versionName == committed.versionName) { "Version name mismatch" }
         check(current.versionCode == committed.versionCode) { "Version code mismatch" }
-        check(current.signerSha256 == committed.signerSha256) { "Signing certificate mismatch" }
-        check(current.baseSha256 == committed.stockSha256) { "Stock APK hash mismatch" }
+        check(current.signerSha256 == committed.signerSha256) {
+            "Signing certificate mismatch: expected ${committed.signerSha256}, found ${current.signerSha256}"
+        }
+        check(current.baseSha256 == committed.stockSha256) {
+            "Stock APK hash mismatch at ${current.basePath}: expected ${committed.stockSha256}, found ${current.baseSha256}"
+        }
         check(current.topology == committed.topology) { "APK topology mismatch" }
         check(current.matchesSplits(committed.stockSplits)) { "Installed split APKs changed" }
         check(current.enabled == committed.enabled) { "Enabled state mismatch" }
-        check(current.launcherResolvable == committed.launcherResolvable) { "Launcher resolution mismatch" }
     }
 
     private suspend fun rollback(
@@ -2752,8 +2790,7 @@ class RootMountTransactionCoordinator(
             before.splitPaths != after.splitPaths ||
             before.splitSha256 != after.splitSha256 ||
             before.baseSha256 != after.baseSha256 ||
-            before.enabled != after.enabled ||
-            before.launcherResolvable != after.launcherResolvable
+            before.enabled != after.enabled
 
     private fun matchesRequestedStock(state: RootPackageState, artifact: RootArtifactState): Boolean =
         state.installed &&
@@ -2785,7 +2822,6 @@ class RootMountTransactionCoordinator(
                     restored.topology == initial.topology &&
                     restored.matchesSplits(initial.verifiedSplits()) &&
                     restored.enabled == initial.enabled &&
-                    restored.launcherResolvable == initial.launcherResolvable &&
                     journal.patchedArtifact?.let { patched ->
                         restored.versionName == patched.versionName &&
                             restored.versionCode == patched.versionCode
@@ -2797,8 +2833,7 @@ class RootMountTransactionCoordinator(
                 restored.baseSha256 == initial.baseSha256 &&
                 restored.topology == initial.topology &&
                 restored.matchesSplits(initial.verifiedSplits()) &&
-                restored.enabled == initial.enabled &&
-                restored.launcherResolvable == initial.launcherResolvable
+                restored.enabled == initial.enabled
             if (matchesInitial) return true
             return journal.previousCommitted?.let { matchesCommittedStock(it, restored) } == true
         }
@@ -2820,8 +2855,7 @@ class RootMountTransactionCoordinator(
             state.baseSha256 == committed.stockSha256 &&
             state.topology == committed.topology &&
             state.matchesSplits(committed.stockSplits) &&
-            state.enabled == committed.enabled &&
-            state.launcherResolvable == committed.launcherResolvable
+            state.enabled == committed.enabled
 
     private fun matchesReusableModule(
         committed: RootCommittedState,

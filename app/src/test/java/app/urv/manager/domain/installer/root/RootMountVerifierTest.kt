@@ -135,6 +135,22 @@ class RootMountVerifierTest {
     }
 
     @Test
+    fun `launcher visibility is not part of mounted APK identity`() = runBlocking {
+        val expected = committedState().copy(launcherResolvable = true)
+        val shell = MountShell(
+            TARGET,
+            mountLayerSources = listOf(RootPaths.moduleStockApk(PACKAGE), RootPaths.moduleApk(PACKAGE))
+        )
+        val matching = MatchingPackageReader(expected)
+        val reader = object : PackageStateReader by matching {
+            override suspend fun read(packageName: String, userId: Int) =
+                matching.read(packageName, userId).copy(launcherResolvable = false)
+        }
+
+        assertFalse(verifier(shell, reader).verifyMounted(expected).launcherResolvable)
+    }
+
+    @Test
     fun `full verification hashes the stock shadow after namespace verification`() = runBlocking {
         val target = "/data/app/com.example.app/base.apk"
         val shell = MountShell(

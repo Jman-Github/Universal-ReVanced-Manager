@@ -1400,6 +1400,56 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `permanent removal accepts changed stock without remounting the old payload`() = runBlocking {
+        val raw = defaultState()
+        val previous = committed(raw)
+        val fixture = Fixture(initial = raw.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.onRemove = {
+            fixture.reader.state = raw.copy(
+                baseSha256 = testSha256("changed-stock"),
+                signerSha256 = testSha256("changed-signer"),
+                launcherResolvable = false
+            )
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.UNMOUNT).copy(removeModuleAfterUnmount = true)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.removeCalls)
+        assertEquals(0, fixture.verifier.mountCalls)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals(null, fixture.store.committed)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `permanent removal refuses an unverifiable current split set`() = runBlocking {
+        val raw = defaultState()
+        val previous = committed(raw)
+        val fixture = Fixture(initial = raw.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.onRemove = {
+            fixture.reader.state = raw.copy(
+                baseSha256 = testSha256("changed-stock"),
+                splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk"),
+                splitSha256 = emptyMap()
+            )
+        }
+
+        assertIs<RootMountResult.Failure>(
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.UNMOUNT).copy(removeModuleAfterUnmount = true)
+            )
+        )
+        assertEquals(0, fixture.module.removeCalls)
+    }
+
+    @Test
     fun `permanent module removal accepts relocated unchanged stock`() = runBlocking {
         val raw = defaultState()
         val previous = committed(raw)
@@ -2732,13 +2782,30 @@ class RootMountTransactionCoordinatorTest {
         val repatch = assertIs<RootMountResult.RequiresRepatch>(result)
         assertTrue(repatch.reason.contains("APK set"))
         assertFalse(repatch.reason.contains("Repatch it"))
-        assertEquals(0, fixture.reader.readCalls)
+        assertEquals(1, fixture.reader.readCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(0, fixture.module.snapshotCalls)
         assertTrue(fixture.scheduler.scheduledPackages.isEmpty())
         assertEquals(null, fixture.store.active)
         assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
         assertEquals(1, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `manual mount retries a stale repatch status when stock identity still matches`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(active = false, status = "REPATCH_REQUIRED")
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.state = fixture.initial.copy(launcherResolvable = false)
+
+        val result = fixture.coordinator.execute(fixture.request(RootMountOperation.MOUNT_ONLY))
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(emptyList(), fixture.installer.replaceCalls)
     }
 
     @Test
@@ -3332,7 +3399,7 @@ class RootMountTransactionCoordinatorTest {
         assertIs<RootMountResult.Success>(result)
         assertEquals(1, fixture.verifier.processVerifyCalls)
         assertEquals(listOf(listOf(1357)), fixture.verifier.verifiedProcessPids)
-        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(2, fixture.verifier.rootVerifyCalls)
         assertEquals(1, fixture.verifier.mountCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertTrue(fixture.shell.commands.any { it.contains("force-stop --user 0") })
@@ -3350,7 +3417,7 @@ class RootMountTransactionCoordinatorTest {
 
         assertIs<RootMountResult.Success>(result)
         assertEquals(2, fixture.verifier.verifyCalls)
-        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(2, fixture.verifier.rootVerifyCalls)
         assertEquals(1, fixture.verifier.mountCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(1, fixture.module.enableCalls)
@@ -3404,13 +3471,30 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `startup restores absent mounts without attempting namespace repair`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertTrue(fixture.store.diagnostics.any { it.contains("Committed mount is absent") })
+        assertFalse(fixture.store.diagnostics.any { it.contains("Non-destructive committed mount repair") })
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
     fun `full reconciliation stays retryable when app reopens before mount changes`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
-        fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.stopResults.add(false)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
@@ -3428,7 +3512,7 @@ class RootMountTransactionCoordinatorTest {
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
-        fixture.reader.stopResults.addAll(listOf(true, true, false, false))
+        fixture.reader.stopResults.addAll(listOf(true, false, false))
         fixture.reader.running = listOf(5678)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
