@@ -20,6 +20,7 @@ import app.urv.manager.domain.batch.retainedBatchOutputPaths
 import app.urv.manager.domain.batch.retainedBatchRepatchSourcePaths
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.RootInstaller
+import app.urv.manager.domain.installer.root.RootMountFeedback
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.recoverAbandonedRootExternalInstalls
@@ -309,6 +310,7 @@ class ManagerApplication : Application() {
             override fun onActivityStarted(activity: Activity) {}
             override fun onActivityResumed(activity: Activity) {
                 AppForeground.onResumed()
+                RootMountFeedback.showPending(this@ManagerApplication)
                 bundleUpdateWebSocketCoordinator.onAppForegroundChanged(true)
                 if (activity is MainActivity) {
                     scheduleAbandonedRootExternalInstallRecovery()
@@ -554,6 +556,7 @@ class ManagerApplication : Application() {
 
     private fun notifyRootMountResults(results: Map<String, RootMountResult>) {
         results.forEach { (packageName, result) ->
+            RootMountFeedback.automaticResult(this, packageName, result)
             when (result) {
                 is RootMountResult.Success -> RootMountReconcileWorker.clearAttentionNotification(
                     this,

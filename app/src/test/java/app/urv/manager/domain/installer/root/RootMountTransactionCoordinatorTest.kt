@@ -3377,7 +3377,7 @@ class RootMountTransactionCoordinatorTest {
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Success>(result)
+        assertFalse(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
         assertEquals(1, fixture.module.enableCalls)
         assertEquals(2, fixture.verifier.processVerifyCalls)
         assertEquals(listOf(listOf(2468), listOf(2468)), fixture.verifier.verifiedProcessPids)
@@ -3396,7 +3396,7 @@ class RootMountTransactionCoordinatorTest {
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Success>(result)
+        assertTrue(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
         assertEquals(1, fixture.verifier.processVerifyCalls)
         assertEquals(listOf(listOf(1357)), fixture.verifier.verifiedProcessPids)
         assertEquals(2, fixture.verifier.rootVerifyCalls)
@@ -3479,7 +3479,7 @@ class RootMountTransactionCoordinatorTest {
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Success>(result)
+        assertTrue(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
         assertEquals(1, fixture.verifier.rootVerifyCalls)
         assertEquals(1, fixture.verifier.mountCalls)
         assertTrue(fixture.store.diagnostics.any { it.contains("Committed mount is absent") })

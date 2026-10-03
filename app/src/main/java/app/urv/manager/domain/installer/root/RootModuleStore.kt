@@ -448,6 +448,7 @@ class RootModuleStore(
         val content = app.assets.open(asset).bufferedReader().use { it.readText() }
             .replace("\r\n", "\n")
             .replace('\r', '\n')
+            .replace("__MANAGER_PACKAGE__", app.packageName)
         destination.writeText(content)
     }
 
@@ -463,6 +464,7 @@ class RootModuleStore(
         val content = app.assets.open(asset).bufferedReader().use { it.readText() }
             .replace("\r\n", "\n")
             .replace('\r', '\n')
+            .replace("__MANAGER_PACKAGE__", app.packageName)
             .replace("__PKG_NAME__", packageName)
             .replace("__VERSION__", safeVersion)
             .replace("__VERSION_CODE__", compatible.versionCode?.toString().orEmpty())

@@ -54,9 +54,10 @@ target_is_mounted() {
 }
 
 target_mount_counts() {
+  # Toybox awk rejects literal newlines in -v values.
   allowed_sources="$(known_mount_sources)" || return 1
-  awk -v target="$URV_STOCK_PATH" -v allowed="$allowed_sources" '
-    BEGIN { count=split(allowed, candidates, "\n") }
+  URV_ALLOWED_SOURCES="$allowed_sources" awk -v target="$URV_STOCK_PATH" '
+    BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
     $5 == target {
       total++
       separator=0
@@ -251,10 +252,9 @@ live_zygote_pids() {
 namespace_mount_ownership() {
   pid="$1"
   allowed_sources="$(known_mount_sources)" || return 1
-  nsenter --mount="/proc/$pid/ns/mnt" -- awk \
-    -v target="$URV_STOCK_PATH" \
-    -v allowed="$allowed_sources" '
-      BEGIN { count=split(allowed, candidates, "\n") }
+  URV_ALLOWED_SOURCES="$allowed_sources" nsenter --mount="/proc/$pid/ns/mnt" -- awk \
+    -v target="$URV_STOCK_PATH" '
+      BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
       $5 == target {
         total++
         separator=0
@@ -327,8 +327,8 @@ namespace_visible_matches_urv_inode() {
 namespace_has_urv_layer() {
   pid="$1"
   allowed_sources="$(known_mount_sources)" || return 1
-  nsenter --mount="/proc/$pid/ns/mnt" -- awk -v target="$URV_STOCK_PATH" -v allowed="$allowed_sources" '
-    BEGIN { count=split(allowed, candidates, "\n") }
+  URV_ALLOWED_SOURCES="$allowed_sources" nsenter --mount="/proc/$pid/ns/mnt" -- awk -v target="$URV_STOCK_PATH" '
+    BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
     $5 == target {
       separator=0
       for (i=1; i<=NF; i++) if ($i == "-") { separator=i; break }
@@ -408,6 +408,7 @@ mount_and_verify_zygotes() {
           return 1
         fi
         if [ "$shadow_ready" = 1 ] &&
+           ! nsenter --mount="/proc/$pid/ns/mnt" -- mount --make-private "$URV_STOCK_PATH" 2>/dev/null &&
            ! nsenter --mount="/proc/$pid/ns/mnt" -- mount -o private none "$URV_STOCK_PATH"; then
           validate_zygote "$pid" || { zygote_changed=1; continue; }
           return 1
@@ -492,7 +493,8 @@ mkdir -p "$transaction_dir" || exit 0
 
 write_boot_status() {
   status_epoch="$(date +%s 2>/dev/null || echo 0)"
-  status_uptime="$(awk '{print int($1)}' /proc/uptime)" || return 1
+  status_elapsed_ms="$(awk '{printf "%.0f", $1 * 1000}' /proc/uptime)" || return 1
+  status_uptime=$((status_elapsed_ms / 1000))
   status_temp="$transaction_dir/boot-status.$$.tmp"
   (
     umask 077
@@ -511,10 +513,47 @@ write_boot_status() {
   log_status "Boot recovery status: $boot_status; elapsed $((status_uptime - boot_started_uptime)) seconds"
 }
 
+wait_for_feedback_user() {
+  feedback_started="$(awk '{print int($1)}' /proc/uptime 2>/dev/null)"
+  case "$feedback_started" in ''|*[!0-9]*) return 0 ;; esac
+  while :; do
+    feedback_user_state="$(timeout 5 am get-started-user-state "$URV_USER_ID" 2>/dev/null)" || return 0
+    case "$feedback_user_state" in
+      RUNNING_LOCKED|RUNNING_UNLOCKING) ;;
+      *) return 0 ;;
+    esac
+    feedback_now="$(awk '{print int($1)}' /proc/uptime 2>/dev/null)"
+    case "$feedback_now" in ''|*[!0-9]*) return 0 ;; esac
+    [ "$((feedback_now - feedback_started))" -lt 300 ] || return 1
+    sleep 2
+  done
+}
+
+notify_boot_result() {
+  case "$boot_status" in
+    VERIFIED|REPAIR_REQUIRED|REPATCH_REQUIRED|VERIFY_FAILED|INCOMPLETE_TRANSACTION|DEFERRED) ;;
+    *) return 0 ;;
+  esac
+  # The receiver uses a system text toast, so Manager's UI need not be open.
+  # Delivery is best-effort and happens after releasing the package lock.
+  # The receiver and Manager's ordinary storage are unavailable before user unlock.
+  if ! wait_for_feedback_user; then
+    log_status "Unable to deliver automatic remount feedback: Android user is still locked"
+    return 0
+  fi
+  timeout 15 am broadcast --user "$URV_USER_ID" --receiver-include-background \
+    -n "__MANAGER_PACKAGE__/app.urv.manager.receiver.RootMountResultReceiver" \
+    -a app.urv.manager.action.ROOT_MOUNT_RESULT \
+    --es package "$URV_PACKAGE" --es result "$boot_status" \
+    --el completed_at "${status_elapsed_ms:-0}" >/dev/null 2>&1 ||
+    log_status "Unable to deliver automatic remount feedback"
+}
+
 finish_boot_service() {
   case "$boot_status" in
     WAITING_*|VERIFYING|MOUNTING) write_boot_status DEFERRED ;;
   esac
+  notify_boot_result
 }
 
 write_boot_status WAITING_FOR_PACKAGE_MANAGER
@@ -981,7 +1020,9 @@ if [ "$URV_PRESERVE_STOCK" = 1 ]; then
     log_status "Stock shadow bind mount failed; leaving real stock active"
     exit 0
   }
-  mount -o private none "$URV_STOCK_PATH" || {
+  # BusyBox accepts --make-private; Android Toybox needs the -o form.
+  mount --make-private "$URV_STOCK_PATH" 2>/dev/null ||
+    mount -o private none "$URV_STOCK_PATH" || {
     log_status "Failed to isolate the stock shadow bind; restoring stock"
     remove_failed_urv_mounts || log_status "Unable to remove the partial stock-shadow mount"
     write_boot_status VERIFY_FAILED

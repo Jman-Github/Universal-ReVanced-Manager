@@ -40,6 +40,10 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -97,6 +101,27 @@ fun Context.toastHandle(string: String, duration: Int = Toast.LENGTH_SHORT): Toa
 fun Context.toast(string: String, duration: Int = Toast.LENGTH_SHORT) {
     toastHandle(string, duration)
 }
+
+suspend fun <T> Context.withRepeatingToast(@StringRes messageRes: Int, block: suspend () -> T): T =
+    withContext(Dispatchers.Main.immediate) {
+        coroutineScope {
+            val message = getString(messageRes)
+            var progressToast = toastHandle(message)
+            val repeater = launch {
+                while (isActive) {
+                    delay(2_500L)
+                    progressToast.cancel()
+                    progressToast = toastHandle(message)
+                }
+            }
+            try {
+                block()
+            } finally {
+                repeater.cancel()
+                progressToast.cancel()
+            }
+        }
+    }
 
 /**
  * Safely perform an operation that may fail to avoid crashing the app.

@@ -75,7 +75,10 @@ fun RootMountResult.Failure.describeOutcome(): String =
     }
 
 sealed interface RootMountResult {
-    data class Success(val transactionId: String) : RootMountResult
+    data class Success(
+        val transactionId: String,
+        val automaticallyRemounted: Boolean = false
+    ) : RootMountResult
     data class RecoveredToPreviousMount(
         val transactionId: String,
         val diagnosticId: String,

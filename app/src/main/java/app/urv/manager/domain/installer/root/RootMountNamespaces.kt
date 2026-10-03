@@ -66,7 +66,9 @@ class RootMountNamespaces(
                   fi
                   if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ]; then
                     mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}
-                    mount -o private none ${shellQuote(expected.stockPath)} || {
+                    # BusyBox accepts --make-private; Android Toybox needs the -o form.
+                    mount --make-private ${shellQuote(expected.stockPath)} 2>/dev/null ||
+                      mount -o private none ${shellQuote(expected.stockPath)} || {
                       echo "Failed to isolate the stock shadow bind mount" >&2
                       exit 1
                     }
@@ -104,6 +106,7 @@ class RootMountNamespaces(
                         exit 1
                       fi
                       if [ "${'$'}shadow_ready" = 1 ] &&
+                          ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount --make-private ${shellQuote(expected.stockPath)} 2>/dev/null &&
                           ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount -o private none ${shellQuote(expected.stockPath)}; then
                         validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                         echo "Failed to isolate the stock shadow in Zygote namespace ${'$'}pid" >&2
@@ -320,6 +323,7 @@ class RootMountNamespaces(
             )
         )
         val allowed = allowedPaths.joinToString(" ") { shellQuote(it) }
+        // Pass multiline sources through ENVIRON because Toybox awk rejects them in -v values.
         val allowedSourceList = shellQuote(allowedPaths.joinToString("\n"))
         val targetWords = targets.joinToString(" ") { shellQuote(it) }
         val cleanup = shell.runIsolatedBounded(
@@ -329,8 +333,8 @@ class RootMountNamespaces(
                 namespace_has_owned_layer() {
                   pid="${'$'}1"
                   target="${'$'}2"
-                  nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" -v allowed="${'$'}allowed_sources" '
-                    BEGIN { count=split(allowed, candidates, "\n") }
+                  URV_ALLOWED_SOURCES="${'$'}allowed_sources" nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '
+                    BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
                     ${'$'}5 == target {
                       separator=0
                       for (i=1; i<=NF; i++) if (${'$'}i == "-") { separator=i; break }

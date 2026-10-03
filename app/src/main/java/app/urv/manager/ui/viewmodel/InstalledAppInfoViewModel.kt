@@ -73,6 +73,7 @@ import app.urv.manager.util.tag
 import app.urv.manager.util.awaitUserConfirmation
 import app.urv.manager.util.toast
 import app.urv.manager.util.toastHandle
+import app.urv.manager.util.withRepeatingToast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -138,6 +139,7 @@ class InstalledAppInfoViewModel(
     private var externalInstallStartTime: Long? = null
     private var externalPackageWasPresentAtStart: Boolean = false
     private var installProgressToastJob: Job? = null
+    private var installProgressToast: Toast? = null
     private var uninstallProgressToastJob: Job? = null
     private var uninstallProgressToast: Toast? = null
     private var deferInstallProgressToasts = false
@@ -584,13 +586,15 @@ class InstalledAppInfoViewModel(
         signatureMismatchPackage = packageName
     }
 
-    private fun startInstallProgressToasts() {
+    private fun startInstallProgressToasts(mounting: Boolean = false) {
         if (deferInstallProgressToasts) return
         if (installProgressToastJob?.isActive == true) return
         isInstalling = true
+        val messageRes = if (mounting) R.string.mounting_ellipsis else R.string.installing_ellipsis
         installProgressToastJob = viewModelScope.launch {
             while (isActive) {
-                context.toast(context.getString(R.string.installing_ellipsis))
+                installProgressToast?.cancel()
+                installProgressToast = context.toastHandle(context.getString(messageRes))
                 delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
             }
         }
@@ -599,6 +603,8 @@ class InstalledAppInfoViewModel(
     private fun stopInstallProgressToasts() {
         installProgressToastJob?.cancel()
         installProgressToastJob = null
+        installProgressToast?.cancel()
+        installProgressToast = null
         internalInstallTimeoutJob?.cancel()
         deferInstallProgressToasts = false
         if (pendingExternalInstall == null) {
@@ -715,7 +721,7 @@ class InstalledAppInfoViewModel(
         }
         isInstalling = true
         deferInstallProgressToasts = plan is InstallerManager.InstallPlan.Internal
-        startInstallProgressToasts()
+        startInstallProgressToasts(mounting = plan is InstallerManager.InstallPlan.Mount)
         if (plan is InstallerManager.InstallPlan.External) {
             runCatching { apk.copyTo(plan.sharedFile, overwrite = true) }
         }
@@ -846,6 +852,8 @@ class InstalledAppInfoViewModel(
                 } catch (e: Exception) {
                     Log.e(tag, "Failed to install saved app with root", e)
                     markInstallFailure(context.getString(R.string.saved_app_install_failed))
+                } finally {
+                    stopInstallProgressToasts()
                 }
             }
 
@@ -1412,8 +1420,10 @@ class InstalledAppInfoViewModel(
         mountOperation = MountOperation.MOUNTING
         isMounted = false
         try {
-            context.toast(context.getString(R.string.mounting_ellipsis))
-            if (!mountSavedPayload(pkgName, app)) {
+            val mounted = context.withRepeatingToast(R.string.mounting_ellipsis) {
+                mountSavedPayload(pkgName, app)
+            }
+            if (!mounted) {
                 context.toast(context.getString(R.string.saved_app_install_failed))
                 return@launch
             }
@@ -1706,8 +1716,10 @@ class InstalledAppInfoViewModel(
                 context.toast(context.getString(R.string.unmounted))
             } else {
                 mountOperation = MountOperation.MOUNTING
-                context.toast(context.getString(R.string.mounting_ellipsis))
-                if (!mountSavedPayload(pkgName, app)) {
+                val mounted = context.withRepeatingToast(R.string.mounting_ellipsis) {
+                    mountSavedPayload(pkgName, app)
+                }
+                if (!mounted) {
                     context.toast(context.getString(R.string.saved_app_install_failed))
                     return@launch
                 }

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Run from repository root. Production functions, mocked Android commands, no root.
 set -eu
-for function in installed_user_ids split_set_matches read_package_state wait_for_package_manager acquire_ready_package_lock write_boot_status finish_boot_service; do
+for function in installed_user_ids split_set_matches read_package_state wait_for_package_manager acquire_ready_package_lock write_boot_status wait_for_feedback_user notify_boot_result finish_boot_service; do
   eval "$(sed -n "/^$function() {/,/^}/p" app/src/main/assets/root/service.sh)"
 done
 URV_PACKAGE=com.example.app
@@ -16,6 +16,7 @@ boot_completed=1
 getprop() { echo "$boot_completed"; }
 scenario=ready
 timeout() { shift; "$@"; }
+am() { [ "$1" = broadcast ]; }
 pm() {
   case "$*" in
     "list users")
@@ -113,7 +114,12 @@ transaction_dir="$MODDIR"
 trap 'rm -rf "$MODDIR"' EXIT
 ticks=0
 attempts=0
-awk() { echo "$ticks"; }
+awk() {
+  case "$1" in
+    *'printf "%.0f"'*) echo "$((ticks * 1000))" ;;
+    *) echo "$ticks" ;;
+  esac
+}
 sleep() { ticks=$((ticks + $1)); }
 boot_id=test-boot
 URV_TRANSACTION_ID=test-transaction
@@ -128,6 +134,7 @@ grep -Fx 'boot_id=test-boot' "$transaction_dir/boot-status" >/dev/null
 ticks=15
 write_boot_status VERIFIED
 grep -Fx 'elapsed_seconds=15' "$transaction_dir/boot-status" >/dev/null
+[ "$status_elapsed_ms" = 15000 ]
 finish_boot_service
 [ "$(head -n 1 "$transaction_dir/boot-status")" = VERIFIED ]
 write_boot_status MOUNTING

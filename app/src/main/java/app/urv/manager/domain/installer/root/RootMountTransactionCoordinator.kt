@@ -589,7 +589,10 @@ class RootMountTransactionCoordinator(
                                     committed.transactionId,
                                     preserveCancellation = true
                                 )
-                                true to RootMountResult.Success(committed.transactionId)
+                                true to RootMountResult.Success(
+                                    committed.transactionId,
+                                    automaticallyRemounted = true
+                                )
                             } else {
                                 transactionStore.appendDiagnostic(
                                     packageName,
@@ -663,7 +666,10 @@ class RootMountTransactionCoordinator(
                                         committed.transactionId,
                                         preserveCancellation = true
                                     )
-                                    true to RootMountResult.Success(committed.transactionId)
+                                    true to RootMountResult.Success(
+                                        committed.transactionId,
+                                        automaticallyRemounted = true
+                                    )
                                 } else {
                                     transactionStore.appendDiagnostic(
                                         packageName,
@@ -2251,7 +2257,7 @@ class RootMountTransactionCoordinator(
             mountingJournal.copy(phase = RootMountPhase.COMPLETED),
             reconciledState.copy(active = true, status = "MOUNTED")
         )
-        return RootMountResult.Success(transactionId)
+        return RootMountResult.Success(transactionId, automaticallyRemounted = true)
     }
 
     private fun checkCommittedIdentity(committed: RootCommittedState, current: RootPackageState) {

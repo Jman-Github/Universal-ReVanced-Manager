@@ -1904,8 +1904,6 @@ class PatcherViewModel(
                     else R.string.installing_patched_app
                 installProgressToast?.cancel()
                 installProgressToast = app.toastHandle(app.getString(messageRes))
-                // Mount phases are shown inline, so the initial toast does not need repeating.
-                if (activeInstallType == InstallType.MOUNT) break
                 delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
             }
         }

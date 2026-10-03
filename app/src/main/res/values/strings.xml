@@ -1816,6 +1816,8 @@ Details: %2$s</string>
     <string name="install_app_fail">Failed to install app: %s</string>
     <string name="install_app_fail_missing_stock">Missing original APK for mount.</string>
     <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
+    <string name="root_mount_automatic_success">%1$s was remounted automatically</string>
+    <string name="root_mount_automatic_failure">%1$s could not be remounted. Export root diagnostics.</string>
     <string name="root_mount_notification_channel">Root mount safety</string>
     <string name="root_mount_repatch_title">Root mount needs repatching</string>
     <string name="root_mount_repair_notification_title">Root mount needs repair</string>
