@@ -2,11 +2,16 @@ package app.urv.manager.domain.manager
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import app.revanced.library.ApkSigner as RevancedApkSigner
 import com.android.apksig.ApkSigner as AndroidApkSigner
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -70,6 +75,20 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     private val legacyBackupKeystorePath =
         app.getExternalFilesDir("keystore")?.resolve(LEGACY_KEYSTORE_FILE_NAME)
     private val keystoreMutex = Mutex()
+    // Code adapted from Morphe, see third-party/NOTICE for more information.
+    // https://github.com/MorpheApp/morphe-manager/pull/1088
+    private val signerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private data class SigningKeyCacheKey(
+        val fingerprint: String,
+        val credentials: KeystoreCredentials
+    )
+    private data class CachedSigningKey(
+        val cacheKey: SigningKeyCacheKey,
+        val keyMaterial: KeyMaterial,
+        val inPlaceSigner: InPlaceApkSigner
+    )
+    // Accessed only under keystoreMutex; hash the file so same-size replacements also invalidate it.
+    private var cachedSigningKey: CachedSigningKey? = null
     private val appContext = app.applicationContext
     private val bcProvider: Provider by lazy {
         // Use an explicit provider instance only when required (e.g., BKS) to avoid
@@ -137,6 +156,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         type: String?,
         fingerprint: String?
     ) {
+        cachedSigningKey = null
         prefs.edit {
             prefs.keystoreAlias.value = alias
             prefs.keystorePass.value = storePass
@@ -207,6 +227,52 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                 props.store(output, "Keystore credentials")
             }
         }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information.
+    // https://github.com/MorpheApp/morphe-manager/pull/1088
+    /** Load the existing signing key while patching runs, without failing the patch on preload errors. */
+    fun preloadSigner() {
+        signerScope.launch {
+            try {
+                keystoreMutex.withLock {
+                    if (keystorePath.isFile && keystorePath.length() > 0L) {
+                        signingKey(notifyOnInvalidCredentials = false)
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.d(LOG_TAG, "Signing key preload failed; will retry when signing", error)
+            }
+        }
+    }
+
+    /** Only for patched output: the host requires Android 8+, which supports v2 signatures. */
+    suspend fun signPatchedApk(apk: File) = withContext(Dispatchers.Default) {
+        keystoreMutex.withLock {
+            val signer = signingKey().inPlaceSigner
+            try {
+                runInterruptible(Dispatchers.IO) {
+                    signer.sign(apk, Build.VERSION.SDK_INT)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // ReVanced outputs can retain inconsistent ZIP headers from their input.
+                // Preserve the existing signing recovery before retrying the device-specific signer.
+                val sanitized = sanitizeZipIfNeeded(apk)
+                if (sanitized == apk) throw error
+                try {
+                    runInterruptible(Dispatchers.IO) {
+                        signer.sign(sanitized, Build.VERSION.SDK_INT)
+                        Files.move(sanitized.toPath(), apk.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
+                } finally {
+                    sanitized.delete()
+                }
+            }
+        }
+    }
 
     suspend fun sign(input: File, output: File) =
         signWithOptions(input, output, preserveSignatureMetadata = false)
@@ -425,6 +491,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
 
     suspend fun clearSigningFiles() = withContext(Dispatchers.IO) {
         keystoreMutex.withLock {
+            cachedSigningKey = null
             listOfNotNull(
                 keystorePath,
                 credentialsPath,
@@ -573,17 +640,18 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         return null
     }
 
-    private suspend fun signWithApksig(
-        input: File,
-        output: File,
-        preserveSignatureMetadata: Boolean
-    ) {
+    private suspend fun signingKey(
+        notifyOnInvalidCredentials: Boolean = true
+    ): CachedSigningKey {
         requireKeystoreReady()
         val keystoreData = withContext(Dispatchers.IO) {
             Files.readAllBytes(keystorePath.toPath())
         }
         val fingerprint = keystoreFingerprint(keystoreData)
         var credentials = resolveCredentials()
+        val cacheKey = SigningKeyCacheKey(fingerprint, credentials)
+        cachedSigningKey?.takeIf { it.cacheKey == cacheKey }?.let { return it }
+        cachedSigningKey = null
         if (!credentials.fingerprint.isNullOrBlank() && credentials.fingerprint != fingerprint) {
             throw IllegalArgumentException("Keystore changed. Re-import or regenerate it.")
         }
@@ -636,6 +704,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                     flexible.keyMaterial.storeType,
                     fingerprint
                 )
+                credentials = resolveCredentials()
                 strictResult = StrictLoadResult(flexible.keyMaterial, flexible.storePass)
             }
         }
@@ -643,7 +712,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
         if (strictResult == null) {
             val recovered = recoverManagerKeystoreCredentials(keystoreData)
             if (recovered == null) {
-                notifyInvalidKeystoreCredentials()
+                if (notifyOnInvalidCredentials) notifyInvalidKeystoreCredentials()
                 throw IllegalArgumentException("Invalid keystore credentials")
             }
             updatePrefs(
@@ -653,6 +722,7 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
                 recovered.keyMaterial.storeType,
                 fingerprint
             )
+            credentials = resolveCredentials()
             strictResult = StrictLoadResult(recovered.keyMaterial, null)
         }
 
@@ -668,6 +738,19 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
             )
         }
 
+        return CachedSigningKey(
+            SigningKeyCacheKey(fingerprint, resolveCredentials()),
+            keyMaterial,
+            InPlaceApkSigner(keyMaterial.alias, keyMaterial.privateKey, keyMaterial.certificates)
+        ).also { cachedSigningKey = it }
+    }
+
+    private suspend fun signWithApksig(
+        input: File,
+        output: File,
+        preserveSignatureMetadata: Boolean
+    ) {
+        val keyMaterial = signingKey().keyMaterial
         val signerConfig = AndroidApkSigner.SignerConfig.Builder(
             keyMaterial.alias,
             keyMaterial.privateKey,

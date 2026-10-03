@@ -39,6 +39,9 @@ import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import org.w3c.dom.Attr
 import org.w3c.dom.Element
+import kotlin.time.Duration
+import kotlin.time.measureTime
+import kotlin.time.measureTimedValue
 
 internal typealias MorphePatchList = List<Patch<*>>
 
@@ -352,6 +355,10 @@ class MorpheSession(
     ) {
         checkCancelled()
         val shouldStripNativeLibs = stripNativeLibs && !inputWasSplit
+        // Code adapted from Morphe, see third-party/NOTICE for more information.
+        // https://github.com/MorpheApp/morphe-manager/pull/1088
+        var patchTime = Duration.ZERO
+        var compileTime = Duration.ZERO
         runStep(StepId.ExecutePatches, onEvent, checkCancelled) {
             val orderedPatches = loadSelectedPatches().sortedBy { it.name }
             java.util.logging.Logger.getLogger("").apply {
@@ -362,7 +369,7 @@ class MorpheSession(
 
                 addHandler(logger.handler)
             }
-            executePatchesWithFrameworkRecovery(orderedPatches)
+            patchTime = measureTime { executePatchesWithFrameworkRecovery(orderedPatches) }
         }
 
         suspend fun writePatchedApkStep() {
@@ -387,16 +394,21 @@ class MorpheSession(
                 }
 
                 checkCancelled()
-                val patched = tempDir.resolve("result.apk")
                 emitWriteApkProgress("Copy base APK")
                 logger.info("Writing patched files...")
                 XmlSurrogateSanitizer.sanitize(tempDir.resolve("apk"), logger)
                 ensureMissingDrawables()
                 validateMissingResourceReferences()
                 checkCancelled()
-                val result = runCancellableBlockingIo(checkCancelled) { patcher.get() }
-                runCancellableBlockingIo(checkCancelled) {
-                    fastCopy(input, patched)
+                val (result, duration) = runCancellableBlockingIo(checkCancelled) {
+                    measureTimedValue { patcher.get() }
+                }
+                compileTime = duration
+                // Use the resource APK directly when available; applyTo already treats it as the base.
+                val patched = result.resources.resourcesApk ?: tempDir.resolve("result.apk").also {
+                    runCancellableBlockingIo(checkCancelled) {
+                        fastCopy(input, it)
+                    }
                 }
                 result.dexFiles.forEach { dex ->
                     checkCancelled()
@@ -431,8 +443,6 @@ class MorpheSession(
                 }
                 checkCancelled()
 
-                logger.info("Patched apk saved to $patched")
-
                 emitWriteApkProgress("Writing output APK")
                 runCancellableBlockingIo(checkCancelled) {
                     checkCancelled()
@@ -461,7 +471,11 @@ class MorpheSession(
             }
         }
 
-        writePatchedApkStep()
+        val writeTime = measureTime { writePatchedApkStep() } - compileTime
+        logger.info(
+            "Patched apk saved to $output (patch=${patchTime.inWholeMilliseconds}ms " +
+                "compile=${compileTime.inWholeMilliseconds}ms write=${writeTime.inWholeMilliseconds}ms)"
+        )
     }
 
     private fun buildWriteApkSubSteps(

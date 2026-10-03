@@ -97,6 +97,8 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.LinkedHashSet
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
@@ -106,6 +108,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.time.measureTime
 
 @OptIn(PluginHostApi::class)
 class PatcherWorker(
@@ -1707,6 +1710,9 @@ class PatcherWorker(
             } else {
                 null
             }
+            // Code adapted from Morphe, see third-party/NOTICE for more information.
+            // https://github.com/MorpheApp/morphe-manager/pull/1088
+            if (!args.skipApkSigning) keystoreManager.preloadSigner()
             val selectedCount = totalPatchCount
             val useProcessRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
             val effectiveLimit = configuredProcessMemoryLimit
@@ -1941,8 +1947,20 @@ class PatcherWorker(
                 workerLogger.warn("APK signing skipped; saving unsigned output")
                 patchedApk.copyTo(File(args.output), overwrite = true)
             } else {
+                // Code adapted from Morphe, see third-party/NOTICE for more information.
+                // https://github.com/MorpheApp/morphe-manager/pull/1088
                 runStep(StepId.SignAPK, eventDispatcher) {
-                    keystoreManager.sign(patchedApk, File(args.output))
+                    val signTime = measureTime {
+                        keystoreManager.signPatchedApk(patchedApk)
+                        runCancellableBlockingIo(checkCancelled) {
+                            Files.move(
+                                patchedApk.toPath(),
+                                File(args.output).toPath(),
+                                StandardCopyOption.REPLACE_EXISTING
+                            )
+                        }
+                    }
+                    workerLogger.info("Signed apk in ${signTime.inWholeMilliseconds}ms")
                 }
             }
 

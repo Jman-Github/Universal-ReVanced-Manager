@@ -264,6 +264,7 @@ dependencies {
     implementation(libs.ackpine.ktx)
 
     testImplementation(kotlin("test-junit"))
+    testImplementation(libs.arsclib)
 }
 
 buildscript {
