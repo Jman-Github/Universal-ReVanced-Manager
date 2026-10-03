@@ -430,6 +430,7 @@ android {
     }
 
     sourceSets {
+        getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
         getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
         getByName("main").assets.directories.add(revanced22RuntimeAssetsDir.get().asFile.path)
         getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)

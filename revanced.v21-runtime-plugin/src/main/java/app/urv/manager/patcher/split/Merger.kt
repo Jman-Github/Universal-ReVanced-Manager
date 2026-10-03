@@ -207,6 +207,7 @@ internal object Merger {
             merged.refreshTable()
             merged.refreshManifest()
             applyExtractNativeLibs(merged)
+            SplitDexCompression.apply(merged)
             coroutineContext.ensureActive()
 
             outputApk.parentFile?.mkdirs()

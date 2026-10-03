@@ -249,6 +249,7 @@ public final class ApkEditorMergeProcess {
         }
 
         SplitManifestCleaner.clean(mergedModule, compressNativeLibraries);
+        SplitDexCompression.apply(mergedModule);
         runCancellationCheckpoint(cancellationCheckpoint);
 
         File parent = outputApk.getParentFile();

@@ -80,6 +80,8 @@ android {
         }
     }
 
+    sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
