@@ -2351,6 +2351,23 @@ Details: %2$s</string>
     <string name="batch_patch_external_disabled">External batch actions are disabled</string>
     <string name="batch_patch_no_updates">No patched apps need an update</string>
     <string name="batch_patch_notification_channel">Batch patching</string>
+    <string name="auto_patch_notification_title">Automatic repatching</string>
+    <string name="auto_patch_notification_finished_title">Automatic repatching completed successfully</string>
+    <string name="auto_patch_notification_failed_title">Automatic repatching needs attention</string>
+    <string name="auto_patch_notification_failed">Automatic repatching failed for one or more apps. Tap to view the batch results.</string>
+    <string name="auto_patch_save_failed">Some repatched apps could not be saved. Tap to view the batch results.</string>
+    <plurals name="auto_patch_notification_running">
+        <item quantity="one">Automatically repatching %d app</item>
+        <item quantity="other">Automatically repatching %d apps</item>
+    </plurals>
+    <plurals name="auto_patch_notification_finished">
+        <item quantity="one">Automatically repatched and saved %d app</item>
+        <item quantity="other">Automatically repatched and saved %d apps</item>
+    </plurals>
+    <plurals name="auto_patch_notification_finished_installed">
+        <item quantity="one">Automatically repatched %1$d app, installed %2$d</item>
+        <item quantity="other">Automatically repatched %1$d apps, installed %2$d</item>
+    </plurals>
     <plurals name="batch_patch_notification_running">
         <item quantity="one">Patching %1$d app</item>
         <item quantity="other">Patching %1$d apps</item>

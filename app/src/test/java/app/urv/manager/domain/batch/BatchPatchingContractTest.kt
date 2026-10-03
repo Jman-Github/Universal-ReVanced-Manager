@@ -290,6 +290,93 @@ class BatchPatchingContractTest {
     }
 
     @Test
+    fun `completed app is installable while another app is patching`() {
+        val output = File.createTempFile("batch-install", ".apk")
+        try {
+            val finished = batchItem("finished").copy(patchedFile = output)
+            val running = batchItem("running", state = BatchItemState.RUNNING)
+            val state = BatchRunState(
+                items = listOf(finished, running),
+                phase = BatchPhase.RUNNING,
+                policy = BatchInstallPolicy.SAVE_ONLY,
+                activeIndex = 1
+            )
+
+            assertTrue(state.canInstallBatchItem(finished))
+            assertFalse(state.canInstallBatchItem(running))
+            assertFalse(state.canInstallBatchItem(finished.copy(saving = true)))
+            assertFalse(state.canInstallBatchItem(finished.copy(
+                installOutcome = BatchInstallOutcome.INSTALLED
+            )))
+            assertFalse(state.copy(phase = BatchPhase.CANCELLING).canInstallBatchItem(finished))
+            assertFalse(state.copy(phase = BatchPhase.INSTALLING).canInstallBatchItem(finished))
+            assertTrue(state.copy(phase = BatchPhase.FINISHED).canInstallBatchItem(finished))
+        } finally {
+            output.delete()
+        }
+    }
+
+    @Test
+    fun `another active install blocks per-app installation`() {
+        val output = File.createTempFile("batch-install", ".apk")
+        try {
+            val ready = batchItem("ready").copy(patchedFile = output)
+            val installing = batchItem("installing", installing = true)
+            val state = BatchRunState(
+                items = listOf(ready, installing),
+                phase = BatchPhase.RUNNING,
+                policy = BatchInstallPolicy.SAVE_ONLY,
+                activeInstallPackageName = installing.packageName
+            )
+
+            assertFalse(state.canInstallBatchItem(ready))
+        } finally {
+            output.delete()
+        }
+    }
+
+    @Test
+    fun `interrupting per-app installation preserves the patch queue`() {
+        val installing = batchItem("installing", installing = true)
+        val running = batchItem("running", state = BatchItemState.RUNNING)
+        val queued = batchItem("queued", state = BatchItemState.READY)
+        val state = BatchRunState(
+            items = listOf(installing, running, queued),
+            phase = BatchPhase.RUNNING,
+            policy = BatchInstallPolicy.INSTALL_AFTER,
+            activeIndex = 1,
+            activeInstallPackageName = installing.packageName,
+            progress = 0.4f,
+            detail = running.appName
+        )
+        val result = interruptBatchItemInstall(state, installing.packageName, "Cancelled")
+
+        assertEquals(BatchPhase.RUNNING, result.phase)
+        assertEquals(1, result.activeIndex)
+        assertEquals(0.4f, result.progress)
+        assertEquals(running.appName, result.detail)
+        assertEquals(BatchInstallOutcome.FAILED, result.items[0].installOutcome)
+        assertFalse(result.items[0].installing)
+        assertEquals(null, result.activeInstallPackageName)
+        assertEquals(running, result.items[1])
+        assertEquals(queued, result.items[2])
+    }
+
+    @Test
+    fun `install cancellation after success does not overwrite the result`() {
+        val installed = batchItem("installed").copy(
+            installOutcome = BatchInstallOutcome.INSTALLED
+        )
+        val state = BatchRunState(
+            items = listOf(installed),
+            phase = BatchPhase.RUNNING,
+            policy = BatchInstallPolicy.SAVE_ONLY
+        )
+
+        assertEquals(installed, interruptBatchItemInstall(state, "installed", "Cancelled").items[0])
+    }
+
+    @Test
     fun `saved entry replacement respects overwrite preference`() {
         val existingKey = "com.example.app__bundle_existing"
 

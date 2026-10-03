@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.batch.BatchInstallOutcome
+import app.urv.manager.domain.batch.canInstallBatchItem
 import app.urv.manager.domain.batch.BatchItemState
 import app.urv.manager.domain.batch.BatchPatchItem
 import app.urv.manager.domain.installer.InstallerManager
@@ -419,9 +420,13 @@ internal fun rememberBatchResultActions(
         installOrOpen = {
             when {
                 item == null || item.saving -> Unit
-                item.installing -> viewModel.cancelInstall()
+                item.installing &&
+                    viewModel.state.value?.activeInstallPackageName == item.packageName ->
+                    viewModel.cancelInstall()
+                item.installing -> Unit
                 item.installOutcome == BatchInstallOutcome.INSTALLED ->
                     viewModel.open(item.packageName)
+                viewModel.state.value?.canInstallBatchItem(item) != true -> Unit
                 item.hasAvailablePatchedFile && chooseInstallerPerInstall -> {
                     pickerScope.launch {
                         if (refreshInstallerPickerEligibility(item)) {

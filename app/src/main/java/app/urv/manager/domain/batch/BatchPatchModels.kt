@@ -10,6 +10,7 @@ import app.urv.manager.domain.manager.SignatureMetadataWorkflowProgress
 import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
+import app.urv.manager.ui.model.PatcherProgressSnapshot
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
@@ -71,6 +72,7 @@ data class BatchPatchItem(
     val useMount: Boolean = false,
     val hadPatchFailures: Boolean = false,
     val progressEvents: List<ProgressEvent> = emptyList(),
+    val patcherProgress: PatcherProgressSnapshot? = null,
     val memoryUsageSamples: List<PatcherMemoryUsage> = emptyList(),
     val logLines: List<String> = emptyList(),
     val signatureInjection: SignatureMetadataWorkflowProgress = SignatureMetadataWorkflowProgress()
@@ -164,7 +166,8 @@ data class BatchRunState(
     val activeIndex: Int? = null,
     val progress: Float = 0f,
     val detail: String? = null,
-    val restored: Boolean = false
+    val restored: Boolean = false,
+    val activeInstallPackageName: String? = null
 ) {
     val activeItem get() = activeIndex?.let(items::getOrNull)
     val runnable get() = items.filter { it.state.isRunnable }
@@ -180,6 +183,30 @@ data class BatchRunState(
     val patchedItems get() = items.filter(BatchPatchItem::hasAvailablePatchedFile)
     val unsavedPatchedItems get() = items.filter(BatchPatchItem::needsSaveBeforeLeaving)
 }
+
+internal fun BatchRunState.canInstallBatchItem(item: BatchPatchItem): Boolean =
+    (phase == BatchPhase.RUNNING || phase == BatchPhase.FINISHED) &&
+        item.hasAvailablePatchedFile &&
+        !item.saving &&
+        item.installOutcome != BatchInstallOutcome.INSTALLED &&
+        items.none { it.installing }
+
+internal fun interruptBatchItemInstall(
+    state: BatchRunState,
+    packageName: String,
+    message: String
+): BatchRunState = state.copy(
+    activeInstallPackageName = null,
+    items = state.items.map { item ->
+        if (item.packageName == packageName && item.installing) {
+            item.copy(
+                installOutcome = BatchInstallOutcome.FAILED,
+                installMessage = message,
+                installing = false
+            )
+        } else item
+    }
+)
 
 internal fun BatchRunState.canStartBatchPatch(): Boolean =
     phase == BatchPhase.PREFLIGHT &&
@@ -206,13 +233,15 @@ internal fun finishInterruptedInstallState(
     if (state.phase == BatchPhase.CANCELLING || state.phase == BatchPhase.FINISHED) {
         return state
     }
-    val interruptedIndex = state.activeIndex
+    val interruptedPackage = state.activeInstallPackageName
+        ?: state.activeItem?.packageName
     return state.copy(
         phase = BatchPhase.FINISHED,
         activeIndex = null,
+        activeInstallPackageName = null,
         detail = null,
-        items = state.items.mapIndexed { index, item ->
-            if (index == interruptedIndex && item.installing) {
+        items = state.items.map { item ->
+            if (item.packageName == interruptedPackage && item.installing) {
                 item.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
                     installMessage = message,

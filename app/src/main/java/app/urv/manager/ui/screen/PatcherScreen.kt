@@ -95,6 +95,7 @@ import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.urv.manager.ui.component.patcher.rememberResourceGraphState
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.signatureMetadataPatcherProgress
@@ -150,6 +151,9 @@ fun PatcherScreen(
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
+    val resourceGraphState = rememberResourceGraphState(
+        viewModel, viewModel.patcherSessionInfo.startedAtElapsedRealtimeMs
+    )
     val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
@@ -1542,7 +1546,8 @@ fun PatcherScreen(
                         PatcherResourceUsageCards(
                             compact = compactResourceGraphs,
                             samples = viewModel.patcherMemoryUsageSamples,
-                            isActive = isPatchingActive
+                            isActive = isPatchingActive,
+                            graphState = resourceGraphState
                         )
                     }
                 }

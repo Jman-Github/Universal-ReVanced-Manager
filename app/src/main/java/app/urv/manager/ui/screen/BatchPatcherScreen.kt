@@ -84,6 +84,7 @@ import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.batch.BatchInstallOutcome
 import app.urv.manager.domain.batch.BatchInstallPolicy
+import app.urv.manager.domain.batch.canInstallBatchItem
 import app.urv.manager.domain.batch.BatchItemState
 import app.urv.manager.domain.batch.BatchPatchItem
 import app.urv.manager.domain.batch.BatchPhase
@@ -376,11 +377,12 @@ fun BatchPatcherScreen(
                 }
                 items(current.items, key = { it.packageName }) { item ->
                     val isActiveInstall = item.installing &&
-                        current.activeItem?.packageName == item.packageName
+                        current.activeInstallPackageName == item.packageName
                     BatchItemCard(
                         item = item,
                         phase = current.phase,
                         isActiveInstall = isActiveInstall,
+                        canInstall = current.canInstallBatchItem(item),
                         resultActionOrder = batchResultActionOrder,
                         hiddenResultActions = batchResultHiddenActions,
                         onToggle = { viewModel.toggleExcluded(item.packageName) },
@@ -783,6 +785,7 @@ private fun BatchItemCard(
     item: BatchPatchItem,
     phase: BatchPhase,
     isActiveInstall: Boolean,
+    canInstall: Boolean,
     resultActionOrder: List<BatchResultActionKey>,
     hiddenResultActions: Set<String>,
     onToggle: () -> Unit,
@@ -961,10 +964,8 @@ private fun BatchItemCard(
                     BatchResultActionKey.SAVE_LOGS -> true
                     BatchResultActionKey.SAVE_APK -> item.hasAvailablePatchedFile
                     BatchResultActionKey.INSTALL_OR_OPEN ->
-                        isActiveInstall ||
-                            (phase == BatchPhase.FINISHED &&
-                                (item.hasAvailablePatchedFile ||
-                                    item.installOutcome == BatchInstallOutcome.INSTALLED))
+                        isActiveInstall || item.hasAvailablePatchedFile ||
+                            item.installOutcome == BatchInstallOutcome.INSTALLED
                 }
             }
             if (phase != BatchPhase.PREFLIGHT && visibleResultActions.isNotEmpty()) {
@@ -991,7 +992,8 @@ private fun BatchItemCard(
                             )
                             BatchResultActionKey.INSTALL_OR_OPEN -> BatchQuickActionButton(
                                 onClick = onInstallOrOpen,
-                                enabled = isActiveInstall || (!item.installing && !item.saving),
+                                enabled = !item.saving && (isActiveInstall || canInstall ||
+                                    item.installOutcome == BatchInstallOutcome.INSTALLED),
                                 icon = when {
                                     isActiveInstall -> Icons.Outlined.Cancel
                                     item.installOutcome == BatchInstallOutcome.INSTALLED ->

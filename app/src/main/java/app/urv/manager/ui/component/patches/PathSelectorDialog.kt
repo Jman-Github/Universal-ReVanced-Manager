@@ -1,5 +1,6 @@
 package app.urv.manager.ui.component.patches
 
+import app.urv.manager.ui.component.persistentControls
 import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
@@ -438,7 +439,7 @@ fun PathSelectorDialog(
                         )
                     }
 
-                    item(key = "search") {
+                    persistentControls(key = "search") {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },

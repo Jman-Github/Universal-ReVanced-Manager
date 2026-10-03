@@ -1095,10 +1095,11 @@ fun PatchesSelectorScreen(
 
             items(
                 items = sortedPatches,
-                key = { it.name },
+                key = { patchSelectionIdentity(uid, it.name) },
                 contentType = { 1 }
             ) { patch ->
                 PatchItem(
+                    identity = patchSelectionIdentity(uid, patch.name),
                     patch = patch,
                     onOptionsDialog = { viewModel.optionsDialog = uid to patch },
                     onShowVersionsDialog = { patchVersionsDialogState = it },
@@ -1862,8 +1863,13 @@ fun PatchesSelectorScreen(
     }
 }
 
+// Exact names are unique within a bundle; include the bundle across sections and pages.
+internal fun patchSelectionIdentity(bundleUid: Int, patchName: String): String =
+    "$bundleUid:$patchName"
+
 @Composable
 private fun PatchItem(
+    identity: String,
     patch: PatchInfo,
     onOptionsDialog: () -> Unit,
     onShowVersionsDialog: (PatchVersionsDialogState) -> Unit,
@@ -1938,8 +1944,8 @@ private fun PatchItem(
         emptyList()
     }
     val hasChips = suggestedVersionInfo != null || showAllVersionsChip || hasMoreVersions
-    var showOptionPreview by rememberSaveable(patch.name) { mutableStateOf(false) }
-    var showOptionPreviewDialog by rememberSaveable(patch.name) { mutableStateOf(false) }
+    var showOptionPreview by rememberSaveable(identity) { mutableStateOf(false) }
+    var showOptionPreviewDialog by rememberSaveable(identity) { mutableStateOf(false) }
     val optionValueEnabled = stringResource(R.string.option_value_enabled)
     val optionValueDisabled = stringResource(R.string.option_value_disabled)
     val optionValueUnset = stringResource(R.string.field_not_set)

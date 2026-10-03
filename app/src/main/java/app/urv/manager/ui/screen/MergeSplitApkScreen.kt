@@ -88,6 +88,7 @@ import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.urv.manager.ui.component.patcher.rememberResourceGraphState
 import app.urv.manager.ui.component.patcher.MergerInformationCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
@@ -121,6 +122,9 @@ fun MergeSplitApkScreen(
 ) {
     val context = LocalContext.current
     val state by vm.splitMergeState.collectAsStateWithLifecycle()
+    val resourceGraphState = rememberResourceGraphState(
+        vm, state.sessionInfo.startedAtElapsedRealtimeMs
+    )
     val fs: Filesystem = koinInject()
     val prefs: PreferencesManager = koinInject()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
@@ -690,7 +694,8 @@ fun MergeSplitApkScreen(
                             isActive = state.inProgress &&
                                 state.writeStep.status != SplitMergeStepStatus.COMPLETED,
                             compact = compactResourceGraphs,
-                            merger = true
+                            merger = true,
+                            graphState = resourceGraphState
                         )
                     }
                 }
@@ -1320,8 +1325,6 @@ internal fun SplitMergeSelectionDialog(
             ) {
                 Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -1449,6 +1452,14 @@ internal fun SplitMergeSelectionDialog(
                             )
                         }
                     }
+                }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     sortedModules.forEach { module ->
                         val required = requiredModules.contains(module.name)
                         SplitMergeModuleRow(

@@ -28,6 +28,7 @@ import androidx.work.WorkerParameters
 import app.universal.revanced.manager.R
 import app.urv.manager.MainActivity
 import app.urv.manager.domain.batch.BatchInstallOutcome
+import app.urv.manager.domain.batch.BatchItemState
 import app.urv.manager.domain.batch.BatchInstallPolicy
 import app.urv.manager.domain.batch.BatchPatchCoordinator
 import app.urv.manager.domain.batch.BatchPhase
@@ -38,7 +39,6 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.WorkerRepository
-import app.urv.manager.util.AppForeground
 import app.urv.manager.util.BatchPatchIntents
 import app.urv.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.NonCancellable
@@ -171,9 +171,12 @@ class AutoPatchWorker(
                 it?.phase == BatchPhase.FINISHED
             } ?: return Result.retry()
 
+            val allSaved = coordinator.saveAllForLater()
+            finished = coordinator.state.value ?: finished
+
             var installBlockedByShizuku = false
             if (
-                prefs.autoPatchInstallWithShizuku.get() &&
+                allSaved && prefs.autoPatchInstallWithShizuku.get() &&
                 finished.patchedItems.isNotEmpty()
             ) {
                 val shizukuStatus = installerManager.shizukuStatus(
@@ -192,7 +195,10 @@ class AutoPatchWorker(
 
             showResultNotification(
                 state = finished,
-                textOverride = if (installBlockedByShizuku) {
+                saveFailed = !allSaved,
+                textOverride = if (!allSaved) {
+                    applicationContext.getString(R.string.auto_patch_save_failed)
+                } else if (installBlockedByShizuku) {
                     applicationContext.getString(
                         R.string.auto_patch_install_skipped_shizuku
                     )
@@ -214,11 +220,13 @@ class AutoPatchWorker(
 
     private fun showResultNotification(
         state: BatchRunState,
-        textOverride: String? = null
+        textOverride: String? = null,
+        saveFailed: Boolean = false
     ) {
-        // Code adapted from Morphe, see third-party/NOTICE for more information
-        // https://github.com/MorpheApp/morphe-manager/commit/45d78a17b0379bdb5f2c4030df6db42a0efec41b
-        if (AppForeground.isResumed) return
+        val failed = saveFailed || state.items.any {
+            it.state != BatchItemState.SUCCEEDED || it.hadPatchFailures ||
+                it.installOutcome == BatchInstallOutcome.FAILED
+        }
         applicationContext.getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID_FINISHED,
             notification(
@@ -228,7 +236,10 @@ class AutoPatchWorker(
                     it.installOutcome == BatchInstallOutcome.INSTALLED
                 },
                 textOverride = textOverride,
-                packageNames = state.items.map { it.packageName }
+                openBatchResult = failed || !prefs.autoPatchInstallWithShizuku.getBlocking(),
+                packageNames = state.items.map { it.packageName },
+                appNames = state.patchedItems.map { it.appName },
+                failed = failed
             )
         )
     }
@@ -239,7 +250,8 @@ class AutoPatchWorker(
             notification(
                 running = false,
                 count = 0,
-                textOverride = applicationContext.getString(message)
+                textOverride = applicationContext.getString(message),
+                failed = true
             )
         )
     }
@@ -249,7 +261,10 @@ class AutoPatchWorker(
         count: Int,
         installed: Int = 0,
         textOverride: String? = null,
-        packageNames: List<String> = emptyList()
+        packageNames: List<String> = emptyList(),
+        appNames: List<String> = emptyList(),
+        failed: Boolean = false,
+        openBatchResult: Boolean = false
     ): Notification {
         val manager = applicationContext.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
@@ -280,20 +295,22 @@ class AutoPatchWorker(
         )
         val text = textOverride ?: if (running) {
             applicationContext.resources.getQuantityString(
-                R.plurals.batch_patch_notification_running,
+                R.plurals.auto_patch_notification_running,
                 count,
                 count
             )
+        } else if (failed) {
+            applicationContext.getString(R.string.auto_patch_notification_failed)
         } else if (installed > 0) {
             applicationContext.resources.getQuantityString(
-                R.plurals.batch_patch_notification_finished_installed,
+                R.plurals.auto_patch_notification_finished_installed,
                 count,
                 count,
                 installed
             )
         } else {
             applicationContext.resources.getQuantityString(
-                R.plurals.batch_patch_notification_finished,
+                R.plurals.auto_patch_notification_finished,
                 count,
                 count
             )
@@ -305,9 +322,16 @@ class AutoPatchWorker(
                     R.drawable.ic_notification_status
                 )
             )
-            .setContentTitle(applicationContext.getString(R.string.batch_patch_title))
+            .setContentTitle(applicationContext.getString(
+                if (running) R.string.auto_patch_notification_title
+                else if (failed) R.string.auto_patch_notification_failed_title
+                else R.string.auto_patch_notification_finished_title
+            ))
             .setContentText(text)
-            .setContentIntent(pendingIntent)
+            .setStyle(Notification.BigTextStyle().bigText(
+                (listOf(text) + appNames).joinToString("\n")
+            ))
+            .apply { if (openBatchResult) setContentIntent(pendingIntent) }
             .setOngoing(running)
             .setAutoCancel(!running)
             .build()

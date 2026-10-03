@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.ui.component.persistentControls
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -693,6 +694,15 @@ fun PatchBundleDiscoveryScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+            persistentControls(key = "discovery-controls") {
+                ExpressiveSettingsCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = packageQuery,
                             onValueChange = {

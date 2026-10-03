@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.ui.component.persistentControls
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -388,12 +389,14 @@ fun AppSelectorScreen(
             ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "app-selector-actions") {
+            item(key = "app-selector-storage") {
+                SelectFromStorageCard(onClick = openStoragePicker)
+            }
+            persistentControls(key = "app-selector-filters") {
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    SelectFromStorageCard(onClick = openStoragePicker)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)

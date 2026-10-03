@@ -99,6 +99,7 @@ import app.urv.manager.domain.manager.SignatureMetadataTargetType
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.persistentControls
 import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.FullscreenDialog
@@ -1354,7 +1355,7 @@ private fun SignatureMetadataAppPickerDialog(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item {
+                persistentControls(key = "signature-app-search") {
                     TextField(
                         value = filterText,
                         onValueChange = { filterText = it },

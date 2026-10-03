@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.ui.component.persistentControls
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ClipData
@@ -3605,7 +3606,7 @@ private fun MergeSplitInstalledAppsDialog(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                item(key = "merge-installed-search") {
+                persistentControls(key = "merge-installed-controls") {
                     TextField(
                         value = filterText,
                         onValueChange = { filterText = it },
@@ -3613,8 +3614,6 @@ private fun MergeSplitInstalledAppsDialog(
                         label = { Text(stringResource(R.string.search_apps)) },
                         singleLine = true
                     )
-                }
-                item(key = "merge-installed-filters") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

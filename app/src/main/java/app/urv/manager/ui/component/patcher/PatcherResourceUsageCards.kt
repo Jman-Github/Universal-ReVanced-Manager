@@ -88,8 +88,34 @@ internal fun ResourceGraphSection(
     }
 }
 
+/** Retain preparation outside lazy list items so scrolling cannot restart the reveal gate. */
+class ResourceGraphState internal constructor() {
+    private var preparationKey: ResourceGraphPreparationKey? = null
+    private var preparation = ResourceGraphPreparation()
+
+    internal fun preparationFor(key: ResourceGraphPreparationKey): ResourceGraphPreparation {
+        if (preparationKey != key) {
+            preparationKey = key
+            preparation = ResourceGraphPreparation()
+        }
+        return preparation
+    }
+}
+
+@Composable
+fun rememberResourceGraphState(vararg sessionKeys: Any?): ResourceGraphState =
+    remember(*sessionKeys) { ResourceGraphState() }
+
+internal data class ResourceGraphPreparationKey(
+    val width: Dp,
+    val density: Float,
+    val fontScale: Float,
+    val sideBySide: Boolean,
+    val labels: List<String>
+)
+
 /** Keep startup measurements hidden until all three cards have their final aligned sections. */
-private class ResourceGraphPreparation {
+internal class ResourceGraphPreparation {
     val headerHeights = mutableStateMapOf<Int, Int>()
     val footerHeights = mutableStateMapOf<Int, Int>()
     val placedHeaders = mutableStateMapOf<Int, Int>()
@@ -118,7 +144,8 @@ fun PatcherResourceUsageCards(
     isActive: Boolean,
     compact: Boolean,
     modifier: Modifier = Modifier,
-    merger: Boolean = false
+    merger: Boolean = false,
+    graphState: ResourceGraphState = rememberResourceGraphState()
 ) {
     if (samples.isEmpty()) return
     val labels = listOf(
@@ -131,12 +158,17 @@ fun PatcherResourceUsageCards(
     val density = LocalDensity.current
     BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
         val sideBySide = compact || maxWidth >= 720.dp
-        val sessionStart = samples.first().sampledAtElapsedRealtimeMs
         val hasCpu = samples.any { it.cpuCoreLoads.isNotEmpty() }
         val hasIo = samples.any { it.ioReadKbPerSec != null && it.ioWriteKbPerSec != null }
-        val preparation = remember(maxWidth, density, sideBySide, sessionStart, hasCpu, hasIo, labels) {
-            ResourceGraphPreparation()
-        }
+        val preparation = graphState.preparationFor(
+            ResourceGraphPreparationKey(
+                width = maxWidth,
+                density = density.density,
+                fontScale = density.fontScale,
+                sideBySide = sideBySide,
+                labels = labels
+            )
+        )
         val headerHeight = with(density) {
             (preparation.headerHeights.values.maxOrNull() ?: 0).toDp()
         }
@@ -154,12 +186,13 @@ fun PatcherResourceUsageCards(
             withFrameNanos { }
             if (preparation.ready(labels.size)) preparation.revealed = true
         }
-        fun canShowGraphs() = preparation.revealed && preparation.sectionsAligned(labels.size)
+        // Once revealed, live measurements must never collapse the graph back to zero height.
+        fun canShowGraphs() = preparation.revealed
         val visible = canShowGraphs()
         val presentation = Modifier.fillMaxWidth()
             .clipToBounds()
             .drawWithContent {
-                // Placement callbacks can change readiness in this frame, after measurement.
+                // Initial placement can complete preparation after measurement in this frame.
                 if (size.height > 0f && canShowGraphs()) drawContent()
             }
             .layout { measurable, constraints ->

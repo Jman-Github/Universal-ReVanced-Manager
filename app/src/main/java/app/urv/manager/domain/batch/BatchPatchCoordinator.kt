@@ -12,6 +12,8 @@ import android.content.pm.PackageInstaller
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.result.ActivityResult
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.work.WorkInfo
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
@@ -55,16 +57,21 @@ import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.UniqueWorkAlreadyRunningException
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.PatcherSessionInfo
 import app.urv.manager.patcher.updatedFromLog
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
+import app.urv.manager.patcher.patch.PatchBundleType
 import app.urv.manager.patcher.patch.installerTypeFor
 import app.urv.manager.patcher.patch.isCompatibleWithInstallerRules
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
+import app.urv.manager.ui.model.PatcherProgressTracker
 import app.urv.manager.ui.model.SelectedApp
+import app.urv.manager.ui.model.StepDetail
+import app.urv.manager.ui.viewmodel.PatcherViewModel
 import app.urv.manager.util.PM
 import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.urv.manager.util.buildSavedAppEntryKey
@@ -435,6 +442,7 @@ class BatchPatchCoordinator(
                         state = BatchItemState.FAILED,
                         message = error.message ?: "Unable to prepare retry",
                         progressEvents = emptyList(),
+                        patcherProgress = null,
                         memoryUsageSamples = emptyList()
                     )
                 }
@@ -448,6 +456,7 @@ class BatchPatchCoordinator(
                         state = BatchItemState.FAILED,
                         message = "The retry source is no longer available",
                         progressEvents = emptyList(),
+                        patcherProgress = null,
                         memoryUsageSamples = emptyList()
                     )
                 }
@@ -495,6 +504,7 @@ class BatchPatchCoordinator(
                             patchCount = item.patchCount
                         ),
                         progressEvents = emptyList(),
+                        patcherProgress = null,
                         memoryUsageSamples = emptyList(),
                         logLines = emptyList(),
                         signatureInjection = SignatureMetadataWorkflowProgress(
@@ -554,9 +564,24 @@ class BatchPatchCoordinator(
                             )
                             val persistImmediately =
                                 shouldPersistBatchOutputImmediately(initial.scheduled)
+                            var saveError: String? = null
                             val persistedItem = if (persistImmediately) {
-                                persistPatchedItem(resolvedItem, output)
+                                try {
+                                    persistPatchedItem(resolvedItem, output)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (error: Exception) {
+                                    Log.e(
+                                        TAG,
+                                        "Failed to save automatically repatched APK for ${resolvedItem.packageName}",
+                                        error
+                                    )
+                                    saveError = error.message ?: "Unable to save the patched APK"
+                                    null
+                                }
                             } else {
+                                null
+                            } ?: run {
                                 keepOutput = true
                                 PersistedBatchPatchedItem(
                                     file = output,
@@ -564,6 +589,7 @@ class BatchPatchCoordinator(
                                     sourceEntryKey = resolvedItem.sourceEntryKey
                                 )
                             }
+                            val savedForLater = persistImmediately && saveError == null
                             updateItem(itemIndex) {
                                 it.copy(
                                     state = BatchItemState.SUCCEEDED,
@@ -572,13 +598,13 @@ class BatchPatchCoordinator(
                                     repatchSourcePath = persistedItem.repatchSourcePath,
                                     sourceEntryKey = persistedItem.sourceEntryKey,
                                     patchedFile = persistedItem.file,
-                                    savedForLater = persistImmediately,
+                                    savedForLater = savedForLater,
                                     signatureWorkflow = resolvedItem.signatureWorkflow,
                                     hadPatchFailures = resolvedItem.hadPatchFailures,
-                                    message = null
+                                    message = saveError
                                 )
                             }
-                            keepRepatchSource = !persistImmediately
+                            keepRepatchSource = !savedForLater
                         } else {
                             updateItem(itemIndex) {
                                 it.copy(
@@ -606,6 +632,21 @@ class BatchPatchCoordinator(
                 }
             }
 
+            // Close per-app install admission before waiting, so queue completion cannot race
+            // a new installation. Keep the execution lease until both operations finish.
+            val pendingInstall = synchronized(this) {
+                mutableState.update { current ->
+                    current?.takeIf { it.phase == BatchPhase.RUNNING }?.copy(
+                        phase = BatchPhase.INSTALLING,
+                        activeIndex = current.activeInstallPackageName?.let { packageName ->
+                            current.items.indexOfFirst { it.packageName == packageName }
+                        },
+                        detail = null
+                    ) ?: current
+                }
+                installJob
+            }
+            pendingInstall?.join()
             val afterPatch = mutableState.value ?: return
             val installAll = afterPatch.policy == BatchInstallPolicy.INSTALL_AFTER
             if (
@@ -620,12 +661,14 @@ class BatchPatchCoordinator(
                     afterPatch.copy(
                         phase = BatchPhase.FINISHED,
                         activeIndex = null,
+                        activeInstallPackageName = null,
                         progress = 1f,
                         detail = null
                     )
                 )
             }
         } catch (cancelled: CancellationException) {
+            withContext(NonCancellable) { installJob?.cancelAndJoin() }
             if (mutableState.value?.phase == BatchPhase.INSTALLING) {
                 finishInterruptedInstall(cancelled)
             } else {
@@ -777,6 +820,42 @@ class BatchPatchCoordinator(
     ): BatchPatchWorkerResult {
         val input = item.input ?: return BatchPatchWorkerResult(succeeded = false)
         val backgroundExecution = mutableState.value?.scheduled == true
+        val skipSigning = prefs.skipApkSigning.get()
+        val progressSteps = PatcherViewModel.generateSteps(
+            app, input, item.selection,
+            splitStepActive = false,
+            skipApkSigning = skipSigning,
+            injectSignatureMetadata = item.signatureWorkflow.enabled
+        ).toMutableStateList()
+        val progressLock = Any()
+        val visualProgress = PatcherProgressTracker(
+            steps = progressSteps,
+            stepSubSteps = mutableMapOf<StepId, SnapshotStateList<StepDetail>>(),
+            isMorpheSelection = {
+                mutableState.value?.items?.getOrNull(itemIndex)?.patcherSessionInfo?.bundleType
+                    ?.let { it == PatchBundleType.MORPHE.name }
+                    ?: item.patcherEngine?.contains("Morphe", ignoreCase = true) == true
+            },
+            morpheBytecodeMode = {
+                mutableState.value?.items?.getOrNull(itemIndex)?.patcherSessionInfo?.morpheBytecodeMode
+            },
+            onSplitStepRequired = {
+                val splitStep = PatcherViewModel.generateSteps(
+                    app, input, item.selection, splitStepActive = true,
+                    skipApkSigning = skipSigning,
+                    injectSignatureMetadata = item.signatureWorkflow.enabled
+                ).first { it.id == StepId.PrepareSplitApk }
+                val loadIndex = progressSteps.indexOfFirst { it.id == StepId.LoadPatches }
+                val insertIndex = if (loadIndex >= 0) {
+                    loadIndex
+                } else {
+                    progressSteps.indexOfFirst { it.id == StepId.ReadAPK }
+                        .takeIf { it >= 0 } ?: progressSteps.size
+                }
+                progressSteps.add(insertIndex, splitStep)
+            }
+        )
+        visualProgress.markInitialStepRunning()
         output.parentFile?.mkdirs()
         val logger = object : Logger() {
             override fun log(level: LogLevel, message: String) {
@@ -810,7 +889,7 @@ class BatchPatchCoordinator(
             output = output.path,
             selectedPatches = item.selection,
             options = item.options,
-            skipApkSigning = prefs.skipApkSigning.get(),
+            skipApkSigning = skipSigning,
             logger = logger,
             preparedInput = null,
             splitSelection = null,
@@ -828,50 +907,55 @@ class BatchPatchCoordinator(
             appName = item.appName,
             allowBackgroundExecution = backgroundExecution,
             onEvent = { update ->
-                val current = update.notificationProgressCurrent
-                val max = update.notificationProgressMax
-                mutableState.update { state ->
-                    state?.copy(
-                        items = state.items.mapIndexed { index, currentItem ->
-                            if (index != itemIndex) {
-                                currentItem
+                synchronized(progressLock) {
+                    val current = update.notificationProgressCurrent
+                    val max = update.notificationProgressMax
+                    update.event?.let(visualProgress::processProgressEventLocked)
+                    val progressSnapshot = visualProgress.snapshot()
+                    mutableState.update { state ->
+                        state?.copy(
+                            items = state.items.mapIndexed { index, currentItem ->
+                                if (index != itemIndex) {
+                                    currentItem
+                                } else {
+                                    currentItem.copy(
+                                        patcherProgress = progressSnapshot,
+                                        progressEvents = update.event?.let { event ->
+                                            (currentItem.progressEvents + event)
+                                                .takeLast(MAX_PROGRESS_EVENTS)
+                                        } ?: currentItem.progressEvents,
+                                        memoryUsageSamples = update.memoryUsage
+                                            ?.takeIf { update.isMemorySample }
+                                            ?.let { sample ->
+                                                val normalized = sample.copy(
+                                                    usedMb = sample.usedMb.coerceAtLeast(0L),
+                                                    maxMb = sample.maxMb.coerceAtLeast(1L),
+                                                    requestedMaxMb = sample.requestedMaxMb.coerceAtLeast(1L)
+                                                )
+                                                if (
+                                                    currentItem.memoryUsageSamples.lastOrNull()
+                                                        ?.sampledAtElapsedRealtimeMs
+                                                        ?.let {
+                                                            it >= normalized.sampledAtElapsedRealtimeMs
+                                                        } == true
+                                                ) {
+                                                    currentItem.memoryUsageSamples
+                                                } else {
+                                                    (currentItem.memoryUsageSamples + normalized)
+                                                        .takeLast(MAX_MEMORY_SAMPLES)
+                                                }
+                                            } ?: currentItem.memoryUsageSamples
+                                    )
+                                }
+                            },
+                            progress = if (current != null && max != null && max > 0) {
+                                val itemProgress = current.toFloat() / max
+                                (queueIndex + itemProgress) / queueSize.coerceAtLeast(1)
                             } else {
-                                currentItem.copy(
-                                    progressEvents = update.event?.let { event ->
-                                        (currentItem.progressEvents + event)
-                                            .takeLast(MAX_PROGRESS_EVENTS)
-                                    } ?: currentItem.progressEvents,
-                                    memoryUsageSamples = update.memoryUsage
-                                        ?.takeIf { update.isMemorySample }
-                                        ?.let { sample ->
-                                            val normalized = sample.copy(
-                                                usedMb = sample.usedMb.coerceAtLeast(0L),
-                                                maxMb = sample.maxMb.coerceAtLeast(1L),
-                                                requestedMaxMb = sample.requestedMaxMb.coerceAtLeast(1L)
-                                            )
-                                            if (
-                                                currentItem.memoryUsageSamples.lastOrNull()
-                                                    ?.sampledAtElapsedRealtimeMs
-                                                    ?.let {
-                                                        it >= normalized.sampledAtElapsedRealtimeMs
-                                                    } == true
-                                            ) {
-                                                currentItem.memoryUsageSamples
-                                            } else {
-                                                (currentItem.memoryUsageSamples + normalized)
-                                                    .takeLast(MAX_MEMORY_SAMPLES)
-                                            }
-                                        } ?: currentItem.memoryUsageSamples
-                                )
+                                state.progress
                             }
-                        },
-                        progress = if (current != null && max != null && max > 0) {
-                            val itemProgress = current.toFloat() / max
-                            (queueIndex + itemProgress) / queueSize.coerceAtLeast(1)
-                        } else {
-                            state.progress
-                        }
-                    )
+                        )
+                    }
                 }
             }
         )
@@ -995,10 +1079,14 @@ class BatchPatchCoordinator(
                 item.options
             ))?.copy(signatureWorkflow = item.signatureWorkflow)
         val identity = buildSavedAppVariantIdentity(version, selectionPayload, item.selection)
-        val overwriteDisabled =
+        // Automatic repatching updates its source entry even when manual saves keep variants.
+        val overwriteDisabled = mutableState.value?.scheduled != true &&
             prefs.enableSavedApps.get() && prefs.disableSavedAppOverwrite.get()
-        val sourceSavedEntry = item.sourceEntryKey
-            ?.let { installedAppRepository.get(it) }
+        val sourceEntry = item.sourceEntryKey?.let { installedAppRepository.get(it) }
+        val automaticSourceIdentity = sourceEntry
+            ?.takeIf { mutableState.value?.scheduled == true }
+            ?.let { savedVariantIdentity(it) }
+        val sourceSavedEntry = sourceEntry
             ?.takeIf { sourceEntry ->
                 sourceEntry.installType == InstallType.SAVED &&
                     (
@@ -1021,7 +1109,8 @@ class BatchPatchCoordinator(
                         isSavedAppEntryForPackage(
                             savedEntry.currentPackageName,
                             finalPackageName
-                        ) && savedVariantIdentity(savedEntry) == identity
+                        ) && savedVariantIdentity(savedEntry) in
+                            setOfNotNull(identity, automaticSourceIdentity)
                     }
                     ?.currentPackageName
         }
@@ -1098,13 +1187,6 @@ class BatchPatchCoordinator(
         }
         installedAppRepository.pruneRepatchInputs()
 
-        if (copiedOutput) {
-            runPostCommitStep("Failed to remove the temporary batch patched APK") {
-                check(output.delete() || !output.exists()) {
-                    "The temporary batch patched APK could not be removed"
-                }
-            }
-        }
         val persistedSavedEntry = installedAppRepository.get(savedEntryKey)
         val sourceSavedEntryHasRetainedRepatchInput = sourceSavedEntry
             ?.repatchSourcePath
@@ -1176,6 +1258,13 @@ class BatchPatchCoordinator(
         val retainedSourceOwner = sourceSavedEntry
             ?.takeIf { preserveSourceSavedEntry }
             ?: persistedSavedEntry
+        if (copiedOutput) {
+            runPostCommitStep("Failed to remove the temporary batch patched APK") {
+                check(output.delete() || !output.exists()) {
+                    "The temporary batch patched APK could not be removed"
+                }
+            }
+        }
         return PersistedBatchPatchedItem(
             file = savedOutput,
             repatchSourcePath = retainedSourceOwner?.repatchSourcePath,
@@ -1232,7 +1321,8 @@ class BatchPatchCoordinator(
                             repatchSourcePath = persistedItem.repatchSourcePath,
                             sourceEntryKey = persistedItem.sourceEntryKey,
                             savedForLater = true,
-                            saving = false
+                            saving = false,
+                            message = null
                         )
                     }
                 } catch (cancelled: CancellationException) {
@@ -1240,7 +1330,12 @@ class BatchPatchCoordinator(
                 } catch (error: Exception) {
                     allSaved = false
                     Log.e(TAG, "Failed to save batch patched APK for $packageName", error)
-                    updateItemByPackage(packageName) { it.copy(saving = false) }
+                    updateItemByPackage(packageName) {
+                        it.copy(
+                            saving = false,
+                            message = error.message ?: "Unable to save the patched APK"
+                        )
+                    }
                 }
             }
             mutableState.value?.let { persistResult(it) }
@@ -1249,7 +1344,10 @@ class BatchPatchCoordinator(
             mutableState.update { current ->
                 current?.copy(items = current.items.map { it.copy(saving = false) })
             }
-            releaseExecution()
+            if (!shouldRetainBatchExecutionAfterFinish(
+                    snapshot.scheduled, liveScheduledExecution
+                )
+            ) releaseExecution()
         }
     }
 
@@ -1333,6 +1431,7 @@ class BatchPatchCoordinator(
                     message = null,
                     hadPatchFailures = false,
                     progressEvents = emptyList(),
+                    patcherProgress = null,
                     memoryUsageSamples = emptyList(),
                     logLines = emptyList(),
                     state = if (
@@ -1438,6 +1537,7 @@ class BatchPatchCoordinator(
         val finished = mutableState.value?.copy(
             phase = BatchPhase.FINISHED,
             activeIndex = null,
+            activeInstallPackageName = null,
             detail = null,
             items = mutableState.value?.items.orEmpty().map { it.copy(installing = false) }
         ) ?: return
@@ -1452,40 +1552,74 @@ class BatchPatchCoordinator(
         val snapshot = mutableState.value ?: return
         val item = snapshot.items.firstOrNull { it.packageName == packageName } ?: return
         if (
-            snapshot.phase != BatchPhase.FINISHED ||
-            item.installing ||
-            item.installOutcome == BatchInstallOutcome.INSTALLED ||
-            item.patchedFile?.exists() != true ||
+            !snapshot.canInstallBatchItem(item) ||
+            installJob?.isActive == true ||
             !tryAcquireExecution()
         ) return
-        mutableState.value = snapshot.copy(
-            phase = BatchPhase.INSTALLING,
-            activeIndex = snapshot.items.indexOf(item),
-            items = snapshot.items.map {
-                if (it.packageName == packageName) it.copy(installing = true) else it
-            }
-        )
-        installJob = launchInstall {
+        val whilePatching = snapshot.phase == BatchPhase.RUNNING
+        mutableState.update { current ->
+            current?.copy(
+                phase = if (whilePatching) current.phase else BatchPhase.INSTALLING,
+                activeIndex = if (whilePatching) current.activeIndex
+                    else current.items.indexOfFirst { it.packageName == packageName },
+                activeInstallPackageName = packageName,
+                items = current.items.map {
+                    if (it.packageName == packageName) it.copy(installing = true) else it
+                }
+            )
+        }
+        installJob = launchInstall(
+            concurrentPackageName = packageName.takeIf { whilePatching }
+        ) {
             installOne(packageName, installerToken = installerToken)
-            val finished = mutableState.value?.copy(
-                phase = BatchPhase.FINISHED,
-                activeIndex = null,
-                detail = null,
-                items = mutableState.value?.items.orEmpty().map { it.copy(installing = false) }
-            ) ?: return@launchInstall
-            finish(finished)
+            if (!whilePatching) {
+                val current = mutableState.value ?: return@launchInstall
+                finish(current.copy(
+                    phase = BatchPhase.FINISHED,
+                    activeIndex = null,
+                    activeInstallPackageName = null,
+                    detail = null,
+                    items = current.items.map { it.copy(installing = false) }
+                ))
+            }
         }
     }
 
-    private fun launchInstall(block: suspend () -> Unit): Job = scope.launch {
+    private fun launchInstall(
+        concurrentPackageName: String? = null,
+        block: suspend () -> Unit
+    ): Job = scope.launch {
+        suspend fun interrupted(error: Throwable) {
+            if (concurrentPackageName == null) {
+                finishInterruptedInstall(error)
+            } else {
+                withContext(NonCancellable) {
+                    val message = if (error is CancellationException) {
+                        app.getString(R.string.installer_hint_aborted)
+                    } else {
+                        error.message?.takeIf(String::isNotBlank)
+                            ?: app.getString(R.string.installer_hint_aborted)
+                    }
+                    mutableState.update { current ->
+                        current?.let {
+                            interruptBatchItemInstall(it, concurrentPackageName, message)
+                        }
+                    }
+                }
+            }
+        }
         try {
             block()
         } catch (cancelled: CancellationException) {
-            finishInterruptedInstall(cancelled)
+            interrupted(cancelled)
             throw cancelled
         } catch (error: Throwable) {
             Log.e(TAG, "Batch installation stopped unexpectedly", error)
-            finishInterruptedInstall(error)
+            interrupted(error)
+        } finally {
+            mutableState.update { current ->
+                current?.copy(activeInstallPackageName = null)
+            }
         }
     }
 
@@ -1680,7 +1814,10 @@ class BatchPatchCoordinator(
         val index = state.items.indexOfFirst { it.packageName == packageName }
         val item = state.items.getOrNull(index) ?: return
         mutableState.update { current ->
-            current?.copy(activeIndex = index)
+            current?.copy(
+                activeIndex = if (current.phase == BatchPhase.RUNNING) current.activeIndex else index,
+                activeInstallPackageName = packageName
+            )
         }
         val file = item.patchedFile?.takeIf { it.exists() }
         if (file == null) {
@@ -2539,11 +2676,13 @@ class BatchPatchCoordinator(
         val replacementSortOrder = existingTargetEntry?.sortOrder
             ?: matchingSavedEntries.minByOrNull(InstalledApp::sortOrder)?.sortOrder
 
-        val pendingHistoricalEntry = prepareReplacedInstalledVariant(
-            targetPackage = targetPackage,
-            originalPackageName = item.packageName,
-            newVariantIdentity = variantIdentity
-        )
+        val pendingHistoricalEntry = if (mutableState.value?.scheduled == true) null else {
+            prepareReplacedInstalledVariant(
+                targetPackage = targetPackage,
+                originalPackageName = item.packageName,
+                newVariantIdentity = variantIdentity
+            )
+        }
 
         val installedCopy = fs.getPatchedAppFile(targetPackage, version)
         val copiedInstalledOutput = !sourceFile.absolutePath.equals(
@@ -2866,6 +3005,7 @@ class BatchPatchCoordinator(
             val cancelled = mutableState.value?.copy(
                 phase = BatchPhase.FINISHED,
                 activeIndex = null,
+                activeInstallPackageName = null,
                 detail = null,
                 items = mutableState.value?.items.orEmpty().map { item ->
                     if (
@@ -3026,13 +3166,16 @@ class BatchPatchCoordinator(
 
     private suspend fun finish(state: BatchRunState) {
         persistResult(state)
-        mutableState.value = state
-        if (!shouldRetainBatchExecutionAfterFinish(
-                scheduled = state.scheduled,
-                liveScheduledExecution = liveScheduledExecution
-            )
-        ) {
-            releaseExecution()
+        synchronized(this) {
+            // A finished state admits new installs; release the old lease before publishing it.
+            if (!shouldRetainBatchExecutionAfterFinish(
+                    scheduled = state.scheduled,
+                    liveScheduledExecution = liveScheduledExecution
+                )
+            ) {
+                releaseExecution()
+            }
+            mutableState.value = state
         }
     }
 
@@ -3185,7 +3328,8 @@ class BatchPatchCoordinator(
                 cancel()
                 discardUnsavedPatchedFiles()
             } else {
-                discardUnsavedPatchedFiles()
+                // Keep automatic outputs available for recovery if saving failed.
+                if (mutableState.value?.scheduled != true) discardUnsavedPatchedFiles()
                 releaseExecution()
             }
         } finally {

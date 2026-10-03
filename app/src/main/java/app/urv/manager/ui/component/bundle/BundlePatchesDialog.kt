@@ -1,5 +1,6 @@
 package app.urv.manager.ui.component.bundle
 
+import app.urv.manager.ui.component.persistentControls
 import android.net.Uri
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
@@ -94,7 +95,7 @@ fun BundlePatchesDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
-                item(key = "patches_search") {
+                persistentControls(key = "patches_search") {
                     OutlinedTextField(
                         modifier = Modifier.fillMaxWidth(),
                         value = query,

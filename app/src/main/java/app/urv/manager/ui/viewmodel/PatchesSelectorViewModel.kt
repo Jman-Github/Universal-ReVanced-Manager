@@ -414,7 +414,15 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
 
         // Materialize required patches before toggling so removing the last optional patch
         // cannot also remove patches that the UI shows as locked on.
-        val baseSelection = (customPatchSelection ?: currentDefaultSelection)
+        // Start from exactly the states displayed by isSelected, including defaults for
+        // bundles whose default selection has not loaded yet. Only this identity changes.
+        val displayedSelection = customPatchSelection ?: currentBundles.associate { scoped ->
+            scoped.uid to scoped.patchSequence(allowIncompatiblePatches)
+                .filter { isSelected(scoped.uid, it) }
+                .map(PatchInfo::name)
+                .toPersistentSet()
+        }.toPersistentMap()
+        val baseSelection = displayedSelection
             .toPatchSelection()
             .applyCurrentAvailability()
             .toPersistentPatchSelection()

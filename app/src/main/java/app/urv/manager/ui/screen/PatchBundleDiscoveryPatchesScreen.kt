@@ -1,5 +1,6 @@
 package app.urv.manager.ui.screen
 
+import app.urv.manager.ui.component.persistentControls
 import android.net.Uri
 import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
@@ -190,7 +191,7 @@ fun PatchBundleDiscoveryPatchesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item(key = "patches_search") {
+            persistentControls(key = "patches_search") {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = query,
