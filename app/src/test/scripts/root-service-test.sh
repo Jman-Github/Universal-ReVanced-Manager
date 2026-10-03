@@ -8,6 +8,12 @@ URV_PACKAGE=com.example.app
 URV_USER_ID=0
 URV_TOPOLOGY=SINGLE
 URV_STOCK_SPLITS=''
+URV_STOCK_PATH=/data/app/example/base.apk
+URV_VERSION_NAME=1.0
+URV_VERSION_CODE=42
+URV_ENABLED=1
+boot_completed=1
+getprop() { echo "$boot_completed"; }
 scenario=ready
 timeout() { shift; "$@"; }
 pm() {
@@ -40,22 +46,14 @@ dumpsys() {
   [ "$scenario" != version_empty ] || return 0
   printf '  versionName=1.0\n  versionCode=42 minSdk=23\n'
 }
-cmd() {
-  [ "$scenario" != launcher_failure ] || return 1
-  case "$scenario" in
-    launcher_empty) return 0 ;;
-    disabled) echo 'No activity found' ;;
-    *) echo 'com.example.app/.MainActivity' ;;
-  esac
-}
-for scenario in ready split disabled launcher_failure launcher_empty; do
+cmd() { echo 'Unexpected launcher query during mount readiness' >&2; exit 1; }
+for scenario in ready split disabled; do
   read_package_state
   [ "$current_version_code" = 42 ]
   case "$scenario" in
-    ready) [ "$path_count:$current_enabled:$current_launcher" = 1:1:1 ] ;;
+    ready) [ "$path_count:$current_enabled" = 1:1 ] ;;
     split) [ "$path_count" = 2 ] ;;
-    disabled) [ "$current_enabled:$current_launcher" = 0:0 ] ;;
-    launcher_failure|launcher_empty) [ "$current_launcher" = 0 ] ;;
+    disabled) [ "$current_enabled" = 0 ] ;;
   esac
 done
 for scenario in users_failure packages_failure path_failure path_empty version_failure version_empty enabled_failure; do
@@ -64,6 +62,15 @@ done
 scenario=absent
 read_package_state
 [ -z "$installed_users" ]
+# An incomplete boot registry must not prove removal or compatibility changes.
+boot_completed=0
+if read_package_state; then echo 'Early absence was accepted' >&2; exit 1; fi
+scenario=ready
+read_package_state
+URV_VERSION_CODE=43
+if read_package_state; then echo 'Early identity mismatch was accepted' >&2; exit 1; fi
+URV_VERSION_CODE=42
+boot_completed=1
 # Verify the complete recorded split set, including same-version content changes.
 scenario=split
 URV_TOPOLOGY=SPLIT
@@ -134,7 +141,7 @@ wait_for_package_manager
 attempts=0
 read_package_state() { attempts=$((attempts + 1)); [ "$attempts" -ge 4 ]; }
 wait_for_package_manager
-[ "$attempts:$ticks" = 4:15 ]
+[ "$attempts:$ticks" = 4:3 ]
 read_package_state() { return 1; }
 ticks=0
 if wait_for_package_manager; then exit 1; fi
@@ -177,11 +184,11 @@ for scenario in transient persistent interrupted; do
   }
   if acquire_ready_package_lock; then
     [ "$scenario" = transient ]
-    [ "$attempts:$acquisitions:$releases:$loads:$ticks:$boot_lock_held" = 4:2:1:2:5:1 ]
+    [ "$attempts:$acquisitions:$releases:$loads:$ticks:$boot_lock_held" = 4:2:1:2:1:1 ]
   else
     case "$scenario" in
       persistent)
-        [ "$ticks:$acquisitions:$releases:$boot_lock_held" = 300:60:60:0 ] ;;
+        [ "$ticks:$acquisitions:$releases:$boot_lock_held" = 300:300:300:0 ] ;;
       interrupted)
         [ "$acquisitions:$loads" = 2:1 ]
         [ "$(head -n 1 "$transaction_dir/boot-status")" = INCOMPLETE_TRANSACTION ]

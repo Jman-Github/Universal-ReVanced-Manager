@@ -4627,6 +4627,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 profileInstallerToken != null &&
                 shouldApplyProfileInstallerPreference(
                     chooseInstallerPerInstall = chooseInstallerPerInstall,
+                    autoInstall = input.autoInstall,
                     installerMatchesPatchMode = hasProfileInstallerPreference
                 ) ->
                 installerManager.withPlayStoreSource(

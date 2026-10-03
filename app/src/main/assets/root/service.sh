@@ -187,20 +187,45 @@ remove_failed_urv_mounts() {
 
 stop_and_wait() {
   installed_users="$(installed_user_ids)" || return 1
-  for installed_user in $installed_users; do
-    am force-stop --user "$installed_user" "$URV_PACKAGE" || return 1
+  stop_package_uids=''
+  for stop_user in $installed_users; do
+    stop_uid_dump="$(timeout 10 pm list packages --user "$stop_user" -U "$URV_PACKAGE" 2>/dev/null)" || return 1
+    stop_user_uid="$(printf '%s\n' "$stop_uid_dump" | awk -v pkg="package:$URV_PACKAGE" '
+      $1 == pkg { for (i=2; i<=NF; i++) if ($i ~ /^uid:[0-9]+$/) { sub(/^uid:/, "", $i); print $i } }
+    ')" || return 1
+    case "$stop_user_uid" in ''|*[!0-9]*) return 1 ;; esac
+    stop_package_uids="$stop_package_uids $stop_user_uid"
   done
-  stop_checks=0
-  while [ "$stop_checks" -lt 50 ]; do
-    process_list="$(ps -A -o args 2>/dev/null)" || return 1
-    if ! echo "$process_list" | awk -v pkg="$URV_PACKAGE" \
-        '$1 == pkg || index($1, pkg ":") == 1 { found=1 } END { exit !found }'; then
-      return 0
+  stop_started="$(awk '{print int($1)}' /proc/uptime)" || return 1
+  stop_attempted=0
+  while :; do
+    process_list="$(timeout 2 /system/bin/ps -A -o UID,ARGS 2>/dev/null)" || return 1
+    # Custom manifest process names need UID matching; retain name matching for isolated children.
+    package_processes="$(printf '%s\n' "$process_list" | awk -v pkg="$URV_PACKAGE" -v uids="$stop_package_uids" '
+      BEGIN { count=split(uids, ids, " "); for (i=1; i<=count; i++) owned[ids[i]]=1 }
+      $1 in owned || $2 == pkg || index($2, pkg ":") == 1 { print }
+    ')" || return 1
+    [ -n "$package_processes" ] || [ "$stop_attempted" = 0 ] || return 0
+    if [ -z "$installed_users" ]; then
+      [ -z "$package_processes" ]
+      return $?
     fi
-    sleep 0.1
-    stop_checks=$((stop_checks + 1))
+    stop_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    stop_remaining=$((15 - stop_now + stop_started))
+    [ "$stop_remaining" -gt 0 ] || return 1
+    # Attempt force-stop even when idle to suppress component restarts during mounting.
+    stop_attempted=1
+    for installed_user in $installed_users; do
+      # HyperOS can reject ActivityManager Binder calls while boot is settling.
+      # Check the actual processes and retry within one deadline, even if am fails.
+      timeout "$stop_remaining" am force-stop --user "$installed_user" "$URV_PACKAGE" ||
+        log_status "ActivityManager stop failed; checking package processes before retry"
+      stop_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+      stop_remaining=$((15 - stop_now + stop_started))
+      [ "$stop_remaining" -gt 0 ] || break
+    done
+    sleep 0.2
   done
-  return 1
 }
 
 zygote_pids() {
@@ -492,22 +517,11 @@ finish_boot_service() {
   esac
 }
 
-boot_waited=0
-write_boot_status WAITING_FOR_BOOT
-trap finish_boot_service EXIT
-log_status "Waiting for Android boot completion before ownership verification"
-while [ "$boot_waited" -lt 300 ]; do
-  [ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] && break
-  sleep 1
-  boot_waited=$((boot_waited + 1))
-done
-[ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] || {
-  write_boot_status BOOT_TIMEOUT
-  log_status "Android boot did not complete; deferring mount verification"
-  exit 0
-}
 write_boot_status WAITING_FOR_PACKAGE_MANAGER
-log_status "Android boot completed; checking PackageManager readiness"
+trap finish_boot_service EXIT
+# service.sh runs during late_start. Positive package identity and ownership checks
+# can succeed before sys.boot_completed; do not add the rest of boot to mount time.
+log_status "Checking PackageManager readiness and committed package ownership"
 canonical_dir="$transaction_dir/backup/payload"
 canonical_patched="$canonical_dir/patched"
 canonical_stock="$canonical_dir/stock"
@@ -650,7 +664,11 @@ namespace_splits_match() {
 read_package_state() {
   installed_users="$(installed_user_ids)" || return 1
   # A successful ownership query can prove removal without querying an absent app.
-  echo "$installed_users" | grep -Fx "$URV_USER_ID" >/dev/null || return 0
+  if ! echo "$installed_users" | grep -Fx "$URV_USER_ID" >/dev/null; then
+    # Early PackageManager queries can see an incomplete package registry.
+    [ "$(getprop sys.boot_completed 2>/dev/null)" = 1 ] || return 1
+    return 0
+  fi
   path_dump="$(timeout 10 pm path --user "$URV_USER_ID" "$URV_PACKAGE" 2>/dev/null)" || return 1
   current_path="$(printf '%s\n' "$path_dump" | awk -F/ '/^package:/ && $NF ~ /^base/ { sub(/^package:/, ""); print; exit }')"
   [ -n "$current_path" ] || current_path="$(printf '%s\n' "$path_dump" | sed -n 's/^package://p' | head -n 1)"
@@ -668,13 +686,14 @@ read_package_state() {
   else
     current_enabled=1
   fi
-  launcher_line="$(timeout 10 cmd package resolve-activity --brief --user "$URV_USER_ID" \
-    -a android.intent.action.MAIN -c android.intent.category.LAUNCHER "$URV_PACKAGE" 2>/dev/null)" || launcher_line=''
-  case "$launcher_line" in
-    */*) current_launcher=1 ;;
-    *"No activity found"*) current_launcher=0 ;;
-    *) current_launcher=0 ;;
-  esac
+  if [ "$(getprop sys.boot_completed 2>/dev/null)" != 1 ]; then
+    # Mount early only from a matching snapshot; defer negative conclusions until boot completes.
+    [ "$current_path" = "$URV_STOCK_PATH" ] &&
+      [ "$current_version_name" = "$URV_VERSION_NAME" ] &&
+      [ "$current_version_code" = "$URV_VERSION_CODE" ] &&
+      [ "$current_enabled" = "$URV_ENABLED" ] &&
+      [ "$split_compatible" = 1 ] || return 1
+  fi
 }
 
 wait_for_package_manager() {
@@ -687,8 +706,10 @@ wait_for_package_manager() {
       write_boot_status INCOMPLETE_TRANSACTION
       return 1
     fi
-    read_package_state && return 0
-    sleep 5
+    if read_package_state && [ -n "$(live_zygote_pids)" ]; then
+      return 0
+    fi
+    sleep 1
   done
 }
 
@@ -714,9 +735,79 @@ acquire_ready_package_lock() {
     release_package_lock || return 1
     boot_lock_held=0
     write_boot_status WAITING_FOR_PACKAGE_MANAGER
-    sleep 5
+    sleep 1
   done
   return 1
+}
+
+zygote_mounts_verified() {
+  checked_zygote_pids="$(live_zygote_pids)" || return 1
+  [ -n "$checked_zygote_pids" ] || return 1
+  for checked_zygote_pid in $checked_zygote_pids; do
+    validate_zygote "$checked_zygote_pid" &&
+      namespace_matches_payload "$checked_zygote_pid" &&
+      namespace_splits_match "$checked_zygote_pid" || return 1
+  done
+  [ "$checked_zygote_pids" = "$(live_zygote_pids)" ]
+}
+
+finish_verified_mount() {
+  write_boot_status VERIFIED || return 1
+  [ "$(getprop sys.boot_completed 2>/dev/null)" != 1 ] || return 0
+  verified_transaction="$URV_TRANSACTION_ID"
+  verified_state_hash="$(sha256sum "$state_file" 2>/dev/null)" || return 1
+  release_package_lock || return 1
+  boot_lock_held=0
+  # Keep the early mount usable without holding up Manager operations. A Zygote
+  # restarted during boot may need its own mount when boot completion is reported.
+  final_started="$(awk '{print int($1)}' /proc/uptime)" || return 1
+  while [ "$(getprop sys.boot_completed 2>/dev/null)" != 1 ]; do
+    [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] &&
+      [ ! -f "$transaction_dir/active.json" ] || return 0
+    [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] || return 0
+    final_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    [ "$((final_now - final_started))" -lt 300 ] || {
+      log_status "Boot completion not reported; leaving the verified early mount for Manager"
+      return 0
+    }
+    sleep 1
+  done
+  acquire_package_lock || return 1
+  boot_lock_held=1
+  [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] &&
+    [ ! -f "$transaction_dir/active.json" ] || return 0
+  [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] || return 0
+  load_state || return 1
+  [ "$URV_PACKAGE" = "$locked_package" ] &&
+    [ "$URV_TRANSACTION_ID" = "$verified_transaction" ] || return 0
+  read_package_state &&
+    [ "$installed_users" = "$URV_USER_ID" ] &&
+    [ "$current_path" = "$URV_STOCK_PATH" ] &&
+    [ "$current_version_name" = "$URV_VERSION_NAME" ] &&
+    [ "$current_version_code" = "$URV_VERSION_CODE" ] &&
+    [ "$current_enabled" = "$URV_ENABLED" ] &&
+    root_mount_layout_valid &&
+    split_set_matches refresh &&
+    [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ] || return 1
+  if [ "$URV_PRESERVE_STOCK" = 1 ]; then
+    [ "$(sha256sum "$URV_STOCK_SHADOW_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_STOCK_SHADOW_SHA256" ] || return 1
+  fi
+  # An unchanged Zygote already launches the patched app. Stop processes only
+  # when namespace drift requires repair, so a healthy early launch stays open.
+  if ! zygote_mounts_verified; then
+    stop_and_wait && mount_and_verify_zygotes && stop_and_wait &&
+      root_mount_layout_valid && split_set_matches refresh || return 1
+  fi
+  log_status "Boot completion root and Zygote mounts verified"
+  write_boot_status VERIFIED
+}
+
+complete_verified_mount() {
+  finish_verified_mount || {
+    log_status "Boot completion verification deferred; Manager recovery is required"
+    # Manager may own the lock now; do not overwrite its recovery checkpoint.
+    [ "$boot_lock_held" = 0 ] || write_boot_status REPAIR_REQUIRED
+  }
 }
 
 boot_lock_held=0
@@ -775,10 +866,10 @@ if [ "$mount_count" -gt 0 ]; then
        [ "$path_count" = "$expected_path_count" ] &&
        [ "$split_compatible" = 1 ] &&
        [ "$current_enabled" = "$URV_ENABLED" ]; then
-      if mount_and_verify_zygotes && root_mount_layout_valid && split_set_matches refresh &&
+      if zygote_mounts_verified && root_mount_layout_valid && split_set_matches refresh &&
          [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ]; then
         log_status "Early root and Zygote mounts verified"
-        write_boot_status VERIFIED
+        complete_verified_mount
         exit 0
       fi
       log_status "Zygote namespace verification failed; retrying after package quiescence"
@@ -788,8 +879,13 @@ if [ "$mount_count" -gt 0 ]; then
       }
       if mount_and_verify_zygotes && root_mount_layout_valid && split_set_matches refresh &&
          [ "$(sha256sum "$URV_STOCK_PATH" 2>/dev/null | awk '{print $1}')" = "$URV_PATCHED_SHA256" ]; then
+        stop_and_wait || {
+          log_status "Repaired mounts verified but package is busy; leaving mounts for Manager recovery"
+          write_boot_status REPAIR_REQUIRED
+          exit 0
+        }
         log_status "Early Zygote namespace repair succeeded"
-        write_boot_status VERIFIED
+        complete_verified_mount
         exit 0
       fi
       log_status "Zygote namespace repair failed; falling back to verified stock"
@@ -930,5 +1026,10 @@ if { [ "$URV_PRESERVE_STOCK" = 1 ] && [ "$post_mount_shadow_hash" != "$URV_STOCK
   exit 0
 fi
 
+stop_and_wait || {
+  log_status "Mounts verified but package restarted; leaving mounts for Manager recovery"
+  write_boot_status REPAIR_REQUIRED
+  exit 0
+}
 log_status "Late root and Zygote mounts verified; app remains stopped"
-write_boot_status VERIFIED
+complete_verified_mount

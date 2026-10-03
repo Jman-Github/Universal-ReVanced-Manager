@@ -109,7 +109,7 @@ import ru.solrudev.ackpine.uninstaller.createSession
 class InstalledAppInfoViewModel(
     packageName: String
 ) : ViewModel(), KoinComponent {
-    enum class MountOperation { UNMOUNTING, MOUNTING }
+    enum class MountOperation { UNMOUNTING, MOUNTING, REPAIRING }
 
     private val context: Application by inject()
     private val pm: PM by inject()
@@ -172,6 +172,8 @@ class InstalledAppInfoViewModel(
         private set
     var mountOperation: MountOperation? by mutableStateOf(null)
         private set
+    val isRootMountBusy: Boolean
+        get() = mountOperation != null || isInstalling || isDeletingSavedRootApp
     var mountWarning: MountWarningState? by mutableStateOf(null)
         private set
     var mountVersionMismatchMessage: String? by mutableStateOf(null)
@@ -1403,6 +1405,7 @@ class InstalledAppInfoViewModel(
     }
 
     fun remountSavedInstallation() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         val pkgName = resolveDevicePackageName(app)
         // The coordinator removes any old mount and activates the saved payload as one transaction.
@@ -1522,8 +1525,10 @@ class InstalledAppInfoViewModel(
     }
 
     fun unmountSavedInstallation() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         val pkgName = resolveDevicePackageName(app)
+        mountOperation = MountOperation.UNMOUNTING
         try {
             context.toast(context.getString(R.string.unmounting))
             rootMountCoordinator.execute(
@@ -1538,33 +1543,53 @@ class InstalledAppInfoViewModel(
         } catch (e: Exception) {
             context.toast(context.getString(R.string.failed_to_unmount, e.simpleMessage()))
             Log.e(tag, "Failed to unmount", e)
+        } finally {
+            mountOperation = null
         }
     }
 
     fun repairRootMount() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
-        val packageName = resolveDevicePackageName(app)
-        mountOperation = MountOperation.MOUNTING
+        mountOperation = MountOperation.REPAIRING
         try {
-            when (val recovery = rootMountCoordinator.execute(
-                RootMountRequest(
-                    packageName,
-                    userId = android.os.Process.myUid() / 100_000,
-                    operation = RootMountOperation.RECOVER
-                )
-            )) {
-                is RootMountResult.Success,
-                is RootMountResult.RecoveredToPreviousMount,
-                is RootMountResult.RecoveredToStock -> Unit
-                else -> recovery.requireSuccess()
+            val progressMessage = context.getString(R.string.root_mount_repair_progress)
+            var progressToast = context.toastHandle(progressMessage)
+            val progressToastJob = launch {
+                while (isActive) {
+                    delay(INSTALL_PROGRESS_TOAST_INTERVAL_MS)
+                    progressToast.cancel()
+                    progressToast = context.toastHandle(progressMessage)
+                }
             }
-            check(mountSavedPayload(packageName, app)) {
-                "No compatible saved payload is available"
+            try {
+                val packageName = resolveDevicePackageName(app)
+                when (val recovery = rootMountCoordinator.execute(
+                    RootMountRequest(
+                        packageName,
+                        userId = android.os.Process.myUid() / 100_000,
+                        operation = RootMountOperation.RECOVER
+                    )
+                )) {
+                    is RootMountResult.Success,
+                    is RootMountResult.RecoveredToPreviousMount,
+                    is RootMountResult.RecoveredToStock -> Unit
+                    else -> recovery.requireSuccess()
+                }
+                check(mountSavedPayload(packageName, app)) {
+                    "No compatible saved payload is available"
+                }
+                isMounted = rootInstaller.isAppMounted(packageName)
+                check(isMounted) { "Root mount could not be verified" }
+            } finally {
+                progressToastJob.cancel()
+                progressToast.cancel()
             }
-            isMounted = rootInstaller.isAppMounted(packageName)
-            context.toast(context.getString(R.string.mounted))
+            context.toast(context.getString(R.string.root_mount_repair_success))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
-            context.toast(context.getString(R.string.failed_to_mount, error.simpleMessage()))
+            context.toast(context.getString(R.string.root_mount_repair_failed, error.simpleMessage()))
             Log.e(tag, "Failed to repair root mount", error)
         } finally {
             mountOperation = null
@@ -1663,6 +1688,7 @@ class InstalledAppInfoViewModel(
     }
 
     fun mountOrUnmount() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         val pkgName = resolveDevicePackageName(app)
         try {
@@ -1817,6 +1843,7 @@ class InstalledAppInfoViewModel(
     }
 
     fun deleteSavedEntry() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         val deletingSavedRootApp = app.installType == InstallType.MOUNT
         if (deletingSavedRootApp) isDeletingSavedRootApp = true
@@ -1834,6 +1861,7 @@ class InstalledAppInfoViewModel(
     }
 
     fun deleteSavedCopy() = viewModelScope.launch {
+        if (isRootMountBusy) return@launch
         val app = installedApp ?: return@launch
         if (!clearSavedData(app, deleteRecord = false)) return@launch
         context.toast(context.getString(R.string.saved_app_copy_removed_toast))

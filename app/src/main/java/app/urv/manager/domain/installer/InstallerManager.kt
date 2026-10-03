@@ -36,11 +36,6 @@ internal fun installerTokenMatchesPatchMode(
     (token == InstallerManager.Token.AutoSaved ||
         token == InstallerManager.Token.RootPlayStore) == useMount
 
-internal fun shouldApplyProfileInstallerPreference(
-    chooseInstallerPerInstall: Boolean,
-    installerMatchesPatchMode: Boolean
-): Boolean = !chooseInstallerPerInstall && installerMatchesPatchMode
-
 internal fun shouldUseConfiguredInstallerWithoutPrompt(
     chooseInstallerPerInstall: Boolean
 ): Boolean = !chooseInstallerPerInstall

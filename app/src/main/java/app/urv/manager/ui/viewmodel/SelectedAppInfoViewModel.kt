@@ -611,8 +611,10 @@ class SelectedAppInfoViewModel(
             profile.installerToken?.let { storedToken ->
                 withContext(Dispatchers.Main) {
                     selectPatchMode(
-                        installerManager.parseToken(storedToken) ==
-                            InstallerManager.Token.AutoSaved
+                        installerTokenMatchesPatchMode(
+                            installerManager.parseToken(storedToken),
+                            useMount = true
+                        )
                     )
                 }
             }
@@ -1713,6 +1715,7 @@ class SelectedAppInfoViewModel(
         val profileInstallerToken = profile?.installerToken?.takeIf { storedToken ->
             shouldApplyProfileInstallerPreference(
                 chooseInstallerPerInstall = chooseInstallerPerInstall,
+                autoInstall = profile.autoInstall,
                 installerMatchesPatchMode = installerTokenMatchesPatchMode(
                     installerManager.parseToken(storedToken),
                     usingMountInstall

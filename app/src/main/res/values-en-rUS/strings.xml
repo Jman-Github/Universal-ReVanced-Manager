@@ -1829,6 +1829,9 @@ Details: %2$s</string>
     <string name="root_mount_downgrade_confirmation">Android rejected the in-place downgrade. Continuing briefly unregisters the app for this user, keeps app data, and immediately installs verified stock. App data created by a newer version may still be incompatible.</string>
     <string name="root_mount_downgrade_title">Confirm safe downgrade fallback</string>
     <string name="root_mount_repair">Repair root mount</string>
+    <string name="root_mount_repair_progress">Repairing root mount…</string>
+    <string name="root_mount_repair_success">Root mount repaired successfully</string>
+    <string name="root_mount_repair_failed">Failed to repair root mount: %1$s</string>
     <string name="root_mount_tools">Root mount tools</string>
     <string name="root_mount_use_stock">Use stock app</string>
     <string name="root_mount_export_diagnostics">Export mount diagnostics</string>
