@@ -2,10 +2,8 @@ package app.urv.manager.ui.screen
 
 import android.os.Build
 import android.net.Uri
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
-import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -81,6 +79,7 @@ import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.installer.root.RootMountPhase
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.KeepScreenOn
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.InstallerStatusDialog
@@ -95,7 +94,7 @@ import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
-import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
+import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.signatureMetadataPatcherProgress
@@ -150,6 +149,7 @@ fun PatcherScreen(
     val pickerScope = rememberCoroutineScope()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
@@ -451,15 +451,7 @@ fun PatcherScreen(
 
     val steps = patcherProgress.steps.groupBy { it.category }
 
-    if (isPatchingActive) {
-        DisposableEffect(Unit) {
-            val window = (context as Activity).window
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            onDispose {
-                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        }
-    }
+    KeepScreenOn(isPatchingActive)
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
@@ -1547,7 +1539,8 @@ fun PatcherScreen(
             ) {
                 if (showPatcherMemoryUsageGraph && viewModel.patcherMemoryUsageSamples.isNotEmpty()) {
                     item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(
+                        PatcherResourceUsageCards(
+                            compact = compactResourceGraphs,
                             samples = viewModel.patcherMemoryUsageSamples,
                             isActive = isPatchingActive
                         )

@@ -15,7 +15,7 @@ import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
-import app.urv.manager.patcher.runtime.PatcherMemoryMonitor
+import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.patcher.toParcel
 import java.io.File
@@ -99,15 +99,6 @@ class Revanced22PatcherProcess(
             }
         }
 
-        fun safeMemory(usedMb: Long, maxMb: Long) {
-            if (!eventsEnabled.get()) return
-            try {
-                events.memory(usedMb, maxMb)
-            } catch (_: Throwable) {
-                eventsEnabled.set(false)
-            }
-        }
-
         fun safeFinished(exceptionStackTrace: String?) {
             if (!eventsEnabled.get()) return
             try {
@@ -136,7 +127,7 @@ class Revanced22PatcherProcess(
                 start(mirrorToOriginal = logMode == PatcherLogMode.VERBOSE)
             }
             var exitCode = 0
-            val memoryMonitor = PatcherMemoryMonitor.start(::safeMemory)
+            val resourceMonitor = PatcherResourceMonitor.start { safeLog(LogLevel.INFO.name, it) }
 
             try {
                 Revanced22RuntimeBridge.initialize(appContext)
@@ -160,7 +151,7 @@ class Revanced22PatcherProcess(
                 safeFinished(report)
                 exitCode = 1
             } finally {
-                memoryMonitor.stop()
+                resourceMonitor.stop()
                 stdioCapture.close()
                 aaptLogs.stop()
             }

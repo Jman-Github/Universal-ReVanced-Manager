@@ -1,19 +1,48 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
--->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Code adapted from Morphe, see third-party/NOTICE for more information
+     https://github.com/MorpheApp/morphe-manager/commit/3a07ae5ca114667e8f085802ff76c4addb7825db -->
 <data-extraction-rules>
-    <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+    <!-- Keep downloaded archives, temporary output and PR-build storage out of backups. -->
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <exclude domain="root" path="app_original-apps" />
+        <exclude domain="root" path="app_patched-apps" />
+        <exclude domain="root" path="app_downloaded-apps" />
+        <exclude domain="root" path="app_patch_bundles" />
+        <exclude domain="root" path="app_batch-patch-outputs" />
+        <exclude domain="root" path="app_ephemeral" />
+        <exclude domain="root" path="app_ui_ephemeral" />
+        <exclude domain="root" path="app_repatch-input-staging" />
+        <exclude domain="root" path="app_repatch-inputs" />
+        <exclude domain="root" path="app_patch-profile-inputs" />
+        <exclude domain="root" path="app_patch-option-inputs" />
+        <exclude domain="root" path="app_managed_downloader_plugins" />
+        <exclude domain="root" path="app_managed_patcher_runtime_plugins" />
+        <exclude domain="root" path="app_pr_profile" />
+        <exclude domain="file" path="lsposed_modules" />
+        <exclude domain="external" path="pr_profile" />
+        <exclude domain="root" path="app_signing" />
+        <!-- KeystoreManager also keeps external backups and a legacy internal key. -->
+        <exclude domain="external" path="keystore" />
+        <exclude domain="file" path="manager.keystore" />
     </cloud-backup>
-    <!--
+
+    <!-- Transfer signing material so the replacement device can update patched apps. -->
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="root" path="app_original-apps" />
+        <exclude domain="root" path="app_patched-apps" />
+        <exclude domain="root" path="app_downloaded-apps" />
+        <exclude domain="root" path="app_patch_bundles" />
+        <exclude domain="root" path="app_batch-patch-outputs" />
+        <exclude domain="root" path="app_ephemeral" />
+        <exclude domain="root" path="app_ui_ephemeral" />
+        <exclude domain="root" path="app_repatch-input-staging" />
+        <exclude domain="root" path="app_repatch-inputs" />
+        <exclude domain="root" path="app_patch-profile-inputs" />
+        <exclude domain="root" path="app_patch-option-inputs" />
+        <exclude domain="root" path="app_managed_downloader_plugins" />
+        <exclude domain="root" path="app_managed_patcher_runtime_plugins" />
+        <exclude domain="root" path="app_pr_profile" />
+        <exclude domain="file" path="lsposed_modules" />
+        <exclude domain="external" path="pr_profile" />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -54,7 +54,8 @@ object SplitArchiveDisplayResolver {
         source: File,
         workspace: File,
         app: Application,
-        pm: PM
+        pm: PM,
+        includeIcon: Boolean = true
     ): ResolvedSplitArchiveDisplay? = withContext(Dispatchers.IO) {
         if (!SplitApkPreparer.isSplitArchive(source)) return@withContext null
         workspace.mkdirs()
@@ -78,8 +79,12 @@ object SplitArchiveDisplayResolver {
             val resourcesSession = createResourcesForApks(app, extractedApks) ?: return@withContext null
             val iconBitmapDrawable = try {
                 label = resolveLabel(packageInfo, resourcesSession.resources, app)
-                iconDrawable = resolveIcon(packageInfo, resourcesSession.resources, app)
-                iconDrawable?.let { toBitmapDrawable(it, app.resources) }
+                if (includeIcon) {
+                    iconDrawable = resolveIcon(packageInfo, resourcesSession.resources, app)
+                    iconDrawable?.let { toBitmapDrawable(it, app.resources) }
+                } else {
+                    null
+                }
             } finally {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     runCatching { resourcesSession.assetManager.close() }

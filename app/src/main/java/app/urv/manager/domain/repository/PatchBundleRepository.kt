@@ -10,6 +10,7 @@ import app.universal.revanced.manager.R
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.data.redux.Action
+import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.redux.ActionContext
 import app.urv.manager.data.redux.Store
 import app.urv.manager.data.room.AppDatabase
@@ -108,10 +109,12 @@ class PatchBundleRepository(
     private val networkInfo: NetworkInfo,
     private val prefs: PreferencesManager,
     private val downloadProgressNotifier: DownloadProgressNotifier,
+    filesystem: Filesystem,
     db: AppDatabase,
 ) {
     private val dao = db.patchBundleDao()
-    private val bundlesDir = app.getDir("patch_bundles", Context.MODE_PRIVATE)
+    // Construct Filesystem first so stale bundle DEX caches are gone before a bundle loads.
+    private val bundlesDir = filesystem.patchBundlesDir
 
     private val scope = CoroutineScope(Dispatchers.Default)
     private val store = Store(scope, State())

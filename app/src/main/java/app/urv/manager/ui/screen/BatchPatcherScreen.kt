@@ -91,6 +91,7 @@ import app.urv.manager.domain.batch.BatchRunState
 import app.urv.manager.domain.batch.canStartBatchPatch
 import app.urv.manager.domain.installer.shouldUseConfiguredInstallerWithoutPrompt
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.ui.component.KeepScreenOn
 import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppLabel
 import app.urv.manager.ui.component.AppScaffold
@@ -263,6 +264,10 @@ fun BatchPatcherScreen(
     EventEffect(flow = viewModel.requestStorageSelection) {
         openStoragePicker()
     }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/974e5723cd960526cd618cca79d9f31d3299221d
+    KeepScreenOn(state?.phase in setOf(BatchPhase.RUNNING, BatchPhase.INSTALLING, BatchPhase.CANCELLING))
 
     val phase = state?.phase
     val showLoadingOverlay = state == null ||

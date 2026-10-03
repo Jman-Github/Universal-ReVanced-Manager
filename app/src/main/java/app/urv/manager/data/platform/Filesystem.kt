@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.storage.StorageManager
 import android.util.Base64
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import app.urv.manager.util.FilenameUtils
@@ -89,6 +90,7 @@ class Filesystem(private val app: Application) {
         app.getDir("repatch-input-staging", Context.MODE_PRIVATE).apply { mkdirs() }
 
     init {
+        deleteLeakedBundleDex()
         val staleStagingInputs = patchOptionInputsDir.listFiles()
             .orEmpty()
             .filter { it.isPatchOptionInputStagingEntry() }
@@ -127,6 +129,19 @@ class Filesystem(private val app: Application) {
             }
         }
     }
+
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/6b92f02ca70c34dc14c0acea20af5e1faec59c24
+    // Runs before patch bundles can load; only old patcher extraction directories are removed.
+    private fun deleteLeakedBundleDex() {
+        val leaked = app.cacheDir.listFiles { file ->
+            file.isDirectory && file.name.startsWith("morphe-extracted-patches")
+        }.orEmpty()
+        val deleted = leaked.count { runCatching { it.deleteRecursively() }.getOrDefault(false) }
+        if (deleted > 0) Log.i("Filesystem", "Deleted $deleted leaked bundle DEX directories")
+    }
+
+    val patchBundlesDir: File = app.getDir("patch_bundles", Context.MODE_PRIVATE)
 
     fun externalFilesDir(): Path = Environment.getExternalStorageDirectory().toPath()
 

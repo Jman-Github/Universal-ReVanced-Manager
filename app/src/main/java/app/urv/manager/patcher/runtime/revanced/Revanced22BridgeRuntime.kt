@@ -6,6 +6,7 @@ import app.urv.manager.patcher.LibraryResolver
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
+import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
 import app.urv.manager.patcher.logger.filtered
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.revanced.Revanced22BridgeFailureException
@@ -46,7 +47,7 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
     ) {
         val logMode = prefs.patcherLogMode.get()
         val runtimeLogger = logger.filtered(logMode)
-        val memoryMonitor = PatcherMemoryMonitor.start(onMemoryUsage)
+        val resourceMonitor = PatcherResourceMonitor.start { logger.info(it) }
         try {
             ensureNotCancelled()
             val sourceInput = File(inputFile)
@@ -142,7 +143,7 @@ class Revanced22BridgeRuntime(context: Context) : Runtime(context) {
                 hostPreparation?.cleanup()
             }
         } finally {
-            memoryMonitor.stop()
+            resourceMonitor.stop()
         }
     }
 

@@ -1,5 +1,7 @@
 package app.urv.manager.patcher.runtime.process
 
+import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
+
 import android.annotation.SuppressLint
 import android.app.ActivityThread
 import android.content.Context
@@ -126,15 +128,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             }
         }
 
-        fun safeMemory(usedMb: Long, maxMb: Long) {
-            if (!eventsEnabled.get()) return
-            try {
-                events.memory(usedMb, maxMb)
-            } catch (_: Throwable) {
-                eventsEnabled.set(false)
-            }
-        }
-
         fun safeFinished(exceptionStackTrace: String?) {
             if (!eventsEnabled.get()) return
             try {
@@ -199,7 +192,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
             }
 
             logger.info("Memory limit: ${Runtime.getRuntime().maxMemory() / (1024 * 1024)}MB")
-            val memoryMonitor = MemoryMonitor.start(::safeMemory)
+            val resourceMonitor = PatcherResourceMonitor.start { safeLog(LogLevel.INFO.name, it) }
             val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply { start(javaLogLevel) }
             val stdioCapture = StdIoCapture(onLine = ::handleWriteProgressLine).apply {
                 start(
@@ -330,7 +323,7 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
                 safeFinished(report)
                 exitCode = 1
             } finally {
-                memoryMonitor.stop()
+                resourceMonitor.stop()
                 stdioCapture.close()
                 aaptLogs.stop()
             }
@@ -385,52 +378,6 @@ class MorphePatcherProcess : IMorphePatcherProcess.Stub() {
 
             Looper.loop()
             exitProcess(1) // Shouldn't happen
-        }
-    }
-
-    private class MemoryMonitor private constructor(
-        private val running: AtomicBoolean,
-        private val thread: Thread
-    ) {
-        fun stop() {
-            running.set(false)
-            thread.interrupt()
-            if (Thread.currentThread() != thread) {
-                runCatching { thread.join(JOIN_TIMEOUT_MS) }
-            }
-        }
-
-        companion object {
-            private const val INTERVAL_MS = 500L
-            private const val JOIN_TIMEOUT_MS = 250L
-            private const val BYTES_PER_MB = 1024L * 1024L
-
-            fun start(onSample: (usedMb: Long, maxHeapMb: Long) -> Unit): MemoryMonitor {
-                val running = AtomicBoolean(true)
-                val thread = Thread {
-                    val runtime = Runtime.getRuntime()
-                    while (running.get()) {
-                        val used = currentHeapMemoryMb(runtime)
-                        val maxHeap = (runtime.maxMemory() / BYTES_PER_MB).coerceAtLeast(1L)
-                        runCatching { onSample(used, maxHeap) }
-                        try {
-                            Thread.sleep(INTERVAL_MS)
-                        } catch (_: InterruptedException) {
-                            break
-                        }
-                    }
-                }.apply {
-                    name = "MorpheMemoryMonitor"
-                    isDaemon = true
-                    start()
-                }
-                return MemoryMonitor(running, thread)
-            }
-
-            private fun currentHeapMemoryMb(runtime: Runtime): Long {
-                return ((runtime.totalMemory() - runtime.freeMemory()) / BYTES_PER_MB)
-                    .coerceAtLeast(0L)
-            }
         }
     }
 

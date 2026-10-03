@@ -1,5 +1,6 @@
 package app.urv.manager.ui.component.patches
 
+import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -27,10 +28,13 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -43,6 +47,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -57,7 +63,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.manager.PreferencesManager
@@ -91,6 +101,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import app.urv.manager.ui.component.CenteredDialogTitle
+
+private const val PATH_SELECTOR_LOADING_SHIMMER_MIN_MS = 500L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,9 +166,51 @@ fun PathSelectorDialog(
         }
     }
     var refreshNonce by remember { mutableStateOf(0) }
-    var refreshInProgress by remember { mutableStateOf(false) }
-    val entries = remember(currentDirectory, permissionGranted, refreshNonce) {
-        if (!permissionGranted) emptyList() else listDirectoryEntriesSafe(currentDirectory)
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23
+    val directoryResult by key(currentDirectory, permissionGranted, refreshNonce) {
+        produceState<Result<List<Path>>?>(initialValue = null) {
+            val loadingStartedAt = SystemClock.elapsedRealtime()
+            val result: Result<List<Path>> = if (!permissionGranted) {
+                Result.failure(SecurityException("Storage permission required"))
+            } else {
+                var contents = withContext(Dispatchers.IO) {
+                    listDirectoryEntriesSafe(currentDirectory)
+                }
+                if (contents == null) {
+                    delay(300)
+                    contents = withContext(Dispatchers.IO) {
+                        listDirectoryEntriesSafe(currentDirectory)
+                    }
+                }
+                contents?.let { Result.success(it) }
+                    ?: Result.failure(SecurityException("Cannot read directory"))
+            }
+            // Count reads and retries toward the minimum shimmer time.
+            val remainingShimmerTime = PATH_SELECTOR_LOADING_SHIMMER_MIN_MS -
+                (SystemClock.elapsedRealtime() - loadingStartedAt)
+            if (remainingShimmerTime > 0L) {
+                delay(remainingShimmerTime)
+            }
+            value = result
+        }
+    }
+    val refreshInProgress = directoryResult == null
+    val entries = directoryResult?.getOrNull().orEmpty()
+
+    fun refreshDirectory() {
+        permissionGranted = filesystem.hasStoragePermission()
+        if (!permissionGranted) {
+            permissionRequested = true
+            permissionLauncher.launch(permissionName)
+        }
+        refreshNonce += 1
+    }
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436
+    val showHiddenFiles by prefs.pathSelectorShowHiddenFiles.getAsState()
+    val visibleEntries = remember(entries, showHiddenFiles) {
+        if (showHiddenFiles) entries else entries.filterNot { it.name.startsWith(".") }
     }
     val persistedSortMode by prefs.pathSelectorSortMode.getAsState()
     var sortMode by rememberSaveable(persistedSortMode) {
@@ -169,11 +223,11 @@ fun PathSelectorDialog(
     val sortComparator = remember(sortMode, sortKeys) {
         sortMode.comparator(sortKeys)
     }
-    val directories = remember(entries, sortComparator) {
-        entries.filter(Path::isDirectory).sortedWith(sortComparator)
+    val directories = remember(visibleEntries, sortComparator) {
+        visibleEntries.filter(Path::isDirectory).sortedWith(sortComparator)
     }
-    val files = remember(entries, fileFilter, sortComparator) {
-        entries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
+    val files = remember(visibleEntries, fileFilter, sortComparator) {
+        visibleEntries.filterNot(Path::isDirectory).filter(fileFilter).sortedWith(sortComparator)
     }
     val persistedSearchQuery by prefs.pathSelectorSearchQuery.getAsState()
     var searchQuery by rememberSaveable(persistedSearchQuery) { mutableStateOf(persistedSearchQuery) }
@@ -235,7 +289,8 @@ fun PathSelectorDialog(
         }
     }
 
-    LaunchedEffect(currentDirectory, lastDirectoryValue) {
+    LaunchedEffect(currentDirectory, lastDirectoryValue, directoryResult) {
+        if (directoryResult?.isSuccess != true) return@LaunchedEffect
         val nextValue = currentDirectory.absolutePathString()
         if (nextValue != lastDirectoryValue) {
             directoryPreference.update(nextValue)
@@ -268,14 +323,7 @@ fun PathSelectorDialog(
                         Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
                     },
                     actions = {
-                        IconButton(onClick = {
-                            refreshNonce += 1
-                            refreshInProgress = true
-                            scope.launch {
-                                delay(1500)
-                                refreshInProgress = false
-                            }
-                        }) {
+                        IconButton(onClick = ::refreshDirectory) {
                             Icon(
                                 Icons.Outlined.Refresh,
                                 contentDescription = stringResource(R.string.refresh)
@@ -314,6 +362,22 @@ fun PathSelectorDialog(
                                         }
                                     )
                                 }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.path_selector_show_hidden_files)) },
+                                    trailingIcon = {
+                                        Checkbox(checked = showHiddenFiles, onCheckedChange = null)
+                                    },
+                                    modifier = Modifier.semantics {
+                                        role = Role.Checkbox
+                                        toggleableState = ToggleableState(showHiddenFiles)
+                                    },
+                                    onClick = {
+                                        scope.launch {
+                                            prefs.pathSelectorShowHiddenFiles.update(!showHiddenFiles)
+                                        }
+                                    }
+                                )
                             }
                         }
                         if (confirmButtonText != null && onConfirm != null) {
@@ -486,6 +550,34 @@ fun PathSelectorDialog(
                                 onClick = { currentDirectory = currentDirectory.parent },
                                 icon = Icons.AutoMirrored.Outlined.ArrowBack,
                                 name = stringResource(R.string.path_selector_parent_dir)
+                            )
+                        }
+                    }
+
+                    if (directoryResult?.isFailure == true) {
+                        item(key = "read_error") {
+                            ListItem(
+                                leadingContent = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                headlineContent = { Text(stringResource(R.string.path_selector_read_error)) },
+                                trailingContent = {
+                                    TextButton(onClick = ::refreshDirectory) {
+                                        Text(stringResource(R.string.retry))
+                                    }
+                                }
+                            )
+                        }
+                    } else if (filteredDirectories.isEmpty() && filteredFiles.isEmpty()) {
+                        item(key = "empty") {
+                            ListItem(
+                                headlineContent = {
+                                    Text(stringResource(
+                                        if (normalizedQuery.isBlank() && entries.isEmpty()) {
+                                            R.string.path_selector_no_files
+                                        } else {
+                                            R.string.path_selector_no_matches
+                                        }
+                                    ))
+                                }
                             )
                         }
                     }
@@ -679,9 +771,12 @@ private fun buildPathSortKey(path: Path): PathSortKey {
 private fun extensionOf(path: Path): String =
     path.name.substringAfterLast('.', "").lowercase(Locale.ROOT)
 
-private fun listDirectoryEntriesSafe(path: Path): List<Path> {
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23
+private fun listDirectoryEntriesSafe(path: Path): List<Path>? {
     val rawEntries = runCatching { path.listDirectoryEntries() }.getOrNull()
-        ?: runCatching { path.toFile().listFiles()?.map { it.toPath() }.orEmpty() }.getOrElse { emptyList() }
+        ?: runCatching { path.toFile().listFiles()?.map { it.toPath() } }.getOrNull()
+        ?: return null
     if (rawEntries.isEmpty()) return emptyList()
     val readable = rawEntries.filter { isReadableSafe(it) }
     return if (readable.isEmpty()) rawEntries else readable
