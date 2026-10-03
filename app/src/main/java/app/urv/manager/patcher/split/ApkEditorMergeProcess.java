@@ -3,8 +3,7 @@ package app.urv.manager.patcher.split;
 import com.reandroid.apk.APKLogger;
 import com.reandroid.apk.ApkBundle;
 import com.reandroid.apk.ApkModule;
-import com.reandroid.arsc.chunk.xml.AndroidManifestBlock;
-import com.reandroid.arsc.header.TableHeader;
+import com.reandroid.arsc.chunk.TableBlock;
 
 import java.io.Closeable;
 import java.io.File;
@@ -91,6 +90,18 @@ public final class ApkEditorMergeProcess {
             APKLogger logger,
             Runnable cancellationCheckpoint
     ) throws Exception {
+        merge(apkDir, outputApk, skipModules, sortApkEntries, logger, cancellationCheckpoint, false);
+    }
+
+    public static void merge(
+            File apkDir,
+            File outputApk,
+            Set<String> skipModules,
+            boolean sortApkEntries,
+            APKLogger logger,
+            Runnable cancellationCheckpoint,
+            boolean compressNativeLibraries
+    ) throws Exception {
         List<Closeable> closeables = new ArrayList<>();
         try {
             runCancellationCheckpoint(cancellationCheckpoint);
@@ -118,8 +129,7 @@ public final class ApkEditorMergeProcess {
             ApkModule mergedModule = null;
             try {
                 runCancellationCheckpoint(cancellationCheckpoint);
-                // Keep manual split selection and the merger tool on the same bundle-level
-                // merge path used by automatic split pruning in the patcher runtimes.
+                // Keep input tables unloaded so ARSCLib can reuse the base table without copying it.
                 mergedModule = bundle.mergeModules(false);
                 writeAndVerifyMergedApk(
                         mergedModule,
@@ -129,7 +139,8 @@ public final class ApkEditorMergeProcess {
                         expectedVersionCode,
                         expectedResourceTable,
                         logger,
-                        cancellationCheckpoint
+                        cancellationCheckpoint,
+                        compressNativeLibraries
                 );
             } catch (Exception | CoderMalfunctionError error) {
                 throw normalizeMergeFailure(error);
@@ -222,7 +233,8 @@ public final class ApkEditorMergeProcess {
             int expectedVersionCode,
             boolean expectedResourceTable,
             APKLogger logger,
-            Runnable cancellationCheckpoint
+            Runnable cancellationCheckpoint,
+            boolean compressNativeLibraries
     ) throws IOException {
         mergedModule.setAPKLogger(logger);
         mergedModule.setLoadDefaultFramework(false);
@@ -236,8 +248,8 @@ public final class ApkEditorMergeProcess {
             mergedModule.getZipEntryMap().autoSortApkFiles();
         }
 
-        SplitManifestCleaner.clean(mergedModule);
-        applyExtractNativeLibs(mergedModule);
+        SplitManifestCleaner.clean(mergedModule, compressNativeLibraries);
+        SplitDexCompression.apply(mergedModule);
         runCancellationCheckpoint(cancellationCheckpoint);
 
         File parent = outputApk.getParentFile();
@@ -326,7 +338,7 @@ public final class ApkEditorMergeProcess {
         }
     }
 
-    private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) {
+    private static ApkModule resolveBaseModule(ApkBundle bundle, List<ApkModule> modules) throws IOException {
         ApkModule baseModule = bundle.getBaseModule();
         if (baseModule == null) {
             baseModule = findLargestTableModule(modules);
@@ -340,13 +352,14 @@ public final class ApkEditorMergeProcess {
         }
     }
 
-    private static ApkModule findLargestTableModule(List<ApkModule> modules) {
+    private static ApkModule findLargestTableModule(List<ApkModule> modules) throws IOException {
         ApkModule candidate = null;
-        int largestSize = 0;
+        long largestSize = 0;
         for (ApkModule module : modules) {
             if (!module.hasTableBlock()) continue;
-            TableHeader header = (TableHeader) module.getTableBlock().getHeaderBlock();
-            int size = header.getChunkSize();
+            TableBlock loaded = module.getLoadedTableBlock();
+            long size = loaded != null ? loaded.getHeaderBlock().getChunkSize()
+                    : module.getInputSource(TableBlock.FILE_NAME).getLength();
             if (candidate == null || size > largestSize) {
                 largestSize = size;
                 candidate = module;
@@ -363,13 +376,6 @@ public final class ApkEditorMergeProcess {
     private static String normalizeModuleName(String name) {
         String lower = name.toLowerCase(Locale.ROOT);
         return lower.endsWith(".apk") ? lower.substring(0, lower.length() - 4) : lower;
-    }
-
-    private static void applyExtractNativeLibs(ApkModule module) {
-        AndroidManifestBlock manifest = module.hasAndroidManifest() ? module.getAndroidManifest() : null;
-        Boolean value = manifest != null ? manifest.isExtractNativeLibs() : null;
-        System.out.println(LOG_TAG + ": Applying: extractNativeLibs=" + value);
-        module.setExtractNativeLibs(value);
     }
 
     private static APKLogger getLogger() {

@@ -75,7 +75,10 @@ fun RootMountResult.Failure.describeOutcome(): String =
     }
 
 sealed interface RootMountResult {
-    data class Success(val transactionId: String) : RootMountResult
+    data class Success(
+        val transactionId: String,
+        val automaticallyRemounted: Boolean = false
+    ) : RootMountResult
     data class RecoveredToPreviousMount(
         val transactionId: String,
         val diagnosticId: String,
@@ -115,7 +118,8 @@ data class RootPackageState(
     val enabled: Boolean = true,
     val launcherResolvable: Boolean = false,
     val systemApp: Boolean = false,
-    val sharedUserId: String? = null
+    val sharedUserId: String? = null,
+    val splitSha256: Map<String, String> = emptyMap()
 ) {
     val topology: String get() = if (splitPaths.isEmpty()) "SINGLE" else "SPLIT"
 }
@@ -128,7 +132,9 @@ data class RootArtifactState(
     val versionCode: Long,
     val signerSha256: String?,
     val sha256: String,
-    val topology: String = "SINGLE"
+    val topology: String = "SINGLE",
+    val splitName: String? = null,
+    val splitHashes: List<String> = emptyList()
 )
 
 @Serializable
@@ -178,7 +184,8 @@ data class RootCommittedState(
     val launcherResolvable: Boolean = false,
     val active: Boolean = true,
     val status: String = "MOUNTED",
-    val committedAtEpochMs: Long
+    val committedAtEpochMs: Long,
+    val stockSplits: Map<String, String> = emptyMap()
 )
 
 data class RootCommandResult(

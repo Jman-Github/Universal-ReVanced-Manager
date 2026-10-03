@@ -103,7 +103,8 @@ object SplitApkPreparer {
         onProgress: ((String) -> Unit)? = null,
         onSubSteps: ((List<String>) -> Unit)? = null,
         onLog: ((String) -> Unit)? = null,
-        sortMergedApkEntries: Boolean = false
+        sortMergedApkEntries: Boolean = false,
+        compressNativeLibraries: Boolean = false
     ): PreparationResult {
         if (!isSplitArchive(source)) {
             return PreparationResult(source, merged = false)
@@ -164,7 +165,8 @@ object SplitApkPreparer {
                     skipModules = skippedModules,
                     onProgress = onProgress,
                     onLog = onLog,
-                    sortApkEntries = sortMergedApkEntries
+                    sortApkEntries = sortMergedApkEntries,
+                    compressNativeLibraries = compressNativeLibraries
                 )
                 coroutineContext.ensureActive()
 

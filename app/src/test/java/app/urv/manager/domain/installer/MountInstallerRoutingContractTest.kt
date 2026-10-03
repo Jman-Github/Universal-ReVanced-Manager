@@ -163,27 +163,41 @@ class MountInstallerRoutingContractTest {
         fun supports(
             patchedPackageName: String = "com.example.app",
             patchedIsCompleteSingleApk: Boolean = true,
+            patchedIsSplitDependentBase: Boolean = false,
             patchedHasSigningCertificate: Boolean = true,
-            installedHasSplitApks: Boolean = false,
             installedHasSharedUserId: Boolean = false,
             hasUsableStockIdentity: Boolean = true,
+            hasUsableSplitStockIdentity: Boolean = false,
             patchedVersionMatchesSource: Boolean = true
         ) = patchedOutputSupportsRootMount(
             patchedPackageName = patchedPackageName,
             originalPackageName = "com.example.app",
             patchedIsCompleteSingleApk = patchedIsCompleteSingleApk,
+            patchedIsSplitDependentBase = patchedIsSplitDependentBase,
             patchedHasSigningCertificate = patchedHasSigningCertificate,
-            installedHasSplitApks = installedHasSplitApks,
             installedHasSharedUserId = installedHasSharedUserId,
             hasUsableStockIdentity = hasUsableStockIdentity,
+            hasUsableSplitStockIdentity = hasUsableSplitStockIdentity,
             patchedVersionMatchesSource = patchedVersionMatchesSource
         )
 
         assertTrue(supports())
         assertFalse(supports(patchedPackageName = "com.example.renamed"))
         assertFalse(supports(patchedIsCompleteSingleApk = false))
+        assertFalse(
+            supports(
+                patchedIsCompleteSingleApk = false,
+                patchedIsSplitDependentBase = true
+            )
+        )
+        assertTrue(
+            supports(
+                patchedIsCompleteSingleApk = false,
+                patchedIsSplitDependentBase = true,
+                hasUsableSplitStockIdentity = true
+            )
+        )
         assertFalse(supports(patchedHasSigningCertificate = false))
-        assertFalse(supports(installedHasSplitApks = true))
         assertFalse(supports(installedHasSharedUserId = true))
         assertFalse(supports(hasUsableStockIdentity = false))
         assertFalse(supports(patchedVersionMatchesSource = false))
@@ -195,40 +209,40 @@ class MountInstallerRoutingContractTest {
             rootMountStockIdentityUsable(
                 installedMatchesSourceVersion = true,
                 installedHasSigningCertificate = true,
-                hasStandaloneStockSource = false,
-                standaloneStockIdentityCompatible = false
+                hasStockSource = false,
+                stockIdentityCompatible = false
             )
         )
         assertTrue(
             rootMountStockIdentityUsable(
                 installedMatchesSourceVersion = true,
                 installedHasSigningCertificate = true,
-                hasStandaloneStockSource = true,
-                standaloneStockIdentityCompatible = true
+                hasStockSource = true,
+                stockIdentityCompatible = true
             )
         )
         assertFalse(
             rootMountStockIdentityUsable(
                 installedMatchesSourceVersion = true,
                 installedHasSigningCertificate = true,
-                hasStandaloneStockSource = true,
-                standaloneStockIdentityCompatible = false
+                hasStockSource = true,
+                stockIdentityCompatible = false
             )
         )
         assertTrue(
             rootMountStockIdentityUsable(
                 installedMatchesSourceVersion = false,
                 installedHasSigningCertificate = false,
-                hasStandaloneStockSource = true,
-                standaloneStockIdentityCompatible = true
+                hasStockSource = true,
+                stockIdentityCompatible = true
             )
         )
         assertFalse(
             rootMountStockIdentityUsable(
                 installedMatchesSourceVersion = false,
                 installedHasSigningCertificate = false,
-                hasStandaloneStockSource = false,
-                standaloneStockIdentityCompatible = false
+                hasStockSource = false,
+                stockIdentityCompatible = false
             )
         )
     }
@@ -494,12 +508,17 @@ class MountInstallerRoutingContractTest {
         assertTrue(patcher.contains("private fun installedPackageMatchesSourceVersion("))
         assertTrue(patcher.contains("pm.getVersionCode(installed) == sourceVersionCode"))
         assertTrue(patcher.contains("rootMountStockIdentityUsable("))
-        assertTrue(patcher.contains("hasStandaloneStockSource = stockCandidates.isNotEmpty()"))
-        assertTrue(patcher.contains("standaloneStockIdentityCompatible = stockSource != null"))
-        assertTrue(patcher.contains("patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched)"))
-        assertTrue(patcher.contains("patchedHasSigningCertificate = pm.getSignature(patched) != null"))
+        assertTrue(patcher.contains("private suspend fun verifiedSplitStockSource("))
+        assertTrue(patcher.contains("SplitApkPreparer.extractEntriesForProcessing(candidate, workspace)"))
+        assertTrue(patcher.contains("verifiedStockSet(extracted.map(packageStateReader::inspect))"))
+        assertTrue(patcher.contains("hasStockSource = stockCandidates.isNotEmpty() || hasSplitStockSource"))
+        assertTrue(patcher.contains("stockIdentityCompatible = stockSource != null || splitStockIdentityCompatible"))
+        assertTrue(patcher.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SINGLE\""))
+        assertTrue(patcher.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SPLIT\""))
+        assertTrue(patcher.contains("patchedHasSigningCertificate = !patchedArtifact.signerSha256.isNullOrBlank()"))
         assertTrue(patcher.contains("installedHasSharedUserId = installedInfo?.sharedUserId != null"))
         assertTrue(patcher.contains("hasUsableStockIdentity = hasUsableStockIdentity"))
+        assertTrue(patcher.contains("hasUsableSplitStockIdentity = hasUsableSplitStockIdentity"))
         assertTrue(patcher.contains("patchedVersionMatchesSource = patched.versionName == sourceVersionName"))
         assertTrue(patcher.contains("supportsRootMount = patchedPackageInfo?.packageName == packageName"))
         assertTrue(patcher.contains("stockNeedsReplacement -> {"))
@@ -569,13 +588,18 @@ class MountInstallerRoutingContractTest {
         assertTrue(batchCoordinator.contains("private fun installedPackageMatchesSourceVersion("))
         assertTrue(batchCoordinator.contains("pm.getVersionCode(installed) == sourceVersionCode"))
         assertTrue(batchCoordinator.contains("rootMountStockIdentityUsable("))
-        assertTrue(batchCoordinator.contains("hasStandaloneStockSource = stockCandidates.isNotEmpty()"))
-        assertTrue(batchCoordinator.contains("standaloneStockIdentityCompatible = stockSource != null"))
+        assertTrue(batchCoordinator.contains("private suspend fun verifiedSplitStockSource("))
+        assertTrue(batchCoordinator.contains("SplitApkPreparer.extractEntriesForProcessing(candidate, workspace)"))
+        assertTrue(batchCoordinator.contains("verifiedStockSet(extracted.map(packageStateReader::inspect))"))
+        assertTrue(batchCoordinator.contains("hasStockSource = stockCandidates.isNotEmpty() || hasSplitStockSource"))
+        assertTrue(batchCoordinator.contains("stockIdentityCompatible = stockSource != null || splitStockIdentityCompatible"))
         assertTrue(batchCoordinator.contains("suspend fun supportsRootMountModeOverride(packageName: String)"))
-        assertTrue(batchCoordinator.contains("patchedIsCompleteSingleApk = packageInfoIsCompleteSingleApk(patched)"))
-        assertTrue(batchCoordinator.contains("patchedHasSigningCertificate = pm.getSignature(patched) != null"))
+        assertTrue(batchCoordinator.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SINGLE\""))
+        assertTrue(batchCoordinator.contains("patchedArtifact.splitName == null && patchedArtifact.topology == \"SPLIT\""))
+        assertTrue(batchCoordinator.contains("patchedHasSigningCertificate = !patchedArtifact.signerSha256.isNullOrBlank()"))
         assertTrue(batchCoordinator.contains("installedHasSharedUserId = installedInfo?.sharedUserId != null"))
         assertTrue(batchCoordinator.contains("hasUsableStockIdentity = hasUsableStockIdentity"))
+        assertTrue(batchCoordinator.contains("hasUsableSplitStockIdentity = hasUsableSplitStockIdentity"))
         assertTrue(installerManager.contains("com.android.vending.splits.required"))
         assertTrue(installerManager.contains("packageInfo.splitNames.isNullOrEmpty()"))
         assertTrue(installerManager.contains("packageInfo.applicationInfo?.splitSourceDirs.isNullOrEmpty()"))
@@ -589,7 +613,7 @@ class MountInstallerRoutingContractTest {
         assertTrue(installerPicker.contains("PlayStoreSourceConfigurationDialog("))
         assertFalse(installerPicker.contains("val showPlayStoreToggle"))
         assertTrue(installerConfiguration.contains("fun PlayStoreSourceConfigurationDialog("))
-        assertTrue(batchCoordinator.contains("R.string.mount_split_not_supported"))
+        assertFalse(batchCoordinator.contains("R.string.mount_split_not_supported"))
         assertTrue(batchCoordinator.contains("R.string.root_mount_incompatible_output"))
         assertTrue(batchCoordinator.contains("val crossModeMountRequested = installerToken != null && !item.useMount && requestedMount"))
         assertFalse(batchCoordinator.contains("val crossModeMountAllowed ="))

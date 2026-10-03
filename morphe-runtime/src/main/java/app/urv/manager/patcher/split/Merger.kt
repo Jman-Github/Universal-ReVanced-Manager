@@ -109,6 +109,7 @@ internal object Merger {
 
                     coroutineContext.ensureActive()
                     val mergedModule = runInterruptible(Dispatchers.Default) {
+                        // Keep input tables unloaded so ARSCLib can reuse the base table without copying it.
                         bundle.mergeModules(false)
                     }.apply {
                         setAPKLogger(logger)
@@ -203,6 +204,7 @@ internal object Merger {
             merged.refreshTable()
             merged.refreshManifest()
             applyExtractNativeLibs(merged)
+            SplitDexCompression.apply(merged)
             coroutineContext.ensureActive()
 
             outputApk.parentFile?.mkdirs()

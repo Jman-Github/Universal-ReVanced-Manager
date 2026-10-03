@@ -4,9 +4,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.pm.PackageInfoCompat
 import app.urv.manager.util.PM
+import com.android.apksig.ApkVerifier
+import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 
 class AndroidPackageStateReader(
     private val pm: PM,
@@ -53,14 +57,19 @@ class AndroidPackageStateReader(
         }
         val basePath = paths.firstOrNull { it.substringAfterLast('/').startsWith("base") }
             ?: paths.first()
-        val splitPaths = paths.filterNot { it == basePath }
+        val splitPaths = paths.filterNot { it == basePath }.sorted()
         // Do not parse the mounted base path as an archive fallback. It may be the patched payload,
         // while recovery needs the package identity registered by PackageManager.
         val info = pm.getPackageInfo(packageName, flags)
-        val baseHash = runQuery(
-            "sha256sum ${shellQuote(basePath)} 2>/dev/null | awk '{print ${'$'}1}'",
+        val apkPaths = listOf(basePath) + splitPaths
+        val hashes = runQuery(
+            "sha256sum ${apkPaths.joinToString(" ", transform = ::shellQuote)} 2>/dev/null",
             HASH_TIMEOUT_SECONDS
-        ).stdout.firstOrNull()?.trim()?.takeIf { it.length == 64 }
+        ).requireSuccess("Hash installed APK set").stdout.map { it.substringBefore(' ').trim() }
+        check(hashes.size == apkPaths.size && hashes.all { it.matches(Regex("[0-9a-f]{64}")) }) {
+            "Installed APK set could not be fully verified"
+        }
+        val baseHash = hashes.first()
         val disabledForUser = runQuery(
             "pm list packages -d --user $userId ${shellQuote(packageName)} 2>/dev/null | " +
                 "grep -Fx ${shellQuote("package:$packageName")}"
@@ -82,6 +91,7 @@ class AndroidPackageStateReader(
             signerSha256 = info?.let { pm.getSignature(it) }?.toByteArray()?.sha256(),
             basePath = basePath,
             splitPaths = splitPaths,
+            splitSha256 = splitPaths.zip(hashes.drop(1)).toMap(),
             baseSha256 = baseHash,
             enabled = !disabledForUser,
             launcherResolvable = launcher,
@@ -102,52 +112,50 @@ class AndroidPackageStateReader(
 
     override fun inspect(file: File): RootArtifactState {
         require(file.isFile) { "APK is missing: ${file.name}" }
+        val manifest = ZipFile(file).use { zip ->
+            val entry = requireNotNull(zip.getEntry("AndroidManifest.xml")) { "APK manifest is missing" }
+            zip.getInputStream(entry).use(AndroidManifestBlock::load)
+        }
+        val splitName = manifest.split?.takeIf(String::isNotBlank)
+        val manifestVersionCode = requireNotNull(manifest.versionCode) { "APK version code is missing" }
+        val versionCodeMajor = manifest.manifestElement
+            ?.searchAttribute("http://schemas.android.com/apk/res/android", "versionCodeMajor")?.data ?: 0
         val info = pm.getPackageInfo(file, includeSigning = true)
-            ?: throw IllegalArgumentException("Invalid APK: ${file.name}")
-        val splitRequiredValue = info.applicationInfo?.metaData?.get("com.android.vending.splits.required")
+        require(info != null || splitName != null) { "Invalid base APK: ${file.name}" }
+        val signer = info?.let { pm.getSignature(it) }?.toByteArray()?.sha256() ?: run {
+            val verification = ApkVerifier.Builder(file).build().verify()
+            require(verification.isVerified) { "Stock split signature could not be verified" }
+            requireNotNull(verification.signerCertificates.singleOrNull()) {
+                "Stock split must have one verified signer"
+            }.encoded.sha256()
+        }
+        val splitRequiredValue = info?.applicationInfo?.metaData?.get("com.android.vending.splits.required")
         val splitRequired = splitRequiredValue == true ||
             splitRequiredValue?.toString()?.equals("true", ignoreCase = true) == true
         return RootArtifactState(
             path = file.absolutePath,
-            packageName = info.packageName,
-            versionName = info.versionName,
-            versionCode = PackageInfoCompat.getLongVersionCode(info),
-            signerSha256 = pm.getSignature(info)?.toByteArray()?.sha256(),
+            packageName = info?.packageName ?: requireNotNull(manifest.packageName),
+            versionName = (info?.versionName ?: manifest.versionName)?.takeIf(String::isNotBlank),
+            versionCode = info?.let(PackageInfoCompat::getLongVersionCode)
+                ?: ((versionCodeMajor.toLong() shl 32) or (manifestVersionCode.toLong() and 0xffffffffL)),
+            signerSha256 = signer,
             sha256 = file.inputStream().use { input -> input.sha256() },
-            topology = if (!splitRequired && info.splitNames.isNullOrEmpty() &&
-                info.applicationInfo?.splitSourceDirs.isNullOrEmpty()
+            topology = if (splitName == null && !splitRequired && info?.splitNames.isNullOrEmpty() &&
+                info?.applicationInfo?.splitSourceDirs.isNullOrEmpty()
             ) {
                 "SINGLE"
             } else {
                 "SPLIT"
-            }
+            },
+            splitName = splitName
         )
     }
 
     override suspend fun waitForStable(
         expected: RootPackageState,
         consecutiveReads: Int
-    ): RootPackageState {
-        require(consecutiveReads > 0) { "At least one stable PackageManager read is required" }
-        var stable = 0
-        var previous: RootPackageState? = null
-        repeat(60) {
-            val current = read(expected.packageName, expected.userId)
-            val matches = current.installed &&
-                current.packageName == expected.packageName &&
-                (expected.versionName == null || current.versionName == expected.versionName) &&
-                (expected.versionCode == null || current.versionCode == expected.versionCode) &&
-                (expected.signerSha256 == null || current.signerSha256 == expected.signerSha256) &&
-                (expected.baseSha256 == null || current.baseSha256 == expected.baseSha256) &&
-                current.basePath != null && current.splitPaths == expected.splitPaths &&
-                current.enabled == expected.enabled &&
-                current.launcherResolvable == expected.launcherResolvable
-            if (matches && current == previous) stable++ else stable = if (matches) 1 else 0
-            if (stable >= consecutiveReads) return current
-            previous = current
-            delay(500)
-        }
-        throw IllegalStateException("PackageManager did not reach a stable verified state")
+    ): RootPackageState = awaitStableRootPackageState(expected, consecutiveReads) {
+        read(expected.packageName, expected.userId)
     }
 
     override suspend fun runningPids(packageName: String): List<Int> {
@@ -168,12 +176,10 @@ class AndroidPackageStateReader(
     }
 
     override suspend fun waitUntilStopped(packageName: String, timeoutMs: Long): Boolean {
-        val attempts = (timeoutMs / 200).coerceAtLeast(1).toInt()
-        repeat(attempts) {
-            if (runningPids(packageName).isEmpty()) return true
-            delay(200)
-        }
-        return false
+        return withTimeoutOrNull(timeoutMs) {
+            while (runningPids(packageName).isNotEmpty()) delay(200)
+            true
+        } ?: false
     }
 
     private suspend fun runQuery(

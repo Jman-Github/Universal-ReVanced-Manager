@@ -1153,6 +1153,7 @@ fun InstalledAppInfoScreen(
                     val mountStatusText = when (viewModel.mountOperation) {
                         InstalledAppInfoViewModel.MountOperation.UNMOUNTING -> stringResource(R.string.unmounting)
                         InstalledAppInfoViewModel.MountOperation.MOUNTING -> stringResource(R.string.mounting_ellipsis)
+                        InstalledAppInfoViewModel.MountOperation.REPAIRING -> stringResource(R.string.root_mount_repair_progress)
                         null -> if (viewModel.isMounted) {
                             stringResource(R.string.mounted)
                         } else {
@@ -1554,12 +1555,13 @@ fun InstalledAppInfoScreen(
                             icon = Icons.AutoMirrored.Outlined.OpenInNew,
                             text = stringResource(R.string.open_app),
                             onClick = viewModel::launch,
-                            enabled = viewModel.appInfo != null && isInstalledOnDevice
+                            enabled = viewModel.appInfo != null && isInstalledOnDevice && !viewModel.isRootMountBusy
                         )
                         SegmentedButton(
                             icon = Icons.Outlined.Delete,
                             text = stringResource(R.string.delete),
-                            onClick = { showSavedEntryDeleteDialog = true }
+                            onClick = { showSavedEntryDeleteDialog = true },
+                            enabled = !viewModel.isRootMountBusy
                         )
                         SegmentedButton(
                             icon = Icons.Outlined.Save,
@@ -1569,7 +1571,8 @@ fun InstalledAppInfoScreen(
                         SegmentedButton(
                             icon = Icons.Outlined.Update,
                             text = stringResource(R.string.repatch),
-                            onClick = { handleRepatchClick(installedApp.originalPackageName) }
+                            onClick = { handleRepatchClick(installedApp.originalPackageName) },
+                            enabled = !viewModel.isRootMountBusy
                         )
                     }
 
@@ -1629,12 +1632,14 @@ fun InstalledAppInfoScreen(
                                         } else {
                                             viewModel.mountOrUnmount()
                                         }
-                                    }
+                                    },
+                                    enabled = !viewModel.isRootMountBusy
                                 )
                                 SegmentedButton(
                                     icon = Icons.Outlined.SettingsBackupRestore,
                                     text = stringResource(R.string.root_mount_repair),
-                                    onClick = viewModel::repairRootMount
+                                    onClick = viewModel::repairRootMount,
+                                    enabled = !viewModel.isRootMountBusy
                                 )
                             }
 

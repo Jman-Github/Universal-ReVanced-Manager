@@ -10,7 +10,7 @@ import java.io.IOException
 
 object Revanced22RuntimeAssets {
     private const val OUTPUT_PREFIX = "revanced-runtime-v22"
-    private const val APKEDITOR_JAR_ASSET = "apkeditor/APKEditor-1.4.7.jar"
+    private const val ARSC_LIB_ASSET = "apkeditor/ARSCLib.jar"
     private const val APKEDITOR_MERGE_ASSET = "apkeditor/apkeditor-merge.jar"
 
     fun isAvailable(context: Context): Boolean = true
@@ -19,7 +19,7 @@ object Revanced22RuntimeAssets {
         File(normalizeContext(context).applicationInfo.sourceDir)
 
     fun ensureApkEditorJar(context: Context): File =
-        ensureAsset(normalizeContext(context), APKEDITOR_JAR_ASSET, "revanced22-apkeditor.jar")
+        ensureAsset(normalizeContext(context), ARSC_LIB_ASSET, "revanced22-arsclib.jar")
 
     fun ensureApkEditorMergeJar(context: Context): File =
         ensureAsset(

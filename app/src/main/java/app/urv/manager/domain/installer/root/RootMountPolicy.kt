@@ -24,10 +24,8 @@ object RootMountPolicy {
         stock: List<RootArtifactState>,
         expectedStockVersionCode: Long? = patched?.versionCode
     ) {
-        require(stock.size <= 1) { "Safe root mount rejects split or mixed APK sets" }
-        require(!installed.installed || installed.topology == "SINGLE") {
-            "Safe root mount rejects split/resource-dependent installations"
-        }
+        require(stock.size <= 1) { "Stock input must be one verified APK set" }
+        if (installed.installed) installed.verifiedSplits()
         if (installed.installed) {
             val installedVersionName = requireNotNull(installed.versionName?.takeUnless(String::isBlank)) {
                 "Installed version name is unavailable"
@@ -45,7 +43,11 @@ object RootMountPolicy {
         }
         patched?.let {
             require(it.packageName == packageName) { "Patched APK package mismatch" }
-            require(it.topology == "SINGLE") { "Safe root mount requires one complete patched APK" }
+            require(it.splitName == null) { "The mounted payload must be a base APK, not a split module" }
+            val splitStock = stock.singleOrNull()?.topology ?: installed.topology
+            require(it.topology == "SINGLE" || it.topology == "SPLIT" && splitStock == "SPLIT") {
+                "A split-dependent patched base requires its verified installed split APKs"
+            }
             val patchedVersionName = requireNotNull(it.versionName?.takeUnless(String::isBlank)) {
                 "Patched APK version name is unavailable"
             }
@@ -56,7 +58,11 @@ object RootMountPolicy {
         }
         stock.singleOrNull()?.let { artifact ->
             require(artifact.packageName == packageName) { "Stock APK package mismatch" }
-            require(artifact.topology == "SINGLE") { "Safe root mount requires one complete stock APK" }
+            require(artifact.topology == "SINGLE" ||
+                artifact.topology == "SPLIT" && (artifact.splitHashes.isNotEmpty() || installed.installed &&
+                artifact.path == installed.basePath && artifact.versionCode == installed.versionCode &&
+                artifact.versionName == installed.versionName)
+            ) { "Stock replacement requires a complete APK; a split base can only use its installed split set" }
             val stockVersionName = requireNotNull(artifact.versionName?.takeUnless(String::isBlank)) {
                 "Stock APK version name is unavailable"
             }
@@ -100,8 +106,8 @@ object RootMountPolicy {
             !current.basePath.isNullOrBlank() &&
             current.baseSha256 == committed.stockSha256 &&
             current.topology == committed.topology &&
-            current.enabled == committed.enabled &&
-            current.launcherResolvable == committed.launcherResolvable
+            current.matchesSplits(committed.stockSplits) &&
+            current.enabled == committed.enabled
         return if (exact) ReconcileDecision.REMOUNT else ReconcileDecision.REPATCH_REQUIRED
     }
 

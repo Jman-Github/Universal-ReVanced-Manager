@@ -177,6 +177,11 @@
             android:exported="false" />
 
         <receiver
+            android:name="app.urv.manager.receiver.RootMountResultReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <receiver
             android:name="app.urv.manager.receiver.PackageChangeReceiver"
             android:enabled="false"
             android:exported="false">

@@ -6,7 +6,6 @@ import com.reandroid.apk.ApkBundle
 import com.reandroid.apk.ApkModule
 import com.reandroid.app.AndroidManifest
 import com.reandroid.archive.ZipEntryMap
-import com.reandroid.archive.block.ApkSignatureBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.container.SpecTypePair
 import com.reandroid.arsc.header.TableHeader
@@ -110,7 +109,13 @@ internal object Merger {
                     closeables.add(bundle)
                     coroutineContext.ensureActive()
 
-                    val mergedModule = mergeBundleModules(bundle, logger).apply {
+                    val mergeContext = coroutineContext
+                    runInterruptible(Dispatchers.Default) {
+                        bundle.apkModuleList.forEach { module ->
+                            normalizeSparseResources(module) { mergeContext.ensureActive() }
+                        }
+                    }
+                    val mergedModule = mergeBundleModules(bundle).apply {
                         setAPKLogger(logger)
                         setLoadDefaultFramework(false)
                     }
@@ -202,6 +207,7 @@ internal object Merger {
             merged.refreshTable()
             merged.refreshManifest()
             applyExtractNativeLibs(merged)
+            SplitDexCompression.apply(merged)
             coroutineContext.ensureActive()
 
             outputApk.parentFile?.mkdirs()
@@ -211,6 +217,28 @@ internal object Merger {
             }
         } finally {
             closeables.forEach(Closeable::close)
+        }
+    }
+
+    private fun normalizeSparseResources(module: ApkModule, checkCancelled: () -> Unit) {
+        if (!module.hasTableBlock()) return
+        // ARSCLib's dense merge treats array positions as entry IDs, which drops sparse entries.
+        // Expand sparse types before merging so each entry keeps its resource ID.
+        module.tableBlock.listPackages().forEach { pkg ->
+            pkg.listSpecTypePairs().forEach { pair ->
+                val types = pair.typeBlockArray
+                for (index in 0 until types.size()) {
+                    checkCancelled()
+                    val type = types.get(index)
+                    if (!type.isSparse) continue
+                    val snapshot = type.toJson()
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_sparse, false)
+                    snapshot.put(com.reandroid.arsc.chunk.TypeBlock.NAME_is_offset16, false)
+                    type.entryArray.clear()
+                    type.headerBlock.setOffsetType(false, false)
+                    type.fromJson(snapshot)
+                }
+            }
         }
     }
 
@@ -236,48 +264,13 @@ internal object Merger {
         }
     }
 
-    private fun generateMergedModuleName(bundle: ApkBundle): String {
-        val moduleNames = bundle.listModuleNames().toSet()
-        val baseName = "merged"
-        var candidate = baseName
-        var index = 1
-        while (moduleNames.contains(candidate)) {
-            candidate = "${baseName}_$index"
-            index += 1
-        }
-        return candidate
-    }
-
     private suspend fun mergeBundleModules(
-        bundle: ApkBundle,
-        logger: ApkEditorLogger
+        bundle: ApkBundle
     ): ApkModule {
-        val modules = bundle.apkModuleList
-        val baseModule = bundle.baseModule
-            ?: findLargestTableModule(modules)
-            ?: modules.first()
-        val mergedModule = ApkModule(generateMergedModuleName(bundle), ZipEntryMap()).apply {
-            setAPKLogger(logger)
-            setLoadDefaultFramework(false)
+        coroutineContext.ensureActive()
+        return runInterruptible(Dispatchers.Default) {
+            bundle.mergeModules(false)
         }
-        val mergeOrder = buildMergeOrder(modules, baseModule)
-        var signatureBlock: ApkSignatureBlock? = null
-        mergeOrder.forEach { module ->
-            coroutineContext.ensureActive()
-            val displayName = moduleDisplayName(module)
-            logger.logMessage("Merging $displayName")
-            val moduleSignature = module.apkSignatureBlock
-            if (module === baseModule && moduleSignature != null) {
-                signatureBlock = moduleSignature
-            } else if (signatureBlock == null) {
-                signatureBlock = moduleSignature
-            }
-            runInterruptible(Dispatchers.Default) {
-                mergedModule.merge(module, false)
-            }
-        }
-        mergedModule.setApkSignatureBlock(signatureBlock)
-        return mergedModule
     }
 
     private fun buildMergeOrder(
