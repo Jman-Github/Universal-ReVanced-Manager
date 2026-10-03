@@ -311,13 +311,26 @@ object SplitApkPreparer {
         .map { module -> module.name }
         .toSet()
 
+    // Code adapted from Morphe, see third-party/NOTICE for more information
+    // https://github.com/MorpheApp/morphe-manager/commit/0b4d6ee006e098cbaed7b01ec529e5a585e1e8ec
+    // APK resources under res/ or assets/ are not split modules. APKS also supports
+    // the direct splits/ and standalones/ entries used by bundletool archives.
+    private fun isSplitModuleEntry(entryName: String, extension: String): Boolean {
+        if (!entryName.endsWith(".apk", ignoreCase = true) || entryName.contains('\\')) return false
+        if (!entryName.contains('/')) return true
+        if (extension != "apks") return false
+        val parent = entryName.substringBefore('/')
+        val leaf = entryName.substringAfter('/')
+        return parent in setOf("splits", "standalones") && !leaf.contains('/')
+    }
+
     private fun resolveSplitApkEntryNames(
         zip: ZipFile,
         extension: String
     ): Set<String> {
         val candidates = zip.entries().asSequence()
             .filterNot { it.isDirectory }
-            .filter { it.name.endsWith(".apk", ignoreCase = true) }
+            .filter { isSplitModuleEntry(it.name, extension) }
             .toList()
         if (candidates.isEmpty()) return emptySet()
 
@@ -473,7 +486,7 @@ object SplitApkPreparer {
                 val embeddedSplitEntries = zip.entries().asSequence()
                     .filterNot { it.isDirectory }
                     .map { it.name }
-                    .filter { it.endsWith(".apk", ignoreCase = true) }
+                    .filter { isSplitModuleEntry(it, "apk") }
                     .filter { isExplicitBaseApkEntryName(it) || isLikelySplitApkEntryName(it) }
                     .toCollection(LinkedHashSet())
                 PreparedApkValidation(
