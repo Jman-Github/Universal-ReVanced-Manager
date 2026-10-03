@@ -34,6 +34,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -41,6 +43,7 @@ import androidx.core.content.getSystemService
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.PatcherSessionInfo
+import app.urv.manager.patcher.split.SplitMergeSessionInfo
 import app.urv.manager.util.toast
 import kotlinx.coroutines.delay
 
@@ -233,6 +236,201 @@ fun PatcherInformationCard(
             }
         }
     }
+}
+
+
+@Composable
+fun MergerInformationCard(
+    information: SplitMergeSessionInfo,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
+) {
+    val context = LocalContext.current
+    val deviceInformation = remember(
+        context,
+        expanded,
+        information.inputApkSizeBytes,
+        information.startedAtElapsedRealtimeMs
+    ) {
+        readDeviceInformation(context)
+    }
+    val session = PatcherSessionInfo(
+        startedAtElapsedRealtimeMs = information.startedAtElapsedRealtimeMs,
+        elapsedMs = information.elapsedMs,
+        runtimeProcess = true,
+        memoryLimitMb = information.memoryLimitMb
+    )
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth()
+                    .clickable { onExpandedChange(!expanded) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(R.string.merger_information),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.merger_information_collapse
+                        else R.string.merger_information_expand
+                    ),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        InformationRow(
+                            InformationItem(
+                                R.string.merger_information_input_size,
+                                information.inputApkSizeBytes?.let {
+                                    Formatter.formatFileSize(context, it)
+                                }.orPlaceholder()
+                            ),
+                            InformationItem(
+                                R.string.merger_information_output_size,
+                                information.outputApkSizeBytes?.let {
+                                    Formatter.formatFileSize(context, it)
+                                }.orPlaceholder()
+                            )
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            MergerAppInformationContent(information, Modifier.weight(1f))
+                            InformationItemContent(
+                                InformationItem(
+                                    R.string.merger_information_splits,
+                                    if (information.includedSplitCount != null &&
+                                        information.totalSplitCount != null
+                                    ) {
+                                        stringResource(
+                                            R.string.merger_information_splits_format,
+                                            information.includedSplitCount,
+                                            information.totalSplitCount
+                                        )
+                                    } else {
+                                        INFORMATION_PLACEHOLDER
+                                    }
+                                ),
+                                Modifier.weight(1f)
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        InformationRow(
+                            InformationItem(
+                                R.string.patcher_information_manager,
+                                BuildConfig.VERSION_NAME
+                            ),
+                            InformationItem(
+                                R.string.merger_information_arsclib,
+                                information.arscLibVersion.orPlaceholder()
+                            )
+                        )
+                        InformationRow(
+                            InformationItem(
+                                R.string.patcher_information_runtime,
+                                runtimeDisplayValue(session)
+                            ),
+                            InformationItem(
+                                R.string.patcher_information_elapsed_time,
+                                elapsedTimeDisplayValue(session)
+                            )
+                        )
+                        InformationRow(
+                            InformationItem(
+                                R.string.patcher_information_android,
+                                stringResource(
+                                    R.string.patcher_information_android_format,
+                                    Build.VERSION.RELEASE,
+                                    Build.VERSION.SDK_INT
+                                )
+                            ),
+                            InformationItem(
+                                R.string.patcher_information_device,
+                                deviceInformation.deviceName
+                            )
+                        )
+                        InformationRow(
+                            InformationItem(
+                                R.string.patcher_information_ram_free,
+                                storageDisplayValue(
+                                    context,
+                                    deviceInformation.availableRamBytes,
+                                    deviceInformation.totalRamBytes
+                                )
+                            ),
+                            InformationItem(
+                                R.string.patcher_information_storage_free,
+                                storageDisplayValue(
+                                    context,
+                                    deviceInformation.availableStorageBytes,
+                                    deviceInformation.totalStorageBytes
+                                )
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MergerAppInformationContent(information: SplitMergeSessionInfo, modifier: Modifier) {
+    val appLabel = stringResource(R.string.merger_information_app)
+    val packageLabel = stringResource(R.string.package_name)
+    Column(modifier = modifier.padding(vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = appLabel,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        CopyableInformationValue(
+            information.appName.orPlaceholder(), appLabel,
+            MaterialTheme.typography.bodyMedium, MaterialTheme.colorScheme.onSurface
+        )
+        CopyableInformationValue(
+            information.packageName.orPlaceholder(), packageLabel,
+            MaterialTheme.typography.bodySmall, MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun CopyableInformationValue(value: String, label: String, style: TextStyle, color: Color) {
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
+    Text(
+        text = value,
+        modifier = Modifier.fillMaxWidth().clip(MaterialTheme.shapes.small)
+            .clickable(enabled = value != INFORMATION_PLACEHOLDER && clipboard != null) {
+                clipboard?.setPrimaryClip(ClipData.newPlainText(label, value))
+                context.toast(context.getString(R.string.toast_copied_to_clipboard))
+            }
+            .horizontalScroll(rememberScrollState()),
+        style = style,
+        color = color,
+        softWrap = false
+    )
 }
 
 @Composable

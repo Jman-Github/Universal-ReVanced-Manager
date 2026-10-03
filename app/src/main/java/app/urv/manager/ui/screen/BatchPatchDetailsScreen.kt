@@ -59,7 +59,7 @@ import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
-import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
+import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.model.SelectedApp
 import app.urv.manager.patcher.parsePatcherSessionInfo
@@ -96,6 +96,7 @@ fun BatchPatchDetailsScreen(
     val prefs: PreferencesManager = koinInject()
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
+    val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
     val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
@@ -312,7 +313,8 @@ fun BatchPatchDetailsScreen(
                     item.memoryUsageSamples.isNotEmpty()
                 ) {
                     item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(
+                        PatcherResourceUsageCards(
+                            compact = compactResourceGraphs,
                             samples = item.memoryUsageSamples,
                             isActive = item.state == BatchItemState.RUNNING
                         )

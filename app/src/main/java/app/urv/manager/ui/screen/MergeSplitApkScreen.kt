@@ -1,11 +1,9 @@
 package app.urv.manager.ui.screen
 
 import android.os.Build
-import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
-import android.view.WindowManager
 import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -56,7 +54,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -79,6 +76,7 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
+import app.urv.manager.ui.component.KeepScreenOn
 import app.urv.manager.ui.component.CheckedFilterChip
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExportSavedApkFileNameDialog
@@ -89,7 +87,8 @@ import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
-import app.urv.manager.ui.component.patcher.PatcherMemoryUsageCard
+import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
+import app.urv.manager.ui.component.patcher.MergerInformationCard
 import app.urv.manager.ui.component.patcher.Steps
 import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
@@ -131,6 +130,8 @@ fun MergeSplitApkScreen(
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
+    val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
+    val mergerInformationExpanded by prefs.splitMergeInformationExpanded.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
     val splitMergeAutoExpandRunningStepsExclusive by
         prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
@@ -282,15 +283,7 @@ fun MergeSplitApkScreen(
 
     InterceptBackHandler(onBack = ::onPageBack)
 
-    if (state.inProgress || state.installing) {
-        DisposableEffect(context) {
-            val window = (context as? Activity)?.window
-            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            onDispose {
-                window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            }
-        }
-    }
+    KeepScreenOn(state.inProgress || state.installing)
 
     if (showDismissConfirmationDialog) {
         ConfirmDialog(
@@ -691,10 +684,26 @@ fun MergeSplitApkScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (showSplitMergeMemoryUsageGraph && state.memoryUsageSamples.isNotEmpty()) {
-                    item(key = "memory-usage") {
-                        PatcherMemoryUsageCard(
+                    item(key = "resource-usage") {
+                        PatcherResourceUsageCards(
                             samples = state.memoryUsageSamples,
-                            isActive = state.inProgress
+                            isActive = state.inProgress &&
+                                state.writeStep.status != SplitMergeStepStatus.COMPLETED,
+                            compact = compactResourceGraphs,
+                            merger = true
+                        )
+                    }
+                }
+                if (state.sessionInfo.startedAtElapsedRealtimeMs != null) {
+                    item(key = "merger-information") {
+                        MergerInformationCard(
+                            information = state.sessionInfo,
+                            expanded = mergerInformationExpanded,
+                            onExpandedChange = { expanded ->
+                                coroutineScope.launch {
+                                    prefs.splitMergeInformationExpanded.update(expanded)
+                                }
+                            }
                         )
                     }
                 }

@@ -3,15 +3,30 @@ package app.urv.manager.util
 import android.content.Context
 import app.universal.revanced.manager.R
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 
 private const val APK_LIB_PREFIX = "lib/"
 private val ABI_LABEL_ORDER = listOf("arm64-v8a", "armeabi-v7a", "armeabi", "x86_64", "x86")
 
-fun File.savedApkAbiLabel(context: Context): String? {
-    if (!isFile) return null
+// Code adapted from Morphe, see third-party/NOTICE for more information
+// https://github.com/MorpheApp/morphe-manager/commit/e193dd1d4ef75c0328a8c4eb70b8a952a34c8b95
+private data class ApkAbiFileStamp(val path: String, val size: Long, val lastModified: Long)
 
-    val abis = runCatching {
+private val apkAbiCache = ConcurrentHashMap<String, Pair<ApkAbiFileStamp, Set<String>>>()
+
+private fun File.abiFileStampOrNull(): ApkAbiFileStamp? =
+    if (isFile) ApkAbiFileStamp(absolutePath, length(), lastModified()) else null
+
+// Cache the ABI names rather than the translated label, so language changes still take effect.
+internal fun File.savedApkAbisOrNull(): Set<String>? {
+    val stamp = abiFileStampOrNull() ?: run {
+        apkAbiCache.remove(absolutePath)
+        return null
+    }
+    apkAbiCache[stamp.path]?.takeIf { it.first == stamp }?.let { return it.second }
+
+    return runCatching {
         ZipFile(this).use { zip ->
             val found = linkedSetOf<String>()
             val entries = zip.entries()
@@ -26,8 +41,14 @@ fun File.savedApkAbiLabel(context: Context): String? {
             }
             found
         }
-    }.getOrNull() ?: return null
+    }.onSuccess { abis ->
+        // A file replaced while scanning must be read again on the next request.
+        if (abiFileStampOrNull() == stamp) apkAbiCache[stamp.path] = stamp to abis
+    }.getOrNull()
+}
 
+fun File.savedApkAbiLabel(context: Context): String? {
+    val abis = savedApkAbisOrNull() ?: return null
     if (abis.isEmpty()) {
         return context.getString(R.string.saved_app_abi_none)
     }

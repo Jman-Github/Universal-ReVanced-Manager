@@ -38,6 +38,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.util.AppForeground
 import app.urv.manager.util.BatchPatchIntents
 import app.urv.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.NonCancellable
@@ -215,6 +216,9 @@ class AutoPatchWorker(
         state: BatchRunState,
         textOverride: String? = null
     ) {
+        // Code adapted from Morphe, see third-party/NOTICE for more information
+        // https://github.com/MorpheApp/morphe-manager/commit/45d78a17b0379bdb5f2c4030df6db42a0efec41b
+        if (AppForeground.isResumed) return
         applicationContext.getSystemService(NotificationManager::class.java).notify(
             NOTIFICATION_ID_FINISHED,
             notification(
