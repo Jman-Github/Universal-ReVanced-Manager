@@ -80,6 +80,7 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.repository.PatchProfileRepository
 import app.urv.manager.domain.repository.PatcherRuntimePluginRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
+import app.urv.manager.domain.storage.RepatchSourceCleanup
 import app.urv.manager.domain.storage.clearManagerCache
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.patcher.worker.PatcherWorker
@@ -120,6 +121,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
     val keystoreManager: KeystoreManager = koinInject()
     val workerRepository: WorkerRepository = koinInject()
     val filesystem: Filesystem = koinInject()
+    val repatchSourceCleanup: RepatchSourceCleanup = koinInject()
     val coroutineScope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
@@ -140,7 +142,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             val loadingStartedAt = SystemClock.elapsedRealtime()
             isLoading = true
             try {
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager, repatchSourceCleanup)
                 val remainingShimmerTime = STORAGE_REFRESH_SHIMMER_MIN_MS -
                     (SystemClock.elapsedRealtime() - loadingStartedAt)
                 if (remainingShimmerTime > 0L) {
@@ -192,7 +194,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                     lsposedRepository = lsposedRepository,
                     keystoreManager = keystoreManager
                 )
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager, repatchSourceCleanup)
                 context.toast(
                     context.getString(
                         R.string.storage_area_cleared,
@@ -227,7 +229,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
             try {
                 workerRepository.workManager.getWorkInfoByIdFlow(workId)
                     .first { workInfo -> workInfo?.state?.isFinished == true }
-                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
+                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager, repatchSourceCleanup)
             } finally {
                 isLoading = false
             }
@@ -288,7 +290,7 @@ fun StorageSettingsScreen(onBackClick: () -> Unit) {
                             isLoading = true
                             try {
                                 val clearedBytes = clearManagerCache(context)
-                                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager)
+                                snapshot = loadStorageSnapshot(context, filesystem, installedAppRepository, keystoreManager, repatchSourceCleanup)
                                 context.toast(
                                     context.getString(
                                         R.string.storage_cache_cleared,
@@ -1027,8 +1029,10 @@ private suspend fun loadStorageSnapshot(
     context: Context,
     filesystem: Filesystem,
     installedAppRepository: InstalledAppRepository,
-    keystoreManager: KeystoreManager
+    keystoreManager: KeystoreManager,
+    repatchSourceCleanup: RepatchSourceCleanup
 ): StorageSnapshot = withContext(Dispatchers.IO) {
+    repatchSourceCleanup.pruneUnusedSources()
     pruneUnreferencedPatchedAppFiles(filesystem, installedAppRepository)
 
     val dataRoot = context.managerStorageRoot

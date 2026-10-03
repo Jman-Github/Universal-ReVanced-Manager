@@ -362,12 +362,13 @@ class InstalledAppRepository(
         }
     }
 
-    suspend fun pruneRepatchInputs() {
+    suspend fun pruneRepatchInputs(additionalRetainedPaths: Collection<String> = emptyList()) {
         withContext(NonCancellable) {
             runCatching {
                 patchOptionInputManager.updateReferences {
                     fs.pruneRepatchInputFiles(
-                        dao.getAllSnapshot().map(InstalledApp::repatchSourcePath)
+                        dao.getAllSnapshot().map(InstalledApp::repatchSourcePath) +
+                            additionalRetainedPaths
                     )
                 }
             }.onFailure { error ->

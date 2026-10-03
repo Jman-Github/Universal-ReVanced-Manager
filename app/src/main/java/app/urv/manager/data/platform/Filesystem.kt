@@ -88,6 +88,7 @@ class Filesystem(private val app: Application) {
     private val repatchInputsDir: File = app.getDir("repatch-inputs", Context.MODE_PRIVATE).apply { mkdirs() }
     private val repatchInputStagingDir: File =
         app.getDir("repatch-input-staging", Context.MODE_PRIVATE).apply { mkdirs() }
+    private val repatchInputStagingCleanup = RepatchInputStagingCleanup(repatchInputStagingDir)
 
     init {
         deleteLeakedBundleDex()
@@ -623,25 +624,8 @@ class Filesystem(private val app: Application) {
         return !file.exists() || file.delete()
     }
 
-    fun pruneRepatchInputStagingFiles(
-        retainedPaths: Collection<String>,
-        olderThanTimestampMillis: Long? = null
-    ): Int {
-        val retainedCanonicalPaths = retainedPaths
-            .asSequence()
-            .filter(String::isNotBlank)
-            .map(::File)
-            .mapTo(mutableSetOf()) { it.safeCanonicalPath() }
-        return repatchInputStagingDir.listFiles { file ->
-            file.isFile && file.name.startsWith("input_")
-        }.orEmpty().count { file ->
-            val oldEnough = olderThanTimestampMillis == null ||
-                file.lastModified() < olderThanTimestampMillis
-            oldEnough &&
-                file.safeCanonicalPath() !in retainedCanonicalPaths &&
-                file.delete()
-        }
-    }
+    fun pruneRepatchInputStagingFiles(retainedPaths: Collection<String>): Int =
+        repatchInputStagingCleanup.prune(retainedPaths)
 
     fun deleteRepatchInputFile(path: String?): Boolean {
         val file = path?.takeIf(String::isNotBlank)?.let(::File) ?: return false

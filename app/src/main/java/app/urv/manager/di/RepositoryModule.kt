@@ -8,6 +8,7 @@ import app.urv.manager.domain.batch.BatchPatchCoordinator
 import app.urv.manager.domain.batch.BatchPlanResolver
 import app.urv.manager.domain.batch.ManualBatchPatchQueue
 import app.urv.manager.domain.repository.*
+import app.urv.manager.domain.storage.RepatchSourceCleanup
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.network.api.ExternalBundlesApi
@@ -43,6 +44,7 @@ val repositoryModule = module {
     singleOf(::WorkerRepository)
     singleOf(::DownloadedAppRepository)
     singleOf(::InstalledAppRepository)
+    singleOf(::RepatchSourceCleanup)
     singleOf(::ManualBatchPatchQueue)
     singleOf(::BatchPlanResolver)
     singleOf(::BatchExecutionGate)
