@@ -88,6 +88,7 @@ import app.urv.manager.ui.component.ColumnWithScrollbar
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.DownloadProgressBanner
 import app.urv.manager.ui.component.GroupHeader
+import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.PasswordField
 import app.urv.manager.ui.component.SettingsSectionIcons
@@ -217,7 +218,7 @@ fun ImportExportSettingsScreen(
     }
 
     fun filePickerBusy(): Boolean =
-        exportPreparing || exportInProgress ||
+        vm.settingsImportPending || exportPreparing || exportInProgress ||
             activeExportPicker != null || pendingExportPicker != null ||
             pendingDocumentExportPicker != null ||
             activeImportPicker != null || pendingImportPicker != null ||
@@ -471,6 +472,13 @@ fun ImportExportSettingsScreen(
             pendingDocumentExportPicker = null
         }
     }
+    LaunchedEffect(vm.importedSettingsRestartLanguage) {
+        val language = vm.importedSettingsRestartLanguage ?: return@LaunchedEffect
+        val activity = context as? android.app.Activity ?: return@LaunchedEffect
+        vm.consumeImportedSettingsRestart()
+        app.urv.manager.util.applyAppLanguage(language)
+        activity.recreate()
+    }
     LaunchedEffect(importedPermissionRequest) {
         val request = importedPermissionRequest ?: return@LaunchedEffect
         if (request.needsStoragePermission) {
@@ -606,7 +614,9 @@ fun ImportExportSettingsScreen(
             icon = Icons.Outlined.WarningAmber
         )
     }
-    if (exportPreparing || exportInProgress) {
+    InterceptBackHandler(enabled = vm.settingsImportPending) {}
+
+    if (vm.settingsImportPending || exportPreparing || exportInProgress) {
         AlertDialog(
             onDismissRequest = {},
             icon = {
@@ -618,7 +628,9 @@ fun ImportExportSettingsScreen(
             },
             title = {
                 Text(
-                    stringResource(R.string.export),
+                    stringResource(
+                        if (vm.settingsImportPending) R.string.import_ else R.string.export
+                    ),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -630,8 +642,11 @@ fun ImportExportSettingsScreen(
                 ) {
                     Text(
                         stringResource(
-                            if (exportPreparing) R.string.patcher_step_group_preparing
-                            else R.string.patcher_step_group_saving
+                            when {
+                                vm.settingsImportPending -> R.string.import_settings_in_progress
+                                exportPreparing -> R.string.patcher_step_group_preparing
+                                else -> R.string.patcher_step_group_saving
+                            }
                         ),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -658,7 +673,7 @@ fun ImportExportSettingsScreen(
             AppTopBar(
                 title = stringResource(R.string.import_export),
                 scrollBehavior = scrollBehavior,
-                onBackClick = onBackClick
+                onBackClick = { if (!vm.settingsImportPending) onBackClick() }
             )
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),

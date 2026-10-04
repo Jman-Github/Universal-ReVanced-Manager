@@ -24,6 +24,10 @@ abstract class BasePreferencesManager(private val context: Context) {
 
     suspend fun edit(block: EditorContext.() -> Unit) = dataStore.editor(block)
 
+    // Read every exported preference from the same DataStore revision.
+    protected suspend fun <T> readSnapshot(block: EditorContext.() -> T): T =
+        EditorContext(dataStore.data.first().toMutablePreferences()).run(block)
+
     protected fun stringPreference(key: String, default: String) =
         StringPreference(dataStore, key, default)
 

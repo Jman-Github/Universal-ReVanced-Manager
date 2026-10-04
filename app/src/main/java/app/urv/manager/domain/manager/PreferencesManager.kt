@@ -660,9 +660,11 @@ class PreferencesManager(
         val patchedAppExportFormat: String? = null,
         val mergedApkExportFormat: String? = null,
         val officialBundleRemoved: Boolean? = null,
+        val officialBundleSortOrder: Int? = null,
         val officialBundleCustomDisplayName: String? = null,
         val dashboardBundlesFabCollapsed: Boolean? = null,
         val dashboardAppsFabCollapsed: Boolean? = null,
+        val dashboardLsposedFabCollapsed: Boolean? = null,
         val dashboardProgressBannerCollapsed: Boolean? = null,
         val dashboardBundleImportBannerCollapsed: Boolean? = null,
         val dashboardBundleUpdateBannerCollapsed: Boolean? = null,
@@ -692,10 +694,12 @@ class PreferencesManager(
         val showManagerUpdateDialogOnLaunch: Boolean? = null,
         val showManagerUpdateChangelog: Boolean? = null,
         val announcementSystemEnabled: Boolean? = null,
+        val selectedAnnouncementTags: Set<String>? = null,
         val announcementPushNotifications: Boolean? = null,
         val announcementPushNotificationInterval: SearchForUpdatesBackgroundInterval? = null,
         val autoClearCacheInterval: AutoClearCacheInterval? = null,
         val useManagerPrereleases: Boolean? = null,
+        val usePatchesPrereleases: Boolean? = null,
         val showBatteryOptimizationBanner: Boolean? = null,
         val allowPatchProfileBundleOverride: Boolean? = null,
         val searchForUpdatesBackgroundInterval: SearchForUpdatesBackgroundInterval? = null,
@@ -765,20 +769,22 @@ class PreferencesManager(
         val splitMergeAutoExpandRunningSteps: Boolean? = null,
         val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
         val useCustomFilePicker: Boolean? = null,
+        val youtubeAssetsSyncHeaderTransforms: Boolean? = null,
         val patchBundleDiscoveryShowRelease: Boolean? = null,
         val patchBundleDiscoveryShowPrerelease: Boolean? = null,
         val patchBundleDiscoveryLatest: Boolean? = null,
+        val patchBundleDiscoverySortMode: String? = null,
         val searchEngineHost: String? = null,
     )
 
-    suspend fun exportSettings(): SettingsSnapshot {
+    suspend fun exportSettings(): SettingsSnapshot = readSnapshot {
         var snapshot = SettingsSnapshot()
         snapshot = exportAppearanceSettings(snapshot)
         snapshot = exportCoreUpdateSettings(snapshot)
         snapshot = exportRuntimeAndInstallerSettings(snapshot)
         snapshot = exportPatchingSettings(snapshot)
         snapshot = exportDiscoverySettings(snapshot)
-        return snapshot
+        snapshot
     }
 
     suspend fun importSettings(snapshot: SettingsSnapshot) = edit {
@@ -827,205 +833,211 @@ class PreferencesManager(
         return useManagerPrereleases.get()
     }
 
-    private suspend fun exportAppearanceSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+    private fun EditorContext.exportAppearanceSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
-            dynamicColor = dynamicColor.get(),
-            pureBlackTheme = pureBlackTheme.get(),
-            materialYouPureBlackTheme = materialYouPureBlackTheme.get(),
-            pureBlackOnSystemDark = pureBlackOnSystemDark.get(),
-            customAccentColor = customAccentColor.get(),
-            customThemeColor = customThemeColor.get(),
-            customBackgroundImageUri = customBackgroundImageUri.get(),
-            customBackgroundImageOpacity = customBackgroundImageOpacity.get(),
-            hideMainTabLabels = hideMainTabLabels.get(),
-            disableMainTabSwipe = disableMainTabSwipe.get(),
-            disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.get(),
-            preventAccidentalTouching = preventAccidentalTouching.get(),
-            showPatchProfilesTab = showPatchProfilesTab.get(),
-            showToolsTab = showToolsTab.get(),
-            showLsposedTab = showLsposedTab.get(),
-            themePresetSelectionName = themePresetSelectionName.get(),
-            themePresetSelectionEnabled = themePresetSelectionEnabled.get(),
-            theme = theme.get(),
-            appLanguage = appLanguage.get()
+            dynamicColor = dynamicColor.value,
+            pureBlackTheme = pureBlackTheme.value,
+            materialYouPureBlackTheme = materialYouPureBlackTheme.value,
+            pureBlackOnSystemDark = pureBlackOnSystemDark.value,
+            customAccentColor = customAccentColor.value,
+            customThemeColor = customThemeColor.value,
+            customBackgroundImageUri = customBackgroundImageUri.value,
+            customBackgroundImageOpacity = customBackgroundImageOpacity.value,
+            hideMainTabLabels = hideMainTabLabels.value,
+            disableMainTabSwipe = disableMainTabSwipe.value,
+            disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.value,
+            preventAccidentalTouching = preventAccidentalTouching.value,
+            showPatchProfilesTab = showPatchProfilesTab.value,
+            showToolsTab = showToolsTab.value,
+            showLsposedTab = showLsposedTab.value,
+            themePresetSelectionName = themePresetSelectionName.value,
+            themePresetSelectionEnabled = themePresetSelectionEnabled.value,
+            theme = theme.value,
+            appLanguage = appLanguage.value
         )
     }
 
-    private suspend fun exportCoreUpdateSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
-        val exportPat = includeGitHubPatInExports.get()
+    private fun EditorContext.exportCoreUpdateSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        val exportPat = includeGitHubPatInExports.value
         return snapshot.copy(
-            api = api.get(),
-            gitHubPat = gitHubPat.get().takeIf { exportPat },
+            api = api.value,
+            gitHubPat = gitHubPat.value.takeIf { exportPat },
             includeGitHubPatInExports = exportPat,
-            firstLaunch = firstLaunch.get(),
-            managerAutoUpdates = managerAutoUpdates.get(),
-            showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.get(),
-            showManagerUpdateChangelog = showManagerUpdateChangelog.get(),
-            announcementSystemEnabled = announcementSystemEnabled.get(),
+            firstLaunch = firstLaunch.value,
+            managerAutoUpdates = managerAutoUpdates.value,
+            showManagerUpdateDialogOnLaunch = showManagerUpdateDialogOnLaunch.value,
+            showManagerUpdateChangelog = showManagerUpdateChangelog.value,
+            announcementSystemEnabled = announcementSystemEnabled.value,
+            selectedAnnouncementTags = selectedAnnouncementTags.value,
             announcementPushNotifications =
-                announcementPushNotificationInterval.get() != SearchForUpdatesBackgroundInterval.NEVER,
-            announcementPushNotificationInterval = announcementPushNotificationInterval.get(),
-            autoClearCacheInterval = autoClearCacheInterval.get(),
-            useManagerPrereleases = useManagerPrereleases.get(),
-            showBatteryOptimizationBanner = showBatteryOptimizationBanner.get(),
-            allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.get(),
-            searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.get(),
-            searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.get(),
-            bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.get(),
-            bundleChangelogFetchLimit = bundleChangelogFetchLimit.get(),
-            bundleChangelogStorageLimit = bundleChangelogStorageLimit.get(),
-            allowMeteredUpdates = allowMeteredUpdates.get()
+                announcementPushNotificationInterval.value != SearchForUpdatesBackgroundInterval.NEVER,
+            announcementPushNotificationInterval = announcementPushNotificationInterval.value,
+            autoClearCacheInterval = autoClearCacheInterval.value,
+            useManagerPrereleases = useManagerPrereleases.value,
+            usePatchesPrereleases = usePatchesPrereleases.value,
+            showBatteryOptimizationBanner = showBatteryOptimizationBanner.value,
+            allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.value,
+            searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.value,
+            searchForManagerUpdatesBackgroundInterval = searchForManagerUpdatesBackgroundInterval.value,
+            bundleUpdateDeliveryMode = bundleUpdateDeliveryMode.value,
+            bundleChangelogFetchLimit = bundleChangelogFetchLimit.value,
+            bundleChangelogStorageLimit = bundleChangelogStorageLimit.value,
+            allowMeteredUpdates = allowMeteredUpdates.value
         )
     }
 
-    private suspend fun exportRuntimeAndInstallerSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
-        val autoPatchEnabledValue = autoPatchEnabled.get()
+    private fun EditorContext.exportRuntimeAndInstallerSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+        val autoPatchEnabledValue = autoPatchEnabled.value
         val restoreShizukuSettings =
-            !autoPatchEnabledValue && autoPatchShizukuSettingsRestorePending.get()
+            !autoPatchEnabledValue && autoPatchShizukuSettingsRestorePending.value
         val exportedAutoPatchInstallWithShizuku = if (restoreShizukuSettings) {
-            autoPatchInstallWithShizukuBeforeDisable.get()
+            autoPatchInstallWithShizukuBeforeDisable.value
         } else {
-            autoPatchInstallWithShizuku.get()
+            autoPatchInstallWithShizuku.value
         }
         val exportedAutoPatchUninstallOnConflictWithShizuku = if (restoreShizukuSettings) {
-            autoPatchUninstallOnConflictWithShizukuBeforeDisable.get()
+            autoPatchUninstallOnConflictWithShizukuBeforeDisable.value
         } else {
-            autoPatchUninstallOnConflictWithShizuku.get()
+            autoPatchUninstallOnConflictWithShizuku.value
         }
 
         return snapshot.copy(
-            stripUnusedNativeLibs = stripUnusedNativeLibs.get(),
-            skipUnneededSplitApks = skipUnneededSplitApks.get(),
-            chooseSplitApksBeforePatching = chooseSplitApksBeforePatching.get(),
-            continueOnPatchError = continueOnPatchError.get(),
-            skipApkSigning = skipApkSigning.get(),
-            injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.get(),
-            morpheBytecodeMode = morpheBytecodeMode.get().runtimeValue,
-            patcherLogMode = patcherLogMode.get(),
-            patchAvailabilityEnabled = patchAvailabilityEnabled.get(),
-            removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.get(),
-            processMemoryLimit = processMemoryLimit.get(),
-            autoCollapsePatcherSteps = autoCollapsePatcherSteps.get(),
-            showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.get(),
-            compactPatcherResourceGraphs = compactPatcherResourceGraphs.get(),
-            patcherInformationExpanded = patcherInformationExpanded.get(),
-            autoExpandRunningSteps = autoExpandRunningSteps.get(),
-            autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.get(),
-            enableSavedApps = enableSavedApps.get(),
-            disableSavedAppOverwrite = disableSavedAppOverwrite.get(),
-            showSavedAppBundleUpdateBadges = showSavedAppBundleUpdateBadges.get(),
-            rootMountToolsCollapsed = rootMountToolsCollapsed.get(),
-            patchedAppExportFormat = patchedAppExportFormat.get(),
-            mergedApkExportFormat = mergedApkExportFormat.get(),
-            chooseInstallerPerInstall = chooseInstallerPerInstall.get(),
-            installerPrimary = installerPrimary.get(),
-            installerFallback = installerFallback.get(),
-            installerCustomComponents = installerCustomComponents.get(),
-            installerHiddenComponents = installerHiddenComponents.get(),
-            shizukuInstallAsPlayStore = shizukuInstallAsPlayStore.get(),
-            autoInstallWithShizuku = autoInstallWithShizuku.get(),
-            autoUninstallWithShizuku = autoUninstallWithShizuku.get(),
+            stripUnusedNativeLibs = stripUnusedNativeLibs.value,
+            skipUnneededSplitApks = skipUnneededSplitApks.value,
+            chooseSplitApksBeforePatching = chooseSplitApksBeforePatching.value,
+            continueOnPatchError = continueOnPatchError.value,
+            skipApkSigning = skipApkSigning.value,
+            injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
+            morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
+            patcherLogMode = patcherLogMode.value,
+            patchAvailabilityEnabled = patchAvailabilityEnabled.value,
+            removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.value,
+            processMemoryLimit = processMemoryLimit.value,
+            autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
+            showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
+            compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
+            patcherInformationExpanded = patcherInformationExpanded.value,
+            autoExpandRunningSteps = autoExpandRunningSteps.value,
+            autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.value,
+            enableSavedApps = enableSavedApps.value,
+            disableSavedAppOverwrite = disableSavedAppOverwrite.value,
+            showSavedAppBundleUpdateBadges = showSavedAppBundleUpdateBadges.value,
+            rootMountToolsCollapsed = rootMountToolsCollapsed.value,
+            patchedAppExportFormat = patchedAppExportFormat.value,
+            mergedApkExportFormat = mergedApkExportFormat.value,
+            chooseInstallerPerInstall = chooseInstallerPerInstall.value,
+            installerPrimary = installerPrimary.value,
+            installerFallback = installerFallback.value,
+            installerCustomComponents = installerCustomComponents.value,
+            installerHiddenComponents = installerHiddenComponents.value,
+            shizukuInstallAsPlayStore = shizukuInstallAsPlayStore.value,
+            autoInstallWithShizuku = autoInstallWithShizuku.value,
+            autoUninstallWithShizuku = autoUninstallWithShizuku.value,
             autoPatchEnabled = autoPatchEnabledValue,
             autoPatchInstallWithShizuku = exportedAutoPatchInstallWithShizuku,
             autoPatchUninstallOnConflictWithShizuku =
                 exportedAutoPatchUninstallOnConflictWithShizuku,
-            autoPatchRequiresCharging = autoPatchRequiresCharging.get(),
-            autoPatchInterval = autoPatchInterval.get(),
-            autoPatchEnabledPackages = autoPatchEnabledPackages.get(),
-            savedAppLauncherShortcutPackages = savedAppLauncherShortcutPackages.get(),
-            allowExternalBatchActions = allowExternalBatchActions.get(),
-            keystoreAlias = keystoreAlias.get(),
-            keystorePass = keystorePass.get(),
-            keystoreKeyPass = keystoreKeyPass.get(),
-            dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.get(),
-            dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.get(),
+            autoPatchRequiresCharging = autoPatchRequiresCharging.value,
+            autoPatchInterval = autoPatchInterval.value,
+            autoPatchEnabledPackages = autoPatchEnabledPackages.value,
+            savedAppLauncherShortcutPackages = savedAppLauncherShortcutPackages.value,
+            allowExternalBatchActions = allowExternalBatchActions.value,
+            keystoreAlias = keystoreAlias.value,
+            keystorePass = keystorePass.value,
+            keystoreKeyPass = keystoreKeyPass.value,
+            dashboardBundlesFabCollapsed = dashboardBundlesFabCollapsed.value,
+            dashboardAppsFabCollapsed = dashboardAppsFabCollapsed.value,
+            dashboardLsposedFabCollapsed = dashboardLsposedFabCollapsed.value,
             dashboardProgressBannerCollapsed =
-                dashboardBundleImportBannerCollapsed.get() && dashboardBundleUpdateBannerCollapsed.get(),
-            dashboardBundleImportBannerCollapsed = dashboardBundleImportBannerCollapsed.get(),
-            dashboardBundleUpdateBannerCollapsed = dashboardBundleUpdateBannerCollapsed.get()
+                dashboardBundleImportBannerCollapsed.value && dashboardBundleUpdateBannerCollapsed.value,
+            dashboardBundleImportBannerCollapsed = dashboardBundleImportBannerCollapsed.value,
+            dashboardBundleUpdateBannerCollapsed = dashboardBundleUpdateBannerCollapsed.value
         )
     }
 
-    private suspend fun exportPatchingSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+    private fun EditorContext.exportPatchingSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
-            officialBundleRemoved = officialBundleRemoved.get(),
-            officialBundleCustomDisplayName = officialBundleCustomDisplayName.get(),
-            disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.get(),
-            disableSelectionWarning = disableSelectionWarning.get(),
-            disableUniversalPatchCheck = disableUniversalPatchCheck.get(),
-            suggestedVersionSafeguard = suggestedVersionSafeguard.get(),
-            disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.get(),
-            showPatchSelectionSummary = showPatchSelectionSummary.get(),
-            collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.get(),
-            patchSelectionFilterFlags = patchSelectionFilterFlags.get(),
-            patchSelectionShowNewPatches = patchSelectionShowNewPatches.get(),
-            patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.get(),
-            patchSelectionSortDescending = patchSelectionSortDescending.get(),
-            patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.get(),
-            patchSelectionSortSelectionMode = patchSelectionSortSelectionMode.get(),
-            patchSelectionActionOrder = patchSelectionActionOrder.get(),
-            patchSelectionHiddenActions = patchSelectionHiddenActions.get(),
-            patchSelectionShowVersionTags = patchSelectionShowVersionTags.get(),
-            patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.get(),
-            patchBundleActionOrder = patchBundleActionOrder.get(),
-            patchBundleHiddenActions = patchBundleHiddenActions.get(),
-            batchResultActionOrder = batchResultActionOrder.get(),
-            batchResultHiddenActions = batchResultHiddenActions.get(),
-            savedAppActionOrder = savedAppActionOrder.get(),
-            savedAppHiddenActions = savedAppHiddenActions.get(),
-            patchProfileActionOrder = patchProfileActionOrder.get(),
-            patchProfileHiddenActions = patchProfileHiddenActions.get(),
-            lsposedModuleActionOrder = lsposedModuleActionOrder.get(),
-            lsposedModuleHiddenActions = lsposedModuleHiddenActions.get()
+            officialBundleRemoved = officialBundleRemoved.value,
+            officialBundleSortOrder = officialBundleSortOrder.value,
+            officialBundleCustomDisplayName = officialBundleCustomDisplayName.value,
+            disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.value,
+            disableSelectionWarning = disableSelectionWarning.value,
+            disableUniversalPatchCheck = disableUniversalPatchCheck.value,
+            suggestedVersionSafeguard = suggestedVersionSafeguard.value,
+            disablePatchSelectionConfirmations = disablePatchSelectionConfirmations.value,
+            showPatchSelectionSummary = showPatchSelectionSummary.value,
+            collapsePatchActionsOnSelection = collapsePatchActionsOnSelection.value,
+            patchSelectionFilterFlags = patchSelectionFilterFlags.value,
+            patchSelectionShowNewPatches = patchSelectionShowNewPatches.value,
+            patchSelectionSortAlphabetical = patchSelectionSortAlphabetical.value,
+            patchSelectionSortDescending = patchSelectionSortDescending.value,
+            patchSelectionSortSettingsMode = patchSelectionSortSettingsMode.value,
+            patchSelectionSortSelectionMode = patchSelectionSortSelectionMode.value,
+            patchSelectionActionOrder = patchSelectionActionOrder.value,
+            patchSelectionHiddenActions = patchSelectionHiddenActions.value,
+            patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
+            patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
+            patchBundleActionOrder = patchBundleActionOrder.value,
+            patchBundleHiddenActions = patchBundleHiddenActions.value,
+            batchResultActionOrder = batchResultActionOrder.value,
+            batchResultHiddenActions = batchResultHiddenActions.value,
+            savedAppActionOrder = savedAppActionOrder.value,
+            savedAppHiddenActions = savedAppHiddenActions.value,
+            patchProfileActionOrder = patchProfileActionOrder.value,
+            patchProfileHiddenActions = patchProfileHiddenActions.value,
+            lsposedModuleActionOrder = lsposedModuleActionOrder.value,
+            lsposedModuleHiddenActions = lsposedModuleHiddenActions.value
         )
     }
 
-    private suspend fun exportDiscoverySettings(snapshot: SettingsSnapshot): SettingsSnapshot {
+    private fun EditorContext.exportDiscoverySettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
-            acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.get(),
-            downloaderPluginSourcesJson = downloaderPluginSourcesJson.get().takeIf { it.isNotBlank() },
+            acknowledgedDownloaderPlugins = acknowledgedDownloaderPlugins.value,
+            downloaderPluginSourcesJson = downloaderPluginSourcesJson.value,
             trustedApkDownloadHelpersJson =
-                trustedApkDownloadHelpersJson.get().takeIf { it.isNotBlank() },
-            acknowledgedPatcherRuntimePlugins = acknowledgedPatcherRuntimePlugins.get(),
+                trustedApkDownloadHelpersJson.value,
+            acknowledgedPatcherRuntimePlugins = acknowledgedPatcherRuntimePlugins.value,
             trustedPatcherRuntimePluginsJson =
-                trustedPatcherRuntimePluginsJson.get().takeIf { it.isNotBlank() },
+                trustedPatcherRuntimePluginsJson.value,
             patcherRuntimePluginSourcesJson =
-                patcherRuntimePluginSourcesJson.get().takeIf { it.isNotBlank() },
-            autoSaveDownloaderApks = autoSaveDownloaderApks.get(),
-            autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.get(),
-            pathSelectorFavorites = pathSelectorFavorites.get(),
-            pathSelectorLastDirectory = pathSelectorLastDirectory.get(),
+                patcherRuntimePluginSourcesJson.value,
+            autoSaveDownloaderApks = autoSaveDownloaderApks.value,
+            autoSaveDownloaderLatestOnly = autoSaveDownloaderLatestOnly.value,
+            pathSelectorFavorites = pathSelectorFavorites.value,
+            pathSelectorLastDirectory = pathSelectorLastDirectory.value,
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/commit/46e37e2915dc92b6a655127155935e63c0b04efc
-            pathSelectorSortMode = pathSelectorSortMode.get(),
-            pathSelectorSearchQuery = pathSelectorSearchQuery.get(),
-            pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.get(),
+            pathSelectorSortMode = pathSelectorSortMode.value,
+            pathSelectorSearchQuery = pathSelectorSearchQuery.value,
+            pathSelectorShowHiddenFiles = pathSelectorShowHiddenFiles.value,
             filePickerLastDirectories = filePickerDirectoryPreferences.mapValues { (_, preference) ->
-                preference.get()
+                preference.value
             },
-            appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.get(),
-            appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.get(),
-            splitMergeSelectionPreset = splitMergeSelectionPreset.get().takeIf { it.isNotBlank() },
-            splitMergeExcludeUnusedLanguages = splitMergeExcludeUnusedLanguages.get(),
-            splitMergeExcludeExtraDensities = splitMergeExcludeExtraDensities.get(),
-            splitMergeExcludeExtraNativeLibs = splitMergeExcludeExtraNativeLibs.get(),
-            patcherSplitModuleSortMode = patcherSplitModuleSortMode.get().takeIf { it.isNotBlank() },
-            splitMergeModuleSortMode = splitMergeModuleSortMode.get().takeIf { it.isNotBlank() },
-            splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.get(),
-            splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.get(),
-            splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.get(),
-            splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.get(),
-            splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.get(),
-            showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.get(),
-            compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.get(),
-            splitMergeInformationExpanded = splitMergeInformationExpanded.get(),
-            splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.get(),
-            splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.get(),
-            useCustomFilePicker = useCustomFilePicker.get(),
-            patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.get(),
-            patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.get(),
-            patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.get(),
-            searchEngineHost = searchEngineHost.get()
+            appSelectorFilterInstalledOnly = appSelectorFilterInstalledOnly.value,
+            appSelectorFilterPatchesAvailable = appSelectorFilterPatchesAvailable.value,
+            splitMergeSelectionPreset = splitMergeSelectionPreset.value,
+            splitMergeExcludeUnusedLanguages = splitMergeExcludeUnusedLanguages.value,
+            splitMergeExcludeExtraDensities = splitMergeExcludeExtraDensities.value,
+            splitMergeExcludeExtraNativeLibs = splitMergeExcludeExtraNativeLibs.value,
+            patcherSplitModuleSortMode = patcherSplitModuleSortMode.value,
+            splitMergeModuleSortMode = splitMergeModuleSortMode.value,
+            splitMergeInstalledFilterUserApps = splitMergeInstalledFilterUserApps.value,
+            splitMergeInstalledFilterSystemApps = splitMergeInstalledFilterSystemApps.value,
+            splitMergeInstalledFilterSplitApks = splitMergeInstalledFilterSplitApks.value,
+            splitMergeInstalledFilterSingleApks = splitMergeInstalledFilterSingleApks.value,
+            splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.value,
+            showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.value,
+            compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.value,
+            splitMergeInformationExpanded = splitMergeInformationExpanded.value,
+            splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.value,
+            splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.value,
+            useCustomFilePicker = useCustomFilePicker.value,
+            youtubeAssetsSyncHeaderTransforms = youtubeAssetsSyncHeaderTransforms.value,
+            patchBundleDiscoveryShowRelease = patchBundleDiscoveryShowRelease.value,
+            patchBundleDiscoveryShowPrerelease = patchBundleDiscoveryShowPrerelease.value,
+            patchBundleDiscoveryLatest = patchBundleDiscoveryLatest.value,
+            patchBundleDiscoverySortMode = patchBundleDiscoverySortMode.value,
+            searchEngineHost = searchEngineHost.value
         )
     }
 
@@ -1067,6 +1079,8 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importCoreUpdateSettings(snapshot: SettingsSnapshot) {
+        snapshot.usePatchesPrereleases?.let { usePatchesPrereleases.value = it }
+        snapshot.selectedAnnouncementTags?.let { selectedAnnouncementTags.value = it }
         snapshot.api?.let { api.value = it }
         snapshot.gitHubPat?.let { gitHubPat.value = it }
         snapshot.includeGitHubPatInExports?.let { includeGitHubPatInExports.value = it }
@@ -1088,6 +1102,12 @@ class PreferencesManager(
             if (snapshot.announcementSystemEnabled == null && it) {
                 announcementSystemEnabled.value = true
             }
+        }
+        if (snapshot.announcementPushNotificationInterval != null ||
+            snapshot.announcementPushNotifications != null
+        ) {
+            announcementPushNotificationsLegacy.value = false
+            announcementPushNotificationIntervalMigrated.value = true
         }
         snapshot.autoClearCacheInterval?.let { autoClearCacheInterval.value = it }
         snapshot.useManagerPrereleases?.let { useManagerPrereleases.value = it }
@@ -1112,6 +1132,7 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importRuntimeAndInstallerSettings(snapshot: SettingsSnapshot) {
+        snapshot.dashboardLsposedFabCollapsed?.let { dashboardLsposedFabCollapsed.value = it }
         snapshot.stripUnusedNativeLibs?.let { stripUnusedNativeLibs.value = it }
         snapshot.skipUnneededSplitApks?.let { skipUnneededSplitApks.value = it }
         snapshot.chooseSplitApksBeforePatching?.let { chooseSplitApksBeforePatching.value = it }
@@ -1207,6 +1228,7 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importPatchingSettings(snapshot: SettingsSnapshot) {
+        snapshot.officialBundleSortOrder?.let { officialBundleSortOrder.value = it }
         snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
         snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
@@ -1241,6 +1263,8 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importDiscoverySettings(snapshot: SettingsSnapshot) {
+        snapshot.patchBundleDiscoverySortMode?.let { patchBundleDiscoverySortMode.value = it }
+        snapshot.youtubeAssetsSyncHeaderTransforms?.let { youtubeAssetsSyncHeaderTransforms.value = it }
         snapshot.acknowledgedDownloaderPlugins?.let { acknowledgedDownloaderPlugins.value = it }
         snapshot.downloaderPluginSourcesJson?.let { downloaderPluginSourcesJson.value = it }
         snapshot.trustedApkDownloadHelpersJson?.let { trustedApkDownloadHelpersJson.value = it }
