@@ -1,5 +1,10 @@
 #!/system/bin/sh
 # Late verification and fail-safe reconciliation for a committed URV mount.
+# Match Manager's FLAG_MOUNT_MASTER shell: a private root-manager namespace
+# can disappear with this service and leave the global APK target unmounted.
+if [ "$(readlink /proc/self/ns/mnt)" != "$(readlink /proc/1/ns/mnt)" ]; then
+  exec nsenter --mount=/proc/1/ns/mnt -- /system/bin/sh "$0" "$@"
+fi
 MODDIR=${0%/*}
 state_file="$MODDIR/state.env"
 log="$MODDIR/log.txt"
@@ -8,6 +13,51 @@ exec >>"$log" 2>&1
 log_status() {
   echo "$(date +%s 2>/dev/null || echo 0) [service] $*"
 }
+
+run_boot_recovery_attempt() {
+  /system/bin/sh "$MODDIR/service.sh" --urv-recovery-attempt "$recovery_deadline"
+}
+
+# Boot Binder services can fail transiently even after a readiness probe succeeds.
+# Retry the complete, locked verification pass without launching Manager. Terminal
+# incompatibility and active transactions stay with the existing recovery policy.
+run_boot_recovery() {
+  recovery_deadline=$(($(awk '{print int($1)}' /proc/uptime) + 600))
+  while :; do
+    [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 0
+    recovery_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    [ "$recovery_now" -lt "$recovery_deadline" ] || {
+      log_status "Boot recovery retry deadline reached; leaving recovery for Manager"
+      return 0
+    }
+    rm -f "$MODDIR/boot-result"
+    run_boot_recovery_attempt
+    [ -f "$MODDIR/boot-result" ] || {
+      log_status "Boot recovery stopped before a safe state could be loaded"
+      return 1
+    }
+    recovery_status="$(head -n 1 "$MODDIR/boot-result" 2>/dev/null)"
+    case "$recovery_status" in
+      VERIFIED|REPATCH_REQUIRED|VERIFY_FAILED|INCOMPLETE_TRANSACTION) return 0 ;;
+    esac
+    [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 0
+    recovery_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    [ "$recovery_now" -lt "$recovery_deadline" ] || {
+      log_status "Boot recovery retry deadline reached; leaving recovery for Manager"
+      return 0
+    }
+    log_status "Temporary boot recovery failure; retrying independently of Manager"
+    sleep 5
+  done
+}
+
+if [ "${1:-}" != --urv-recovery-attempt ]; then
+  run_boot_recovery
+  exit $?
+fi
+boot_recovery_deadline="${2:-0}"
+case "$boot_recovery_deadline" in ''|*[!0-9]*) exit 1 ;; esac
+rm -f "$MODDIR/boot-result"
 
 disable_module() {
   : >"$MODDIR/disable" || return 1
@@ -531,7 +581,7 @@ wait_for_feedback_user() {
 
 notify_boot_result() {
   case "$boot_status" in
-    VERIFIED|REPAIR_REQUIRED|REPATCH_REQUIRED|VERIFY_FAILED|INCOMPLETE_TRANSACTION|DEFERRED) ;;
+    VERIFIED|REPAIR_REQUIRED|REPATCH_REQUIRED|VERIFY_FAILED) ;;
     *) return 0 ;;
   esac
   # The receiver uses a system text toast, so Manager's UI need not be open.
@@ -553,6 +603,9 @@ finish_boot_service() {
   case "$boot_status" in
     WAITING_*|VERIFYING|MOUNTING) write_boot_status DEFERRED ;;
   esac
+  # Publish the final pass result, not an early verification checkpoint.
+  (umask 077; printf '%s\n' "$boot_status" >"$MODDIR/boot-result") ||
+    log_status "Unable to record the boot recovery pass result"
   notify_boot_result
 }
 
@@ -740,6 +793,8 @@ wait_for_package_manager() {
   while :; do
     ready_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
     [ "$((ready_now - ready_started))" -lt 300 ] || return 1
+    [ "${boot_recovery_deadline:-0}" = 0 ] ||
+      [ "$ready_now" -lt "$boot_recovery_deadline" ] || return 1
     [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] || return 1
     if [ -f "$transaction_dir/active.json" ]; then
       write_boot_status INCOMPLETE_TRANSACTION
@@ -802,23 +857,27 @@ finish_verified_mount() {
   final_started="$(awk '{print int($1)}' /proc/uptime)" || return 1
   while [ "$(getprop sys.boot_completed 2>/dev/null)" != 1 ]; do
     [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] &&
-      [ ! -f "$transaction_dir/active.json" ] || return 0
-    [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] || return 0
+      [ ! -f "$transaction_dir/active.json" ] || { boot_status=DEFERRED; return 0; }
+    [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] ||
+      { boot_status=DEFERRED; return 0; }
     final_now="$(awk '{print int($1)}' /proc/uptime)" || return 1
+    [ "${boot_recovery_deadline:-0}" = 0 ] ||
+      [ "$final_now" -lt "$boot_recovery_deadline" ] || return 1
     [ "$((final_now - final_started))" -lt 300 ] || {
-      log_status "Boot completion not reported; leaving the verified early mount for Manager"
-      return 0
+      log_status "Boot completion not reported; retrying verification of the early mount"
+      return 1
     }
     sleep 1
   done
   acquire_package_lock || return 1
   boot_lock_held=1
   [ ! -f "$MODDIR/disable" ] && [ ! -f "$MODDIR/remove" ] &&
-    [ ! -f "$transaction_dir/active.json" ] || return 0
-  [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] || return 0
+    [ ! -f "$transaction_dir/active.json" ] || { boot_status=DEFERRED; return 0; }
+  [ "$(sha256sum "$state_file" 2>/dev/null)" = "$verified_state_hash" ] ||
+    { boot_status=DEFERRED; return 0; }
   load_state || return 1
   [ "$URV_PACKAGE" = "$locked_package" ] &&
-    [ "$URV_TRANSACTION_ID" = "$verified_transaction" ] || return 0
+    [ "$URV_TRANSACTION_ID" = "$verified_transaction" ] || { boot_status=DEFERRED; return 0; }
   read_package_state &&
     [ "$installed_users" = "$URV_USER_ID" ] &&
     [ "$current_path" = "$URV_STOCK_PATH" ] &&
@@ -843,9 +902,13 @@ finish_verified_mount() {
 
 complete_verified_mount() {
   finish_verified_mount || {
-    log_status "Boot completion verification deferred; Manager recovery is required"
+    log_status "Boot completion verification deferred; another service pass is required"
     # Manager may own the lock now; do not overwrite its recovery checkpoint.
-    [ "$boot_lock_held" = 0 ] || write_boot_status REPAIR_REQUIRED
+    if [ "$boot_lock_held" = 0 ]; then
+      boot_status=DEFERRED
+    else
+      write_boot_status REPAIR_REQUIRED
+    fi
   }
 }
 

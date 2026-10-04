@@ -4,6 +4,9 @@ set -eu
 for function in wait_for_feedback_user notify_boot_result finish_boot_service; do
   eval "$(sed -n "/^$function() {/,/^}/p" app/src/main/assets/root/service.sh)"
 done
+fixture="$(mktemp -d)"
+trap 'rm -rf "$fixture"' EXIT
+MODDIR="$fixture"
 URV_USER_ID=10
 URV_PACKAGE=com.example.app
 calls=0
@@ -36,20 +39,25 @@ am() {
 }
 log_status() { diagnostics=$((diagnostics + 1)); }
 write_boot_status() { boot_status="$1"; }
-for status in VERIFIED REPAIR_REQUIRED REPATCH_REQUIRED VERIFY_FAILED INCOMPLETE_TRANSACTION DEFERRED; do
+for status in VERIFIED REPAIR_REQUIRED REPATCH_REQUIRED VERIFY_FAILED; do
   boot_status="$status"
   before="$calls"
   finish_boot_service
   [ "$calls" -eq "$((before + 1))" ]
+  [ "$(cat "$MODDIR/boot-result")" = "$status" ]
   case "$delivered" in
     *"broadcast --user 10 --receiver-include-background"*"--es package com.example.app --es result $status --el completed_at 12340") ;;
     *) echo "Incorrect completion broadcast: $delivered" >&2; exit 1 ;;
   esac
 done
+before="$calls"
 boot_status=WAITING_FOR_PACKAGE_MANAGER
 finish_boot_service
 [ "$boot_status" = DEFERRED ]
-before="$calls"
+[ "$calls" = "$before" ]
+boot_status=INCOMPLETE_TRANSACTION
+finish_boot_service
+[ "$calls" = "$before" ]
 boot_status=UNKNOWN
 finish_boot_service
 [ "$calls" = "$before" ]

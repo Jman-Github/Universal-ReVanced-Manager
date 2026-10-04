@@ -1,7 +1,7 @@
 #!/bin/sh
 # Verify early mounting can release its lock and safely recheck at boot completion.
 set -eu
-for function in zygote_mounts_verified finish_verified_mount complete_verified_mount; do
+for function in zygote_mounts_verified finish_verified_mount complete_verified_mount finish_boot_service; do
   eval "$(sed -n "/^$function() {/,/^}/p" app/src/main/assets/root/service.sh)"
 done
 fixture="$(mktemp -d)"
@@ -21,7 +21,8 @@ URV_PATCHED_SHA256=patched
 URV_STOCK_SHADOW_SHA256=stock
 URV_STOCK_SHADOW_PATH=/data/adb/module/stock.apk
 log_status() { :; }
-write_boot_status() { status="$1"; }
+write_boot_status() { status="$1"; boot_status="$1"; }
+notify_boot_result() { :; }
 getprop() {
   if [ "$scenario" = already_booted ] ||
      { [ "$ticks" -ge 2 ] && [ "$scenario" != boot_timeout ]; }; then echo 1; else echo 0; fi
@@ -96,6 +97,13 @@ for scenario in completed healthy already_booted superseded active disable remov
     boot_timeout) [ "$ticks:$acquisitions" = 300:0 ] ;;
     lock_busy) [ "$status:$boot_lock_held" = VERIFIED:0 ]; [ ! -s "$fixture/calls" ] ;;
     *) [ ! -s "$fixture/calls" ] ;;
+  esac
+  finish_boot_service
+  case "$scenario" in
+    completed|healthy|already_booted) [ "$(cat "$MODDIR/boot-result")" = VERIFIED ] ;;
+    foreign|identity_changed|stop_failure|namespace_failure)
+      [ "$(cat "$MODDIR/boot-result")" = REPAIR_REQUIRED ] ;;
+    *) [ "$(cat "$MODDIR/boot-result")" = DEFERRED ] ;;
   esac
 done
 echo 'Root service boot-completion recheck tests passed'

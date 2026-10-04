@@ -105,8 +105,8 @@ class RootMountFeedbackTest {
 
     @Test
     fun `blocked failure feedback is not treated as displayed`() {
-        assertTrue(shouldShowRootMountFeedback("3:false", "3:false", false, -1, 90_000))
-        assertFalse(shouldShowRootMountFeedback("3:false", "3:false", false, 20_000, 90_000))
+        assertTrue(shouldShowRootMountFeedback("3:false", "3:false", false, -1, 90_000, completedAt = 100))
+        assertFalse(shouldShowRootMountFeedback("3:false", "3:false", false, 20_000, 90_000, completedAt = 100))
     }
 
     @Test
@@ -128,30 +128,37 @@ class RootMountFeedbackTest {
     }
 
     @Test
-    fun `duplicate success reports are suppressed briefly`() {
-        assertFalse(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 59_999))
+    fun `duplicate success reports are suppressed within a boot`() {
+        assertFalse(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 59_999, completedAt = 100))
     }
 
     @Test
-    fun `a later automatic remount can report success in the same boot`() {
-        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 60_100))
+    fun `app restarts cannot repeat the same successful boot outcome`() {
+        assertFalse(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 60_100, completedAt = 100))
+        assertFalse(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 3_600_100, completedAt = 100))
+    }
+
+    @Test
+    fun `a genuinely new remount can report success without a timer delay`() {
+        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, 100, 110, completedAt = 105))
+        assertFalse(shouldShowRootMountFeedback("3:true", "3:true", true, 110, 3_600_100, completedAt = 105))
     }
 
     @Test
     fun `unchanged failures do not repeat on every background check`() {
-        assertFalse(shouldShowRootMountFeedback("3:false", "3:false", false, 100, 3_600_100))
+        assertFalse(shouldShowRootMountFeedback("3:false", "3:false", false, 100, 3_600_100, completedAt = 100))
     }
 
     @Test
     fun `a new boot or changed outcome is reported`() {
-        assertTrue(shouldShowRootMountFeedback("3:false", "4:false", false, 100, 100))
-        assertTrue(shouldShowRootMountFeedback("3:false", "3:true", true, 100, 101))
-        assertTrue(shouldShowRootMountFeedback("3:true", "3:false", false, 100, 101))
+        assertTrue(shouldShowRootMountFeedback("3:false", "4:false", false, 100, 100, completedAt = 100))
+        assertTrue(shouldShowRootMountFeedback("3:false", "3:true", true, 100, 101, completedAt = 100))
+        assertTrue(shouldShowRootMountFeedback("3:true", "3:false", false, 100, 101, completedAt = 100))
     }
 
     @Test
     fun `missing prior timestamps and reset clocks allow success feedback`() {
-        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, -1, 100))
-        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, 200, 100))
+        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, -1, 100, completedAt = 100))
+        assertTrue(shouldShowRootMountFeedback("3:true", "3:true", true, 200, 100, completedAt = 100))
     }
 }

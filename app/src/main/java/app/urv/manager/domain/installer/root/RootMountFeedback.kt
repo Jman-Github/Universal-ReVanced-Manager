@@ -79,7 +79,9 @@ object RootMountFeedback {
                     return@post
                 }
                 val showToast = notify &&
-                    shouldShowRootMountFeedback(previousOutcome, outcome, success, previousShownAt, now)
+                    shouldShowRootMountFeedback(
+                        previousOutcome, outcome, success, previousShownAt, now, completedAt
+                    )
                 val previousPendingAt = if (bootCount >= 0) {
                     prefs.getLong("$packageName:pending-at", -1)
                 } else {
@@ -175,7 +177,11 @@ object RootMountFeedback {
             })
         }
         toast.show()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+        // Consume queued foreground successes across process death, but retain
+        // failures until the toast callback confirms they actually reached the user.
+        if ((AppForeground.isResumed && outcome.endsWith(":true")) ||
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.R
+        ) {
             markDisplayed(app, packageName, outcome, pendingAt, bootCount)
         }
         // Suppressed toasts receive no callback; retain their pending result for the next resume.
@@ -199,7 +205,7 @@ object RootMountFeedback {
         if (bootCount >= 0) prefs.edit()
             .putLong("$packageName:shown-at", shownAt)
             .putLong("$packageName:pending-at", -1)
-            .apply()
+            .commit()
         Log.d("RootMountFeedback", "Remount feedback displayed for $packageName")
     }
 }
@@ -225,12 +231,13 @@ internal fun shouldShowRootMountFeedback(
     outcome: String,
     success: Boolean,
     previousShownAt: Long,
-    now: Long
+    now: Long,
+    completedAt: Long
 ): Boolean {
     if (previousOutcome != outcome || previousShownAt < 0) return true
-    // Repeated failures need attention once per boot; later repairs still deserve feedback.
-    if (!success) return false
-    return now < previousShownAt || now - previousShownAt >= 60_000
+    // Only a remount completed after the last delivery is a new success event.
+    // Replaying an older boot result cannot re-announce it after an app restart.
+    return success && (now < previousShownAt || completedAt > previousShownAt)
 }
 
 internal fun isOutdatedRootMountFeedback(
