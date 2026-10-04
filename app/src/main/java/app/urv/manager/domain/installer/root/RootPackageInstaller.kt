@@ -56,18 +56,28 @@ class RootPackageInstaller(
         path: String,
         expectedSha256: String,
         userId: Int
-    ): Result<Unit> = runCatching {
-        val actualHash = runBounded(
-            "sha256sum ${shellQuote(path)} 2>/dev/null | awk '{print ${'$'}1}'",
-            HASH_TIMEOUT_SECONDS,
-            "rollback APK verification"
-        ).requireSuccess("Verify rollback stock APK")
-            .stdout.firstOrNull()?.trim()
-        check(actualHash == expectedSha256) { "Rollback stock APK hash mismatch" }
-        installRootPath(path, userId, allowDowngrade = true)
+    ): Result<Unit> = replaceRootBackups(listOf(RootBackupArtifact(path, expectedSha256)), userId)
+
+    override suspend fun replaceRootBackups(apks: List<RootBackupArtifact>, userId: Int): Result<Unit> = try {
+        require(apks.isNotEmpty() && apks.map { it.path }.distinct().size == apks.size)
+        for ((path, expectedSha256) in apks) {
+            val actualHash = runBounded(
+                "sha256sum ${shellQuote(path)} 2>/dev/null | awk '{print ${'$'}1}'",
+                HASH_TIMEOUT_SECONDS,
+                "rollback APK verification"
+            ).requireSuccess("Verify rollback stock APK")
+                .stdout.firstOrNull()?.trim()
+            check(actualHash == expectedSha256) { "Rollback stock APK hash mismatch" }
+        }
+        installRootPaths(apks.map { it.path }, userId, allowDowngrade = true)
+        Result.success(Unit)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        Result.failure(failure)
     }
 
-    private suspend fun installRootPath(path: String, userId: Int, allowDowngrade: Boolean) {
+    private suspend fun installRootPaths(paths: List<String>, userId: Int, allowDowngrade: Boolean) {
         val downgrade = if (allowDowngrade) " -d" else ""
         val createAttempts = listOf(
             "pm install-create -r$downgrade --user $userId",
@@ -91,24 +101,28 @@ class RootPackageInstaller(
         val created = session ?: error(failure)
         var committed = false
         try {
-            val size = runBounded(
-                "stat -c %s ${shellQuote(path)}",
-                FILE_METADATA_TIMEOUT_SECONDS,
-                "rollback APK size read"
-            ).requireSuccess("Read rollback APK size")
-                .stdout.firstOrNull()?.trim()?.toLongOrNull()
-                ?: error("Invalid rollback APK size")
-            val installTimeout = installTimeoutSeconds(size)
-            val write = runBounded(
-                "${created.backend} install-write -S $size ${created.id} 0.apk < ${shellQuote(path)}",
-                installTimeout,
-                "rollback install session write"
-            )
-            write.requireSuccess("Write rollback install session")
-            check(!write.output.contains("Failure", ignoreCase = true)) { write.output }
+            var totalSize = 0L
+            for ((index, path) in paths.withIndex()) {
+                val size = runBounded(
+                    "stat -c %s ${shellQuote(path)}",
+                    FILE_METADATA_TIMEOUT_SECONDS,
+                    "rollback APK size read"
+                ).requireSuccess("Read rollback APK size")
+                    .stdout.firstOrNull()?.trim()?.toLongOrNull()
+                    ?: error("Invalid rollback APK size")
+                check(size > 0) { "Empty rollback APK" }
+                totalSize = Math.addExact(totalSize, size)
+                val write = runBounded(
+                    "${created.backend} install-write -S $size ${created.id} $index.apk < ${shellQuote(path)}",
+                    installTimeoutSeconds(size),
+                    "rollback install session write"
+                )
+                write.requireSuccess("Write rollback install session")
+                check(!write.output.contains("Failure", ignoreCase = true)) { write.output }
+            }
             val commit = runBounded(
                 "${created.backend} install-commit ${created.id}",
-                installTimeout,
+                installTimeoutSeconds(totalSize),
                 "rollback install session commit"
             ).requireSuccess("Commit rollback install session")
             check(!commit.output.contains("Failure", ignoreCase = true)) { commit.output }

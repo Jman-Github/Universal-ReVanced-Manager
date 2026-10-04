@@ -61,6 +61,7 @@ import app.urv.manager.util.PM
 import app.urv.manager.util.installedPackageSnapshot
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
+import app.urv.manager.util.withRepeatingToast
 import java.io.BufferedWriter
 import java.io.File
 import java.io.IOException
@@ -858,7 +859,7 @@ class SignatureMetadataInjectorViewModel(
                                 installInternally(result.outputFile, packageName, label)
                             }
                         }
-                        is InstallerManager.InstallPlan.Mount -> {
+                        is InstallerManager.InstallPlan.Mount -> app.withRepeatingToast(R.string.mounting_ellipsis) {
                             val stockInfo = pm.getPackageInfo(stockApk)
                                 ?: error(app.getString(R.string.install_app_fail_missing_stock))
                             val mountResult = rootMountCoordinator.execute(

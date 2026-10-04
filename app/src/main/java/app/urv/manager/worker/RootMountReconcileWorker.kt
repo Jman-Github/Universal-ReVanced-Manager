@@ -11,6 +11,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import app.universal.revanced.manager.R
 import app.urv.manager.MainActivity
+import app.urv.manager.domain.installer.root.RootMountFeedback
 import app.urv.manager.domain.installer.root.RootMountResult
 import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.util.permission.hasNotificationPermission
@@ -25,6 +26,7 @@ class RootMountReconcileWorker(
         val packageName = inputData.getString(KEY_PACKAGE)
         val results = coordinator.reconcileCommittedTransactions(userId, packageName)
         results.forEach { (committedPackage, result) ->
+            RootMountFeedback.automaticResult(applicationContext, committedPackage, result)
             handleResult(committedPackage, result)
         }
         return when {

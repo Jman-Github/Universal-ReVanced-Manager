@@ -16,6 +16,79 @@ import kotlin.test.assertTrue
 
 class RootMountTransactionCoordinatorTest {
     @Test
+    fun `same version split replacement cannot reuse the previous mount`() = runBlocking {
+        val split = splitState()
+        val fixture = Fixture(initial = split)
+        val previous = committed(split).copy(active = false, status = "STOCK")
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.state = split.copy(splitSha256 = split.splitSha256.mapValues { testSha256("changed") })
+        val result = fixture.coordinator.execute(fixture.request(RootMountOperation.MOUNT_ONLY))
+        assertFalse(result is RootMountResult.Success)
+        assertEquals(0, fixture.verifier.mountCalls)
+        assertTrue(fixture.installer.replaceCalls.isEmpty())
+    }
+
+    @Test
+    fun `complete split input installs and records every installed split`() = runBlocking {
+        val fixture = Fixture()
+        val patched = fixture.artifact("patched-v3.apk", 3, "patched-3")
+        val base = fixture.artifact("base-v3.apk", 3, "stock-3")
+        val split = fixture.artifact("split-v3.apk", 3, "en-3")
+        fixture.reader.artifacts[split.first.path] = split.second.copy(splitName = "config.en", topology = "SPLIT")
+        val splitPath = "/data/app/$PACKAGE/split_config.en.apk"
+        fixture.installer.onReplace = { _, _ ->
+            fixture.reader.state = fixture.rawState(3, "stock-3").copy(
+                splitPaths = listOf(splitPath), splitSha256 = mapOf(splitPath to split.second.sha256)
+            )
+        }
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.REPLACE_STOCK_AND_MOUNT, patched.first)
+                .copy(stockApks = listOf(split.first, base.first))
+        )
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(listOf(split.first, base.first), fixture.installer.lastInstalledFiles)
+        assertEquals(mapOf("split_config.en.apk" to split.second.sha256), fixture.store.committed?.stockSplits)
+    }
+
+    @Test
+    fun `split package mounts and remounts with its complete identity`() = runBlocking {
+        val split = splitState()
+        val fixture = Fixture(initial = split)
+        val patched = fixture.artifact("patched.apk", 2, "patched")
+        val stock = fixture.artifact("stock.apk", 2, "stock-2")
+        assertIs<RootMountResult.Success>(fixture.coordinator.execute(
+            fixture.request(RootMountOperation.SWITCH_PATCHED_BUILD, patched.first, stock.first)
+        ))
+        val mounted = requireNotNull(fixture.store.committed)
+        assertEquals(split.verifiedSplits(), mounted.stockSplits)
+        assertEquals("SPLIT", mounted.topology)
+        fixture.module.snapshotHash = mounted.patchedSha256
+        assertIs<RootMountResult.Success>(fixture.coordinator.execute(fixture.request(RootMountOperation.MOUNT_ONLY)))
+        assertEquals(0, fixture.installer.replaceCalls.size)
+    }
+
+    @Test
+    fun `split stock replacement failure restores every original APK`() = runBlocking {
+        val split = splitState()
+        val fixture = Fixture(initial = split)
+        val stock = fixture.artifact("stock-v3.apk", 3, "stock-3")
+        val patched = fixture.artifact("patched-v3.apk", 3, "patched-3")
+        fixture.installer.onReplace = { _, _ ->
+            fixture.reader.state = fixture.rawState(3, "stock-3").copy(splitPaths = emptyList(), splitSha256 = emptyMap())
+        }
+        fixture.installer.onBackupRestore = { fixture.reader.state = split }
+        fixture.verifier.verifyFailure = IllegalStateException("mount failed")
+        val failure = assertIs<RootMountResult.Failure>(fixture.coordinator.execute(
+            fixture.request(RootMountOperation.REPLACE_STOCK_AND_MOUNT, patched.first, stock.first)
+        ))
+        assertEquals(RootRecoveryState.STOCK, failure.recoveryState)
+        assertEquals(listOf(split.baseSha256) + split.verifiedSplits().toSortedMap().values,
+            fixture.installer.restoredBackups.map { it.sha256 })
+        assertEquals(split, fixture.reader.state)
+    }
+
+    @Test
     fun `mounting is refused when the package is installed for another Android user`() = runBlocking {
         val fixture = Fixture()
         fixture.reader.installedUsers = setOf(0, 10)
@@ -790,6 +863,33 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `mount only rebuild uses committed stock identity behind the mounted base`() = runBlocking {
+        val stockState = defaultState()
+        val previous = committed(stockState)
+        val fixture = Fixture(stockState.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        // The module needs rebuilding, but the old bind is still visible at sourceDir.
+        fixture.module.snapshotHash = null
+        fixture.verifier.onRemove = { fixture.reader.state = stockState }
+        val patched = fixture.artifact("saved-patched.apk", 2, "saved-patched")
+        val registeredStock = File(requireNotNull(stockState.basePath))
+
+        val result = fixture.coordinator.execute(
+            fixture.request(
+                RootMountOperation.MOUNT_ONLY,
+                patched = patched.first,
+                stock = registeredStock
+            )
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.stageCalls)
+        assertEquals(stockState.baseSha256, fixture.store.committed?.stockSha256)
+        assertEquals(patched.second.sha256, fixture.store.committed?.patchedSha256)
+        assertEquals(listOf(patched.first.absolutePath), fixture.reader.inspectedPaths)
+    }
+
+    @Test
     fun `progress observer failures cannot alter a verified transaction`() = runBlocking {
         val fixture = Fixture()
         val patched = fixture.artifact("patched-v2.apk", 2, "patched-2")
@@ -1146,12 +1246,7 @@ class RootMountTransactionCoordinatorTest {
 
     @Test
     fun `unmount accepts structurally valid split stock without committed state`() = runBlocking {
-        val split = defaultState().copy(
-            splitPaths = listOf(
-                "/data/app/$PACKAGE/split_config.arm64_v8a.apk",
-                "/data/app/$PACKAGE/split_config.en.apk"
-            )
-        )
+        val split = splitState()
         val fixture = Fixture(initial = split)
 
         val result = fixture.coordinator.execute(fixture.request(RootMountOperation.UNMOUNT))
@@ -1256,7 +1351,8 @@ class RootMountTransactionCoordinatorTest {
         fixture.store.committed = previous
         fixture.verifier.onRemove = {
             fixture.reader.state = fixture.rawState(3, "stock-3").copy(
-                splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+                splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk"),
+                splitSha256 = mapOf("/data/app/$PACKAGE/split_config.en.apk" to testSha256("en"))
             )
         }
 
@@ -1301,6 +1397,56 @@ class RootMountTransactionCoordinatorTest {
         assertEquals(RootRecoveryState.PREVIOUS_MOUNT, failedRemoval.recoveryState)
         assertEquals(1, failure.module.restoreCalls)
         assertEquals(0, failure.module.purgeCalls)
+    }
+
+    @Test
+    fun `permanent removal accepts changed stock without remounting the old payload`() = runBlocking {
+        val raw = defaultState()
+        val previous = committed(raw)
+        val fixture = Fixture(initial = raw.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.onRemove = {
+            fixture.reader.state = raw.copy(
+                baseSha256 = testSha256("changed-stock"),
+                signerSha256 = testSha256("changed-signer"),
+                launcherResolvable = false
+            )
+        }
+
+        val result = fixture.coordinator.execute(
+            fixture.request(RootMountOperation.UNMOUNT).copy(removeModuleAfterUnmount = true)
+        )
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.module.removeCalls)
+        assertEquals(0, fixture.verifier.mountCalls)
+        assertEquals(0, fixture.installer.backupRestoreCalls)
+        assertEquals(null, fixture.store.committed)
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
+    fun `permanent removal refuses an unverifiable current split set`() = runBlocking {
+        val raw = defaultState()
+        val previous = committed(raw)
+        val fixture = Fixture(initial = raw.copy(baseSha256 = previous.patchedSha256))
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.verifier.onRemove = {
+            fixture.reader.state = raw.copy(
+                baseSha256 = testSha256("changed-stock"),
+                splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk"),
+                splitSha256 = emptyMap()
+            )
+        }
+
+        assertIs<RootMountResult.Failure>(
+            fixture.coordinator.execute(
+                fixture.request(RootMountOperation.UNMOUNT).copy(removeModuleAfterUnmount = true)
+            )
+        )
+        assertEquals(0, fixture.module.removeCalls)
     }
 
     @Test
@@ -1404,12 +1550,7 @@ class RootMountTransactionCoordinatorTest {
 
     @Test
     fun `recovery accepts unchanged split package from repair-required unmount`() = runBlocking {
-        val split = defaultState().copy(
-            splitPaths = listOf(
-                "/data/app/$PACKAGE/split_config.arm64_v8a.apk",
-                "/data/app/$PACKAGE/split_config.en.apk"
-            )
-        )
+        val split = splitState()
         val fixture = Fixture(initial = split)
         fixture.store.active = journal(
             RootMountPhase.ROLLING_BACK,
@@ -2535,7 +2676,7 @@ class RootMountTransactionCoordinatorTest {
         )
 
         val repatch = assertIs<RootMountResult.RequiresRepatch>(result)
-        assertTrue(repatch.reason.contains("standalone APK"))
+        assertTrue(repatch.reason.contains("APK set"))
         assertFalse(repatch.reason.contains("Repatch it"))
         assertEquals(0, fixture.installer.backupRestoreCalls)
         assertEquals(1, fixture.lock.releaseCalls)
@@ -2630,7 +2771,8 @@ class RootMountTransactionCoordinatorTest {
             status = "REPATCH_REQUIRED"
         )
         fixture.reader.state = fixture.rawState(3, "stock-3").copy(
-            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk"),
+            splitSha256 = mapOf("/data/app/$PACKAGE/split_config.en.apk" to testSha256("en"))
         )
 
         val result = fixture.coordinator.execute(
@@ -2638,15 +2780,32 @@ class RootMountTransactionCoordinatorTest {
         )
 
         val repatch = assertIs<RootMountResult.RequiresRepatch>(result)
-        assertTrue(repatch.reason.contains("standalone APK"))
+        assertTrue(repatch.reason.contains("APK set"))
         assertFalse(repatch.reason.contains("Repatch it"))
-        assertEquals(0, fixture.reader.readCalls)
+        assertEquals(1, fixture.reader.readCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(0, fixture.module.snapshotCalls)
         assertTrue(fixture.scheduler.scheduledPackages.isEmpty())
         assertEquals(null, fixture.store.active)
         assertEquals("REPATCH_REQUIRED", fixture.store.committed?.status)
         assertEquals(1, fixture.lock.releaseCalls)
+    }
+
+    @Test
+    fun `manual mount retries a stale repatch status when stock identity still matches`() = runBlocking {
+        val fixture = Fixture()
+        val previous = committed(fixture.initial).copy(active = false, status = "REPATCH_REQUIRED")
+        fixture.store.committed = previous
+        fixture.module.snapshotHash = previous.patchedSha256
+        fixture.reader.state = fixture.initial.copy(launcherResolvable = false)
+
+        val result = fixture.coordinator.execute(fixture.request(RootMountOperation.MOUNT_ONLY))
+
+        assertIs<RootMountResult.Success>(result)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertEquals("MOUNTED", fixture.store.committed?.status)
+        assertEquals(true, fixture.store.committed?.active)
+        assertEquals(emptyList(), fixture.installer.replaceCalls)
     }
 
     @Test
@@ -2768,7 +2927,8 @@ class RootMountTransactionCoordinatorTest {
             )
         )
         fixture.reader.state = fixture.rawState(3, "stock-3").copy(
-            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk")
+            splitPaths = listOf("/data/app/$PACKAGE/split_config.en.apk"),
+            splitSha256 = mapOf("/data/app/$PACKAGE/split_config.en.apk" to testSha256("en"))
         )
 
         val result = fixture.coordinator.execute(
@@ -3217,7 +3377,7 @@ class RootMountTransactionCoordinatorTest {
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Success>(result)
+        assertFalse(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
         assertEquals(1, fixture.module.enableCalls)
         assertEquals(2, fixture.verifier.processVerifyCalls)
         assertEquals(listOf(listOf(2468), listOf(2468)), fixture.verifier.verifiedProcessPids)
@@ -3236,10 +3396,10 @@ class RootMountTransactionCoordinatorTest {
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
-        assertIs<RootMountResult.Success>(result)
+        assertTrue(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
         assertEquals(1, fixture.verifier.processVerifyCalls)
         assertEquals(listOf(listOf(1357)), fixture.verifier.verifiedProcessPids)
-        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(2, fixture.verifier.rootVerifyCalls)
         assertEquals(1, fixture.verifier.mountCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertTrue(fixture.shell.commands.any { it.contains("force-stop --user 0") })
@@ -3257,7 +3417,7 @@ class RootMountTransactionCoordinatorTest {
 
         assertIs<RootMountResult.Success>(result)
         assertEquals(2, fixture.verifier.verifyCalls)
-        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(2, fixture.verifier.rootVerifyCalls)
         assertEquals(1, fixture.verifier.mountCalls)
         assertEquals(0, fixture.verifier.removeCalls)
         assertEquals(1, fixture.module.enableCalls)
@@ -3311,13 +3471,30 @@ class RootMountTransactionCoordinatorTest {
     }
 
     @Test
+    fun `startup restores absent mounts without attempting namespace repair`() = runBlocking {
+        val fixture = Fixture()
+        fixture.store.committed = committed(fixture.initial)
+        fixture.verifier.transientVerifyFailures = 1
+        fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
+
+        val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
+
+        assertTrue(assertIs<RootMountResult.Success>(result).automaticallyRemounted)
+        assertEquals(1, fixture.verifier.rootVerifyCalls)
+        assertEquals(1, fixture.verifier.mountCalls)
+        assertTrue(fixture.store.diagnostics.any { it.contains("Committed mount is absent") })
+        assertFalse(fixture.store.diagnostics.any { it.contains("Non-destructive committed mount repair") })
+        assertFalse(fixture.store.activeExists(PACKAGE))
+    }
+
+    @Test
     fun `full reconciliation stays retryable when app reopens before mount changes`() = runBlocking {
         val fixture = Fixture()
         fixture.store.committed = committed(fixture.initial)
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
-        fixture.reader.stopResults.addAll(listOf(true, false))
+        fixture.reader.stopResults.add(false)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
 
@@ -3335,7 +3512,7 @@ class RootMountTransactionCoordinatorTest {
         fixture.scheduler.tracked += PACKAGE
         fixture.verifier.transientVerifyFailures = 1
         fixture.verifier.rootVerifyFailure = IllegalStateException("root mount is missing")
-        fixture.reader.stopResults.addAll(listOf(true, true, false, false))
+        fixture.reader.stopResults.addAll(listOf(true, false, false))
         fixture.reader.running = listOf(5678)
 
         val result = fixture.coordinator.reconcileCommittedTransactions(0, PACKAGE)[PACKAGE]
@@ -3704,8 +3881,10 @@ class RootMountTransactionCoordinatorTest {
         }
         override suspend fun snapshotStock(packageName: String, paths: List<String>): List<RootBackupArtifact> {
             stockSnapshotCalls++
-            return paths.mapIndexed { index, _ ->
-                RootBackupArtifact("/data/adb/urv/transactions/$packageName/backup/package/$index.apk", requireNotNull(reader.state.baseSha256))
+            return paths.mapIndexed { index, path ->
+                val hash = if (path == reader.state.basePath) requireNotNull(reader.state.baseSha256)
+                    else reader.state.splitSha256.getValue(path)
+                RootBackupArtifact("/data/adb/urv/transactions/$packageName/backup/package/$index.apk", hash)
             }
         }
         override suspend fun commitSnapshot(packageName: String) = Unit
@@ -3750,9 +3929,11 @@ class RootMountTransactionCoordinatorTest {
 
     private class FakeInstaller : RootPackageInstallation {
         val replaceCalls = mutableListOf<Boolean>()
+        var lastInstalledFiles = emptyList<File>()
         val replaceResults = ArrayDeque<RootPackageReplaceResult>()
         var uninstallCalls = 0
         var backupRestoreCalls = 0
+        var restoredBackups = emptyList<RootBackupArtifact>()
         var restoreRegistrationCalls = 0
         var backupRestoreResult: Result<Unit> = Result.success(Unit)
         var onReplace: (suspend (Int, Boolean) -> Unit)? = null
@@ -3766,6 +3947,7 @@ class RootMountTransactionCoordinatorTest {
             allowDowngrade: Boolean
         ): RootPackageReplaceResult {
             replaceCalls += allowDowngrade
+            lastInstalledFiles = apks
             val call = replaceCalls.size
             onReplaceAttempt?.invoke(call, allowDowngrade)
             val result = if (replaceResults.isEmpty()) {
@@ -3788,6 +3970,10 @@ class RootMountTransactionCoordinatorTest {
             backupRestoreCalls++
             onBackupRestore?.invoke()
             return backupRestoreResult
+        }
+        override suspend fun replaceRootBackups(apks: List<RootBackupArtifact>, userId: Int): Result<Unit> {
+            restoredBackups = apks
+            return replaceRootBackup(apks.first().path, apks.first().sha256, userId)
         }
     }
 
@@ -3902,6 +4088,11 @@ class RootMountTransactionCoordinatorTest {
     private companion object {
         const val PACKAGE = "com.example.app"
 
+        fun splitState(): RootPackageState {
+            val paths = listOf("/data/app/$PACKAGE/split_config.en.apk", "/data/app/$PACKAGE/split_config.arm64_v8a.apk")
+            return defaultState().copy(splitPaths = paths, splitSha256 = paths.associateWith(::testSha256))
+        }
+
         fun defaultState() = RootPackageState(
             packageName = PACKAGE,
             userId = 0,
@@ -3929,7 +4120,8 @@ class RootMountTransactionCoordinatorTest {
             topology = state.topology,
             enabled = state.enabled,
             launcherResolvable = state.launcherResolvable,
-            committedAtEpochMs = 1
+            committedAtEpochMs = 1,
+            stockSplits = state.verifiedSplits()
         )
 
         fun journal(

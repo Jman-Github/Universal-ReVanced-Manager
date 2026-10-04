@@ -1694,6 +1694,8 @@ class DashboardViewModel(
                     skipUnneededSplits = false,
                     includedModules = includedModules,
                     memoryLimitMb = processMemoryLimit,
+                    // Standalone APK installs can extract compressed libraries; patcher inputs keep their policy.
+                    compressNativeLibraries = true,
                     onProgress = { message ->
                         appendSplitMergeLogIfCurrent(ownerJob, message)
                         updateSplitMergeStateIfCurrent(ownerJob) { current ->

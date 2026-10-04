@@ -49,6 +49,7 @@ import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.mutableStateSetOf
 
 import app.urv.manager.util.toast
+import app.urv.manager.util.withRepeatingToast
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -331,12 +332,16 @@ class DownloadsViewModel(
 
             when (plan) {
                 is InstallerManager.InstallPlan.Internal -> installInternally(apk)
-                is InstallerManager.InstallPlan.Mount -> installWithRootMount(
-                    apk = apk,
-                    packageInfo = packageInfo,
-                    label = sourceLabel,
-                    installAsPlayStore = plan.installAsPlayStore
-                )
+                is InstallerManager.InstallPlan.Mount -> {
+                    appContext.withRepeatingToast(R.string.mounting_ellipsis) {
+                        installWithRootMount(
+                            apk = apk,
+                            packageInfo = packageInfo,
+                            label = sourceLabel,
+                            installAsPlayStore = plan.installAsPlayStore
+                        )
+                    }
+                }
                 // Code adapted from Morphe, see third-party/NOTICE for more information
                 // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
                 is InstallerManager.InstallPlan.RootPlayStore -> {

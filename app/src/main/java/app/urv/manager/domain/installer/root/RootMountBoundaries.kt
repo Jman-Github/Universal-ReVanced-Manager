@@ -69,6 +69,11 @@ interface RootPackageInstallation {
     suspend fun uninstallKeepData(packageName: String, userId: Int)
     suspend fun restoreSystemRegistration(packageName: String, userId: Int): Boolean
     suspend fun replaceRootBackup(path: String, expectedSha256: String, userId: Int): Result<Unit>
+    suspend fun replaceRootBackups(apks: List<RootBackupArtifact>, userId: Int): Result<Unit> {
+        val apk = apks.singleOrNull()
+            ?: return Result.failure(IllegalStateException("APK-set rollback is not supported by this installer"))
+        return replaceRootBackup(apk.path, apk.sha256, userId)
+    }
 }
 
 interface RootReconciliationScheduling {

@@ -6,6 +6,7 @@ import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Sync
+import org.gradle.api.tasks.compile.JavaCompile
 import org.gradle.jvm.tasks.Jar
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -89,7 +90,9 @@ val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("li
 fun libraryVersion(alias: String): String =
     libraryVersions.findVersion(alias).get().requiredVersion
 
-val apkEditorLib by configurations.creating
+val arscLib by configurations.creating {
+    isTransitive = false
+}
 
 configurations.all {
     exclude(group = "xmlpull", module = "xmlpull")
@@ -101,12 +104,10 @@ configurations.all {
         "com.android.tools.smali:smali-baksmali:3.0.9"
     )
 }
-val strippedApkEditorLib by tasks.registering(Jar::class) {
-    archiveFileName.set("APKEditor-android.jar")
+val androidArscLib by tasks.registering(Jar::class) {
+    archiveFileName.set("ARSCLib-android.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    doFirst {
-        from(apkEditorLib.resolve().map { zipTree(it) })
-    }
+    from({ arscLib.map { zipTree(it) } })
     exclude(
         "android/**",
         "com/android/tools/smali/**",
@@ -124,7 +125,9 @@ val apkEditorMergeJar by tasks.registering(Jar::class) {
     archiveFileName.set("apkeditor-merge.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn("compileReleaseJavaWithJavac")
-    from(layout.buildDirectory.dir("intermediates/javac/release/classes")) {
+    from({
+        tasks.named<JavaCompile>("compileReleaseJavaWithJavac").get().destinationDirectory.get().asFile
+    }) {
         include("app/urv/manager/patcher/split/ApkEditorMergeProcess*.class")
     }
 }
@@ -196,8 +199,8 @@ dependencies {
     implementation("com.android.tools.build:apkzlib:8.5.2")
     compileOnly("com.google.guava:guava:33.2.1-jre")
     implementation(libs.xpp3)
-    apkEditorLib(files("$rootDir/libs/APKEditor-1.4.7.jar"))
-    implementation(files(strippedApkEditorLib))
+    arscLib(libs.arsclib)
+    implementation(files(androidArscLib))
     implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation(libs.documentfile)
 
@@ -428,6 +431,7 @@ android {
     }
 
     sourceSets {
+        getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
         getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
         getByName("main").assets.directories.add(revanced22RuntimeAssetsDir.get().asFile.path)
         getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)
@@ -529,9 +533,9 @@ tasks {
     val copyRevanced22RuntimeAssets by registering(Sync::class) {
         dependsOn(apkEditorMergeJar)
         into(revanced22RuntimeAssetsDir)
-        from(apkEditorLib) {
+        from(arscLib) {
             into("apkeditor")
-            rename { "APKEditor-1.4.7.jar" }
+            rename { "ARSCLib.jar" }
         }
         from(apkEditorMergeJar) {
             into("apkeditor")

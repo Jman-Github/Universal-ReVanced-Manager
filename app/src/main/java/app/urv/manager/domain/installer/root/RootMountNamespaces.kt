@@ -25,6 +25,10 @@ class RootMountNamespaces(
                   zygote_changed=0
                   for pid in ${'$'}before; do
                     validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
+                    namespace_splits_match "${'$'}pid" || {
+                      echo "Split APKs differ in Zygote namespace ${'$'}pid" >&2
+                      exit 1
+                    }
                     if ! namespace_matches "${'$'}pid"; then
                       if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ] &&
                           namespace_matches_shadow "${'$'}pid"; then
@@ -62,7 +66,9 @@ class RootMountNamespaces(
                   fi
                   if [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 1 ]; then
                     mount -o bind ${shellQuote(expected.stockShadowPath.orEmpty())} ${shellQuote(expected.stockPath)}
-                    mount -o private none ${shellQuote(expected.stockPath)} || {
+                    # BusyBox accepts --make-private; Android Toybox needs the -o form.
+                    mount --make-private ${shellQuote(expected.stockPath)} 2>/dev/null ||
+                      mount -o private none ${shellQuote(expected.stockPath)} || {
                       echo "Failed to isolate the stock shadow bind mount" >&2
                       exit 1
                     }
@@ -100,6 +106,7 @@ class RootMountNamespaces(
                         exit 1
                       fi
                       if [ "${'$'}shadow_ready" = 1 ] &&
+                          ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount --make-private ${shellQuote(expected.stockPath)} 2>/dev/null &&
                           ! nsenter --mount="/proc/${'$'}pid/ns/mnt" -- mount -o private none ${shellQuote(expected.stockPath)}; then
                         validate_zygote "${'$'}pid" || { zygote_changed=1; continue; }
                         echo "Failed to isolate the stock shadow in Zygote namespace ${'$'}pid" >&2
@@ -232,7 +239,8 @@ class RootMountNamespaces(
         packageName: String,
         userId: Int,
         stockPath: String,
-        pids: List<Int>
+        pids: List<Int>,
+        splitPaths: List<String> = emptyList()
     ) {
         if (pids.isEmpty()) return
         require(pids.all { it > 1 }) { "Invalid target process ID" }
@@ -268,6 +276,14 @@ class RootMountNamespaces(
                     echo "Target process namespace ${'$'}pid still sees a non-stock APK" >&2
                     exit 1
                   fi
+                  for split_path in ${splitPaths.joinToString(" ", transform = ::shellQuote)}; do
+                    split_inode="${'$'}(stat -c '%d:%i' "${'$'}split_path")" || exit 1
+                    split_target_inode="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- stat -c '%d:%i' "${'$'}split_path" 2>/dev/null)" || exit 1
+                    [ "${'$'}split_inode" = "${'$'}split_target_inode" ] || {
+                      echo "Stock split APK differs in target process namespace ${'$'}pid" >&2
+                      exit 1
+                    }
+                  done
                   verified_namespace_id="${'$'}(readlink "/proc/${'$'}pid/ns/mnt" 2>/dev/null)" || {
                     [ -d "/proc/${'$'}pid" ] || continue
                     echo "Could not re-inspect target process mount namespace ${'$'}pid" >&2
@@ -307,6 +323,7 @@ class RootMountNamespaces(
             )
         )
         val allowed = allowedPaths.joinToString(" ") { shellQuote(it) }
+        // Pass multiline sources through ENVIRON because Toybox awk rejects them in -v values.
         val allowedSourceList = shellQuote(allowedPaths.joinToString("\n"))
         val targetWords = targets.joinToString(" ") { shellQuote(it) }
         val cleanup = shell.runIsolatedBounded(
@@ -316,8 +333,8 @@ class RootMountNamespaces(
                 namespace_has_owned_layer() {
                   pid="${'$'}1"
                   target="${'$'}2"
-                  nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" -v allowed="${'$'}allowed_sources" '
-                    BEGIN { count=split(allowed, candidates, "\n") }
+                  URV_ALLOWED_SOURCES="${'$'}allowed_sources" nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk -v target="${'$'}target" '
+                    BEGIN { count=split(ENVIRON["URV_ALLOWED_SOURCES"], candidates, "\n") }
                     ${'$'}5 == target {
                       separator=0
                       for (i=1; i<=NF; i++) if (${'$'}i == "-") { separator=i; break }
@@ -455,7 +472,19 @@ class RootMountNamespaces(
     private fun namespaceHelpers(expected: RootCommittedState): String {
         val patchedRoot = mountInfoRootAlias(expected.patchedPath)
         val shadowRoot = mountInfoRootAlias(expected.stockShadowPath.orEmpty())
+        require(validSplitIdentity(expected.topology, expected.stockSplits)) { "Invalid committed split APK set" }
+        val splitPaths = expected.stockSplits.keys.sorted().joinToString(" ") {
+            shellQuote(expected.stockPath.substringBeforeLast('/') + "/" + it)
+        }
         return discoveryHelpers() + """
+            namespace_splits_match() {
+              for split_path in $splitPaths; do
+                split_source_inode="${'$'}(stat -c '%d:%i' "${'$'}split_path" 2>/dev/null)" || return 1
+                split_target_inode="${'$'}(nsenter --mount="/proc/${'$'}1/ns/mnt" -- stat -c '%d:%i' "${'$'}split_path" 2>/dev/null)" || return 1
+                [ "${'$'}split_source_inode" = "${'$'}split_target_inode" ] || return 1
+              done
+              return 0
+            }
             validate_shadow_file() {
               [ ${if (expected.preserveStockAcrossBoot) "1" else "0"} = 0 ] && return 0
               [ -f ${shellQuote(expected.stockShadowPath.orEmpty())} ]
@@ -495,6 +524,7 @@ class RootMountNamespaces(
             }
             namespace_matches() {
               pid="${'$'}1"
+              namespace_splits_match "${'$'}pid" || return 1
               validate_shadow_file || return 1
               ownership="${'$'}(nsenter --mount="/proc/${'$'}pid/ns/mnt" -- awk \
                 -v target=${shellQuote(expected.stockPath)} \

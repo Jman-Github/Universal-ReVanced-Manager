@@ -172,6 +172,10 @@ class RootMountPolicyTest {
             RootMountPolicy.ReconcileDecision.REPATCH_REQUIRED,
             RootMountPolicy.reconcile(committed, installed.copy(versionCode = 3))
         )
+        assertEquals(
+            RootMountPolicy.ReconcileDecision.REMOUNT,
+            RootMountPolicy.reconcile(committed, installed.copy(launcherResolvable = false))
+        )
         listOf(
             installed.copy(userId = 1),
             installed.copy(versionName = "different"),
@@ -180,8 +184,7 @@ class RootMountPolicyTest {
             installed.copy(baseSha256 = "different"),
             installed.copy(splitPaths = listOf("/data/app/example/split.apk")),
             installed.copy(sharedUserId = "shared"),
-            installed.copy(enabled = false),
-            installed.copy(launcherResolvable = false)
+            installed.copy(enabled = false)
         ).forEach { mismatch ->
             assertEquals(
                 RootMountPolicy.ReconcileDecision.REPATCH_REQUIRED,
