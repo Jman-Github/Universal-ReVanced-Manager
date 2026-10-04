@@ -159,6 +159,8 @@ class PreferencesManager(
     val autoCollapsePatcherSteps = booleanPreference("auto_collapse_patcher_steps", false)
     val showPatcherMemoryUsageGraph = booleanPreference("show_patcher_memory_usage_graph", true)
     val compactPatcherResourceGraphs = booleanPreference("compact_patcher_resource_graphs", false)
+    val showPatcherResourceGraphExtraInfo = booleanPreference("show_patcher_resource_graph_extra_info", false)
+    val showCompactPatcherResourceGraphExtraInfo = booleanPreference("show_compact_patcher_resource_graph_extra_info", false)
     val patcherInformationExpanded = booleanPreference("patcher_information_expanded", true)
     val autoExpandRunningSteps = booleanPreference("auto_expand_running_steps", true)
     val autoExpandRunningStepsExclusive = booleanPreference("auto_expand_running_steps_exclusive", false)
@@ -565,6 +567,8 @@ class PreferencesManager(
     val splitMergeAutoCollapseSteps = booleanPreference("split_merge_auto_collapse_steps", false)
     val showSplitMergeMemoryUsageGraph = booleanPreference("show_split_merge_memory_usage_graph", true)
     val compactSplitMergeResourceGraphs = booleanPreference("compact_split_merge_resource_graphs", false)
+    val showSplitMergeResourceGraphExtraInfo = booleanPreference("show_split_merge_resource_graph_extra_info", false)
+    val showCompactSplitMergeResourceGraphExtraInfo = booleanPreference("show_compact_split_merge_resource_graph_extra_info", false)
     val splitMergeInformationExpanded = booleanPreference("split_merge_information_expanded", true)
     val splitMergeAutoExpandRunningSteps =
         booleanPreference("split_merge_auto_expand_running_steps", true)
@@ -664,6 +668,8 @@ class PreferencesManager(
         val autoCollapsePatcherSteps: Boolean? = null,
         val showPatcherMemoryUsageGraph: Boolean? = null,
         val compactPatcherResourceGraphs: Boolean? = null,
+        val showPatcherResourceGraphExtraInfo: Boolean? = null,
+        val showCompactPatcherResourceGraphExtraInfo: Boolean? = null,
         val patcherInformationExpanded: Boolean? = null,
         val autoExpandRunningSteps: Boolean? = null,
         val autoExpandRunningStepsExclusive: Boolean? = null,
@@ -779,6 +785,8 @@ class PreferencesManager(
         val splitMergeAutoCollapseSteps: Boolean? = null,
         val showSplitMergeMemoryUsageGraph: Boolean? = null,
         val compactSplitMergeResourceGraphs: Boolean? = null,
+        val showSplitMergeResourceGraphExtraInfo: Boolean? = null,
+        val showCompactSplitMergeResourceGraphExtraInfo: Boolean? = null,
         val splitMergeInformationExpanded: Boolean? = null,
         val splitMergeAutoExpandRunningSteps: Boolean? = null,
         val splitMergeAutoExpandRunningStepsExclusive: Boolean? = null,
@@ -936,6 +944,8 @@ class PreferencesManager(
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
             compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
+            showPatcherResourceGraphExtraInfo = showPatcherResourceGraphExtraInfo.value,
+            showCompactPatcherResourceGraphExtraInfo = showCompactPatcherResourceGraphExtraInfo.value,
             patcherInformationExpanded = patcherInformationExpanded.value,
             autoExpandRunningSteps = autoExpandRunningSteps.value,
             autoExpandRunningStepsExclusive = autoExpandRunningStepsExclusive.value,
@@ -1048,6 +1058,8 @@ class PreferencesManager(
             splitMergeAutoCollapseSteps = splitMergeAutoCollapseSteps.value,
             showSplitMergeMemoryUsageGraph = showSplitMergeMemoryUsageGraph.value,
             compactSplitMergeResourceGraphs = compactSplitMergeResourceGraphs.value,
+            showSplitMergeResourceGraphExtraInfo = showSplitMergeResourceGraphExtraInfo.value,
+            showCompactSplitMergeResourceGraphExtraInfo = showCompactSplitMergeResourceGraphExtraInfo.value,
             splitMergeInformationExpanded = splitMergeInformationExpanded.value,
             splitMergeAutoExpandRunningSteps = splitMergeAutoExpandRunningSteps.value,
             splitMergeAutoExpandRunningStepsExclusive = splitMergeAutoExpandRunningStepsExclusive.value,
@@ -1180,6 +1192,8 @@ class PreferencesManager(
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
         snapshot.compactPatcherResourceGraphs?.let { compactPatcherResourceGraphs.value = it }
+        snapshot.showPatcherResourceGraphExtraInfo?.let { showPatcherResourceGraphExtraInfo.value = it }
+        snapshot.showCompactPatcherResourceGraphExtraInfo?.let { showCompactPatcherResourceGraphExtraInfo.value = it }
         snapshot.patcherInformationExpanded?.let { patcherInformationExpanded.value = it }
         snapshot.autoExpandRunningSteps?.let { autoExpandRunningSteps.value = it }
         snapshot.autoExpandRunningStepsExclusive?.let { autoExpandRunningStepsExclusive.value = it }
@@ -1360,6 +1374,8 @@ class PreferencesManager(
         snapshot.splitMergeAutoCollapseSteps?.let { splitMergeAutoCollapseSteps.value = it }
         snapshot.showSplitMergeMemoryUsageGraph?.let { showSplitMergeMemoryUsageGraph.value = it }
         snapshot.compactSplitMergeResourceGraphs?.let { compactSplitMergeResourceGraphs.value = it }
+        snapshot.showSplitMergeResourceGraphExtraInfo?.let { showSplitMergeResourceGraphExtraInfo.value = it }
+        snapshot.showCompactSplitMergeResourceGraphExtraInfo?.let { showCompactSplitMergeResourceGraphExtraInfo.value = it }
         snapshot.splitMergeInformationExpanded?.let { splitMergeInformationExpanded.value = it }
         snapshot.splitMergeAutoExpandRunningSteps?.let { splitMergeAutoExpandRunningSteps.value = it }
         snapshot.splitMergeAutoExpandRunningStepsExclusive?.let {

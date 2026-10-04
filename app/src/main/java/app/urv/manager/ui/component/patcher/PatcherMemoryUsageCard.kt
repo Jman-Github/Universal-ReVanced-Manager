@@ -79,6 +79,7 @@ fun PatcherMemoryUsageCard(
     @StringRes titleRes: Int = R.string.patcher_memory_usage,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    showExtraInfo: Boolean = false,
     layout: ResourceGraphLayout? = null,
     pageControls: (@Composable () -> Unit)? = null
 ) {
@@ -113,6 +114,7 @@ fun PatcherMemoryUsageCard(
         graphBars = graphBars,
         modifier = modifier,
         compact = compact,
+        showExtraInfo = showExtraInfo,
         layout = layout,
         pageControls = pageControls
     )
@@ -133,6 +135,8 @@ internal fun PatcherHistoryUsageCard(
     scrollableDetailLines: List<String> = emptyList(),
     coreLoads: List<Int> = emptyList(),
     currentAvailable: Boolean = true,
+    showExtraInfo: Boolean = false,
+    showHistory: Boolean = true,
     layout: ResourceGraphLayout? = null,
     pageControls: (@Composable () -> Unit)? = null
 ) {
@@ -143,6 +147,9 @@ internal fun PatcherHistoryUsageCard(
             else -> R.string.patcher_memory_usage_final
         }
     )
+    val visibleAccessibilityText = if (showExtraInfo) accessibilityText else stringResource(
+        R.string.resource_graph_current_accessibility, title, headline, status
+    )
     val graphScrollState = rememberScrollState()
     val coroutineScope = rememberCoroutineScope()
     val sessionStartTime = samples.first().sampledAtElapsedRealtimeMs
@@ -150,7 +157,8 @@ internal fun PatcherHistoryUsageCard(
     val isGraphDragged by graphScrollState.interactionSource.collectIsDraggedAsState()
     var followLatest by rememberSaveable(sessionStartTime) { mutableStateOf(true) }
     var programmaticScrollCount by remember(sessionStartTime) { mutableIntStateOf(0) }
-    val showJumpToLatest = !followLatest
+    val showJumpToLatest = showHistory && !followLatest
+    SideEffect { layout?.onLatestControlChanged?.invoke(showJumpToLatest) }
     val historyScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(
@@ -288,119 +296,107 @@ internal fun PatcherHistoryUsageCard(
                         }
                     }
                 }
-                detail?.let {
+                if (showHistory) detail?.let {
                     Text(
                         text = it,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (coreLoads.isNotEmpty()) {
+                if (showHistory && coreLoads.isNotEmpty()) {
                     CpuCoreLoadBars(loads = coreLoads, historyScrollConnection = historyScrollConnection)
                 }
             }
-            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-                // Reveal only after the current viewport and initial history position are measured.
-                val viewportWidthPx = with(density) { maxWidth.roundToPx() }
-                val historyPrepared = graphScrollState.viewportSize == viewportWidthPx &&
-                    viewportWidthPx > 0 && (!followLatest || !graphScrollState.canScrollForward)
-                SideEffect { layout?.onHistoryReady?.invoke(historyPrepared) }
-                // Keep the same bar pitch in every layout; narrow cards show less history at once.
-                val visibleSlots = ceil(maxWidth / RESOURCE_HISTORY_BAR_SLOT_WIDTH).toInt().coerceAtLeast(1)
-                val slotCount = maxOf(visibleSlots, graphBars.size)
-                val graphWidth = RESOURCE_HISTORY_BAR_SLOT_WIDTH * slotCount
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .nestedScroll(historyScrollConnection)
-                        .horizontalScroll(graphScrollState)
-                ) {
-                    ResourceHistoryPlot(
-                        bars = graphBars,
-                        slotCount = slotCount,
-                        normalColor = normalColor,
-                        warningColor = warningColor,
-                        dangerColor = dangerColor,
-                        trackColor = trackColor,
-                        modifier = Modifier.width(graphWidth).height(64.dp)
-                            .clearAndSetSemantics { contentDescription = accessibilityText }
-                    )
-                }
-            }
             ResourceGraphSection(
-                minHeight = layout?.footerHeight,
-                onMeasured = layout?.onFooterMeasured,
-                onPlaced = layout?.onFooterPlaced,
-                compact = compact
+                minHeight = layout?.plotHeight,
+                onMeasured = layout?.onPlotMeasured,
+                onPlaced = layout?.onPlotPlaced,
+                compact = compact,
+                contentAlignment = Alignment.BottomStart
             ) {
-                if (compact) {
-                    // The caption reserves its natural height even while Latest fades over it.
-                    val historyCaption = stringResource(R.string.patcher_memory_usage_history)
-                    Box(Modifier.fillMaxWidth().heightIn(min = 32.dp)) {
-                        Text(
-                            text = historyCaption,
-                            modifier = Modifier.fillMaxWidth().alpha(0f).clearAndSetSemantics { },
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        Crossfade(
-                            targetState = showJumpToLatest,
-                            modifier = Modifier.matchParentSize(),
-                            animationSpec = tween(180),
-                            label = "resource_latest"
-                        ) { showLatest ->
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
-                                if (showLatest) {
-                                    TextButton(
-                                        onClick = jumpToLatest,
-                                        modifier = Modifier.height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 8.dp)
-                                    ) {
-                                        Text(stringResource(R.string.patcher_resource_latest_compact))
-                                    }
-                                } else {
-                                    Text(
-                                        text = historyCaption,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
+                if (showHistory) {
+                    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                        // Reveal only after the current viewport and initial history position are measured.
+                        val viewportWidthPx = with(density) { maxWidth.roundToPx() }
+                        val historyPrepared = graphScrollState.viewportSize == viewportWidthPx &&
+                            viewportWidthPx > 0 && (!followLatest || !graphScrollState.canScrollForward)
+                        SideEffect { layout?.onHistoryReady?.invoke(historyPrepared) }
+                        // Keep the same bar pitch in every layout; narrow cards show less history at once.
+                        val visibleSlots = ceil(maxWidth / RESOURCE_HISTORY_BAR_SLOT_WIDTH).toInt().coerceAtLeast(1)
+                        val slotCount = maxOf(visibleSlots, graphBars.size)
+                        val graphWidth = RESOURCE_HISTORY_BAR_SLOT_WIDTH * slotCount
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(historyScrollConnection)
+                                .horizontalScroll(graphScrollState)
+                        ) {
+                            ResourceHistoryPlot(
+                                bars = graphBars,
+                                slotCount = slotCount,
+                                normalColor = normalColor,
+                                warningColor = warningColor,
+                                dangerColor = dangerColor,
+                                trackColor = trackColor,
+                                modifier = Modifier.width(graphWidth).height(64.dp)
+                                    .clearAndSetSemantics { contentDescription = visibleAccessibilityText }
+                            )
                         }
                     }
-                    Text(
-                        text = peak,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    SideEffect { layout?.onHistoryReady?.invoke(true) }
+                    detail?.let {
                         Text(
-                            text = stringResource(R.string.patcher_memory_usage_history),
-                            modifier = Modifier.weight(1f),
+                            text = it,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        AnimatedVisibility(
-                            visible = showJumpToLatest,
-                            enter = expandHorizontally(expandFrom = Alignment.End) +
-                                slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-                            exit = shrinkHorizontally(shrinkTowards = Alignment.End) +
-                                slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(
-                                    onClick = jumpToLatest,
-                                    modifier = Modifier.height(32.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp)
-                                ) {
-                                    Text(stringResource(R.string.patcher_memory_usage_latest))
+                    }
+                    if (coreLoads.isNotEmpty()) {
+                        CpuCoreLoadBars(loads = coreLoads, historyScrollConnection = historyScrollConnection)
+                    }
+                }
+            }
+            if (showExtraInfo) {
+                ResourceGraphSection(
+                    minHeight = layout?.footerHeight,
+                    onMeasured = layout?.onFooterMeasured,
+                    onPlaced = layout?.onFooterPlaced,
+                    compact = compact
+                ) {
+                    if (compact) {
+                        // The caption reserves its natural height even while Latest fades over it.
+                        val historyCaption = stringResource(R.string.patcher_memory_usage_history)
+                        Box(Modifier.fillMaxWidth().heightIn(min = 32.dp)) {
+                            Text(
+                                text = historyCaption,
+                                modifier = Modifier.fillMaxWidth().alpha(0f).clearAndSetSemantics { },
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Crossfade(
+                                targetState = showJumpToLatest,
+                                modifier = Modifier.matchParentSize(),
+                                animationSpec = tween(180),
+                                label = "resource_latest"
+                            ) { showLatest ->
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) {
+                                    if (showLatest) {
+                                        TextButton(
+                                            onClick = jumpToLatest,
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp)
+                                        ) {
+                                            Text(stringResource(R.string.patcher_resource_latest_compact))
+                                        }
+                                    } else {
+                                        Text(
+                                            text = historyCaption,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
                             }
                         }
                         Text(
@@ -408,7 +404,75 @@ internal fun PatcherHistoryUsageCard(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 32.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.patcher_memory_usage_history),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            AnimatedVisibility(
+                                visible = showJumpToLatest,
+                                enter = expandHorizontally(expandFrom = Alignment.End) +
+                                    slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
+                                exit = shrinkHorizontally(shrinkTowards = Alignment.End) +
+                                    slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TextButton(
+                                        onClick = jumpToLatest,
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp)
+                                    ) {
+                                        Text(stringResource(R.string.patcher_memory_usage_latest))
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+                            }
+                            Text(
+                                text = peak,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+                }
+            } else if (showJumpToLatest || layout?.showLatestControls == true) {
+                ResourceGraphSection(
+                    minHeight = layout?.footerHeight,
+                    onMeasured = layout?.onFooterMeasured,
+                    onPlaced = layout?.onFooterPlaced,
+                    compact = compact
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterEnd
+                    ) {
+                        if (showJumpToLatest) {
+                            TextButton(
+                                onClick = jumpToLatest,
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (compact) R.string.patcher_resource_latest_compact
+                                        else R.string.patcher_memory_usage_latest
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                SideEffect {
+                    layout?.onFooterMeasured?.invoke(0)
+                    layout?.onFooterPlaced?.invoke(0)
                 }
             }
         }

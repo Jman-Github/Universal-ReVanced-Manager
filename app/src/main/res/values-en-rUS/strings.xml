@@ -2484,4 +2484,11 @@ Details: %2$s</string>
     <string name="merger_cpu_process">Estimated merger CPU load</string>
     <string name="merger_io_storage">Merger storage throughput</string>
     <string name="merger_io_cached">Merger I/O (includes cached data)</string>
+    <string name="resource_graph_extra_info_title">Show extra information</string>
+    <string name="resource_graph_extra_info_description">Show session history labels, peak values, the CPU history graph, and storage read/write rates and throughput details</string>
+    <string name="patcher_resource_graph_options_title">Show extra information (standard patcher graphs)</string>
+    <string name="patcher_compact_resource_graph_options_title">Show extra information (compact patcher graphs)</string>
+    <string name="merger_resource_graph_options_title">Show extra information (standard merger graphs)</string>
+    <string name="merger_compact_resource_graph_options_title">Show extra information (compact merger graphs)</string>
+    <string name="resource_graph_current_accessibility">%1$s. %2$s. %3$s.</string>
 </resources>

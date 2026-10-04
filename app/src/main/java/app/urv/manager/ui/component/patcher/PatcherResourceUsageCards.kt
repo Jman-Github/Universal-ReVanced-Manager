@@ -61,11 +61,16 @@ import kotlinx.coroutines.launch
 data class ResourceGraphLayout(
     val headerHeight: Dp,
     val footerHeight: Dp,
+    val plotHeight: Dp,
     val onHeaderMeasured: (Int) -> Unit,
     val onFooterMeasured: (Int) -> Unit,
+    val onPlotMeasured: (Int) -> Unit,
     val onHeaderPlaced: (Int) -> Unit,
     val onFooterPlaced: (Int) -> Unit,
-    val onHistoryReady: (Boolean) -> Unit
+    val onPlotPlaced: (Int) -> Unit,
+    val onHistoryReady: (Boolean) -> Unit,
+    val showLatestControls: Boolean,
+    val onLatestControlChanged: (Boolean) -> Unit
 )
 
 @Composable
@@ -74,11 +79,13 @@ internal fun ResourceGraphSection(
     onMeasured: ((Int) -> Unit)?,
     compact: Boolean,
     onPlaced: ((Int) -> Unit)? = null,
+    contentAlignment: Alignment = Alignment.TopStart,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(
         Modifier.fillMaxWidth().heightIn(min = minHeight ?: 0.dp)
-            .onGloballyPositioned { onPlaced?.invoke(it.size.height) }
+            .onGloballyPositioned { onPlaced?.invoke(it.size.height) },
+        contentAlignment = contentAlignment
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().onSizeChanged { onMeasured?.invoke(it.height) },
@@ -111,6 +118,7 @@ internal data class ResourceGraphPreparationKey(
     val density: Float,
     val fontScale: Float,
     val sideBySide: Boolean,
+    val showExtraInfo: Boolean,
     val labels: List<String>
 )
 
@@ -118,21 +126,27 @@ internal data class ResourceGraphPreparationKey(
 internal class ResourceGraphPreparation {
     val headerHeights = mutableStateMapOf<Int, Int>()
     val footerHeights = mutableStateMapOf<Int, Int>()
+    val plotHeights = mutableStateMapOf<Int, Int>()
     val placedHeaders = mutableStateMapOf<Int, Int>()
     val placedFooters = mutableStateMapOf<Int, Int>()
+    val placedPlots = mutableStateMapOf<Int, Int>()
     val historiesReady = mutableStateMapOf<Int, Boolean>()
+    val latestControls = mutableStateMapOf<Int, Boolean>()
     var revealed by mutableStateOf(false)
 
     fun ready(pageCount: Int): Boolean =
         sectionsAligned(pageCount) && (0 until pageCount).all { historiesReady[it] == true }
 
     fun sectionsAligned(pageCount: Int): Boolean {
-        if (headerHeights.size != pageCount || footerHeights.size != pageCount) return false
+        if (headerHeights.size != pageCount || footerHeights.size != pageCount ||
+            plotHeights.size != pageCount) return false
         val header = headerHeights.values.maxOrNull() ?: 0
         val footer = footerHeights.values.maxOrNull() ?: 0
+        val plot = plotHeights.values.maxOrNull() ?: 0
         return (0 until pageCount).all { page ->
             (placedHeaders[page] ?: -1) >= header &&
-                (placedFooters[page] ?: -1) >= footer
+                (placedFooters[page] ?: -1) >= footer &&
+                (placedPlots[page] ?: -1) >= plot
         }
     }
 }
@@ -145,7 +159,8 @@ fun PatcherResourceUsageCards(
     compact: Boolean,
     modifier: Modifier = Modifier,
     merger: Boolean = false,
-    graphState: ResourceGraphState = rememberResourceGraphState()
+    graphState: ResourceGraphState = rememberResourceGraphState(),
+    showExtraInfo: Boolean = false
 ) {
     if (samples.isEmpty()) return
     val labels = listOf(
@@ -166,14 +181,20 @@ fun PatcherResourceUsageCards(
                 density = density.density,
                 fontScale = density.fontScale,
                 sideBySide = sideBySide,
+                showExtraInfo = showExtraInfo,
                 labels = labels
             )
         )
         val headerHeight = with(density) {
             (preparation.headerHeights.values.maxOrNull() ?: 0).toDp()
         }
+        val showLatestControls = preparation.latestControls.values.any { it }
         val footerHeight = with(density) {
             (preparation.footerHeights.values.maxOrNull() ?: 0).toDp()
+                .coerceAtLeast(if (!showExtraInfo && showLatestControls) 32.dp else 0.dp)
+        }
+        val plotHeight = with(density) {
+            (preparation.plotHeights.values.maxOrNull() ?: 0).toDp().coerceAtLeast(64.dp)
         }
         // Rate samplers need two polls; unavailable metrics must not keep the UI hidden forever.
         val telemetryInitialized = !isActive || (hasCpu && hasIo) ||
@@ -205,12 +226,16 @@ fun PatcherResourceUsageCards(
             }
             .then(if (visible) Modifier else Modifier.clearAndSetSemantics { })
         fun graphLayout(page: Int) = ResourceGraphLayout(
-            headerHeight, footerHeight,
+            headerHeight, footerHeight, plotHeight,
             { preparation.headerHeights[page] = it },
             { preparation.footerHeights[page] = it },
+            { preparation.plotHeights[page] = maxOf(it, with(density) { 64.dp.roundToPx() }) },
             { preparation.placedHeaders[page] = it },
             { preparation.placedFooters[page] = it },
-            { preparation.historiesReady[page] = it }
+            { preparation.placedPlots[page] = it },
+            { preparation.historiesReady[page] = it },
+            showLatestControls,
+            { preparation.latestControls[page] = it }
         )
         if (sideBySide) {
             Row(
@@ -224,6 +249,7 @@ fun PatcherResourceUsageCards(
                         samples = samples,
                         isActive = isActive,
                         compact = true,
+                        showExtraInfo = showExtraInfo,
                         merger = merger,
                         modifier = Modifier.weight(1f),
                         layout = graphLayout(page)
@@ -243,6 +269,7 @@ fun PatcherResourceUsageCards(
             ) { page ->
                 ResourcePage(
                     page, samples, isActive, compact = false, merger = merger,
+                    showExtraInfo = showExtraInfo,
                     layout = graphLayout(page),
                     pageControls = {
                         ResourcePageDots(labels, pagerState, enabled = visible) { selected ->
@@ -315,6 +342,7 @@ private fun ResourcePage(
     samples: List<PatcherMemoryUsage>,
     isActive: Boolean,
     compact: Boolean,
+    showExtraInfo: Boolean,
     merger: Boolean,
     modifier: Modifier = Modifier,
     layout: ResourceGraphLayout? = null,
@@ -323,10 +351,10 @@ private fun ResourcePage(
     when (page) {
         0 -> PatcherMemoryUsageCard(
             samples, isActive, modifier = modifier, compact = compact,
-            layout = layout, pageControls = pageControls
+            layout = layout, pageControls = pageControls, showExtraInfo = showExtraInfo
         )
-        1 -> CpuUsageCard(samples, isActive, compact, merger, modifier, layout, pageControls)
-        2 -> IoUsageCard(samples, isActive, compact, merger, modifier, layout, pageControls)
+        1 -> CpuUsageCard(samples, isActive, compact, showExtraInfo, merger, modifier, layout, pageControls)
+        2 -> IoUsageCard(samples, isActive, compact, showExtraInfo, merger, modifier, layout, pageControls)
     }
 }
 @Composable
@@ -334,6 +362,7 @@ private fun CpuUsageCard(
     samples: List<PatcherMemoryUsage>,
     isActive: Boolean,
     compact: Boolean,
+    showExtraInfo: Boolean,
     merger: Boolean,
     modifier: Modifier,
     layout: ResourceGraphLayout?,
@@ -343,7 +372,7 @@ private fun CpuUsageCard(
         .distinctBy { it.resourceSampleTimeMs }
     val title = stringResource(R.string.patcher_cpu_usage)
     if (readings.isEmpty()) {
-        UnavailableUsageCard(title, modifier, compact, layout, pageControls)
+        UnavailableUsageCard(title, modifier, compact, showExtraInfo, layout, pageControls)
         return
     }
     val latest = readings.last()
@@ -382,6 +411,8 @@ private fun CpuUsageCard(
         detail = if (currentAvailable) "$scope · $cores"
             else stringResource(R.string.patcher_resource_unavailable),
         coreLoads = if (currentAvailable) latest.cpuCoreLoads else emptyList(),
+        showExtraInfo = showExtraInfo,
+        showHistory = showExtraInfo,
         currentAvailable = currentAvailable,
         layout = layout,
         pageControls = pageControls
@@ -393,6 +424,7 @@ private fun IoUsageCard(
     samples: List<PatcherMemoryUsage>,
     isActive: Boolean,
     compact: Boolean,
+    showExtraInfo: Boolean,
     merger: Boolean,
     modifier: Modifier,
     layout: ResourceGraphLayout?,
@@ -402,7 +434,7 @@ private fun IoUsageCard(
         .distinctBy { it.resourceSampleTimeMs }
     val title = stringResource(R.string.patcher_storage_io_usage)
     if (readings.isEmpty()) {
-        UnavailableUsageCard(title, modifier, compact, layout, pageControls)
+        UnavailableUsageCard(title, modifier, compact, showExtraInfo, layout, pageControls)
         return
     }
     val latest = readings.last()
@@ -438,10 +470,12 @@ private fun IoUsageCard(
         graphBars = readings.map { ResourceGraphBar(it.ioTotalKbPerSec / scale, 0f) },
         modifier = modifier,
         compact = compact,
-        detail = if (currentAvailable) {
-            if (compact) scope else stringResource(R.string.patcher_io_rates, read, write) + "\n" + scope
-        } else stringResource(R.string.patcher_resource_unavailable),
-        scrollableDetailLines = if (compact && currentAvailable) {
+        detail = if (!currentAvailable) stringResource(R.string.patcher_resource_unavailable)
+            else if (!showExtraInfo) null
+            else if (compact) scope
+            else stringResource(R.string.patcher_io_rates, read, write) + "\n" + scope,
+        showExtraInfo = showExtraInfo,
+        scrollableDetailLines = if (showExtraInfo && compact && currentAvailable) {
             stringResource(R.string.patcher_io_rates, read, write).lines()
         } else emptyList(),
         currentAvailable = currentAvailable,
@@ -465,10 +499,14 @@ private fun UnavailableUsageCard(
     title: String,
     modifier: Modifier,
     compact: Boolean,
+    showExtraInfo: Boolean,
     layout: ResourceGraphLayout?,
     pageControls: (@Composable () -> Unit)?
 ) {
-    SideEffect { layout?.onHistoryReady?.invoke(true) }
+    SideEffect {
+        layout?.onHistoryReady?.invoke(true)
+        layout?.onLatestControlChanged?.invoke(false)
+    }
     ElevatedCard(modifier = modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(if (compact) 8.dp else 16.dp),
@@ -488,10 +526,22 @@ private fun UnavailableUsageCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.height(64.dp))
             ResourceGraphSection(
-                layout?.footerHeight, layout?.onFooterMeasured, compact, layout?.onFooterPlaced
-            ) { }
+                layout?.plotHeight, layout?.onPlotMeasured, compact, layout?.onPlotPlaced,
+                contentAlignment = Alignment.BottomStart
+            ) {
+                Spacer(Modifier.height(64.dp))
+            }
+            if (showExtraInfo || layout?.showLatestControls == true) {
+                ResourceGraphSection(
+                    layout?.footerHeight, layout?.onFooterMeasured, compact, layout?.onFooterPlaced
+                ) { }
+            } else {
+                SideEffect {
+                    layout?.onFooterMeasured?.invoke(0)
+                    layout?.onFooterPlaced?.invoke(0)
+                }
+            }
         }
     }
 }

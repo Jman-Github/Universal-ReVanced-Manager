@@ -133,11 +133,12 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
     @ExperimentalAnimationApi
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Apply the normal app theme before AppCompat initializes or restores the activity.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
-        installSplashScreen()
 
         val vm: MainViewModel = getActivityViewModel()
         vm.handleInitialIntent(intent)

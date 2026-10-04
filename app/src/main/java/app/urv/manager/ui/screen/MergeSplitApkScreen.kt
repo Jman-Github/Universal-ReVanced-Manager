@@ -136,6 +136,8 @@ fun MergeSplitApkScreen(
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
     val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
+    val showGraphExtraInfo by prefs.showSplitMergeResourceGraphExtraInfo.getAsState()
+    val showCompactGraphExtraInfo by prefs.showCompactSplitMergeResourceGraphExtraInfo.getAsState()
     val mergerInformationExpanded by prefs.splitMergeInformationExpanded.getAsState()
     val splitMergeAutoExpandRunningSteps by prefs.splitMergeAutoExpandRunningSteps.getAsState()
     val splitMergeAutoExpandRunningStepsExclusive by
@@ -714,6 +716,7 @@ fun MergeSplitApkScreen(
                             isActive = state.inProgress &&
                                 state.writeStep.status != SplitMergeStepStatus.COMPLETED,
                             compact = compactResourceGraphs,
+                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
                             merger = true,
                             graphState = resourceGraphState
                         )

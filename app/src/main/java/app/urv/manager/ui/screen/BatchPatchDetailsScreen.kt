@@ -104,6 +104,8 @@ fun BatchPatchDetailsScreen(
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
+    val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
+    val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
     val patcherInformationExpanded by prefs.patcherInformationExpanded.getAsState()
     val autoExpandRunningSteps by prefs.autoExpandRunningSteps.getAsState()
     val autoExpandRunningStepsExclusive by prefs.autoExpandRunningStepsExclusive.getAsState()
@@ -341,6 +343,7 @@ fun BatchPatchDetailsScreen(
                     item(key = "memory-usage") {
                         PatcherResourceUsageCards(
                             compact = compactResourceGraphs,
+                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
                             samples = item.memoryUsageSamples,
                             isActive = item.state == BatchItemState.RUNNING,
                             graphState = resourceGraphState

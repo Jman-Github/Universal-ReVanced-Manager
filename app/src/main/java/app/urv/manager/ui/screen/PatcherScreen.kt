@@ -151,6 +151,8 @@ fun PatcherScreen(
     val autoCollapsePatcherSteps by prefs.autoCollapsePatcherSteps.getAsState()
     val showPatcherMemoryUsageGraph by prefs.showPatcherMemoryUsageGraph.getAsState()
     val compactResourceGraphs by prefs.compactPatcherResourceGraphs.getAsState()
+    val showGraphExtraInfo by prefs.showPatcherResourceGraphExtraInfo.getAsState()
+    val showCompactGraphExtraInfo by prefs.showCompactPatcherResourceGraphExtraInfo.getAsState()
     val resourceGraphState = rememberResourceGraphState(
         viewModel, viewModel.patcherSessionInfo.startedAtElapsedRealtimeMs
     )
@@ -1546,6 +1548,7 @@ fun PatcherScreen(
                     item(key = "memory-usage") {
                         PatcherResourceUsageCards(
                             compact = compactResourceGraphs,
+                            showExtraInfo = if (compactResourceGraphs) showCompactGraphExtraInfo else showGraphExtraInfo,
                             samples = viewModel.patcherMemoryUsageSamples,
                             isActive = isPatchingActive,
                             graphState = resourceGraphState

@@ -190,6 +190,7 @@ import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.splitTrailingPunctuation
 import app.urv.manager.ui.component.settings.BooleanItem
+import app.urv.manager.ui.component.settings.ExpandableBooleanItem
 import app.urv.manager.ui.component.settings.SafeguardBooleanItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
@@ -1578,32 +1579,57 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                val patcherGraphsEnabled by viewModel.prefs.showPatcherMemoryUsageGraph.getAsState()
+                val patcherGraphsCompact by viewModel.prefs.compactPatcherResourceGraphs.getAsState()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_memory_usage_graph_title,
                     activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.patcher_resource_graph_options_title),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    BooleanItem(
+                    ExpandableBooleanItem(
                         modifier = highlightModifier,
                         preference = viewModel.prefs.showPatcherMemoryUsageGraph,
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.patcher_memory_usage_graph_title,
                         description = R.string.patcher_memory_usage_graph_description,
-                    )
+                        contentEnabled = patcherGraphsEnabled && !patcherGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.patcher_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showPatcherResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_resource_graphs_compact_title,
                     activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.patcher_compact_resource_graph_options_title),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    BooleanItem(
+                    ExpandableBooleanItem(
                         modifier = highlightModifier,
                         preference = viewModel.prefs.compactPatcherResourceGraphs,
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.patcher_resource_graphs_compact_title,
                         description = R.string.patcher_resource_graphs_compact_description,
-                    )
+                        enabled = patcherGraphsEnabled,
+                        contentEnabled = patcherGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.patcher_compact_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showCompactPatcherResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
@@ -1710,32 +1736,57 @@ fun AdvancedSettingsScreen(
                     )
                 }
                 ExpressiveSettingsDivider()
+                val mergerGraphsEnabled by viewModel.prefs.showSplitMergeMemoryUsageGraph.getAsState()
+                val mergerGraphsCompact by viewModel.prefs.compactSplitMergeResourceGraphs.getAsState()
                 SettingsSearchHighlight(
                     targetKey = R.string.merge_split_memory_usage_graph_title,
                     activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.merger_resource_graph_options_title),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    BooleanItem(
+                    ExpandableBooleanItem(
                         modifier = highlightModifier,
                         preference = viewModel.prefs.showSplitMergeMemoryUsageGraph,
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.merge_split_memory_usage_graph_title,
                         description = R.string.merge_split_memory_usage_graph_description,
-                    )
+                        contentEnabled = mergerGraphsEnabled && !mergerGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.merger_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showSplitMergeResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.merger_resource_graphs_compact_title,
                     activeKey = highlightTarget,
+                    extraKeys = setOf(R.string.merger_compact_resource_graph_options_title),
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
-                    BooleanItem(
+                    ExpandableBooleanItem(
                         modifier = highlightModifier,
                         preference = viewModel.prefs.compactSplitMergeResourceGraphs,
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.merger_resource_graphs_compact_title,
                         description = R.string.merger_resource_graphs_compact_description,
-                    )
+                        enabled = mergerGraphsEnabled,
+                        contentEnabled = mergerGraphsCompact,
+                        expandForSearch = highlightTarget == R.string.merger_compact_resource_graph_options_title
+                    ) { childEnabled ->
+                        BooleanItem(
+                            preference = viewModel.prefs.showCompactSplitMergeResourceGraphExtraInfo,
+                            coroutineScope = viewModel.viewModelScope,
+                            headline = R.string.resource_graph_extra_info_title,
+                            description = R.string.resource_graph_extra_info_description,
+                            enabled = childEnabled
+                        )
+                    }
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
