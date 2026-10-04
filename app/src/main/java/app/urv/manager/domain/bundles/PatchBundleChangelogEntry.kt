@@ -1,0 +1,34 @@
+package app.urv.manager.domain.bundles
+
+import app.urv.manager.network.dto.ReVancedAsset
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class PatchBundleChangelogEntry(
+    val version: String,
+    val description: String,
+    val publishedAtMillis: Long? = null,
+    val pageUrl: String? = null,
+    val hasReleaseBody: Boolean = false
+) {
+    companion object {
+        fun fromAsset(
+            asset: ReVancedAsset,
+            hasReleaseBody: Boolean = false
+        ): PatchBundleChangelogEntry {
+            val publishedAt = runCatching {
+                asset.createdAt.toInstant(TimeZone.UTC).toEpochMilliseconds()
+            }.getOrNull()
+
+            return PatchBundleChangelogEntry(
+                version = asset.version,
+                description = asset.description,
+                publishedAtMillis = publishedAt,
+                pageUrl = asset.pageUrl,
+                hasReleaseBody = hasReleaseBody
+            )
+        }
+    }
+}

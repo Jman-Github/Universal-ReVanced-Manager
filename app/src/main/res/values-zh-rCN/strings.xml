@@ -5,9 +5,6 @@
     <string name="patch_bundles">补丁包</string>
     <string name="patch_bundle">补丁包</string>
     <string name="manager">管理器</string>
-    <string name="plugin_host_permission_label">Universal ReVanced Manager 插件宿主</string>
-    <string name="plugin_host_permission_description">用于控制对 Universal ReVanced Manager 插件的访问。仅 Universal ReVanced Manager 拥有此权限。</string>
-    <string name="toast_copied_to_clipboard">已复制！</string>
     <string name="copy_to_clipboard">复制到剪贴板</string>
     <string name="settings">设置</string>
     <string name="select_app">选择一个应用</string>
@@ -30,10 +27,8 @@
     <string name="selected_app_meta_any_version">任何可用版本</string>
     <string name="app_source_dialog_title">选择来源</string>
     <string name="app_source_dialog_option_auto">自动</string>
-    <string name="app_source_dialog_option_auto_description">使用所有可用的下载器来下载应用</string>
     <string name="app_source_dialog_option_auto_unavailable">无可用插件</string>
     <string name="app_source_dialog_option_storage">存储</string>
-    <string name="app_source_dialog_option_storage_description">从本地存储中选择一个 APK 文件</string>
     <string name="app_source_dialog_option_installed_no_root">没有 root 权限无法再次修补已挂载的应用</string>
     <string name="app_source_dialog_option_installed_version_not_suggested">版本 %s 与建议版本不匹配</string>
     <string name="bundle_version_item">包推荐</string>
@@ -48,8 +43,6 @@
     <string name="bundle_version_suggested_label">建议版本：%1$s</string>
     <string name="bundle_update_manual_available">有可用更新</string>
     <string name="bundle_update_manual_available_with_version">有可用更新：%1$s</string>
-    <string name="bundle_update_progress">已处理 %1$d/%2$d 个包</string>
-    <string name="bundle_update_banner_title">正在更新补丁包</string>
     <string name="bundle_reorder">整理包</string>
     <string name="bundle_reorder_title">整理补丁包</string>
     <string name="bundle_reorder_description">拖动手柄以调整包在列表和补丁选择菜单中出现的顺序。</string>
@@ -82,29 +75,18 @@
     <string name="apk_source_auto">使用所有 APK 下载器</string>
     <string name="apk_source_downloader">使用 %s</string>
     <string name="apk_source_installed">使用已安装的 APK</string>
-    <string name="apk_source_local">使用本地 APK 文件</string>
     <string name="apk_source_downloaded">使用下载的 APK</string>
     <string name="legacy_import_failed">无法导入旧版设置</string>
     <string name="auto_updates_dialog_title">配置更新</string>
-    <string name="auto_updates_dialog_description">您希望 Universal ReVanced Manager 定期检查以下组件的更新吗？</string>
     <string name="auto_updates_dialog_patches">官方 ReVanced 补丁</string>
     <string name="auto_updates_dialog_note">这些设置以后可以更改。</string>
-    <string name="general">通用</string>
-    <string name="general_description">主题，动态取色</string>
     <string name="updates">更新</string>
-    <string name="updates_description">检查更新并查看更新日志</string>
     <string name="downloads">下载</string>
-    <string name="downloads_description">下载器插件和已下载的应用</string>
     <string name="plugins_help_title">什么是下载器?</string>
-    <string name="plugins_help_description">下载器是一个插件，它允许 URV 从各种来源下载官方 APK 文件。下载的 APK 文件将显示在底部区域。在修补过程中，您可以选择已下载的 APK 文件，也可以通过插件下载。\n\n支持的下载器插件列表请参见此处。</string>
-    <string name="import_export">导入 &amp; 导出</string>
-    <string name="import_export_description">密钥库、补丁选项和选择</string>
     <string name="changelog">查看更新日志</string>
     <string name="changelog_loading">正在加载更新日志</string>
     <string name="changelog_download_fail">下载更新日志失败：%s</string>
     <string name="changelog_description">查看此更新中的最新更改</string>
-    <string name="advanced">高级</string>
-    <string name="advanced_description">API URL，内存限制，调试</string>
     <string name="about">关于</string>
     <string name="contributors">贡献者</string>
     <string name="dynamic_color">动态取色</string>
@@ -124,7 +106,6 @@
     <string name="theme_preview_title">主题预览</string>
     <string name="theme_preview_description">更改主题设置时即时更新</string>
     <string name="theme_presets">主题预设</string>
-    <string name="theme_presets_description">最流行外观的快速切换</string>
     <string name="theme_preset_default">默认</string>
     <string name="theme_preset_amoled">纯黑</string>
     <string name="theme_reset">重置所有主题设置</string>
@@ -160,17 +141,12 @@
     <string name="regenerate_keystore_description">生成新密钥库</string>
     <string name="regenerate_keystore_dialog_description">您即将重新生成管理器在修补过程中将使用的密钥库。\n\n您将无法更新从此来源先前安装的应用。</string>
     <string name="regenerate_keystore_success">密钥库已成功替换</string>
-    <string name="import_patch_selection">导入补丁选择</string>
-    <string name="import_patch_selection_description">从 JSON 文件导入补丁选择</string>
-    <string name="import_patch_selection_fail">无法导入补丁选择：%s</string>
-    <string name="import_patch_selection_success">已导入补丁选择</string>
     <string name="import_patch_bundles">导入补丁包</string>
     <string name="import_patch_bundles_description">从 JSON 文件恢复远程补丁包</string>
     <string name="import_patch_bundles_fail">无法导入补丁包：%s</string>
     <string name="import_patch_bundles_in_progress">正在导入…</string>
     <string name="import_patch_bundles_success">已导入 %d 个补丁包</string>
     <string name="import_patch_bundles_updated">已更新 %d 个补丁包</string>
-    <string name="import_patch_bundles_none">没有导入新的补丁包</string>
     <string name="import_patch_bundles_banner_title">正在导入补丁包</string>
     <string name="import_patch_bundles_banner_subtitle">已处理 %1$d / %2$d</string>
     <string name="import_patch_profiles">导入补丁配置文件</string>
@@ -181,13 +157,8 @@
     <string name="import_patch_profiles_skipped">跳过了 %d 个重复的补丁配置文件</string>
     <string name="import_patch_profiles_none">未导入任何补丁配置文件</string>
     <string name="import_manager_settings">导入管理器设置</string>
-    <string name="import_manager_settings_description">从 JSON 文件恢复保存的管理器设置</string>
     <string name="import_manager_settings_fail">无法导入管理器设置：%s</string>
     <string name="import_manager_settings_success">已导入管理器设置</string>
-    <string name="export_patch_selection">导出补丁选择</string>
-    <string name="export_patch_selection_description">将补丁选择导出到 JSON 文件</string>
-    <string name="export_patch_selection_fail">无法导出补丁选择：%s</string>
-    <string name="export_patch_selection_success">已导出补丁选择</string>
     <string name="export_patch_bundles">导出补丁包</string>
     <string name="export_patch_bundles_description">将导入的远程补丁包保存到 JSON 文件</string>
     <string name="export_patch_bundles_fail">无法导出补丁包：%s</string>
@@ -212,11 +183,8 @@
     <string name="export_manager_settings_description">将所有管理器设置保存到 JSON 文件</string>
     <string name="export_manager_settings_fail">无法导出管理器设置：%s</string>
     <string name="export_manager_settings_success">已导出管理器设置</string>
-    <string name="reset_patch_selection">重置补丁选择</string>
-    <string name="reset_patch_selection_description">重置存储的补丁选择</string>
     <string name="reset_patch_options">重置补丁选项</string>
     <string name="reset_patch_options_description">重置存储的补丁选项</string>
-    <string name="reset_patch_selection_success">补丁选择已重置</string>
     <string name="patch_selection_deselected_all_toast">已取消选择所有补丁</string>
     <string name="patch_selection_deselected_bundle_toast">已取消选择 %s 中的所有补丁</string>
     <string name="patch_selection_no_selected_bundle_toast">%s 中没有可取消选择的补丁</string>
@@ -249,30 +217,20 @@
     <string name="patch_selection_action_order_description">选择补丁选择操作按钮的布局顺序</string>
     <string name="patch_selection_action_order_reset">重置为默认顺序</string>
     <string name="patch_selection_confirm_deselect_bundle_title">取消选择包？</string>
-    <string name="patch_selection_confirm_deselect_bundle_message">取消选择 %1$s 中所有已选择的补丁？</string>
     <string name="patch_selection_confirm_deselect_all_title">取消选择所有补丁？</string>
     <string name="patch_selection_confirm_deselect_all_message">这将清除所有包中每个已选择的补丁。</string>
     <string name="patch_selection_confirm_bundle_defaults_title">恢复包默认值？</string>
     <string name="patch_selection_confirm_bundle_defaults_message">这将恢复 %1$s 的推荐默认值。</string>
     <string name="patch_selection_confirm_select_bundle_title">选择包？</string>
-    <string name="patch_selection_confirm_select_bundle_message">选择 %1$s 提供的每个补丁？</string>
     <string name="patch_selection_confirm_select_all_title">选择所有补丁？</string>
     <string name="patch_selection_confirm_select_all_message">这将选择所有包中的每个补丁。</string>
     <string name="patch_selection_button_label_reset_bundle">包默认值</string>
     <string name="patch_profile_save_label">保存配置文件</string>
     <string name="patch_selection_toggle_expand">显示操作</string>
     <string name="patch_selection_toggle_collapse">隐藏操作</string>
-    <string name="patch_selection_reset_all">全局重置补丁选择</string>
     <string name="patch_selection_reset_all_dialog_description">您即将重置所有补丁选择。您将需要重新手动选择每个补丁。\n\n补丁配置文件不受影响。</string>
     <string name="patch_selection_reset_all_description">重置所有补丁选择</string>
     <string name="patch_selection_reset_dialog_title">重置补丁默认值？</string>
-    <string name="patch_selection_reset_dialog_message">这将把您的补丁选择和选项恢复为推荐的默认值。</string>
-    <string name="patch_selection_reset_package">重置应用的补丁选择</string>
-    <string name="patch_selection_reset_package_dialog_description">您即将重置应用 \"%s\" 的补丁选择。您将需要重新手动选择每个补丁。\n\n补丁配置文件不受影响。</string>
-    <string name="patch_selection_reset_package_description">重置单个应用的补丁选择</string>
-    <string name="patch_selection_reset_patches">重置补丁选择（单个）</string>
-    <string name="patch_selection_reset_patches_dialog_description">您即将重置 \"%s\" 的补丁选择。您将需要重新手动选择每个补丁。\n\n补丁配置文件不受影响。</string>
-    <string name="patch_selection_reset_patches_description">重置特定补丁集合的补丁选择</string>
     <string name="patch_options_reset_package">重置应用的补丁选项</string>
     <string name="patch_options_reset_package_dialog_description">您即将重置应用 \"%s\" 的补丁选项。您将需要重新应用每个选项。\n\n补丁配置文件不受影响。</string>
     <string name="patch_options_reset_package_description">重置单个应用的补丁选项</string>
@@ -282,18 +240,11 @@
     <string name="patch_options_reset_all">全局重置补丁选项</string>
     <string name="patch_options_reset_all_dialog_description">您即将重置所有补丁选项。您将需要重新应用每个选项。\n\n补丁配置文件不受影响。</string>
     <string name="patch_options_reset_all_description">重置所有补丁选项</string>
-    <string name="downloader_plugins">插件</string>
     <string name="downloader_plugin_state_trusted">受信任</string>
-    <string name="downloader_plugin_state_failed">加载失败。点击查看更多详情</string>
     <string name="downloader_plugin_state_untrusted">不受信任</string>
-    <string name="downloader_plugin_trust_dialog_title">信任插件？</string>
-    <string name="downloader_plugin_revoke_trust_dialog_title">撤销信任？</string>
     <string name="downloader_plugin_view_error">查看错误详情</string>
     <string name="downloader_plugin_failed_dialog_body">加载 \"%1$s\" 失败。您可以查看错误详情或卸载该插件。</string>
-    <string name="downloader_plugin_uninstall_title">卸载插件？</string>
     <string name="downloader_plugin_uninstall_description">您确定要卸载 \"%1$s\" 吗？</string>
-    <string name="downloader_settings_no_apps">未找到下载的应用。</string>
-    <string name="search_apps">搜索应用…</string>
     <string name="options">选项</string>
     <string name="ok">确定</string>
     <string name="edit">编辑</string>
@@ -302,7 +253,6 @@
     <string name="share">分享</string>
     <string name="patch">修补</string>
     <string name="select_from_storage">从存储中选择</string>
-    <string name="select_from_storage_description">使用文件选择器从存储中选择 APK 文件</string>
     <string name="type_anything">输入任意内容以继续</string>
     <string name="search">搜索补丁…</string>
     <string name="apply">应用</string>
@@ -317,11 +267,7 @@
     <string name="dark">深色</string>
     <string name="appearance">外观</string>
     <string name="downloaded_apps">已下载的应用</string>
-    <string name="process_runtime">在另一个进程中运行修补程序（实验性）</string>
-    <string name="process_runtime_description">这速度更快，并允许修补程序使用更多内存</string>
     <string name="strip_unused_libs">移除未使用的原生库</string>
-    <string name="process_runtime_memory_limit">修补程序进程内存限制</string>
-    <string name="process_runtime_memory_limit_description">修补程序进程可以使用的最大内存量（以兆字节为单位）</string>
     <string name="reset_to_recommended">重置为推荐值</string>
     <string name="patcher_auto_collapse_steps">自动折叠已完成的修补程序步骤</string>
     <string name="patcher_auto_collapse_steps_description">在所有步骤完成后自动折叠每个修补程序进度小部件。</string>
@@ -364,11 +310,8 @@
     <string name="debug_logs_export">导出调试日志</string>
     <string name="debug_logs_export_read_failed">读取日志失败 (退出代码 %d)</string>
     <string name="debug_logs_export_failed">导出日志失败</string>
-    <string name="debug_logs_export_success">已导出日志</string>
     <string name="api_url_description">用于下载必要文件的 API</string>
     <string name="api_url_dialog_title">更改 API URL</string>
-    <string name="api_url_dialog_description">更改 Universal ReVanced Manager 的 API URL。Universal ReVanced Manager 使用 API 来下载补丁和更新。</string>
-    <string name="api_url_dialog_warning">Universal ReVanced Manager 连接到 API 以下载补丁和更新。请确保您信任它。</string>
     <string name="api_url_dialog_save">设置</string>
     <string name="api_url_dialog_reset">重置 API URL</string>
     <string name="github_pat">GitHub访问令牌</string>
@@ -385,7 +328,6 @@
     <string name="device_memory_limit_format">%1$dMB (正常) - %2$dMB (大)</string>
     <string name="patches_force_download">强制下载所有补丁包</string>
     <string name="storage">存储</string>
-    <string name="no_patch_found">找不到任何补丁。请检查您的补丁</string>
     <string name="tab_apps">应用</string>
     <string name="tab_patches">补丁包</string>
     <string name="tab_profiles">补丁配置文件</string>
@@ -394,11 +336,8 @@
     <string name="download_apk">下载 APK 文件</string>
     <string name="patches_download_fail">下载补丁失败：%s</string>
     <string name="patches_replace_fail">导入补丁失败：%s</string>
-    <string name="no_patched_apps_found">未找到修补过的应用</string>
     <string name="patches_selected">已选择 %s 个补丁包</string>
     <string name="patch_profiles_selected">已选择 %1$d 个补丁配置文件</string>
-    <string name="selected_apps_count">已选择 %1$d 个应用</string>
-    <string name="selected_apps_delete_dialog_description">从管理器中移除选中的应用？您设备上已安装的应用将保持不变。</string>
     <string name="incompatible_patches">不兼容的补丁</string>
     <string name="universal_patches">通用补丁</string>
     <string name="patch_selection_reset_toast">补丁选择和选项已重置为推荐的默认值</string>
@@ -421,7 +360,6 @@
     <string name="patch_profile_save_failed_toast">保存补丁配置文件失败</string>
     <string name="patch_profile_rename">重命名</string>
     <string name="patch_profile_rename_title">重命名补丁配置文件</string>
-    <string name="patch_profile_empty_state">从补丁选择屏幕保存配置后，将在此处看到它。</string>
     <string name="patch_profile_missing_bundles_toast">此配置文件中的某些包不可用，将被跳过。</string>
     <string name="patch_profile_changed_patches_toast">此配置文件中的某些补丁或选项不再与包匹配，已被跳过。</string>
     <string name="patch_profile_no_available_bundles_toast">此配置文件中没有可用的包。更新您的包后重试。</string>
@@ -434,18 +372,14 @@
     <string name="patch_profile_bundle_change_uid_invalid">请输入有效的数字 UID。</string>
     <string name="patch_profile_bundle_change_uid_success">包 UID 已更新为 %1$d。</string>
     <string name="patch_profile_bundle_change_uid_not_found">未找到 UID 为 %1$d 的本地补丁包。</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
     <string name="patcher_process_exit_message">修补程序进程退出，代码为 %1$d。</string>
-    <string name="patcher_memory_adjustment_title">修补程序内存不足</string>
-    <string name="patcher_memory_adjustment_message_reduced">实验性修补程序进程因内存不足而停止。我们将其内存限制从 %1$d MB 降低到 %2$d MB，以便您可以立即重试。</string>
-    <string name="patcher_memory_adjustment_message_no_change">实验性修补程序进程因内存不足而停止，但内存限制已为 %1$d MB。请尝试在高级设置中进一步降低它，或在重试前禁用实验模式。</string>
-    <string name="patcher_memory_adjustment_retry">重试</string>
-    <string name="patcher_memory_adjustment_dismiss">忽略</string>
     <string name="patcher_missing_patch_title">补丁选择需要注意</string>
     <string name="patcher_preflight_missing_patch_message">The following patches aren\'t available in the current bundle:\n%1$s\nYou can remove them automatically, adjust the selection, or continue anyway.</string>
     <string name="patcher_missing_patch_review">查看选择</string>
     <string name="patch_selector_missing_patch_title">重新选择缺失的补丁</string>
     <string name="patch_selector_missing_patch_message">需要重新选择这些补丁：\n%1$s\n请再次启用它们（或选择替代品），然后再次尝试修补。</string>
-    <string name="patch_profile_delete_multiple_dialog_description">删除选中的补丁配置文件？</string>
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="other">%d 个补丁</item>
     </plurals>
@@ -457,6 +391,7 @@
     <string name="search_patches">搜索补丁</string>
     <string name="app_version_not_compatible">此补丁与选定的应用版本 (%1$s) 不兼容。\n\n它仅与以下版本兼容：%2$s。</string>
     <string name="failed_to_load_apk">加载 APK 失败</string>
+    <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
     <string name="loading">正在加载…</string>
     <string name="not_installed">未安装</string>
     <string name="installed">已安装</string>
@@ -483,8 +418,6 @@
     <string name="unpatch_description">您确定要取消修补此应用吗？</string>
     <string name="downloader_app_not_found">下载器未找到该应用</string>
     <string name="downloader_error">下载器错误：%s</string>
-    <string name="downloader_no_plugins_installed">未安装下载器。</string>
-    <string name="downloader_no_plugins_available">已安装下载器，但没有受信任的。请检查您的设置。</string>
     <string name="downloader_plugin_uninstall_success">已卸载 %1$s</string>
     <string name="downloader_plugin_uninstall_failed">卸载 %1$s 失败</string>
     <string name="downloaded_apps_export">导出选中的应用</string>
@@ -499,23 +432,17 @@
     <string name="path_selector_parent_dir">上一级目录</string>
     <string name="path_selector_dirs">目录</string>
     <string name="path_selector_files">文件</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information
+         https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436 -->
     <string name="show_password_field">显示密码</string>
     <string name="hide_password_field">隐藏密码</string>
     <string name="installer_primary_title">主要安装程序</string>
     <string name="installer_fallback_title">备用安装程序</string>
     <string name="installer_internal_name">系统安装程序</string>
-    <string name="installer_internal_description">使用 Android 包安装程序</string>
-    <string name="installer_shizuku_description">使用 Shizuku 或 Sui 静默安装。</string>
     <string name="installer_option_none">无备用</string>
-    <string name="installer_none_description">未配置备用安装程序</string>
-    <string name="installer_status_requires_root">需要 root 权限</string>
     <string name="installer_status_not_supported">此操作不支持。</string>
-    <string name="installer_status_shizuku_not_installed">安装 Shizuku 或 Sui 以使用此选项。</string>
-    <string name="installer_status_shizuku_not_running">启动 Shizuku 或 Sui 后重试。</string>
-    <string name="installer_status_shizuku_permission">从 Shizuku 应用授予 Universal ReVanced Manager Shizuku 权限。</string>
-    <string name="installer_status_shizuku_unsupported">已安装的 Shizuku 版本不受支持。</string>
-    <string name="installer_action_open_shizuku">打开 Shizuku</string>
-    <string name="installer_shizuku_launch_failed">无法打开 Shizuku。请手动启动它并重试。</string>
     <string name="installer_custom_header">自定义安装程序</string>
     <string name="installer_custom_manage_title">管理自定义安装程序</string>
     <string name="installer_custom_tab_saved">已保存</string>
@@ -559,12 +486,13 @@
     <string name="installer_external_success">%1$s 报告安装成功。</string>
     <string name="install_app">安装</string>
     <string name="install_app_fail_title">安装失败</string>
+    <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
     <string name="install_timeout_message">安装未完成。请检查系统安装程序对话框并重试。</string>
     <string name="reinstall_app_fail">重新安装应用失败：%s</string>
     <string name="uninstall_app_fail">卸载应用失败：%s</string>
     <string name="open_app">打开</string>
     <string name="save_apk">保存 APK</string>
-    <string name="save_apk_success">APK 已保存</string>
     <string name="saved_app_export_success">已导出修补的应用</string>
     <string name="saved_app_export_failed">导出修补的应用失败</string>
     <string name="saved_app_removed_toast">已移除保存的修补应用</string>
@@ -594,7 +522,6 @@
     <string name="patcher_step_sign_apk">为修补后的 APK 文件签名</string>
     <string name="patcher_notification_title">正在修补…</string>
     <string name="patcher_notification_text">点击返回修补程序</string>
-    <string name="patcher_stop_confirm_title">停止修补程序</string>
     <string name="patcher_stop_confirm_description">您确定要停止修补过程吗？</string>
     <string name="patcher_install_in_progress">正在安装，请稍候</string>
     <string name="execute_patches">执行补丁</string>
@@ -618,20 +545,14 @@
     <string name="less">更少</string>
     <string name="continue_">继续</string>
     <string name="dismiss">忽略</string>
-    <string name="original_revanced_manager_github">官方 ReVanced Manager GitHub</string>
     <string name="patch_bundle_urls">获取补丁包导入链接</string>
     <string name="version">版本</string>
-    <string name="developer_options">开发者选项</string>
-    <string name="developer_options_description">用于调试问题的选项</string>
     <string name="patches_update_success">更新成功</string>
-    <string name="patches_update_unavailable">无可用更新</string>
     <string name="view_patches">查看补丁</string>
     <string name="patches_view_any_version">任意版本</string>
     <string name="patches_view_any_package">任意包</string>
     <string name="patches_delete_single_dialog_description">您确定要删除 \"%s\" 吗？</string>
     <string name="patches_delete_multiple_dialog_description">您确定要删除选中的补丁包吗？</string>
-    <string name="about_revanced_manager">关于 Universal ReVanced Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced Manager (URV Manager) 是官方 ReVanced Manager 的一个分支。这两个应用程序都使用 ReVanced Patcher，允许您下载和使用自定义补丁修补应用，并管理修补过程。Universal ReVanced Manager 包含的独特功能有：补丁包显示名称、支持导入任何第三方补丁包等等。查看 Universal ReVanced Manager 提供的完整独特功能列表</string>
     <string name="here">此处</string>
     <string name="update_available">有可用更新</string>
     <string name="ready_to_install_update">准备安装更新</string>
@@ -643,14 +564,10 @@
     <string name="update_on_metered_connections">在计量连接下更新</string>
     <string name="update_on_metered_connections_description">允许在计量网络下进行补丁和管理器更新</string>
     <string name="update_checking_manager">启动时检查更新</string>
-    <string name="update_checking_manager_description">在应用程序启动时检查 Universal ReVanced Manager 的新版本</string>
     <string name="manager_prereleases">使用预发布版本</string>
-    <string name="manager_prereleases_description">使用 Universal ReVanced Manager 的预发布版本</string>
     <string name="update_published">发布于 %s</string>
-    <string name="battery_optimization_notification">必须关闭电池优化，Universal ReVanced Manager 才能在后台正常工作。点击此处关闭优化。</string>
     <string name="installing_manager_update">正在安装更新…</string>
     <string name="downloading_manager_update">正在下载更新…</string>
-    <string name="manager_update_banner_title">正在下载管理器更新</string>
     <string name="download_manager_failed">下载更新失败：%s</string>
     <string name="cancel">取消</string>
     <string name="save">保存</string>
@@ -667,9 +584,7 @@
     <string name="option_required">此选项为必填项</string>
     <string name="required_options_screen">必填选项</string>
     <string name="failed_to_check_updates">检查更新失败：%s</string>
-    <string name="no_update_available">无可用更新</string>
     <string name="update_check">正在检查更新…</string>
-    <string name="update_available_dialog_description">Universal ReVanced Manager 的新版本 (%s) 已可用。</string>
     <string name="failed_to_download_update">下载更新失败：%s</string>
     <string name="download">下载</string>
     <string name="resume_download">继续下载</string>
@@ -707,7 +622,6 @@
     <string name="next">下一步</string>
     <string name="auto_update">自动更新</string>
     <string name="add_patches">添加补丁包</string>
-    <string name="auto_update_description">有新版本时自动更新</string>
     <string name="patches_prereleases">使用预发布版本</string>
     <string name="patches_prereleases_description">使用 %s 的预发布版本</string>
     <string name="patches_url">补丁包 URL</string>
@@ -720,4 +634,5 @@
     <string name="failed_to_import_keystore">导入密钥库失败</string>
     <string name="export">导出</string>
     <string name="confirm">确认</string>
+    <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
 </resources>

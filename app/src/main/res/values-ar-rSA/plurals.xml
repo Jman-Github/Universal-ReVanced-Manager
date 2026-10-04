@@ -1,2 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <plurals name="patch_count">
+        <item quantity="zero">لا توجد تصحيحات</item>
+        <item quantity="one">تصحيح واحد</item>
+        <item quantity="two">تصحيحان</item>
+        <item quantity="few">%d تصحيحات</item>
+        <item quantity="many">%d تصحيحاً</item>
+        <item quantity="other">%d تصحيح</item>
+    </plurals>
+    <plurals name="selected_count">
+        <item quantity="zero">لم يتم تحديد أي عنصر</item>
+        <item quantity="one">تم تحديد عنصر واحد</item>
+        <item quantity="two">تم تحديد عنصرين</item>
+        <item quantity="few">تم تحديد %d عناصر</item>
+        <item quantity="many">تم تحديد %d عنصراً</item>
+        <item quantity="other">تم تحديد %d عنصر</item>
+    </plurals>
+</resources>

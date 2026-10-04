@@ -1,2 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <plurals name="patch_count">
+        <item quantity="one">%d yama</item>
+        <item quantity="other">%d yama</item>
+    </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">%d yama kaldırıldı</item>
+        <item quantity="other">%d yama kaldırıldı</item>
+    </plurals>
+    <plurals name="selected_count">
+        <item quantity="one">%d seçilen</item>
+        <item quantity="other">%d seçilen</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d uygulama seçildi</item>
+        <item quantity="other">%d uygulama seçildi</item>
+    </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">Seçili uygulamayı silmek istediğinizden emin misiniz?\nRoot ile bağlanmış girdilerin bağlantıları da kaldırılacak ve root modülleri silinecektir. Sistem uygulamaları yüklü kalacaktır.</item>
+        <item quantity="other">Seçili uygulamaları silmek istediğinizden emin misiniz?\nRoot ile bağlanmış girdilerin bağlantıları da kaldırılacak ve root modülleri silinecektir. Sistem uygulamaları yüklü kalacaktır.</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Seçilen yama paketini silmek istediğinizden emin misiniz?</item>
+        <item quantity="other">Seçilen yama paketlerini silmek istediğinizden emin misiniz?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Seçilen yama profilini silmek istediğinizden emin misiniz?</item>
+        <item quantity="other">Seçilen yama profillerini silmek istediğinizden emin misiniz?</item>
+    </plurals>
+</resources>

@@ -2,10 +2,30 @@
 <resources>
     <plurals name="patch_count">
         <item quantity="one">%d parche</item>
-        <item quantity="other">%d parches</item>
+        <item quantity="other">%d Parches</item>
+    </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">Se eliminó %d parche</item>
+        <item quantity="other">Se eliminaron %d parches</item>
     </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d seleccionado</item>
         <item quantity="other">%d seleccionados</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d aplicación seleccionada</item>
+        <item quantity="other">%d aplicaciones seleccionadas</item>
+    </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">¿Está seguro que desea eliminar la aplicación seleccionada?\nentradas de montaje root también se desmontarán y se eliminarán sus módulos raíz. Las aplicaciones de stock permanecerán instaladas.</item>
+        <item quantity="other">¿Está seguro de que desea eliminar las aplicaciones seleccionadas?\nentradas de montaje root también serán desmontadas y sus módulos raíz eliminados. Las aplicaciones de stock permanecerán instaladas.</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">¿Estás seguro de que quieres eliminar el paquete de parches seleccionado?</item>
+        <item quantity="other">¿Estás seguro de que quieres eliminar los paquetes de parches seleccionados?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">¿Estás seguro de que quieres eliminar el perfil de parches seleccionado?</item>
+        <item quantity="other">¿Estás seguro de que quieres eliminar los perfiles de parches seleccionados?</item>
     </plurals>
 </resources>

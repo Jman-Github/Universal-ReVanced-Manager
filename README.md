@@ -3,11 +3,11 @@
     <source
       width="256px"
       media="(prefers-color-scheme: dark)"
-      srcset="assets/icons/icon-circle.png"
+      srcset="assets/icons/icon-circle.svg"
     >
     <img
       width="256px"
-      src="assets/icons/icon-circle.png"
+      src="assets/icons/icon-circle.svg"
       alt="Universal ReVanced Manager icon"
     />
   </picture>
@@ -15,7 +15,9 @@
 
 # 💊 Universal ReVanced Manager
 
-Application for using ReVanced, Morphe and AmpleReVanced all in a single app on Android.
+Universal ReVanced Manager (URV) is an Android manager for patching apps with ReVanced and Morphe in one place. Built from ReVanced Manager, URV expands the full patching workflow with third-party patch bundles, multiple patcher runtimes, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and standalone APK utilities.
+
+URV supports both ReVanced and Morphe patch ecosystems, rooted and non-rooted workflows, local and remote patch bundle sources, split APK handling, downloader integrations, signature and keystore tools, detailed patching diagnostics, backups, storage controls, and extensive UI customization.
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
@@ -29,296 +31,139 @@ Application for using ReVanced, Morphe and AmpleReVanced all in a single app on 
   <a href="https://discord.gg/xZAqRHSp3V" style="text-decoration:none;"><img src="https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
-## 💪 Unique Features
+## 💪 Features
 
-Universal ReVanced Manager includes powerful features that the official ReVanced Manager does not:
+URV covers the full patching lifecycle, from choosing an APK source and patch bundle to patching, installing, saving, repatching, automating updates, and managing the files and tools around those workflows.
 
 <details>
-<summary><strong>Patch Bundles & Customization</strong></summary>
+<summary><strong>Patch Bundles & Patcher Runtimes</strong></summary>
 <ul>
-  <li><strong>Third-party patch support:</strong> Import any third-party API v4 patch bundle you want (including popular ones like inotia00's or anddea's), which the official ReVanced Manager does not support.</li>
-  <li><strong>Custom bundle names:</strong> Set a custom display name for any imported patch bundle so you can tell them apart at a glance.</li>
-  <li><strong>Smarter patch selection:</strong>
-    <ul>
-      <li>Global deselect all button</li>
-      <li>Per-bundle deselect all button</li>
-      <li>Per-bundle select all button</li>
-      <li>Global select all button</li>
-      <li>Patch profiles button to save patch selections and option states per app</li>
-      <li>Patch profiles can store a persistent APK path for one-tap patching</li>
-      <li>Patch confirmation screen showing selected bundles, patches, and sub-options</li>
-      <li>Export all patch selections at once</li>
-      <li>Latest patch bundle changelogs shown in bundle info</li>
-      <li>Undo and redo buttons</li>
-    </ul>
-  </li>
-  <li><strong>Bundle recommendation picker:</strong> Choose per-bundle suggested versions or override with any other supported version.</li>
-  <li><strong>Suggestion toggle on Select-App:</strong> Bundle suggestions are grouped behind a toggle with inline dialogs to view additional supported versions.</li>
-  <li><strong>Official bundle management:</strong> Delete the Official ReVanced patch bundle from the Patch Bundles tab and restore it from Advanced settings.</li>
-  <li><strong>Export filename templates:</strong> Configure a filename template for exported patched APKs with placeholders for app and patch metadata.</li>
-  <li><strong>Release link button:</strong> GitHub button on each bundle's info page opens the bundle repository's releases.</li>
-  <li><strong>Bundle timestamps:</strong> Cards show Created and Updated times; exports and imports preserve these timestamps.</li>
-  <li><strong>Organize bundles:</strong> "Organize" button to manually reorder bundles; exports and imports keep the custom order.</li>
-  <li><strong>Force bundle redownload:</strong> Long-press the update check button on a bundle to force a full redownload.</li>
-  <li><strong>Bundle discovery:</strong> Browse a patch bundle catalog and import external bundles directly from the app.</li>
-  <li><strong>Improved UI:</strong> Settings, the Patch Bundles tab, the Apps tab, the app selection page, and the patch selection page all have an improved UI design.</li>
+  <li><strong>ReVanced and Morphe in one manager:</strong> Use ReVanced <code>.rvp</code> and Morphe <code>.mpp</code> patch bundles from the same app.</li>
+  <li><strong>Third-party patch bundles:</strong> Add compatible local or remote patch bundles, including repository and release-based sources, instead of being limited to the pre-installed bundle.</li>
+  <li><strong>Bundle discovery:</strong> Browse the external patch bundle catalog, search it, inspect supported apps and patches, and import bundles directly.</li>
+  <li><strong>Remote updates:</strong> Check, download, and background-update remote bundles with progress, stable/pre-release channel handling, per-bundle update controls, and force-redownload support.</li>
+  <li><strong>Full changelog history:</strong> View cached patch bundle changelog history with configurable loading and storage limits, plus release links when available.</li>
+  <li><strong>Bundle organization:</strong> Rename imported bundles, reorder them, preserve metadata and timestamps, and export/import bundle configurations.</li>
+  <li><strong>Official bundle recovery:</strong> Remove the pre-installed Official ReVanced bundle and restore it later from Advanced settings.</li>
+  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with URV.</li>
+  <li><strong>ReVanced v21 runtime plugin:</strong> Add the supported ReVanced v21 runtime plugin from a local APK or GitHub source and manage its trust, update channel, installed version, and stored plugin files.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>App Patching Flow</strong></summary>
+<summary><strong>Patch Selection, Profiles & Patching</strong></summary>
 <ul>
-  <li><strong>Morphe patch bundles support:</strong> Supports the <a href="https://github.com/MorpheApp/morphe-patcher">Morphe Patcher</a> without needing a computer or another app.</li>
-  <li><strong>Ample patch bundles support:</strong> Supports <a href="https://github.com/AmpleReVanced/revanced-patches">AmpleReVanced patch bundles</a> alongside ReVanced and Morphe runtimes.</li>
-  <li><strong>Downloaded app source:</strong> Added a "Downloaded apps" source in the select source screen when patching. If the manager has cached an APK from a downloader plugin, you can pick it directly from there. This option only appears when that app is available.</li>
-  <li><strong>Split APK support:</strong> .apkm, .apks, and .xapk file formats are automatically converted to the .apk format when patching. No need for outside tools.</li>
-  <li><strong>Split merge sub-steps:</strong> Expandable sub-steps for the "Merging split APKs" step, plus sub-steps for "Writing patched APK".</li>
-  <li><strong>Skip unused split modules:</strong> Optional Advanced setting that skips unnecessary split modules (like locale and density splits) when patching split APKs.</li>
-  <li><strong>Advanced native library stripping:</strong> Optional advanced setting to strip unused native libraries (unsupported ABIs) from patched APKs during patching, helping reduce size.</li>
-  <li><strong>Keystore support:</strong> Import and use JKS and PKCS12 keystores for signing patched APKs.</li>
-  <li><strong>Patcher logs export:</strong> Export patcher logs from the patcher screen as a .txt file.</li>
-  <li><strong>Export = auto-save:</strong> When you export a patched app to storage from the patching screen, the manager will now also automatically save that patched app under the "Apps" tab. Before, this only happened if you installed the patched app directly from that screen.</li>
-  <li><strong>Installer management:</strong> A full installer management system with installer metadata, and configurable primary and fallback that applies everywhere across the app.</li>
-  <li><strong>View applied patches:</strong> The "Apps" tab shows the applied patches for each saved patched APK and which patch bundle(s) were used.</li>
-  <li><strong>Organize apps & profiles:</strong> Reorder saved patched apps in the Apps tab and patch profiles in the Patch Profiles tab.</li>
-  <li><strong>Accidental exit protection:</strong> After patching, pressing the back button now shows a confirmation popup. It asks if you really want to leave and gives you the option to save the patched app for later (adds it to the "Apps" tab).</li>
-  <li><strong>Missing patch recovery:</strong> If a selected patch no longer exists, a detailed dialog explains the issue and returns you to patch selection with missing patches highlighted.</li>
-  <li><strong>Step auto-collapse:</strong> Completed patcher steps auto-collapse; toggle in Settings &gt; Advanced &gt; "Auto-collapse completed patcher steps".</li>
-  <li><strong>Saved apps toggle:</strong> Option to disable saving patched apps and hide saved app delete actions.</li>
-  <li><strong>Version tags:</strong> On the patch selection and app selection pages, each app or patch displays the versions it supports. Tapping a version chip opens a web search for that specific app and version.</li>
+  <li><strong>Flexible patch selection:</strong> Select/deselect all patches globally or per bundle, undo/redo changes, filter new patches, inspect option values, and switch between bundle recommendations and other supported versions.</li>
+  <li><strong>Patch confirmation:</strong> Review selected bundles, patches, options, and relevant configuration before patching.</li>
+  <li><strong>Patch profiles:</strong> Save patch selections, option values, target versions, a reusable APK/split source, installer choice, signature workflow, auto-install behavior, and one-tap patching preferences.</li>
+  <li><strong>Single and batch patching:</strong> Patch one app or build a multi-app queue with per-app configuration, reordering, cancellation, detailed progress/results, and install-all actions.</li>
+  <li><strong>Automatic repatching:</strong> Periodically repatch opted-in saved apps when their patch bundles change, with configurable intervals, charging requirements, notifications, and optional Shizuku/Shevery installation.</li>
+  <li><strong>Repatch source retention:</strong> Keep the original APK or split archive used for a saved app so future manual, batch, and automatic repatches can reuse it without asking for the source again.</li>
+  <li><strong>Split APK preparation:</strong> Patch <code>.apkm</code>, <code>.apks</code>, <code>.xapk</code>, and compatible split archives with selectable modules and cleanup filters for unused languages, densities, and native libraries.</li>
+  <li><strong>Install-target-aware patches:</strong> Morphe patch availability can adapt to Standard or Root Mount patching, including required/unavailable patches and optional GmsCore handling.</li>
+  <li><strong>Signature metadata workflow:</strong> Optionally clone signature metadata from the original signed input into the final patched APK and remember that choice for saved apps, profiles, batch jobs, and automatic repatching.</li>
+  <li><strong>Signing control:</strong> Use the manager keystore, import compatible keystores, or skip patched APK signing where supported.</li>
+  <li><strong>Detailed patcher diagnostics:</strong> View elapsed time, app/runtime/device information, selected patches, split/native-library state, and expandable patcher steps and sub-steps.</li>
+  <li><strong>Live resource monitoring:</strong> Optional memory, CPU, and storage I/O graphs are available during patching, with compact layouts and peak/current readings.</li>
+  <li><strong>Patcher logs:</strong> Export detailed logs with app, device, runtime, selected patch, split, and failure information.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Patch Bundle Updates & Imports</strong></summary>
+<summary><strong>APK Sources, Downloaders & Saved Apps</strong></summary>
 <ul>
-  <li><strong>Progress with percentages:</strong> Progress bars with percentage for bundle updates, update checks, and imports.</li>
-  <li><strong>Background bundle updates:</strong> Auto-download bundles in the background with a single progress notification, plus update-available alerts for bundles set to manual updates.</li>
-  <li><strong>Installer management:</strong> Full installer management system covering app installs, saved app reinstalls, and manager updates.
-    <ul>
-      <li>Metadata display for each installer</li>
-      <li>Configurable primary and fallback installers</li>
-      <li>Shizuku installer option for silent installs when Shizuku or Sui is available</li>
-      <li>Advanced settings support saving custom installer packages with package-name lookup and autocomplete, plus dedicated management for third-party installers</li>
-      <li>App mounting support for rooted users (rooted mount installer)</li>
-    </ul>
-  </li>
+  <li><strong>Multiple APK sources:</strong> Start from installed apps, local storage, manager-downloaded APKs, downloader plugins, supported helper apps, or split archives depending on the workflow.</li>
+  <li><strong>Downloader plugins:</strong> Install, update, configure, trust/revoke, and remove compatible downloader plugins directly in URV.</li>
+  <li><strong>APK download helper apps:</strong> Use supported standalone helper apps as APK sources, with helper discovery, signer trust, GitHub source management, and install/update controls.</li>
+  <li><strong>Download cache management:</strong> Keep multiple downloaded APKs, export or delete individual entries, and optionally retain only the newest download for each app.</li>
+  <li><strong>Saved patched apps:</strong> Keep patched APKs in the Apps tab for later install/export/repatch workflows and inspect the patches, bundles, and related metadata used to create them.</li>
+  <li><strong>Saved app organization:</strong> Search and reorder saved apps, manage update badges, and control whether patched apps are automatically saved.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Tools</strong></summary>
+<summary><strong>Installation & Root Workflows</strong></summary>
 <ul>
-  <li><strong>Dedicated Tools tab:</strong> Includes standalone utilities outside the patching flow for common APK and asset workflows.</li>
-  <li><strong>Merge split APKs tool:</strong> Merge split archives (.xapk, .apkm, .apks, .zip) into a single installable APK, with signer integration and downloader-plugin input support.</li>
-  <li><strong>Create custom YouTube icons &amp; headers:</strong> Build adaptive icon and header asset packs with image positioning controls and export-ready outputs.</li>
-  <li><strong>Keystore creator and converter:</strong> Generate new signing keystores or convert existing keystores between supported formats directly in-app.</li>
+  <li><strong>Central installer manager:</strong> Configure primary and fallback installers and choose installers per install or patching result, saved app, patch profile, or tool workflow.</li>
+  <li><strong>Multiple install methods:</strong> Use the Android system installer, Shizuku/Shevery/Sui, supported custom installers, rooted installation, or Root Mount where compatible.</li>
+  <li><strong>Google Play attribution:</strong> Supported system, Shizuku/Shevery, and rooted install modes can record Google Play Store as the installation source.</li>
+  <li><strong>Root Mount:</strong> Mount compatible patched APKs over installed stock apps with stock-source checks, split-input compatibility, post-patch routing, and install-target-aware patch selection.</li>
+  <li><strong>Root recovery:</strong> Track mounted apps across reboots, repair broken mounts, recover stock sources where possible, and export diagnostics when a mount needs attention.</li>
+  <li><strong>Installation controls:</strong> Cancel in-progress installs, handle signature conflicts with clearer recovery options, and automatically install successful patch results when configured.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Downloader & Storage Management</strong></summary>
+<summary><strong>Tools & System Utilities</strong></summary>
 <ul>
-  <li><strong>Cached downloads management:</strong> The manager can now keep multiple downloaded apps (from downloader plugins) inside the downloader settings. You can also export any of these APKs to your device's storage whenever you want.</li>
-  <li><strong>Plugin cleanup:</strong> You can uninstall downloader plugins directly from inside the manager via the download settings page. No manual cleanup needed.</li>
-  <li><strong>File picker favorites:</strong> Favorite files or folders in the custom file picker for quick access.</li>
+  <li><strong>Split APK merger:</strong> Merge <code>.xapk</code>, <code>.apkm</code>, <code>.apks</code>, and compatible ZIP archives into a single APK with selectable split filters, signing, install/save actions, progress sub-steps, and live resource monitoring.</li>
+  <li><strong>Split installer:</strong> Install compatible split packages directly without first merging them into a single APK.</li>
+  <li><strong>APK signer:</strong> Sign APKs with the manager's signing configuration from a standalone tool.</li>
+  <li><strong>Signature metadata injector &amp; cloner:</strong> Inspect sources and clone/inject legacy signature metadata into APK or split targets with selectable signing/output behavior.</li>
+  <li><strong>Keystore creator:</strong> Generate new signing keystores in supported formats with configurable credentials and long-lived certificates.</li>
+  <li><strong>Keystore converter:</strong> Convert supported keystore formats directly in the app.</li>
+  <li><strong>Custom YouTube assets:</strong> Build custom adaptive icons and header assets with positioning, color, preset, and export controls.</li>
+  <li><strong>LSPosed module management:</strong> Optional rooted tab for adding, updating, installing, and organizing user-added LSPosed-compatible modules from GitHub or local storage.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Appearance & Theming</strong></summary>
+<summary><strong>Storage, Backups & File Management</strong></summary>
 <ul>
-  <li><strong>Enhanced theming:</strong> Appearance settings include an accent color picker, theme color picker, color HEX code support, presets, and a live preview widget so you can choose a custom theme color and customize the app to your liking.</li>
-  <li><strong>Custom background images:</strong> Set your own background image with transparency controls and a preview panel; selected images are imported into app storage so they remain available even if the original file is moved or deleted.</li>
-  <li><strong>Monochrome app icons:</strong> Support for Android monochrome icons.</li>
-  <li><strong>Better long names:</strong> Long labels use horizontal swipe instead of auto-sliding or wrapping.</li>
+  <li><strong>Storage dashboard:</strong> Inspect URV storage usage across caches, patch bundles, runtime/downloader plugin files, saved APKs, repatch inputs, patch-profile inputs, signing files, LSPosed modules, backgrounds, and other app data.</li>
+  <li><strong>Targeted cleanup:</strong> Clear individual storage areas, clear recreatable caches, or configure scheduled automatic cache cleanup.</li>
+  <li><strong>Settings and data export/import:</strong> Back up and restore manager settings and supported URV configuration data, including patch-related preferences and organization state.</li>
+  <li><strong>Signing-file handling:</strong> Import/export compatible keystores while keeping signing material out of Android cloud backups.</li>
+  <li><strong>Custom file picker:</strong> Favorite paths, remember folders per workflow, persist sorting/search preferences, show hidden files, and use Android document providers where supported.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Network & Updates</strong></summary>
+<summary><strong>Appearance, Navigation & Search</strong></summary>
 <ul>
-  <li><strong>Metered connection control:</strong> Toggle to allow updates on metered connections for both patch bundles and the manager itself, so you are not blocked on mobile data.</li>
+  <li><strong>Theme customization:</strong> Choose theme/accent colors with presets, HEX input, and live previews, plus monochrome and pure-black options where supported.</li>
+  <li><strong>Custom backgrounds:</strong> Import a background image, adjust its transparency, and keep a private app copy so it remains available if the original moves.</li>
+  <li><strong>Navigation controls:</strong> Configure tab visibility/labels, swipe navigation behavior, action layouts, and other interaction preferences.</li>
+  <li><strong>Search throughout URV:</strong> Search settings with jump-to highlighting and search the Apps, Patch Bundles, Patch Profiles, discovery, patch selection, and file-picker workflows.</li>
+  <li><strong>Patch-selection layouts:</strong> Use standard or more compact/minimal patch selection views and keep relevant filters/presets across sessions.</li>
 </ul>
 </details>
 
 <details>
-<summary><strong>Developer & Power Features</strong></summary>
+<summary><strong>Updates, Notifications & Advanced Controls</strong></summary>
 <ul>
-  <li><strong>Always-visible developer options:</strong> Developer options are always available in Settings by default. No hidden or secret unlock flow.</li>
-  <li><strong>Disable battery optimization banner:</strong> Developer option to hide the battery optimization warning banner.</li>
-  <li><strong>Robust import and export:</strong> Export and import your patch bundles, your patch profiles, and your app settings to and from JSON files for easy backup, sharing, or migration between devices.</li>
-  <li><strong>Full settings export/import:</strong> Export and import all manager settings in one JSON (excluding keystores) for quick migration and recovery.</li>
-</ul>
-</details>
-
-<details>
-<summary><strong>Settings & Navigation</strong></summary>
-<ul>
-  <li><strong>Settings search:</strong> Search across settings categories with jump-to highlighting.</li>
-  <li><strong>Tab search:</strong> Apps, Patch Bundles, and Patch Profiles tabs are searchable via a nav bar search button.</li>
+  <li><strong>Manager updates:</strong> Check for new URV releases, preview changelogs in-app, and receive update notifications.</li>
+  <li><strong>Patch bundle notifications:</strong> Get grouped update alerts and background download progress for bundle updates, including manual and automatic delivery modes.</li>
+  <li><strong>Metered-network controls:</strong> Decide whether manager and patch bundle update checks/downloads may run on metered connections.</li>
+  <li><strong>Developer options:</strong> Advanced controls remain directly accessible for patcher behavior, process/runtime settings, logging, memory handling, notification behavior, and diagnostics.</li>
+  <li><strong>External automation:</strong> When external batch actions are enabled, automation apps can request batch patching, while launcher shortcuts can trigger update/repatch workflows.</li>
 </ul>
 </details>
 
 <details>
 <summary><strong>Localization</strong></summary>
 <ul>
-  <li><strong>Chinese Simplified:</strong> User-selectable language option in settings.</li>
-  <li><strong>Vietnamese:</strong> User-selectable language option in settings.</li>
-  <li><strong>Korean:</strong> User-selectable language option in settings.</li>
-  <li><strong>Japanese:</strong> User-selectable language option in settings.</li>
-  <li><strong>Russian:</strong> User-selectable language option in settings.</li>
-  <li><strong>Ukrainian:</strong> User-selectable language option in settings.</li>
-  <li><strong>Brazilian Portuguese:</strong> User-selectable language option in settings.</li>
-  <li><strong>Indonesian:</strong> User-selectable language option in settings.</li>
-  <li><strong>Fillipino:</strong> User-selectable language option in settings.</li>
-  <li><strong>Hindi:</strong> User-selectable language option in settings.</li>
-  <li><strong>Gujarati:</strong> User-selectable language option in settings.</li>
-  <li><strong>French:</strong> User-selectable language option in settings.</li>
-
+  <li><strong>Device language support:</strong> Follow the device language when a supported translation is available, with English fallback behavior.</li>
+  <li><strong>Selectable app languages:</strong> English, German, Spanish, French, Chinese (Simplified), Indonesian, Hindi, Gujarati, Portuguese (Brazil), Vietnamese, Korean, Japanese, Russian, Turkish, and Ukrainian.</li>
+  <li><strong>In-app switching:</strong> Change languages from Settings with a restart prompt when needed.</li>
 </ul>
 </details>
 
 ## 🔽 Download
 
-You can download the most recent version of Universal ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases/latest).
+You can download the most recent version of Universal ReVanced Manager from [GitHub releases](https://github.com/Jman-Github/universal-revanced-manager/releases).
 
 ## 📋 Patch Bundles
 
-To import patch bundles into Universal ReVanced Manager, use my [ReVanced Patch Bundles](https://github.com/Jman-Github/ReVanced-Patch-Bundles) repository. It includes a detailed [catalog](https://github.com/Jman-Github/ReVanced-Patch-Bundles/blob/bundles/patch-bundles/PATCH-LIST-CATALOG.md) of all patches across 20+ tracked bundles, as well as [bundle URLs](https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls) you can paste directly into Universal ReVanced Manager to import them. Keep in mind that only the patch bundles labeled "API v4" can be imported into the manager. Bundles without this label cannot be imported into the app.
+URV can add compatible ReVanced (<code>.rvp</code>) and Morphe (<code>.mpp</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog.
+
+For a maintained third-party bundle catalog, use the [ReVanced Patch Bundles](https://github.com/Jman-Github/ReVanced-Patch-Bundles) repository. It includes a detailed [patch catalog](https://github.com/Jman-Github/ReVanced-Patch-Bundles/blob/bundles/patch-bundles/PATCH-LIST-CATALOG.md) and [bundle URLs](https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls) that can be imported into URV. For bundles from the discovery/catalog flow, use entries marked <strong>API v4</strong> or <strong>Morphe</strong>; API v3 discovery entries are unsupported.
 
 ## 🔌 Supported Downloader Plugins
 
-[Play Store Downloader](https://github.com/brosssh/revanced-manager-downloaders) ❌  
-[ApkMirror Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
-[APKPure Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
-[APKCombo Downloader](https://github.com/brosssh/revanced-manager-downloaders) ✅  
+URV supports compatible downloader plugins and standalone APK download helper apps as reusable APK sources. They can be installed or imported from supported GitHub repository, release, or APK asset URLs, managed from Downloader settings, and used directly in patching and tool workflows.
 
-## 🤝 Contributors
-<table>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2Fbrosssh.png&h=36&w=36&fit=cover&mask=circle" alt="brosssh avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://github.com/brosssh">brosssh</a><br />
-      Multiple PRs, top contributor
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2FTanakaLun.png&h=36&w=36&fit=cover&mask=circle" alt="TanakaLun avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://github.com/TanakaLun">TanakaLun</a><br />
-      Chinese localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2Fann9cht.png&h=36&w=36&fit=cover&mask=circle" alt="ann9cht avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://github.com/ann9cht">ann9cht</a><br />
-      Vietnamese localization
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2FKobeW50.png&h=36&w=36&fit=cover&mask=circle" alt="KobeW50 avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://github.com/KobeW50">KobeW50</a><br />
-      Proofreading strings & wording
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com/BlackGold8282.png&h=36&w=36&fit=cover&mask=circle" alt="BlackGold8282 avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://github.com/BlackGold8282">BlackGold8282</a><br />
-      Korean localization
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2FYuzuMikan404.png&h=36&w=36&fit=cover&mask=circle" alt="YuzuMikan404 avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://github.com/YuzuMikan404">YuzuMikan404</a><br />
-      Japanese localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2Fvippium.png&h=36&w=36&fit=cover&mask=circle" alt="vippium avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://github.com/vippium">vippium</a><br />
-      Monochrome icon improvements
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2FVertuhai.png&h=36&w=36&fit=cover&mask=circle" alt="Vertuhai avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://github.com/Vertuhai">Vertuhai</a><br />
-      Russian and Ukrainian localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=github.com%2Fr7reiz.png&h=36&w=36&fit=cover&mask=circle" alt="r7reiz avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://github.com/r7reiz">r7reiz</a><br />
-      Brazilian Portuguese localization
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/13430318/large/73204ec2b41cc713d81dc88824059dea.jpg&h=36&w=36&fit=cover&mask=circle" alt="naokoshoto avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://crowdin.com/profile/naokoshoto">naokoshoto</a><br />
-      Indonesian localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/16366724/large/e0afadb935d2fa9b972ca1697169c806.png&h=36&w=36&fit=cover&mask=circle" alt="mesazane avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://crowdin.com/profile/mesazane">Mesazane</a><br />
-      Indonesian localization
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/17524508/large/b5f2c910b17aae07cdfc69bcd973fe31.png&h=36&w=36&fit=cover&mask=circle" alt="fielph avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://crowdin.com/profile/fielph">fielph</a><br />
-      Fillipino localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com%2Favatar%2F17552514%2Flarge%2F8cd18fa414c96aa3bd702eaeccb70b6d.jpeg&h=36&w=36&fit=cover&mask=circle" alt="srs4200 avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://crowdin.com/profile/srs4200">srs4200</a><br />
-      Bengali localization
-    </td>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com/avatar/16589059/small/65fcdfc7892c0e034a5b24fcba44b471_default.png&h=36&w=36&fit=cover&mask=circle" alt="mickael81 avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:0;">
-      <a href="https://crowdin.com/profile/mickael81">mickael81</a><br />
-      French localization
-    </td>
-  </tr>
-  <tr>
-    <td style="vertical-align:middle;padding-right:8px;">
-      <img src="https://images.weserv.nl/?url=crowdin-static.cf-downloads.crowdin.com%2Favatar%2F15398900%2Flarge%2Feddf7f926deb28d0648c04e8d5494c44.png&h=36&w=36&fit=cover&mask=circle" alt="imx-sunner avatar" width="36" height="36" />
-    </td>
-    <td style="vertical-align:middle;padding-right:24px;">
-      <a href="https://crowdin.com/profile/imx-sunner">imx-sunner</a><br />
-      Spanish localization
-    </td>
-    <td colspan="2" style="vertical-align:middle;padding-right:0;"></td>
-  </tr>
-</table>
+The [ReVanced Manager Downloaders](https://github.com/brosssh/revanced-manager-downloaders/releases) repository provides compatible downloader plugins for sources such as APKMirror, APKPure, and APKCombo. URV also supports standalone APK download helper apps, such as [Helper For Morphe](https://github.com/rushiranpise/helper-for-morphe/releases).
 
 ## ⭐ Star History
 
