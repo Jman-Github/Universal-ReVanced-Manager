@@ -36,6 +36,18 @@ jobs:
       - name: Cache Gradle
         uses: burrunan/gradle-cache-action@v3.0.3
 
+      - name: Read latest published APK version code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
+        shell: bash
+        run: |
+          python3 .github/scripts/test_pr_version_code.py
+          aapt2="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt2 | sort -V | tail -n 1)"
+          test -x "$aapt2"
+          python3 .github/scripts/resolve-pr-version-code.py \
+            --repository "$GITHUB_REPOSITORY" --aapt2 "$aapt2"
+
       - name: Run JVM unit tests
         env:
           GITHUB_ACTOR: ${{ github.actor }}
@@ -83,7 +95,7 @@ jobs:
             "-PdevVersionSuffix=$PR_TEST_SUFFIX" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease
-          echo "PR APKs update the normal manager in place. Return using a newer normal release with a compatible database and version code. Older releases such as dev 22 are not supported rollback targets; back up your data before testing." >> "$GITHUB_STEP_SUMMARY"
+          echo "PR build data and regular release data are kept separate to prevent conflicts when switching between release builds and PR artifacts. Because of this, when you install a PR artifact, your app data will appear to be reset. It’s only a clean slate for that specific PR build. Your previous data is still preserved, and once you reinstall the release build you were using before, that data will be restored." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload release-signed validation APKs
         if: steps.signing.outputs.available == 'true'
