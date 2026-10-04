@@ -354,6 +354,8 @@ fun AdvancedSettingsScreen(
         listOf(
             LanguageOption("system", R.string.language_option_system),
             LanguageOption("en", R.string.language_option_english),
+            LanguageOption("de", R.string.language_option_german),
+            LanguageOption("es", R.string.language_option_spanish),
             LanguageOption("fr", R.string.language_option_french),
             LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
             LanguageOption("in", R.string.language_option_indonesian),
@@ -364,6 +366,7 @@ fun AdvancedSettingsScreen(
             LanguageOption("ko", R.string.language_option_korean),
             LanguageOption("ja", R.string.language_option_japanese),
             LanguageOption("ru", R.string.language_option_russian),
+            LanguageOption("tr", R.string.language_option_turkish),
             LanguageOption("uk", R.string.language_option_ukrainian)
         )
     }

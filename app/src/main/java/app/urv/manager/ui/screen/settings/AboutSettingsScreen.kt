@@ -253,7 +253,7 @@ fun AboutSettingsScreen(
                         AnnotatedLinkText(
                             text = stringResource(R.string.revanced_manager_description),
                             linkLabel = stringResource(R.string.here),
-                            url = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-unique-features",
+                            url = "https://github.com/Jman-Github/Universal-ReVanced-Manager#-features",
                             modifier = Modifier.fillMaxWidth(),
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

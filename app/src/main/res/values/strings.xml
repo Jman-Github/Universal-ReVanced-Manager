@@ -1076,6 +1076,8 @@ Patch profiles are not affected.</string>
     <string name="language_restart_later">Later</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
+    <string name="language_option_german">German</string>
+    <string name="language_option_spanish">Spanish</string>
     <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>
@@ -1086,6 +1088,7 @@ Patch profiles are not affected.</string>
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
     <string name="language_option_russian">Russian</string>
+    <string name="language_option_turkish">Turkish</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
@@ -2068,7 +2071,7 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Are you sure you want to delete \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
     <string name="about_revanced_manager">About URV Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is a fork of ReVanced Manager. Both applications use the ReVanced Patcher, which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features URV Manager has to offer</string>
+    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is an Android manager for ReVanced and Morphe. It expands the patching workflow with third-party patch bundles, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and built-in APK tools. See the full feature list</string>
     <string name="here">here.</string>
     <string name="update_available">An update is available</string>
     <string name="ready_to_install_update">Ready to install update</string>
