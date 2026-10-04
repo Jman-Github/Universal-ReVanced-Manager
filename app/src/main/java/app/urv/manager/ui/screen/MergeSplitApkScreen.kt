@@ -209,6 +209,12 @@ fun MergeSplitApkScreen(
         !state.installing
     val canSaveNow = canUseMergedOutput
     val canInstallNow = canUseMergedOutput
+    val canFinish = (state.completed || state.error != null) &&
+        !state.preparingSelection &&
+        !state.cancellationInProgress &&
+        !state.inProgress &&
+        !state.savingOutput &&
+        !state.installing
     val mergeCancelledMessage = stringResource(R.string.merge_split_apk_cancelled)
     val canOpenLogActions = state.logEntries.isNotEmpty() &&
         !state.preparingSelection &&
@@ -645,6 +651,12 @@ fun MergeSplitApkScreen(
                     ) {
                         Icon(Icons.Outlined.PostAdd, stringResource(R.string.save_logs))
                     }
+                    IconButton(
+                        onClick = ::onPageBack,
+                        enabled = canFinish
+                    ) {
+                        Icon(Icons.Outlined.Check, stringResource(R.string.done))
+                    }
                 },
                 floatingActionButton = {
                     AnimatedVisibility(visible = canInstallNow || state.installing) {
@@ -1028,6 +1040,7 @@ internal fun SplitMergeSelectionDialog(
     initialPresetKey: String,
     initialSortMode: SplitMergeModuleSortMode,
     @StringRes confirmTextRes: Int? = null,
+    @StringRes confirmTextWithCountRes: Int? = null,
     onDismissRequest: () -> Unit,
     onFilterSelectionChanged: (String, Boolean, Boolean, Boolean) -> Unit,
     onSortModeChanged: (SplitMergeModuleSortMode) -> Unit,
@@ -1502,7 +1515,16 @@ internal fun SplitMergeSelectionDialog(
                                     onConfirm(selectedModules + requiredModules, stripNativeLibs)
                                 }
                             ) {
-                                Text(stringResource(confirmTextRes))
+                                Text(
+                                    if (confirmTextWithCountRes != null) {
+                                        stringResource(
+                                            confirmTextWithCountRes,
+                                            selectedModuleCount
+                                        )
+                                    } else {
+                                        stringResource(confirmTextRes)
+                                    }
+                                )
                             }
                         } else {
                             Spacer(modifier = Modifier.weight(1f))

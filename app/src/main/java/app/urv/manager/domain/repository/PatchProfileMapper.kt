@@ -12,6 +12,7 @@ import app.urv.manager.patcher.revanced.Revanced22RuntimeBridge
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.util.Options
 import app.urv.manager.util.PatchSelection
+import app.urv.manager.util.mergeWith
 import app.urv.manager.util.tag
 import java.security.MessageDigest
 data class PatchProfileConfiguration(
@@ -98,11 +99,81 @@ fun PatchProfilePayload.remapAndExtractSelection(
     signatures: Map<Int, Set<String>>
 ): Pair<PatchProfilePayload, PatchSelection> {
     val remapped = remapLocalBundles(sources, signatures)
-    val selection = remapped.bundles.associate { bundle ->
-        val patches = bundle.patches.map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-        bundle.bundleUid to patches
-    }.filterValues { it.isNotEmpty() }
+    val sourceMap = sources.associateBy { it.uid }
+    val sourceByEndpoint = sources.mapNotNull { source ->
+        source.asRemoteOrNull?.endpoint
+            ?.normalizedBundleEndpoint()
+            ?.let { it to source }
+    }.toMap()
+    val selection = buildMap<Int, Set<String>> {
+        remapped.bundles.forEach { bundle ->
+            val resolvedUid = if (sourceMap.containsKey(bundle.bundleUid)) {
+                bundle.bundleUid
+            } else {
+                bundle.sourceEndpoint
+                    ?.normalizedBundleEndpoint()
+                    ?.let(sourceByEndpoint::get)
+                    ?.uid
+                    ?: bundle.bundleUid
+            }
+            val patches = bundle.patches
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+            if (patches.isNotEmpty()) {
+                put(resolvedUid, get(resolvedUid).orEmpty() + patches)
+            }
+        }
+    }
     return remapped to selection
+}
+
+internal fun PatchSelection.mergeWithRemappedSelection(
+    originalPayload: PatchProfilePayload,
+    remappedPayload: PatchProfilePayload,
+    remappedSelection: PatchSelection,
+    sources: List<PatchBundleSource>
+): PatchSelection {
+    val uidRemap = originalPayload.bundles
+        .zip(remappedPayload.bundles)
+        .mapNotNull { (original, remapped) ->
+            if (original.bundleUid != remapped.bundleUid) {
+                original.bundleUid to remapped.bundleUid
+            } else {
+                null
+            }
+        }
+        .toMap()
+        .toMutableMap()
+
+    val sourceMap = sources.associateBy { it.uid }
+    val sourceByEndpoint = sources.mapNotNull { source ->
+        source.asRemoteOrNull?.endpoint
+            ?.normalizedBundleEndpoint()
+            ?.let { it to source }
+    }.toMap()
+    originalPayload.bundles.forEach { bundle ->
+        if (sourceMap.containsKey(bundle.bundleUid)) return@forEach
+        val resolvedUid = bundle.sourceEndpoint
+            ?.normalizedBundleEndpoint()
+            ?.let(sourceByEndpoint::get)
+            ?.uid
+            ?: return@forEach
+        if (resolvedUid != bundle.bundleUid) {
+            uidRemap[bundle.bundleUid] = resolvedUid
+        }
+    }
+
+    if (uidRemap.isEmpty()) return mergeWith(remappedSelection)
+
+    fun PatchSelection.canonicalize() = buildMap<Int, Set<String>> {
+        this@canonicalize.forEach { (uid, patches) ->
+            val resolvedUid = uidRemap[uid] ?: uid
+            val merged = get(resolvedUid).orEmpty() + patches
+            if (merged.isNotEmpty()) put(resolvedUid, merged)
+        }
+    }
+    return canonicalize().mergeWith(remappedSelection.canonicalize())
 }
 
 fun PatchProfile.toConfiguration(
@@ -119,14 +190,16 @@ fun PatchProfilePayload.toConfiguration(
     val missingBundles = mutableSetOf<Int>()
     val changedBundles = mutableSetOf<Int>()
     val endpointToSource = sources.values.mapNotNull { source ->
-        (source as? RemotePatchBundle)?.endpoint?.let { endpoint -> endpoint to source }
+        (source as? RemotePatchBundle)?.endpoint
+            ?.normalizedBundleEndpoint()
+            ?.let { endpoint -> endpoint to source }
     }.toMap()
 
     bundles.forEach { bundle ->
         var resolvedUid = bundle.bundleUid
         var info = bundleInfo[resolvedUid]
         if (info == null) {
-            val endpoint = bundle.sourceEndpoint
+            val endpoint = bundle.sourceEndpoint?.normalizedBundleEndpoint()
             if (endpoint != null) {
                 val matchingSource = endpointToSource[endpoint]
                 if (matchingSource != null) {
@@ -214,7 +287,9 @@ fun PatchProfilePayload.remapLocalBundles(
         identifier.trim().takeIf { it.isNotEmpty() }?.lowercase()?.let { it to source }
     }.toMap()
     val endpointToSource = sources.mapNotNull { source ->
-        source.asRemoteOrNull?.endpoint?.let { it to source }
+        source.asRemoteOrNull?.endpoint
+            ?.normalizedBundleEndpoint()
+            ?.let { it to source }
     }.toMap()
 
     var changed = false
@@ -264,7 +339,7 @@ fun PatchProfilePayload.remapLocalBundles(
             return@map updated
         }
 
-        bundle.sourceEndpoint?.let { endpoint ->
+        bundle.sourceEndpoint?.normalizedBundleEndpoint()?.let { endpoint ->
             val remote = endpointToSource[endpoint]
             if (remote != null) {
                 return@map bundle
@@ -328,6 +403,9 @@ fun Map<Int, PatchBundleInfo.Global>.toSignatureMap() =
     mapValues { (_, info) ->
         info.patches.map { it.name.trim().lowercase() }.toSet()
     }
+
+private fun String.normalizedBundleEndpoint(): String? =
+    trim().trimEnd('/').takeIf(String::isNotBlank)
 
 private fun Collection<String>.signatureHash(): String? {
     if (isEmpty()) return null

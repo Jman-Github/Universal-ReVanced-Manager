@@ -34,6 +34,6 @@ interface PatchBundleDao {
     @Query("UPDATE patch_bundles SET sort_order = :sortOrder WHERE uid = :uid")
     suspend fun updateSortOrder(uid: Int, sortOrder: Int)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM patch_bundles WHERE uid != :uid AND display_name IS NOT NULL AND LOWER(display_name) = LOWER(:displayName))")
+    @Query("SELECT EXISTS(SELECT 1 FROM patch_bundles WHERE uid != :uid AND display_name IS NOT NULL AND display_name COLLATE BINARY = :displayName)")
     suspend fun hasDisplayNameConflict(uid: Int, displayName: String): Boolean
 }

@@ -61,7 +61,8 @@ data class AppliedPatchBundleUi(
     val version: String?,
     val patchInfos: List<PatchInfo>,
     val fallbackNames: List<String>,
-    val bundleAvailable: Boolean
+    val bundleAvailable: Boolean,
+    val hasUpdate: Boolean = false
 )
 
 @Composable

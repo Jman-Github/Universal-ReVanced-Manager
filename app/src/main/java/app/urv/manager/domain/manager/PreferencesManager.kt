@@ -136,6 +136,8 @@ class PreferencesManager(
     val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
     val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
+    val patchBundleImportAutoUpdate = booleanPreference("patch_bundle_import_auto_update", true)
+    val patchBundleImportSearchUpdate = booleanPreference("patch_bundle_import_search_update", true)
     val dashboardBundlesFabCollapsed = booleanPreference("dashboard_bundles_fab_collapsed", false)
     val dashboardAppsFabCollapsed = booleanPreference("dashboard_apps_fab_collapsed", false)
     val dashboardLsposedFabCollapsed = booleanPreference("dashboard_lsposed_fab_collapsed", false)

@@ -1819,56 +1819,15 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
-    val showPatchSelectionVersionTags by
-        viewModel.prefs.patchSelectionShowVersionTags.getAsState()
-    val showPatchSelectionOptionPreviews by
-        viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
-    val minimalPatchSelectionView =
-        !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
-    var patchSelectionViewOptionsExpanded by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(highlightTarget) {
-        if (
-            highlightTarget == R.string.patch_selection_version_tags_title ||
-            highlightTarget == R.string.patch_selection_option_previews_title
-        ) {
-            patchSelectionViewOptionsExpanded = true
-        }
-    }
-    val lsposedActionOrderPref by viewModel.prefs.lsposedModuleActionOrder.getAsState()
-    val lsposedHiddenActionsPref by viewModel.prefs.lsposedModuleHiddenActions.getAsState()
-            val lsposedActionOrderList = remember(lsposedActionOrderPref) {
-                val parsed = lsposedActionOrderPref
-                    .split(',')
-                    .mapNotNull { LsposedModuleActionKey.fromStorageId(it.trim()) }
-                LsposedModuleActionKey.ensureComplete(parsed)
-            }
-            val lsposedWorkingOrder = remember(lsposedActionOrderList) {
-                lsposedActionOrderList.toMutableStateList()
-            }
-            LaunchedEffect(lsposedActionOrderList) {
-                lsposedWorkingOrder.clear()
-                lsposedWorkingOrder.addAll(lsposedActionOrderList)
-            }
-            var lsposedActionsExpanded by rememberSaveable { mutableStateOf(false) }
-
-            LaunchedEffect(lsposedActionOrderList) {
-                snapshotFlow { lsposedWorkingOrder.toList() }
-                    .distinctUntilChanged()
-                    .debounce(200)
-                    .collectLatest { order ->
-                        if (order == lsposedActionOrderList) return@collectLatest
-                        viewModel.setLsposedModuleActionOrder(order)
-                    }
-            }
-
-            LaunchedEffect(highlightTarget) {
-                if (highlightTarget == R.string.lsposed_module_action_visibility_title) {
-                    lsposedActionsExpanded = true
-                }
-            }
+            val showPatchSelectionVersionTags by
+                viewModel.prefs.patchSelectionShowVersionTags.getAsState()
+            val showPatchSelectionOptionPreviews by
+                viewModel.prefs.patchSelectionShowOptionPreviews.getAsState()
+            val minimalPatchSelectionView =
+                !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
 
             GroupHeader(
-                stringResource(R.string.action_buttons_patch_list_section),
+                stringResource(R.string.patch_list_display_section),
                 icon = SettingsSectionIcons.ActionButtonsPatchList
             )
             ExpressiveSettingsCard(
@@ -1877,47 +1836,23 @@ fun AdvancedSettingsScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
-                Column {
-                    SettingsSearchHighlight(
-                targetKey = R.string.minimal_patch_selection_view_title,
-                activeKey = highlightTarget,
-                onHighlightComplete = { highlightTarget = null }
-            ) { highlightModifier ->
-                ExpressiveSettingsItem(
-                    modifier = highlightModifier,
-                    headlineContent = stringResource(R.string.minimal_patch_selection_view_title),
-                    supportingContent = stringResource(
-                        R.string.minimal_patch_selection_view_description
-                    ),
-                    trailingContent = {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ExpressiveSettingsSwitch(
-                                checked = minimalPatchSelectionView,
-                                onCheckedChange = { enabled ->
-                                    viewModel.viewModelScope.launch {
-                                        viewModel.prefs.setMinimalPatchSelectionView(enabled)
-                                    }
-                                }
-                            )
-                            Icon(
-                                imageVector = if (patchSelectionViewOptionsExpanded) {
-                                    Icons.Outlined.KeyboardArrowUp
-                                } else {
-                                    Icons.Outlined.KeyboardArrowDown
-                                },
-                                contentDescription = null
-                            )
-                        }
-                    },
-                    onClick = {
-                        patchSelectionViewOptionsExpanded = !patchSelectionViewOptionsExpanded
-                    }
-                )
-            }
-            if (patchSelectionViewOptionsExpanded) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.minimal_patch_selection_view_title,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = minimalPatchSelectionView,
+                        onValueChange = { enabled ->
+                            viewModel.viewModelScope.launch {
+                                viewModel.prefs.setMinimalPatchSelectionView(enabled)
+                            }
+                        },
+                        headline = R.string.minimal_patch_selection_view_title,
+                        description = R.string.minimal_patch_selection_view_description
+                    )
+                }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patch_selection_version_tags_title,
@@ -1957,137 +1892,6 @@ fun AdvancedSettingsScreen(
                     )
                 }
             }
-            ExpressiveSettingsDivider()
-            SettingsSearchHighlight(
-                targetKey = R.string.lsposed_module_action_order_title,
-                activeKey = highlightTarget,
-                onHighlightComplete = { highlightTarget = null }
-            ) { highlightModifier ->
-                ExpressiveSettingsItem(
-                    modifier = highlightModifier,
-                    headlineContent = stringResource(R.string.lsposed_module_action_order_title),
-                    supportingContent = stringResource(R.string.lsposed_module_action_order_description),
-                    trailingContent = {
-                        Icon(
-                            imageVector = if (lsposedActionsExpanded) {
-                                Icons.Outlined.KeyboardArrowUp
-                            } else {
-                                Icons.Outlined.KeyboardArrowDown
-                            },
-                            contentDescription = null
-                        )
-                    },
-                    onClick = { lsposedActionsExpanded = !lsposedActionsExpanded }
-                )
-            }
-
-            if (lsposedActionsExpanded) {
-                ExpressiveSettingsDivider()
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val rowState = rememberLazyListState()
-                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
-                        lsposedWorkingOrder.add(
-                            to.index,
-                            lsposedWorkingOrder.removeAt(from.index)
-                        )
-                    }
-
-                    LsposedModuleActionPreview(
-                        order = lsposedWorkingOrder,
-                        hiddenActions = lsposedHiddenActionsPref,
-                        rowState = rowState,
-                        reorderableState = reorderableState
-                    )
-                }
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                ) {
-                    SettingsSearchHighlight(
-                        targetKey = R.string.lsposed_module_action_visibility_title,
-                        activeKey = highlightTarget,
-                        onHighlightComplete = { highlightTarget = null }
-                    ) { highlightModifier ->
-                        Text(
-                            text = stringResource(R.string.lsposed_module_action_visibility_title),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = highlightModifier
-                        )
-                    }
-                    Text(
-                        text = stringResource(R.string.lsposed_module_action_visibility_description),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        LsposedModuleActionKey.values().forEach { key ->
-                            val visible = key.storageId !in lsposedHiddenActionsPref
-                            val setVisible: (Boolean) -> Unit = { isVisible ->
-                                val updated = lsposedHiddenActionsPref.toMutableSet()
-                                if (isVisible) {
-                                    updated.remove(key.storageId)
-                                } else {
-                                    updated.add(key.storageId)
-                                }
-                                viewModel.setLsposedModuleHiddenActions(updated)
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .clickable { setVisible(!visible) }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = stringResource(key.labelRes),
-                                    modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
-                                ExpressiveSettingsSwitch(
-                                    checked = visible,
-                                    onCheckedChange = setVisible
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(
-                            onClick = { viewModel.setLsposedModuleHiddenActions(emptySet()) }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_visibility_reset))
-                        }
-                        TextButton(
-                            onClick = {
-                                lsposedWorkingOrder.clear()
-                                lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
-                                viewModel.setLsposedModuleActionOrder(
-                                    LsposedModuleActionKey.DefaultOrder
-                                )
-                            }
-                        ) {
-                            Text(stringResource(R.string.lsposed_module_action_order_reset))
-                        }
-                    }
-                }
-            }
-        }
-        }
         }
 
         if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
@@ -2327,6 +2131,8 @@ internal fun ActionButtonSettings(
     val savedHiddenActionsPref by viewModel.prefs.savedAppHiddenActions.getAsState()
     val profileActionOrderPref by viewModel.prefs.patchProfileActionOrder.getAsState()
     val profileHiddenActionsPref by viewModel.prefs.patchProfileHiddenActions.getAsState()
+    val lsposedActionOrderPref by viewModel.prefs.lsposedModuleActionOrder.getAsState()
+    val lsposedHiddenActionsPref by viewModel.prefs.lsposedModuleHiddenActions.getAsState()
             val actionOrderList = remember(actionOrderPref) {
                 val parsed = actionOrderPref
                     .split(',')
@@ -2405,6 +2211,21 @@ internal fun ActionButtonSettings(
             }
             var profileActionsExpanded by rememberSaveable { mutableStateOf(false) }
 
+            val lsposedActionOrderList = remember(lsposedActionOrderPref) {
+                val parsed = lsposedActionOrderPref
+                    .split(',')
+                    .mapNotNull { LsposedModuleActionKey.fromStorageId(it.trim()) }
+                LsposedModuleActionKey.ensureComplete(parsed)
+            }
+            val lsposedWorkingOrder = remember(lsposedActionOrderList) {
+                lsposedActionOrderList.toMutableStateList()
+            }
+            LaunchedEffect(lsposedActionOrderList) {
+                lsposedWorkingOrder.clear()
+                lsposedWorkingOrder.addAll(lsposedActionOrderList)
+            }
+            var lsposedActionsExpanded by rememberSaveable { mutableStateOf(false) }
+
             fun moveAction(action: PatchSelectionActionKey, target: PatchSelectionActionKey) {
                 if (action == target) return
                 val fromIndex = workingOrder.indexOf(action)
@@ -2476,6 +2297,16 @@ internal fun ActionButtonSettings(
                     }
             }
 
+            LaunchedEffect(lsposedActionOrderList) {
+                snapshotFlow { lsposedWorkingOrder.toList() }
+                    .distinctUntilChanged()
+                    .debounce(200)
+                    .collectLatest { order ->
+                        if (order == lsposedActionOrderList) return@collectLatest
+                        viewModel.setLsposedModuleActionOrder(order)
+                    }
+            }
+
 
     LaunchedEffect(highlightTarget) {
         when (highlightTarget) {
@@ -2484,10 +2315,10 @@ internal fun ActionButtonSettings(
             R.string.batch_result_action_visibility_title -> batchResultActionsExpanded = true
             R.string.saved_app_action_visibility_title -> savedActionsExpanded = true
             R.string.patch_profile_action_visibility_title -> profileActionsExpanded = true
+            R.string.lsposed_module_action_visibility_title -> lsposedActionsExpanded = true
         }
     }
     Column {
-        ExpressiveSettingsDivider()
         SettingsSearchHighlight(
                 targetKey = R.string.patch_selection_action_order_title,
                 activeKey = highlightTarget,
@@ -3321,6 +3152,132 @@ internal fun ActionButtonSettings(
                             }
                         ) {
                             Text(stringResource(R.string.patch_profile_action_order_reset))
+                        }
+                    }
+                }
+            }
+
+            ExpressiveSettingsDivider()
+            SettingsSearchHighlight(
+                targetKey = R.string.lsposed_module_action_order_title,
+                activeKey = highlightTarget,
+                onHighlightComplete = onHighlightComplete
+            ) { highlightModifier ->
+                ExpressiveSettingsItem(
+                    modifier = highlightModifier,
+                    headlineContent = stringResource(R.string.lsposed_module_action_order_title),
+                    supportingContent = stringResource(R.string.lsposed_module_action_order_description),
+                    trailingContent = {
+                        Icon(
+                            imageVector = if (lsposedActionsExpanded) {
+                                Icons.Outlined.KeyboardArrowUp
+                            } else {
+                                Icons.Outlined.KeyboardArrowDown
+                            },
+                            contentDescription = null
+                        )
+                    },
+                    onClick = { lsposedActionsExpanded = !lsposedActionsExpanded }
+                )
+            }
+
+            if (lsposedActionsExpanded) {
+                ExpressiveSettingsDivider()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val rowState = rememberLazyListState()
+                    val reorderableState = rememberReorderableLazyListState(rowState) { from, to ->
+                        lsposedWorkingOrder.add(
+                            to.index,
+                            lsposedWorkingOrder.removeAt(from.index)
+                        )
+                    }
+
+                    LsposedModuleActionPreview(
+                        order = lsposedWorkingOrder,
+                        hiddenActions = lsposedHiddenActionsPref,
+                        rowState = rowState,
+                        reorderableState = reorderableState
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                ) {
+                    SettingsSearchHighlight(
+                        targetKey = R.string.lsposed_module_action_visibility_title,
+                        activeKey = highlightTarget,
+                        onHighlightComplete = onHighlightComplete
+                    ) { highlightModifier ->
+                        Text(
+                            text = stringResource(R.string.lsposed_module_action_visibility_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = highlightModifier
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.lsposed_module_action_visibility_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LsposedModuleActionKey.values().forEach { key ->
+                            val visible = key.storageId !in lsposedHiddenActionsPref
+                            val setVisible: (Boolean) -> Unit = { isVisible ->
+                                val updated = lsposedHiddenActionsPref.toMutableSet()
+                                if (isVisible) updated.remove(key.storageId) else updated.add(key.storageId)
+                                viewModel.setLsposedModuleHiddenActions(updated)
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable { setVisible(!visible) }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = stringResource(key.labelRes),
+                                    modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                ExpressiveSettingsSwitch(
+                                    checked = visible,
+                                    onCheckedChange = setVisible
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = { viewModel.setLsposedModuleHiddenActions(emptySet()) }
+                        ) {
+                            Text(stringResource(R.string.lsposed_module_action_visibility_reset))
+                        }
+                        TextButton(
+                            onClick = {
+                                lsposedWorkingOrder.clear()
+                                lsposedWorkingOrder.addAll(LsposedModuleActionKey.DefaultOrder)
+                                viewModel.setLsposedModuleActionOrder(
+                                    LsposedModuleActionKey.DefaultOrder
+                                )
+                            }
+                        ) {
+                            Text(stringResource(R.string.lsposed_module_action_order_reset))
                         }
                     }
                 }

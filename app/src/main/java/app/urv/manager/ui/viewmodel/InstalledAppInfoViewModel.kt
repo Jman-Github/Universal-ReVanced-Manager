@@ -50,6 +50,7 @@ import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PendingHistoricalSavedEntry
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.mergeWithRemappedSelection
 import app.urv.manager.domain.repository.remapAndExtractSelection
 import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.toPayload
@@ -63,7 +64,6 @@ import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.buildSavedAppEntryKey
 import app.urv.manager.util.buildSavedAppVariantIdentity
 import app.urv.manager.util.isSavedAppEntryForPackage
-import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedApkAbiLabel
 import app.urv.manager.util.savedAppLauncherShortcutCapacity
@@ -269,7 +269,12 @@ class InstalledAppInfoViewModel(
         val sourceIds = sources.map { it.uid }.toSet()
         val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
         val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
-        val mergedSelection = storedSelection.mergeWith(remappedSelection)
+        val mergedSelection = storedSelection.mergeWithRemappedSelection(
+            originalPayload = payload,
+            remappedPayload = remappedPayload,
+            remappedSelection = remappedSelection,
+            sources = sources
+        )
         val persistableSelection = mergedSelection.filterKeys { it in sourceIds }
         if (persistableSelection.isNotEmpty() &&
             (persistableSelection != storedSelection || remappedPayload != payload)

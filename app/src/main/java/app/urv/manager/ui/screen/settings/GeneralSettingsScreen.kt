@@ -437,6 +437,16 @@ fun GeneralSettingsScreen(
                         description = R.string.prevent_accidental_touching_description
                     )
                 }
+            }
+
+            GroupHeader(
+                stringResource(R.string.action_buttons_section),
+                icon = SettingsSectionIcons.ActionButtonsPatchList
+            )
+            ExpressiveSettingsCard(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
+            ) {
                 ActionButtonSettings(
                     viewModel = actionButtonsViewModel,
                     highlightTarget = highlightTarget,

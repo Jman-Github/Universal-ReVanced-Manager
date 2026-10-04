@@ -1092,6 +1092,7 @@ fun PatcherScreen(
             initialPresetKey = "all",
             initialSortMode = SplitMergeModuleSortMode.fromStorage(patcherSplitSortMode),
             confirmTextRes = R.string.continue_,
+            confirmTextWithCountRes = R.string.continue_with_count,
             onDismissRequest = {
                 viewModel.cancelSplitSelectionPreparation()
                 onPageBack()

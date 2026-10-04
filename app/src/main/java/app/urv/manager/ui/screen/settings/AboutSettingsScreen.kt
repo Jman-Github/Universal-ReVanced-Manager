@@ -2,10 +2,10 @@ package app.urv.manager.ui.screen.settings
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.view.HapticFeedbackConstants
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -61,8 +61,10 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.model.navigation.Settings
 import app.urv.manager.ui.viewmodel.AboutViewModel.Companion.getSocialIcon
+import app.urv.manager.util.longPressOnly
 import app.urv.manager.util.openUrl
 import app.urv.manager.util.toast
+import app.urv.manager.util.withHapticFeedback
 import app.universal.revanced.manager.BuildConfig
 import app.universal.revanced.manager.R
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -75,13 +77,14 @@ fun AboutSettingsScreen(
 ) {
     val context = LocalContext.current
     val clipboard = remember(context) { context.getSystemService<ClipboardManager>() }
+    val managerVersionCopiedMessage = stringResource(R.string.manager_version_copied)
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var showNoticeDialog by rememberSaveable { mutableStateOf(false) }
     var showLicensesDialog by rememberSaveable { mutableStateOf(false) }
     val managerVersion = remember { BuildConfig.VERSION_NAME }
-    val managerVersionWithCode = remember(managerVersion) {
-        "v${managerVersion.removePrefix("v").removePrefix("V")} (${BuildConfig.VERSION_CODE})"
+    val managerVersionLabel = remember(managerVersion) {
+        "v${managerVersion.removePrefix("v").removePrefix("V")}"
     }
     // painterResource() is broken on release builds for some reason.
     val icon = rememberDrawablePainter(drawable = remember {
@@ -219,21 +222,32 @@ fun AboutSettingsScreen(
                                 .wrapContentWidth(Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val copyManagerVersion = {
+                                if (clipboard != null) {
+                                    clipboard.setPrimaryClip(
+                                        ClipData.newPlainText(
+                                            "Manager version",
+                                            managerVersionLabel
+                                        )
+                                    )
+                                    context.toast(managerVersionCopiedMessage)
+                                }
+                            }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                             Text(
-                                text = managerVersionWithCode,
+                                text = managerVersionLabel,
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
-                                modifier = Modifier.combinedClickable(
-                                    onClick = {},
-                                    onLongClickLabel = stringResource(R.string.copy_to_clipboard),
-                                    onLongClick = {
-                                        clipboard?.setPrimaryClip(
-                                            ClipData.newPlainText("Manager version", managerVersionWithCode)
-                                        )
-                                        context.toast(context.getString(R.string.manager_version_copied))
-                                    }
+                                modifier = Modifier.longPressOnly(
+                                    label = stringResource(R.string.copy_to_clipboard),
+                                    onLongPress = copyManagerVersion
                                 )
+                            )
+                            Text(
+                                text = " (${BuildConfig.VERSION_CODE})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
                         }
                         AnnotatedLinkText(

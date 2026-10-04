@@ -273,8 +273,9 @@
     <string name="advanced_system_description">Safety, debug, and system controls</string>
     <string name="theme_section">Theme</string>
     <string name="background_section">Background</string>
-    <string name="navigation_tabs_section">Navigation, Tabs &amp; Action Buttons</string>
-    <string name="action_buttons_patch_list_section">Action Buttons &amp; Patch List Display</string>
+    <string name="navigation_tabs_section">Navigation &amp; Tabs</string>
+    <string name="action_buttons_section">Action Buttons</string>
+    <string name="patch_list_display_section">Patch List Display</string>
     <string name="app_behavior_section">App Behavior</string>
     <string name="network_integrations_section">Network &amp; Integrations</string>
     <string name="installer_section">Installer</string>
@@ -2010,6 +2011,7 @@ Details: %2$s</string>
     <string name="more">More</string>
     <string name="less">Less</string>
     <string name="continue_">Continue</string>
+    <string name="continue_with_count">Continue (%1$d)</string>
     <string name="dismiss">Dismiss</string>
     <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
@@ -2068,7 +2070,7 @@ Details: %2$s</string>
     <string name="downloading_manager_update">Downloading update…</string>
     <string name="download_progress_notification_channel">Downloads</string>
     <string name="download_progress_indeterminate">Downloading…</string>
-    <string name="manager_update_banner_title">URV Manager update found</string>
+    <string name="manager_update_banner_title">Updating URV Manager</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Failed to download update: %s</string>
     <string name="cancel">Cancel</string>
@@ -2164,7 +2166,6 @@ Details: %2$s</string>
     <string name="patch_bundle_discovery_loading_more">Loading more patch bundles…</string>
     <string name="patch_bundle_discovery_error">Failed to load patch bundles.</string>
     <string name="patch_bundle_discovery_imported">Added</string>
-    <string name="patch_bundle_discovery_patch_count">%1$d patches</string>
     <string name="patch_bundle_discovery_filter_all">All</string>
     <string name="patch_bundle_discovery_release">Release</string>
     <string name="patch_bundle_discovery_prerelease">Pre-release</string>

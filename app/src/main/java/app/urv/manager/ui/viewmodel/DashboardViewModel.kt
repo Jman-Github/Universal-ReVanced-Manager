@@ -505,6 +505,20 @@ class DashboardViewModel(
         }
     }
 
+    fun setPatchBundleImportAutoUpdate(value: Boolean) =
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                prefs.patchBundleImportAutoUpdate.update(value)
+            }
+        }
+
+    fun setPatchBundleImportSearchUpdate(value: Boolean) =
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            withContext(NonCancellable) {
+                prefs.patchBundleImportSearchUpdate.update(value)
+            }
+        }
+
     fun createLocalSourceFromFile(path: String) = viewModelScope.launch {
         withContext(NonCancellable) {
             withPersistentImportToast {

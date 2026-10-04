@@ -336,6 +336,8 @@ fun DashboardScreen(
     val dashboardSplitInputDirectory by prefs.dashboardSplitInputLastDirectory.getAsState()
     val dashboardSavedAppsExportDirectory by
         prefs.dashboardSavedAppsExportLastDirectory.getAsState()
+    val patchBundleImportAutoUpdate by prefs.patchBundleImportAutoUpdate.getAsState()
+    val patchBundleImportSearchUpdate by prefs.patchBundleImportSearchUpdate.getAsState()
     val chooseInstallerPerInstall by prefs.chooseInstallerPerInstall.getAsState()
     val bundlesFabCollapsed by prefs.dashboardBundlesFabCollapsed.getAsState()
     val appsFabCollapsed by prefs.dashboardAppsFabCollapsed.getAsState()
@@ -1845,6 +1847,10 @@ fun DashboardScreen(
                 requestBundleFilePicker()
             },
             selectedLocalPath = selectedBundlePath,
+            initialAutoUpdate = patchBundleImportAutoUpdate,
+            initialSearchUpdate = patchBundleImportSearchUpdate,
+            onAutoUpdateChange = vm::setPatchBundleImportAutoUpdate,
+            onSearchUpdateChange = vm::setPatchBundleImportSearchUpdate,
             initialRemoteUrl = initialAddBundleRemoteUrl
         )
     }
@@ -2679,6 +2685,17 @@ fun DashboardScreen(
                                     Icon(Icons.Default.Storage, stringResource(R.string.select_from_storage))
                                 }
                                 HapticFloatingActionButton(
+                                    onClick = { attemptAppInput(onAppSelectorClick) },
+                                    enabled = appInputEnabled,
+                                    containerColor = if (appInputEnabled) {
+                                        FloatingActionButtonDefaults.containerColor
+                                    } else {
+                                        disabledAppInputFabColor
+                                    }
+                                ) {
+                                    Icon(Icons.Default.Add, stringResource(R.string.add))
+                                }
+                                HapticFloatingActionButton(
                                     onClick = { attemptAppInput(onBatchQueueClick) },
                                     enabled = appInputEnabled,
                                     containerColor = if (appInputEnabled) {
@@ -2692,15 +2709,6 @@ fun DashboardScreen(
                                         stringResource(R.string.batch_queue_create)
                                     )
                                 }
-                                HapticFloatingActionButton(
-                                    onClick = { attemptAppInput(onAppSelectorClick) },
-                                    enabled = appInputEnabled,
-                                    containerColor = if (appInputEnabled) {
-                                        FloatingActionButtonDefaults.containerColor
-                                    } else {
-                                        disabledAppInputFabColor
-                                    }
-                                ) { Icon(Icons.Default.Add, stringResource(R.string.add)) }
                             }
                         }
                         BundleFabHandle(

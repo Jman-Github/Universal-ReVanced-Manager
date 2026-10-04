@@ -49,6 +49,10 @@ fun ImportPatchBundleDialog(
     onLocalSubmit: (String) -> Unit,
     onLocalPick: () -> Unit,
     selectedLocalPath: String?,
+    initialAutoUpdate: Boolean,
+    initialSearchUpdate: Boolean,
+    onAutoUpdateChange: (Boolean) -> Unit,
+    onSearchUpdateChange: (Boolean) -> Unit,
     initialRemoteUrl: String = ""
 ) {
     val normalizedInitialRemoteUrl = remember(initialRemoteUrl) { initialRemoteUrl.trim() }
@@ -57,8 +61,8 @@ fun ImportPatchBundleDialog(
     }
     var bundleType by rememberSaveable(normalizedInitialRemoteUrl) { mutableStateOf(BundleType.Remote) }
     var remoteUrl by rememberSaveable(normalizedInitialRemoteUrl) { mutableStateOf(normalizedInitialRemoteUrl) }
-    var autoUpdate by rememberSaveable { mutableStateOf(true) }
-    var searchUpdate by rememberSaveable { mutableStateOf(true) }
+    var autoUpdate by rememberSaveable { mutableStateOf(initialAutoUpdate) }
+    var searchUpdate by rememberSaveable { mutableStateOf(initialSearchUpdate) }
 
     val steps = listOf<@Composable () -> Unit>(
         {
@@ -76,8 +80,14 @@ fun ImportPatchBundleDialog(
                 searchUpdate,
                 onLocalPick,
                 { remoteUrl = it },
-                { autoUpdate = it },
-                { searchUpdate = it }
+                {
+                    autoUpdate = it
+                    onAutoUpdateChange(it)
+                },
+                {
+                    searchUpdate = it
+                    onSearchUpdateChange(it)
+                }
             )
         }
     )

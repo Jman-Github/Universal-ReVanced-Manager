@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.annotation.MainThread
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material3.ListItemColors
 import androidx.compose.material3.ListItemDefaults
@@ -25,7 +26,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -350,6 +354,24 @@ fun <T, R> ((T) -> R).withHapticFeedback(constant: Int): (T) -> R {
 }
 
 fun Modifier.enabled(condition: Boolean) = if (condition) this else alpha(0.5f)
+
+@Composable
+fun Modifier.longPressOnly(
+    label: String,
+    onLongPress: () -> Unit
+): Modifier {
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
+    return this
+        .pointerInput(Unit) {
+            detectTapGestures(onLongPress = { currentOnLongPress() })
+        }
+        .semantics {
+            onLongClick(label = label) {
+                currentOnLongPress()
+                true
+            }
+        }
+}
 
 @MainThread
 fun <T : Any> SavedStateHandle.saveableVar(init: () -> T): PropertyDelegateProvider<Any?, ReadWriteProperty<Any?, T>> =

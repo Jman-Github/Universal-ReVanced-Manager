@@ -5,6 +5,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
+import android.view.HapticFeedbackConstants
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
@@ -127,7 +128,9 @@ import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.AnnotatedLinkText // From PR #37: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/37
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.consumeHorizontalScroll
+import app.urv.manager.util.longPressOnly
 import app.urv.manager.util.toast
+import app.urv.manager.util.withHapticFeedback
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -1411,7 +1414,7 @@ private fun String.toDownloaderDisplayLabel(): String {
 
 private fun String?.toPluginVersionLabel(): String? {
     val version = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    return if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+    return "v${version.removePrefix("v").removePrefix("V")}"
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1439,6 +1442,10 @@ private fun DownloaderPluginCard(
     middleActionEnabled: Boolean = true,
     footerActionEnabled: Boolean = true
 ) {
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    val copiedToClipboardMessage = stringResource(R.string.toast_copied_to_clipboard)
+    val copyToClipboardLabel = stringResource(R.string.copy_to_clipboard)
     val supportingSlot: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
@@ -1468,7 +1475,21 @@ private fun DownloaderPluginCard(
             },
             trailingContent = version.toPluginVersionLabel()?.let { pluginVersion ->
                 {
-                    Text(pluginVersion)
+                    val copyPluginVersion = {
+                        clipboard?.setPrimaryClip(
+                            ClipData.newPlainText("$title version", pluginVersion)
+                        )
+                        if (clipboard != null) {
+                            context.toast(copiedToClipboardMessage)
+                        }
+                    }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                    Text(
+                        text = pluginVersion,
+                        modifier = Modifier.longPressOnly(
+                            label = copyToClipboardLabel,
+                            onLongPress = copyPluginVersion
+                        )
+                    )
                 }
             }
         )

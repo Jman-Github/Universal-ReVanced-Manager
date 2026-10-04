@@ -2,6 +2,7 @@ package app.urv.manager.ui.screen.settings
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.view.HapticFeedbackConstants
 import androidx.annotation.StringRes
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -91,7 +92,9 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.viewmodel.PatcherRuntimePluginsViewModel
+import app.urv.manager.util.longPressOnly
 import app.urv.manager.util.toast
+import app.urv.manager.util.withHapticFeedback
 import org.koin.androidx.compose.koinViewModel
 import java.security.MessageDigest
 import app.urv.manager.ui.component.CenteredDialogTitle
@@ -632,7 +635,7 @@ private fun String.toRuntimeDisplayLabel(): String =
 
 private fun String?.toRuntimeVersionLabel(): String? {
     val version = this?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-    return if (version.startsWith("v", ignoreCase = true)) version else "v$version"
+    return "v${version.removePrefix("v").removePrefix("V")}"
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -661,6 +664,10 @@ private fun RuntimePluginCard(
     footerActionEnabled: Boolean = true,
     leadingContent: (@Composable () -> Unit)? = null
 ) {
+    val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    val copiedToClipboardMessage = stringResource(R.string.toast_copied_to_clipboard)
+    val copyToClipboardLabel = stringResource(R.string.copy_to_clipboard)
     val supportingSlot: @Composable () -> Unit = {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
@@ -704,8 +711,20 @@ private fun RuntimePluginCard(
             },
             trailingContent = version.toRuntimeVersionLabel()?.let { pluginVersion ->
                 {
+                    val copyRuntimeVersion = {
+                        clipboard?.setPrimaryClip(
+                            ClipData.newPlainText("$title version", pluginVersion)
+                        )
+                        if (clipboard != null) {
+                            context.toast(copiedToClipboardMessage)
+                        }
+                    }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     Text(
                         text = pluginVersion,
+                        modifier = Modifier.longPressOnly(
+                            label = copyToClipboardLabel,
+                            onLongPress = copyRuntimeVersion
+                        ),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

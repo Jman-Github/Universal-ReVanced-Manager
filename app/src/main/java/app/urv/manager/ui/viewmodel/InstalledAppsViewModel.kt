@@ -29,7 +29,9 @@ import app.urv.manager.domain.installer.root.RootMountTransactionCoordinator
 import app.urv.manager.domain.installer.root.requireSuccess
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.mergeWithRemappedSelection
 import app.urv.manager.domain.repository.remapAndExtractSelection
+import app.urv.manager.domain.repository.remapLocalBundles
 import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.util.PM
 import app.urv.manager.util.PatchSelection
@@ -38,7 +40,6 @@ import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.buildSavedAppVariantIdentity
-import app.urv.manager.util.mergeWith
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedApkAbiLabel
 import app.urv.manager.util.simpleMessage
@@ -147,11 +148,25 @@ class InstalledAppsViewModel(
                 Triple(installedApps, bundleInfo, sources)
             }.collect { (installedApps, bundleInfo, sources) ->
                 val sourceMap = sources.associateBy { it.uid }
+                val signatures = bundleInfo.toSignatureMap().toMutableMap().apply {
+                    sources
+                        .filter { it.asRemoteOrNull == null }
+                        .forEach { source -> putIfAbsent(source.uid, emptySet()) }
+                }
                 val packageNames = installedApps.map { it.currentPackageName }.toSet()
 
                 installedApps.forEach { app ->
                     val selection = loadAppliedPatches(app.currentPackageName)
-                    val summaries = buildBundleSummaries(app, selection, bundleInfo, sourceMap)
+                    val remappedPayload = app.selectionPayload?.remapLocalBundles(
+                        sources = sources,
+                        signatures = signatures
+                    )
+                    val summaryApp = if (remappedPayload != null && remappedPayload != app.selectionPayload) {
+                        app.copy(selectionPayload = remappedPayload)
+                    } else {
+                        app
+                    }
+                    val summaries = buildBundleSummaries(summaryApp, selection, bundleInfo, sourceMap)
                     if (summaries.isEmpty()) {
                         bundleSummaries.remove(app.currentPackageName)
                     } else {
@@ -289,7 +304,12 @@ class InstalledAppsViewModel(
         val sourceIds = sources.map { it.uid }.toSet()
         val signatures = patchBundleRepository.allBundlesInfoFlow.first().toSignatureMap()
         val (remappedPayload, remappedSelection) = payload.remapAndExtractSelection(sources, signatures)
-        val mergedSelection = storedSelection.mergeWith(remappedSelection)
+        val mergedSelection = storedSelection.mergeWithRemappedSelection(
+            originalPayload = payload,
+            remappedPayload = remappedPayload,
+            remappedSelection = remappedSelection,
+            sources = sources
+        )
         val persistableSelection = mergedSelection.filterKeys { it in sourceIds }
         if (persistableSelection.isNotEmpty() &&
             (persistableSelection != storedSelection || remappedPayload != payload)
@@ -802,22 +822,38 @@ class InstalledAppsViewModel(
         val payloadBundles = app.selectionPayload?.bundles.orEmpty()
         val sourceByEndpoint = sourceMap.values.mapNotNull { source ->
             source.asRemoteOrNull?.endpoint
-                ?.trim()
-                ?.takeIf(String::isNotBlank)
+                ?.normalizedBundleEndpoint()
                 ?.let { it to source }
         }.toMap()
+        val payloadBundlesByUid = buildMap<Int, PatchProfilePayload.Bundle> {
+            payloadBundles.forEach { bundle ->
+                if (sourceMap.containsKey(bundle.bundleUid)) {
+                    put(bundle.bundleUid, bundle)
+                }
+            }
+            payloadBundles.forEach { bundle ->
+                if (sourceMap.containsKey(bundle.bundleUid)) return@forEach
+                val resolvedUid = bundle.sourceEndpoint
+                    ?.normalizedBundleEndpoint()
+                    ?.let(sourceByEndpoint::get)
+                    ?.uid
+                    ?: bundle.bundleUid
+                putIfAbsent(resolvedUid, bundle)
+            }
+        }
         val summaries = mutableListOf<AppBundleSummary>()
         val processed = mutableSetOf<Int>()
 
         selection.keys.forEach { uid ->
             processed += uid
-            buildSummaryEntry(uid, payloadBundles, bundleInfo, sourceMap, sourceByEndpoint)
+            buildSummaryEntry(uid, payloadBundlesByUid, bundleInfo, sourceMap, sourceByEndpoint)
                 ?.let(summaries::add)
         }
 
-        payloadBundles.forEach { bundle ->
-            if (bundle.bundleUid in processed) return@forEach
-            buildSummaryEntry(bundle.bundleUid, payloadBundles, bundleInfo, sourceMap, sourceByEndpoint)
+        payloadBundlesByUid.keys.forEach { uid ->
+            if (uid in processed) return@forEach
+            processed += uid
+            buildSummaryEntry(uid, payloadBundlesByUid, bundleInfo, sourceMap, sourceByEndpoint)
                 ?.let(summaries::add)
         }
 
@@ -826,16 +862,15 @@ class InstalledAppsViewModel(
 
     private fun buildSummaryEntry(
         uid: Int,
-        payloadBundles: List<PatchProfilePayload.Bundle>,
+        payloadBundlesByUid: Map<Int, PatchProfilePayload.Bundle>,
         bundleInfo: Map<Int, PatchBundleInfo.Global>,
         sourceMap: Map<Int, PatchBundleSource>,
         sourceByEndpoint: Map<String, PatchBundleSource>
     ): AppBundleSummary? {
-        val payloadBundle = payloadBundles.firstOrNull { it.bundleUid == uid }
+        val payloadBundle = payloadBundlesByUid[uid]
         val payloadEndpoint = payloadBundle?.sourceEndpoint
-            ?.trim()
-            ?.takeIf(String::isNotBlank)
-        val source = payloadEndpoint?.let(sourceByEndpoint::get) ?: sourceMap[uid]
+            ?.normalizedBundleEndpoint()
+        val source = sourceMap[uid] ?: payloadEndpoint?.let(sourceByEndpoint::get)
         val info = bundleInfo[source?.uid ?: uid] ?: bundleInfo[uid]
 
         val title = source?.displayTitle
@@ -850,7 +885,7 @@ class InstalledAppsViewModel(
         val version = payloadVersion ?: currentVersion
         val hasUpdate = payloadVersion != null &&
             currentVersion != null &&
-            compareVersionStrings(currentVersion, payloadVersion) > 0
+            isBundleUpdateAvailable(currentVersion, payloadVersion)
 
         return AppBundleSummary(
             title = title,
@@ -859,82 +894,89 @@ class InstalledAppsViewModel(
         )
     }
 
-    private fun compareVersionStrings(first: String, second: String): Int {
-        val firstVersion = BundleVersion.parse(first)
-        val secondVersion = BundleVersion.parse(second)
-        if (firstVersion != null && secondVersion != null) {
-            return firstVersion.compareTo(secondVersion)
-        }
+}
 
-        return compareLooseVersionStrings(first, second)
+private fun String.normalizedBundleEndpoint(): String? =
+    trim().trimEnd('/').takeIf(String::isNotBlank)
+
+internal fun isBundleUpdateAvailable(currentVersion: String, appliedVersion: String): Boolean =
+    compareBundleVersionStrings(currentVersion, appliedVersion) > 0
+
+private fun compareBundleVersionStrings(first: String, second: String): Int {
+    val firstVersion = BundleVersion.parse(first)
+    val secondVersion = BundleVersion.parse(second)
+    if (firstVersion != null && secondVersion != null) {
+        return firstVersion.compareTo(secondVersion)
     }
 
-    private fun compareLooseVersionStrings(first: String, second: String): Int {
-        val aParts = first.split(Regex("[^0-9]+"))
-            .filter { it.isNotBlank() }
-            .map { it.toIntOrNull() ?: 0 }
-        val bParts = second.split(Regex("[^0-9]+"))
-            .filter { it.isNotBlank() }
-            .map { it.toIntOrNull() ?: 0 }
-        val max = maxOf(aParts.size, bParts.size)
+    return compareLooseBundleVersionStrings(first, second)
+}
+
+private fun compareLooseBundleVersionStrings(first: String, second: String): Int {
+    val aParts = first.split(Regex("[^0-9]+"))
+        .filter { it.isNotBlank() }
+        .map { it.toIntOrNull() ?: 0 }
+    val bParts = second.split(Regex("[^0-9]+"))
+        .filter { it.isNotBlank() }
+        .map { it.toIntOrNull() ?: 0 }
+    val max = maxOf(aParts.size, bParts.size)
+    for (index in 0 until max) {
+        val a = aParts.getOrElse(index) { 0 }
+        val b = bParts.getOrElse(index) { 0 }
+        if (a != b) return a.compareTo(b)
+    }
+    return first.compareTo(second, ignoreCase = true)
+}
+
+private data class BundleVersion(
+    val core: List<Long>,
+    val prerelease: List<String>
+) : Comparable<BundleVersion> {
+    override fun compareTo(other: BundleVersion): Int {
+        val max = maxOf(core.size, other.core.size)
         for (index in 0 until max) {
-            val a = aParts.getOrElse(index) { 0 }
-            val b = bParts.getOrElse(index) { 0 }
-            if (a != b) return a.compareTo(b)
+            val first = core.getOrElse(index) { 0 }
+            val second = other.core.getOrElse(index) { 0 }
+            if (first != second) return first.compareTo(second)
         }
-        return first.compareTo(second, ignoreCase = true)
+
+        if (prerelease.isEmpty() && other.prerelease.isEmpty()) return 0
+        if (prerelease.isEmpty()) return 1
+        if (other.prerelease.isEmpty()) return -1
+
+        val prereleaseMax = maxOf(prerelease.size, other.prerelease.size)
+        for (index in 0 until prereleaseMax) {
+            val first = prerelease.getOrNull(index) ?: return -1
+            val second = other.prerelease.getOrNull(index) ?: return 1
+            val firstNumber = first.toLongOrNull()
+            val secondNumber = second.toLongOrNull()
+            val comparison = when {
+                firstNumber != null && secondNumber != null -> firstNumber.compareTo(secondNumber)
+                firstNumber != null -> -1
+                secondNumber != null -> 1
+                else -> first.compareTo(second, ignoreCase = true)
+            }
+            if (comparison != 0) return comparison
+        }
+
+        return 0
     }
 
-    private data class BundleVersion(
-        val core: List<Long>,
-        val prerelease: List<String>
-    ) : Comparable<BundleVersion> {
-        override fun compareTo(other: BundleVersion): Int {
-            val max = maxOf(core.size, other.core.size)
-            for (index in 0 until max) {
-                val first = core.getOrElse(index) { 0 }
-                val second = other.core.getOrElse(index) { 0 }
-                if (first != second) return first.compareTo(second)
-            }
+    companion object {
+        private val versionPattern = Regex("^[vV]?(\\d+(?:\\.\\d+)*)(?:[-_]([^+\\s]+))?(?:\\+.*)?$")
 
-            if (prerelease.isEmpty() && other.prerelease.isEmpty()) return 0
-            if (prerelease.isEmpty()) return 1
-            if (other.prerelease.isEmpty()) return -1
+        fun parse(value: String): BundleVersion? {
+            val match = versionPattern.matchEntire(value.trim()) ?: return null
+            val core = match.groupValues[1]
+                .split('.')
+                .map { it.toLongOrNull() ?: return null }
+            val prerelease = match.groupValues.getOrNull(2)
+                ?.takeIf { it.isNotBlank() }
+                ?.split(Regex("[.-]"))
+                ?.filter { it.isNotBlank() }
+                .orEmpty()
 
-            val prereleaseMax = maxOf(prerelease.size, other.prerelease.size)
-            for (index in 0 until prereleaseMax) {
-                val first = prerelease.getOrNull(index) ?: return -1
-                val second = other.prerelease.getOrNull(index) ?: return 1
-                val firstNumber = first.toLongOrNull()
-                val secondNumber = second.toLongOrNull()
-                val comparison = when {
-                    firstNumber != null && secondNumber != null -> firstNumber.compareTo(secondNumber)
-                    firstNumber != null -> -1
-                    secondNumber != null -> 1
-                    else -> first.compareTo(second, ignoreCase = true)
-                }
-                if (comparison != 0) return comparison
-            }
-
-            return 0
-        }
-
-        companion object {
-            private val versionPattern = Regex("^[vV]?(\\d+(?:\\.\\d+)*)(?:[-_]([^+\\s]+))?(?:\\+.*)?$")
-
-            fun parse(value: String): BundleVersion? {
-                val match = versionPattern.matchEntire(value.trim()) ?: return null
-                val core = match.groupValues[1]
-                    .split('.')
-                    .map { it.toLongOrNull() ?: return null }
-                val prerelease = match.groupValues.getOrNull(2)
-                    ?.takeIf { it.isNotBlank() }
-                    ?.split(Regex("[.-]"))
-                    ?.filter { it.isNotBlank() }
-                    .orEmpty()
-
-                return BundleVersion(core, prerelease)
-            }
+            return BundleVersion(core, prerelease)
         }
     }
 }

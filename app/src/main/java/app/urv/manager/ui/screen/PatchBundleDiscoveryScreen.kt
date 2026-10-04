@@ -76,6 +76,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
@@ -1227,7 +1228,7 @@ private fun BundleDiscoveryItem(
                     )
                 }
                 BundleTag(
-                    text = stringResource(R.string.patch_bundle_discovery_patch_count, patchCount),
+                    text = pluralStringResource(R.plurals.patch_count, patchCount, patchCount),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )

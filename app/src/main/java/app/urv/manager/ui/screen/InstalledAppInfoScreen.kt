@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
 import android.util.Log
+import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,7 +85,10 @@ import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.batch.batchOriginalPackageName
+import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.repository.remapLocalBundles
+import app.urv.manager.domain.repository.toSignatureMap
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.ui.component.AppInfo
 import app.urv.manager.ui.component.AppliedPatchBundleUi
@@ -109,6 +113,7 @@ import app.urv.manager.ui.component.settings.SettingsListItem
 import app.urv.manager.ui.model.InstalledAppAction
 import app.urv.manager.ui.viewmodel.InstalledAppInfoViewModel
 import app.urv.manager.ui.viewmodel.InstalledAppInfoViewModel.ReplaceSavedBundleResult
+import app.urv.manager.ui.viewmodel.isBundleUpdateAvailable
 import app.urv.manager.ui.viewmodel.InstallResult
 import app.urv.manager.ui.viewmodel.MountWarningAction
 import app.urv.manager.ui.viewmodel.MountWarningReason
@@ -119,10 +124,12 @@ import app.urv.manager.util.PatchBundleExportData
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.isAllowedApkFile
+import app.urv.manager.util.longPressOnly
 import app.urv.manager.util.savedAppBasePackage
 import app.urv.manager.util.savedAppLauncherShortcutCapacity
 import app.urv.manager.util.tag
 import app.urv.manager.util.toast
+import app.urv.manager.util.withHapticFeedback
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import java.util.Locale
@@ -132,7 +139,10 @@ import java.nio.file.Files
 import java.nio.file.Path
 import app.urv.manager.ui.component.CenteredDialogTitle
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class
+)
 @Composable
 fun InstalledAppInfoScreen(
     onPatchClick: (
@@ -147,6 +157,8 @@ fun InstalledAppInfoScreen(
     initialAction: InstalledAppAction? = null
 ) {
     val context = LocalContext.current
+    val clipboard = remember(context) { context.getSystemService(ClipboardManager::class.java) }
+    val copiedToClipboardMessage = stringResource(R.string.toast_copied_to_clipboard)
     val scope = rememberCoroutineScope()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val prefs: PreferencesManager = koinInject()
@@ -270,8 +282,43 @@ fun InstalledAppInfoScreen(
         }
     }
     val selectionPayload = installedAppState?.selectionPayload
-    val savedBundlesByUid = remember(selectionPayload) {
-        selectionPayload?.bundles.orEmpty().associateBy { it.bundleUid }
+    val remapSignatures = remember(bundleSources, bundleInfo) {
+        bundleInfo.toSignatureMap().toMutableMap().apply {
+            bundleSources
+                .filter { it.asRemoteOrNull == null }
+                .forEach { source -> putIfAbsent(source.uid, emptySet()) }
+        }
+    }
+    val remappedSelectionPayload = remember(selectionPayload, bundleSources, bundleInfo) {
+        selectionPayload?.remapLocalBundles(
+            sources = bundleSources,
+            signatures = remapSignatures
+        )
+    }
+    val savedBundlesByUid = remember(remappedSelectionPayload, bundleSources) {
+        val sourcesByUid = bundleSources.associateBy { it.uid }
+        val sourcesByEndpoint = bundleSources.mapNotNull { source ->
+            source.asRemoteOrNull?.endpoint
+                ?.normalizedBundleEndpoint()
+                ?.let { it to source }
+        }.toMap()
+        val savedBundles = remappedSelectionPayload?.bundles.orEmpty()
+        buildMap {
+            savedBundles.forEach { bundle ->
+                if (sourcesByUid.containsKey(bundle.bundleUid)) {
+                    put(bundle.bundleUid, bundle)
+                }
+            }
+            savedBundles.forEach { bundle ->
+                if (sourcesByUid.containsKey(bundle.bundleUid)) return@forEach
+                val resolvedUid = bundle.sourceEndpoint
+                    ?.normalizedBundleEndpoint()
+                    ?.let(sourcesByEndpoint::get)
+                    ?.uid
+                    ?: bundle.bundleUid
+                putIfAbsent(resolvedUid, bundle)
+            }
+        }
     }
     data class SavedBundleTarget(
         val bundleUid: Int,
@@ -300,12 +347,19 @@ fun InstalledAppInfoScreen(
         if (appliedSelection.isNullOrEmpty()) return@remember emptyList<AppliedPatchBundleUi>()
 
         runCatching {
+            val sourceByEndpoint = bundleSources.mapNotNull { source ->
+                source.asRemoteOrNull?.endpoint
+                    ?.normalizedBundleEndpoint()
+                    ?.let { it to source }
+            }.toMap()
             appliedSelection.entries.mapNotNull { (bundleUid, patches) ->
                 if (patches.isEmpty()) return@mapNotNull null
                 val patchNames = patches.toList().sorted()
-                val info = bundleInfo[bundleUid]
-                val source = bundleSources.firstOrNull { it.uid == bundleUid }
                 val savedBundle = savedBundlesByUid[bundleUid]
+                val savedEndpoint = savedBundle?.sourceEndpoint?.normalizedBundleEndpoint()
+                val source = bundleSources.firstOrNull { it.uid == bundleUid }
+                    ?: savedEndpoint?.let(sourceByEndpoint::get)
+                val info = bundleInfo[source?.uid ?: bundleUid] ?: bundleInfo[bundleUid]
                 val fallbackName = if (bundleUid == 0)
                     context.getString(R.string.patches_name_default)
                 else
@@ -326,14 +380,20 @@ fun InstalledAppInfoScreen(
                 val missingNames = patchNames.filterNot { patchName ->
                     patchInfos.any { it.name == patchName }
                 }.distinct()
+                val savedVersion = savedBundle?.version?.takeUnless { it.isBlank() }
+                val currentVersion = info?.version?.takeUnless { it.isBlank() }
+                    ?: source?.version?.takeUnless { it.isBlank() }
 
                 AppliedPatchBundleUi(
                     uid = bundleUid,
                     title = title,
-                    version = savedBundle?.version?.takeUnless { it.isNullOrBlank() } ?: info?.version,
+                    version = savedVersion ?: currentVersion,
                     patchInfos = patchInfos,
                     fallbackNames = missingNames,
-                    bundleAvailable = info != null
+                    bundleAvailable = info != null,
+                    hasUpdate = savedVersion != null &&
+                        currentVersion != null &&
+                        isBundleUpdateAvailable(currentVersion, savedVersion)
                 )
             }.sortedBy { it.title }
         }.getOrElse { error ->
@@ -422,14 +482,6 @@ fun InstalledAppInfoScreen(
                 return@launch
             }
             continueRepatch(targetPackageName)
-        }
-    }
-
-    val bundlesUsedSummary = remember(appliedBundles) {
-        if (appliedBundles.isEmpty()) ""
-        else appliedBundles.joinToString("\n") { bundle ->
-            val version = bundle.version?.takeIf { it.isNotBlank() }
-            if (version != null) "${bundle.title} (v${version.removePrefix("v").removePrefix("V")})" else bundle.title
         }
     }
 
@@ -1135,10 +1187,25 @@ fun InstalledAppInfoScreen(
                 labelOverride = viewModel.appLabel,
                 placeholderLabel = displayPackageName
             ) {
+                val copyAppVersion = {
+                    clipboard?.setPrimaryClip(
+                        ClipData.newPlainText(
+                            "App version",
+                            installedApp.version.toPrefixedVersionLabel()
+                        )
+                    )
+                    if (clipboard != null) {
+                        context.toast(copiedToClipboardMessage)
+                    }
+                }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 AppVersion(
                     appInfo = viewModel.appInfo,
                     versionName = installedApp.version,
                     prefixVersion = true,
+                    modifier = Modifier.longPressOnly(
+                        label = stringResource(R.string.copy_to_clipboard),
+                        onLongPress = copyAppVersion
+                    ),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 viewModel.savedApkAbiLabel?.let { abiLabel ->
@@ -1860,12 +1927,25 @@ fun InstalledAppInfoScreen(
 
                 val bundleSummaryText = when {
                     appliedSelection == null -> stringResource(R.string.loading)
-                    bundlesUsedSummary.isNotBlank() -> bundlesUsedSummary
-                    else -> stringResource(R.string.no_patch_bundles_tracked)
+                    appliedBundles.isEmpty() -> stringResource(R.string.no_patch_bundles_tracked)
+                    else -> null
                 }
                 SettingsListItem(
                     headlineContent = stringResource(R.string.patch_bundles_used),
-                    supportingContent = bundleSummaryText
+                    supportingContent = bundleSummaryText,
+                    supportingContentSlot = if (bundleSummaryText == null) {
+                        {
+                            AppliedBundleSummary(
+                                bundles = appliedBundles,
+                                clipboard = clipboard,
+                                onCopied = {
+                                    context.toast(copiedToClipboardMessage)
+                                }
+                            )
+                        }
+                    } else {
+                        null
+                    }
                 )
 
                 val missingBundles = appliedBundles.filterNot { it.bundleAvailable }
@@ -2130,3 +2210,70 @@ private data class PendingSavedExportConfirmation(
     val directory: Path,
     val fileName: String
 )
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AppliedBundleSummary(
+    bundles: List<AppliedPatchBundleUi>,
+    clipboard: ClipboardManager?,
+    onCopied: () -> Unit
+) {
+    val updateCount = bundles.count { it.hasUpdate }
+    val showIndividualUpdates = bundles.size > 1 && updateCount in 1 until bundles.size
+    val copyToClipboardLabel = stringResource(R.string.copy_to_clipboard)
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        bundles.forEach { bundle ->
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = bundle.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                bundle.version
+                    ?.takeIf(String::isNotBlank)
+                    ?.toPrefixedVersionLabel()
+                    ?.let { versionLabel ->
+                        val copyBundleVersion = {
+                            clipboard?.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    "${bundle.title} version",
+                                    versionLabel
+                                )
+                            )
+                            if (clipboard != null) {
+                                onCopied()
+                            }
+                        }.withHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        Text(
+                            text = versionLabel,
+                            modifier = Modifier.longPressOnly(
+                                label = copyToClipboardLabel,
+                                onLongPress = copyBundleVersion
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                if (showIndividualUpdates && bundle.hasUpdate) {
+                    Text(
+                        text = "(${stringResource(R.string.update)})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun String.toPrefixedVersionLabel(): String {
+    val normalized = trim().removePrefix("v").removePrefix("V")
+    return "v$normalized"
+}
+
+private fun String.normalizedBundleEndpoint(): String? =
+    trim().trimEnd('/').takeIf(String::isNotBlank)
