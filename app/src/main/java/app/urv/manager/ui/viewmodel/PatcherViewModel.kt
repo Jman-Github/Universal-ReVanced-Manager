@@ -2553,7 +2553,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val newVariantIdentity = buildSavedAppVariantIdentity(
                 appVersion = finalVersion,
                 selectionPayload = selectionPayload,
-                patchSelection = sanitizedSelectionFinal
+                patchSelection = sanitizedSelectionFinal,
+                useMount = usingMountInstall
             )
             val savedEntriesForPackage = installedAppRepository.getByInstallType(InstallType.SAVED)
                 .filter { savedApp ->
@@ -2690,6 +2691,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             persistedInstallType,
                             sanitizedSelectionFinal,
                             selectionPayload,
+                            useMount = usingMountInstall,
                             resetCreatedAt = true,
                             customInstallerPackageName = customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
@@ -2706,6 +2708,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             installType = existingInstalled.installType,
                             patchSelection = sanitizedSelectionFinal,
                             selectionPayload = selectionPayload,
+                            useMount = usingMountInstall,
                             customInstallerPackageName = existingInstalled.customInstallerPackageName,
                             repatchSourcePath = patchedRepatchSourcePath,
                             updateRepatchSource = true
@@ -2720,6 +2723,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                             InstallType.SAVED,
                             sanitizedSelectionFinal,
                             selectionPayload,
+                            useMount = usingMountInstall,
                             resetCreatedAt = true,
                             repatchSourcePath = patchedRepatchSourcePath,
                             updateRepatchSource = true
@@ -5798,7 +5802,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         return buildSavedAppVariantIdentity(
             appVersion = installedApp.version,
             selectionPayload = installedApp.selectionPayload,
-            patchSelection = patchSelection
+            patchSelection = patchSelection,
+            useMount = installedApp.useMount
         )
     }
 

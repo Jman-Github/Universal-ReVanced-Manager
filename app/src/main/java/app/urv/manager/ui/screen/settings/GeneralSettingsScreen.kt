@@ -339,6 +339,34 @@ fun GeneralSettingsScreen(
                 }
                 ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
+                    targetKey = R.string.show_apps_tab_update_count,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.showAppsTabUpdateCount,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.show_apps_tab_update_count,
+                        description = R.string.show_apps_tab_update_count_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
+                    targetKey = R.string.show_bundles_tab_update_count,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = prefs.showBundlesTabUpdateCount,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.show_bundles_tab_update_count,
+                        description = R.string.show_bundles_tab_update_count_description
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.disable_main_tab_swipe,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }

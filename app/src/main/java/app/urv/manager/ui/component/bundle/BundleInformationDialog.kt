@@ -184,6 +184,13 @@ fun BundleInformationDialog(
         bundleRepo.update(updatedSource, showToast = true)
     }
 
+    fun onRepositoryLatestChange(new: Boolean) = composableScope.launch {
+        val updatedSource = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.setUseLatest(new)
+        } ?: return@launch
+        bundleRepo.update(updatedSource, showToast = true)
+    }
+
     fun openReleasePage() = composableScope.launch {
         releasePageUrl?.let {
             uriHandler.openUri(it)
@@ -543,6 +550,20 @@ fun BundleInformationDialog(
                         },
                         modifier = Modifier.clickable {
                             onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
+                        }
+                    )
+
+                    BundleListItem(
+                        headlineText = stringResource(R.string.repository_bundle_latest),
+                        supportingText = stringResource(R.string.repository_bundle_latest_description),
+                        trailingContent = {
+                            HapticSwitch(
+                                checked = repositoryBundle.useLatest,
+                                onCheckedChange = ::onRepositoryLatestChange
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            onRepositoryLatestChange(!repositoryBundle.useLatest)
                         }
                     )
                 }

@@ -315,6 +315,8 @@ fun DashboardScreen(
     val showManagerUpdateChangelog by prefs.showManagerUpdateChangelog.getAsState()
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val hideMainTabLabels by prefs.hideMainTabLabels.getAsState()
+    val showAppsTabUpdateCount by prefs.showAppsTabUpdateCount.getAsState()
+    val showBundlesTabUpdateCount by prefs.showBundlesTabUpdateCount.getAsState()
     val disableMainTabSwipe by prefs.disableMainTabSwipe.getAsState()
     val preventAccidentalTouching by prefs.preventAccidentalTouching.getAsState()
     val showPatchProfilesTab by prefs.showPatchProfilesTab.getAsState()
@@ -350,6 +352,16 @@ fun DashboardScreen(
     val profilesSelectable = showPatchProfilesTab && selectedProfileCount > 0
     val availablePatches by vm.availablePatches.collectAsStateWithLifecycle(0)
     val patchBundlesLoading by vm.patchBundlesLoading.collectAsStateWithLifecycle()
+    val manualBundleUpdates by bundleListViewModel.manualUpdateInfo.collectAsStateWithLifecycle(emptyMap())
+    val appsUpdateCount by remember(installedApps) {
+        derivedStateOf {
+            installedApps.count { app ->
+                installedAppsViewModel.bundleSummaries[app.currentPackageName]
+                    .orEmpty()
+                    .any { it.hasUpdate }
+            }
+        }
+    }
     val splitMergeState by vm.splitMergeState.collectAsStateWithLifecycle()
     val newPluginNotifications by vm.newPluginNotifications.collectAsStateWithLifecycle(emptyList())
     val downloaderPlugins by vm.loadedDownloaderPlugins.collectAsStateWithLifecycle(emptyList())
@@ -2798,6 +2810,15 @@ fun DashboardScreen(
             ) {
                 visibleTabs.forEach { page ->
                     val selected = page == swipeSyncedPage
+                    val updateCount = when (page) {
+                        DashboardPage.DASHBOARD -> appsUpdateCount.takeIf {
+                            showAppsTabUpdateCount && it > 0
+                        }
+                        DashboardPage.BUNDLES -> manualBundleUpdates.size.takeIf {
+                            showBundlesTabUpdateCount && it > 0
+                        }
+                        else -> null
+                    }
                     val tabScale by animateFloatAsState(
                         targetValue = if (selected) 1.02f else 1f,
                         animationSpec = spring(
@@ -2831,9 +2852,25 @@ fun DashboardScreen(
                             }
                             .offset(y = tabOffsetY),
                         text = if (hideMainTabLabels) null else {
-                            { DashboardTabLabel(text = stringResource(page.titleResId), selected = selected) }
+                            {
+                                DashboardTabLabel(
+                                    text = stringResource(page.titleResId),
+                                    selected = selected,
+                                    updateCount = updateCount
+                                )
+                            }
                         },
-                        icon = { Icon(page.icon, null) },
+                        icon = {
+                            if (hideMainTabLabels && updateCount != null) {
+                                BadgedBox(
+                                    badge = { DashboardTabUpdateBadge(updateCount) }
+                                ) {
+                                    Icon(page.icon, null)
+                                }
+                            } else {
+                                Icon(page.icon, null)
+                            }
+                        },
                         selectedContentColor = MaterialTheme.colorScheme.primary,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -3928,43 +3965,60 @@ fun Notifications(
 @Composable
 private fun DashboardTabLabel(
     text: String,
-    selected: Boolean
+    selected: Boolean,
+    updateCount: Int?
 ) {
     val compactTabLabelStyle = MaterialTheme.typography.labelSmall.copy(
         letterSpacing = 0.sp,
         fontSize = 10.sp
     )
     val isSingleWord = text.none { it.isWhitespace() }
-    if (selected) {
-        Surface(
-            shape = RoundedCornerShape(999.dp),
-            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+    val labelContent: @Composable (Modifier, Color) -> Unit = { modifier, color ->
+        Row(
+            modifier = modifier.widthIn(min = 56.dp, max = 88.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = text,
-                modifier = Modifier
-                    .widthIn(min = 56.dp, max = 88.dp)
-                    .padding(
-                        horizontal = if (isSingleWord) 3.dp else 6.dp,
-                        vertical = 3.dp,
-                    ),
+                modifier = Modifier.weight(1f, fill = false),
                 style = compactTabLabelStyle,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = color,
                 maxLines = if (isSingleWord) 1 else 2,
                 softWrap = !isSingleWord,
                 textAlign = TextAlign.Center,
                 overflow = TextOverflow.Ellipsis
             )
+            updateCount?.let { DashboardTabUpdateBadge(it) }
+        }
+    }
+    if (selected) {
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+        ) {
+            labelContent(
+                Modifier.padding(
+                    horizontal = if (isSingleWord) 3.dp else 6.dp,
+                    vertical = 3.dp,
+                ),
+                MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     } else {
+        labelContent(Modifier, MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun DashboardTabUpdateBadge(updateCount: Int) {
+    Badge(
+        containerColor = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    ) {
         Text(
-            text = text,
-            modifier = Modifier.widthIn(min = 56.dp, max = 88.dp),
-            style = compactTabLabelStyle,
-            maxLines = if (isSingleWord) 1 else 2,
-            softWrap = !isSingleWord,
-            textAlign = TextAlign.Center,
-            overflow = TextOverflow.Ellipsis
+            text = updateCount.toString(),
+            style = MaterialTheme.typography.labelSmall
         )
     }
 }

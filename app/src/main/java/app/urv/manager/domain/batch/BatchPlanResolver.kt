@@ -434,6 +434,7 @@ class BatchPlanResolver(
         val chooseInstallerPerInstall = prefs.chooseInstallerPerInstall.get()
         val mountRequested = mountRequestedFor(
             forcedUseMount = forcedUseMount,
+            rememberedUseMount = installedRecord?.useMount,
             installerToken = savedProfileInstallerToken,
             chooseInstallerPerInstall = chooseInstallerPerInstall,
         )
@@ -648,10 +649,12 @@ class BatchPlanResolver(
     // https://github.com/MorpheApp/morphe-manager/pull/747
     private fun mountRequestedFor(
         forcedUseMount: Boolean?,
+        rememberedUseMount: Boolean?,
         installerToken: String?,
         chooseInstallerPerInstall: Boolean,
     ): Boolean {
         forcedUseMount?.let { return it }
+        rememberedUseMount?.let { return it }
         if (chooseInstallerPerInstall) return false
         installerToken?.let {
             return installerManager.baseInstallerToken(installerManager.parseToken(it)) ==

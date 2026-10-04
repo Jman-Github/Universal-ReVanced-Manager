@@ -30,6 +30,7 @@ import app.urv.manager.domain.repository.SerializedOptions
 import app.urv.manager.domain.repository.SerializedSelection
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.JsonPatchBundle
+import app.urv.manager.domain.bundles.RepositoryBundleReleaseChannel
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.PatchBundleChangelogEntry
@@ -134,6 +135,7 @@ data class PatchBundleSnapshot(
     val autoUpdate: Boolean = false,
     val searchUpdate: Boolean = true,
     val usePrereleases: Boolean? = null,
+    val useLatest: Boolean? = null,
     val enabled: Boolean = true,
     val officialState: OfficialBundleState? = null,
     val position: Int? = null,
@@ -1061,7 +1063,7 @@ class ImportExportViewModel(
                     var skippedCount = 0
                     var officialSnapshot: PatchBundleSnapshot? = null
                     val pendingEnabledUpdates = LinkedHashMap<Int, Boolean>()
-                    val pendingChannelUpdates = LinkedHashMap<Int, Boolean>()
+                    val pendingChannelUpdates = LinkedHashMap<Int, RepositoryBundleReleaseChannel>()
                     val total = exportFile.bundles.size.coerceAtLeast(1)
                     var processed = 0
 
@@ -1145,16 +1147,22 @@ class ImportExportViewModel(
                                 changed = true
                             }
                             val repositoryBundle = current as? JsonPatchBundle
-                            val snapshotUsePrereleases = snapshot.usePrereleases
+                            val snapshotReleaseChannel = when {
+                                snapshot.useLatest == true -> RepositoryBundleReleaseChannel.LATEST
+                                snapshot.usePrereleases == true -> RepositoryBundleReleaseChannel.PRERELEASE
+                                snapshot.useLatest != null || snapshot.usePrereleases != null ->
+                                    RepositoryBundleReleaseChannel.RELEASE
+                                else -> null
+                            }
                             if (repositoryBundle != null &&
-                                snapshotUsePrereleases != null &&
+                                snapshotReleaseChannel != null &&
                                 repositoryBundle.supportsPrereleases &&
-                                repositoryBundle.usePrereleases != snapshotUsePrereleases
+                                repositoryBundle.releaseChannel != snapshotReleaseChannel
                             ) {
+                                pendingChannelUpdates[current.uid] = repositoryBundle.releaseChannel
                                 effectiveCurrent = with(patchBundleRepository) {
-                                    repositoryBundle.setUsePrereleases(snapshotUsePrereleases)
+                                    repositoryBundle.setRepositoryReleaseChannel(snapshotReleaseChannel)
                                 }
-                                pendingChannelUpdates[current.uid] = repositoryBundle.usePrereleases
                                 changed = true
                             }
                             if (current.enabled != snapshotEnabled) {
@@ -1197,7 +1205,8 @@ class ImportExportViewModel(
                                 endpoint,
                                 snapshot.searchUpdate,
                                 snapshot.autoUpdate,
-                                usePrereleases = snapshot.usePrereleases ?: false,
+                                usePrereleases = snapshot.usePrereleases == true && snapshot.useLatest != true,
+                                useLatest = snapshot.useLatest == true,
                                 createdAt = snapshot.createdAt,
                                 updatedAt = snapshot.updatedAt,
                                 importLabel = bundleLabel,
@@ -1449,11 +1458,11 @@ class ImportExportViewModel(
                         } finally {
                             // Retain the old channel for failed downloads so a repeated import retries them.
                             val sources = patchBundleRepository.sources.first().associateBy { it.uid }
-                            pendingChannelUpdates.forEach { (uid, previousUsePrereleases) ->
+                            pendingChannelUpdates.forEach { (uid, previousChannel) ->
                                 if (uid in updatedChannels) return@forEach
                                 val source = sources[uid] as? JsonPatchBundle ?: return@forEach
                                 with(patchBundleRepository) {
-                                    source.setUsePrereleases(previousUsePrereleases)
+                                    source.setRepositoryReleaseChannel(previousChannel)
                                 }
                             }
                         }
@@ -1521,6 +1530,7 @@ class ImportExportViewModel(
                     autoUpdate = it.autoUpdate,
                     searchUpdate = it.searchUpdate,
                     usePrereleases = (it as? JsonPatchBundle)?.usePrereleases ?: false,
+                    useLatest = (it as? JsonPatchBundle)?.useLatest ?: false,
                     enabled = it.enabled,
                     position = positionLookup[it.uid],
                     createdAt = it.createdAt,

@@ -145,6 +145,8 @@ class MainViewModel(
     ) = viewModelScope.launch {
         val resolved = findDownloadedApp(app) ?: app
         val selectionPayloadJson = selectionPayload?.let { json.encodeToString(it) }
+        val rememberedUseMount = sourceEntryKey
+            ?.let { installedAppRepository.get(it)?.useMount }
         appSelectChannel.send(
             SelectedApplicationInfo.ViewModelParams(
                 app = resolved,
@@ -153,7 +155,8 @@ class MainViewModel(
                 persistConfiguration = persistConfiguration,
                 returnToDashboard = returnToDashboard,
                 batchQueue = batchQueue,
-                sourceEntryKey = sourceEntryKey
+                sourceEntryKey = sourceEntryKey,
+                useMount = rememberedUseMount
             )
         )
     }

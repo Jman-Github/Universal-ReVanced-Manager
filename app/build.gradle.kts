@@ -82,7 +82,7 @@ val prReleaseVersionCode = if (prTestBuild) {
     }
     code
 } else null
-val managerDatabaseVersion = 20
+val managerDatabaseVersion = 21
 val includedMorpheRuntime = rootProject.findProject(":morphe-runtime") != null
 val devVersionNameSuffix = if (resolvedProjectVersion.contains('-')) "" else "-$devVersionSuffix"
 val libraryVersions = extensions.getByType<VersionCatalogsExtension>().named("libs")

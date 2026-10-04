@@ -1073,7 +1073,8 @@ fun AdvancedSettingsScreen(
                             enabled = autoPatchInstallWithShizuku,
                             trailingContent = {
                                 ExpressiveSettingsSwitch(
-                                    checked = autoPatchUninstallOnConflictWithShizuku,
+                                    checked = autoPatchInstallWithShizuku &&
+                                        autoPatchUninstallOnConflictWithShizuku,
                                     enabled = autoPatchInstallWithShizuku,
                                     onCheckedChange =
                                         viewModel::setAutoPatchUninstallOnConflictWithShizuku
@@ -1096,7 +1097,8 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
-                        modifier = highlightModifier,
+                        modifier = highlightModifier
+                            .alpha(if (autoPatchEnabled) 1f else 0.5f),
                         headlineContent = stringResource(
                             R.string.auto_patch_requires_charging
                         ),
@@ -1106,7 +1108,7 @@ fun AdvancedSettingsScreen(
                         enabled = autoPatchEnabled,
                         trailingContent = {
                             ExpressiveSettingsSwitch(
-                                checked = autoPatchRequiresCharging,
+                                checked = autoPatchEnabled && autoPatchRequiresCharging,
                                 enabled = autoPatchEnabled,
                                 onCheckedChange = viewModel::setAutoPatchRequiresCharging
                             )

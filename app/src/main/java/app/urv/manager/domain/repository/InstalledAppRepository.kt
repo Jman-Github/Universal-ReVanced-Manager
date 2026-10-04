@@ -96,6 +96,8 @@ internal class PendingHistoricalSavedEntry(
                 installType = InstallType.SAVED,
                 patchSelection = sourceSelection,
                 selectionPayload = sourceApp.selectionPayload,
+                useMount = sourceApp.useMount,
+                updateUseMount = true,
                 createdAtOverride = sourceApp.createdAt,
                 repatchSourcePath = sourceApp.repatchSourcePath,
                 updateRepatchSource = true
@@ -269,6 +271,8 @@ class InstalledAppRepository(
         installType: InstallType,
         patchSelection: PatchSelection,
         selectionPayload: PatchProfilePayload? = null,
+        useMount: Boolean? = null,
+        updateUseMount: Boolean = useMount != null,
         resetCreatedAt: Boolean = false,
         createdAtOverride: Long? = null,
         sortOrderOverride: Int? = null,
@@ -334,7 +338,8 @@ class InstalledAppRepository(
                         selectionPayload = selectionPayload,
                         createdAt = createdAt,
                         customInstallerPackageName = persistedCustomInstallerPackageName,
-                        repatchSourcePath = persistedRepatchSourcePath
+                        repatchSourcePath = persistedRepatchSourcePath,
+                        useMount = if (updateUseMount) useMount else existingApp?.useMount
                     ),
                     patchSelection.flatMap { (uid, patches) ->
                         patches.map { patch ->
@@ -411,6 +416,8 @@ class InstalledAppRepository(
             installType = previousApp.installType,
             patchSelection = previousSelection,
             selectionPayload = previousApp.selectionPayload,
+            useMount = previousApp.useMount,
+            updateUseMount = true,
             createdAtOverride = previousApp.createdAt,
             sortOrderOverride = previousApp.sortOrder,
             customInstallerPackageName = previousApp.customInstallerPackageName,

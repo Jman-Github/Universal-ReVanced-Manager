@@ -167,27 +167,20 @@ fun PatchBundleDiscoveryScreen(
         mutableStateOf(BundleDiscoverySortMode.fromStorage(sortModePref))
     }
     var showSortMenu by remember { mutableStateOf(false) }
-    var previousRelease by remember { mutableStateOf(showRelease) }
-    var previousPrerelease by remember { mutableStateOf(showPrerelease) }
     val filterChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
     )
     LaunchedEffect(showRelease, showPrerelease, latestSelected) {
-        if (!latestSelected) {
+        if (latestSelected) {
+            if (showRelease) showRelease = false
+            if (showPrerelease) showPrerelease = false
+        } else {
             when {
                 showRelease && showPrerelease -> {
                     showPrerelease = false
-                    previousRelease = true
-                    previousPrerelease = false
                 }
                 !showRelease && !showPrerelease -> {
                     showRelease = true
-                    previousRelease = true
-                    previousPrerelease = false
-                }
-                else -> {
-                    previousRelease = showRelease
-                    previousPrerelease = showPrerelease
                 }
             }
         }
@@ -794,22 +787,10 @@ fun PatchBundleDiscoveryScreen(
                             CheckedFilterChip(
                                 selected = latestSelected,
                                 onClick = {
-                                    val newValue = !latestSelected
-                                    latestSelected = newValue
-                                    if (newValue) {
-                                        previousRelease = showRelease
-                                        previousPrerelease = showPrerelease
-                                        showRelease = false
-                                        showPrerelease = false
-                                    } else {
-                                        if (previousPrerelease && !previousRelease) {
-                                            showRelease = false
-                                            showPrerelease = true
-                                        } else {
-                                            showRelease = true
-                                            showPrerelease = false
-                                        }
-                                    }
+                                    if (latestSelected) return@CheckedFilterChip
+                                    latestSelected = true
+                                    showRelease = false
+                                    showPrerelease = false
                                 },
                                 colors = filterChipColors,
                                 label = { Text(stringResource(R.string.patch_bundle_discovery_latest)) }

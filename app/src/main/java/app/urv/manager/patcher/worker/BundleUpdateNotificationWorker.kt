@@ -58,6 +58,10 @@ class BundleUpdateNotificationWorker(
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(bundleNotificationChannel)
 
+            // The application reloads patch bundles asynchronously on process start.
+            // Do not snapshot the repository's initial empty state on a cold worker run.
+            patchBundleRepository.awaitReady()
+
             fun buildPendingIntent(
                 requestCode: Int,
                 bundleUid: Int?,
@@ -151,21 +155,23 @@ class BundleUpdateNotificationWorker(
             }
 
             val manualUpdates = LinkedHashMap<Int, BundleUpdateNotificationEntry>()
-            if (canNotify) {
-                patchBundleRepository.fetchUpdatesAndNotify(
-                    applicationContext,
-                    predicate = { bundle -> !bundle.autoUpdate },
-                    onAlreadyNotified = { bundle, bundleVersion, notificationIdentity ->
-                        if (!isManualUpdateDismissed(bundle.uid, notificationIdentity)) {
-                            manualUpdates[bundle.uid] = BundleUpdateNotificationEntry(
-                                uid = bundle.uid,
-                                name = bundle.displayTitle,
-                                version = bundleVersion,
-                                notificationIdentity = notificationIdentity
-                            )
-                        }
+            patchBundleRepository.fetchUpdatesAndNotify(
+                applicationContext,
+                predicate = { bundle -> !bundle.autoUpdate },
+                onAlreadyNotified = { bundle, bundleVersion, notificationIdentity ->
+                    if (canNotify && !isManualUpdateDismissed(bundle.uid, notificationIdentity)) {
+                        manualUpdates[bundle.uid] = BundleUpdateNotificationEntry(
+                            uid = bundle.uid,
+                            name = bundle.displayTitle,
+                            version = bundleVersion,
+                            notificationIdentity = notificationIdentity
+                        )
                     }
-                ) { bundle, bundleVersion, notificationIdentity ->
+                }
+            ) { bundle, bundleVersion, notificationIdentity ->
+                if (!canNotify) {
+                    false
+                } else {
                     manualUpdateDismissalMarker(bundle.uid, notificationIdentity)?.let { marker ->
                         BundleUpdateNotificationDismissReceiver.clearDismissedMarkers(
                             applicationContext,
@@ -185,32 +191,40 @@ class BundleUpdateNotificationWorker(
             if (canNotify) {
                 val sourceOrder = patchBundleRepository.sources.first().map { it.uid }
                 val orderedUpdatedBundles = updatedBundles.values.orderBySource(sourceOrder)
-                val orderedManualUpdates = manualUpdates.values.orderBySource(sourceOrder)
-                if (orderedManualUpdates.isNotEmpty()) {
-                    val dismissalMarkers = orderedManualUpdates.dismissalMarkers()
-                    val sections = listOf(
-                        BundleNotificationSection(
-                            header = bundleNotificationAvailable(orderedManualUpdates.size),
-                            entries = orderedManualUpdates
+                patchBundleRepository.withManualUpdateSnapshot { liveManualUpdates ->
+                    manualUpdates.entries.removeAll { (uid, entry) ->
+                        val liveIdentity = liveManualUpdates[uid]?.notificationIdentity
+                            ?: return@removeAll true
+                        normalizedManualUpdateIdentity(entry.notificationIdentity) !=
+                            normalizedManualUpdateIdentity(liveIdentity)
+                    }
+                    val orderedManualUpdates = manualUpdates.values.orderBySource(sourceOrder)
+                    if (orderedManualUpdates.isNotEmpty()) {
+                        val dismissalMarkers = orderedManualUpdates.dismissalMarkers()
+                        val sections = listOf(
+                            BundleNotificationSection(
+                                header = bundleNotificationAvailable(orderedManualUpdates.size),
+                                entries = orderedManualUpdates
+                            )
                         )
-                    )
-                    val notification = buildNotification(
-                        channelId = bundleNotificationChannel.id,
-                        title = bundleNotificationTitle(orderedManualUpdates.size),
-                        description = sections.toNotificationText(),
-                        pendingIntent = buildPendingIntent(
-                            BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID,
-                            if (orderedManualUpdates.size == 1) orderedManualUpdates.first().uid else null,
-                            dismissalMarkers
-                        ),
-                        ongoing = false,
-                        progress = null,
-                        sections = sections,
-                        dismissalMarkers = dismissalMarkers
-                    )
-                    notificationManager.notify(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID, notification)
-                } else {
-                    notificationManager.cancel(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID)
+                        val notification = buildNotification(
+                            channelId = bundleNotificationChannel.id,
+                            title = bundleNotificationTitle(orderedManualUpdates.size),
+                            description = sections.toNotificationText(),
+                            pendingIntent = buildPendingIntent(
+                                BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID,
+                                if (orderedManualUpdates.size == 1) orderedManualUpdates.first().uid else null,
+                                dismissalMarkers
+                            ),
+                            ongoing = false,
+                            progress = null,
+                            sections = sections,
+                            dismissalMarkers = dismissalMarkers
+                        )
+                        notificationManager.notify(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID, notification)
+                    } else {
+                        notificationManager.cancel(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID)
+                    }
                 }
 
                 when {
@@ -449,6 +463,11 @@ class BundleUpdateNotificationWorker(
         }.joinToString("\n")
 
     private fun manualUpdateDismissalMarker(uid: Int, notificationIdentity: String): String? {
+        val normalizedIdentity = normalizedManualUpdateIdentity(notificationIdentity) ?: return null
+        return "$uid:$normalizedIdentity"
+    }
+
+    private fun normalizedManualUpdateIdentity(notificationIdentity: String): String? {
         val trimmedIdentity = notificationIdentity.trim().takeIf { it.isNotBlank() } ?: return null
         val normalizedVersion = trimmedIdentity
             .substringBefore('|')
@@ -474,6 +493,6 @@ class BundleUpdateNotificationWorker(
         } else {
             "$normalizedVersion|$normalizedArtifactIdentity"
         }
-        return "$uid:$normalizedIdentity"
+        return normalizedIdentity
     }
 }

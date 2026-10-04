@@ -91,12 +91,16 @@ class PreferencesManager(
     val customBackgroundImageUri = stringPreference("custom_background_image_uri", "")
     val customBackgroundImageOpacity = floatPreference("custom_background_image_opacity", 0.65f)
     val hideMainTabLabels = booleanPreference("hide_main_tab_labels", false)
+    val showAppsTabUpdateCount = booleanPreference("show_apps_tab_update_count", true)
+    val showBundlesTabUpdateCount = booleanPreference("show_bundles_tab_update_count", true)
     val disableMainTabSwipe = booleanPreference("disable_main_tab_swipe", false)
     val disablePatchSelectionTabSwipe = booleanPreference("disable_patch_selection_tab_swipe", false)
     val preventAccidentalTouching = booleanPreference("prevent_accidental_touching", true)
     val showPatchProfilesTab = booleanPreference("show_patch_profiles_tab", true)
     val showToolsTab = booleanPreference("show_tools_tab", true)
     val showLsposedTab = booleanPreference("show_lsposed_tab", false)
+    val appSelectorSortMode = stringPreference("app_selector_sort_mode", "NAME_ASC")
+    val batchQueueAppSelectorSortMode = stringPreference("batch_queue_app_selector_sort_mode", "NAME_ASC")
     val theme = enumPreference("theme", Theme.SYSTEM)
     val appLanguage = stringPreference("app_language", "system")
 
@@ -626,12 +630,16 @@ class PreferencesManager(
         val customBackgroundImageUri: String? = null,
         val customBackgroundImageOpacity: Float? = null,
         val hideMainTabLabels: Boolean? = null,
+        val showAppsTabUpdateCount: Boolean? = null,
+        val showBundlesTabUpdateCount: Boolean? = null,
         val disableMainTabSwipe: Boolean? = null,
         val disablePatchSelectionTabSwipe: Boolean? = null,
         val preventAccidentalTouching: Boolean? = null,
         val showPatchProfilesTab: Boolean? = null,
         val showToolsTab: Boolean? = null,
         val showLsposedTab: Boolean? = null,
+        val appSelectorSortMode: String? = null,
+        val batchQueueAppSelectorSortMode: String? = null,
         val themePresetSelectionName: String? = null,
         val themePresetSelectionEnabled: Boolean? = null,
         val stripUnusedNativeLibs: Boolean? = null,
@@ -850,12 +858,16 @@ class PreferencesManager(
             customBackgroundImageUri = customBackgroundImageUri.value,
             customBackgroundImageOpacity = customBackgroundImageOpacity.value,
             hideMainTabLabels = hideMainTabLabels.value,
+            showAppsTabUpdateCount = showAppsTabUpdateCount.value,
+            showBundlesTabUpdateCount = showBundlesTabUpdateCount.value,
             disableMainTabSwipe = disableMainTabSwipe.value,
             disablePatchSelectionTabSwipe = disablePatchSelectionTabSwipe.value,
             preventAccidentalTouching = preventAccidentalTouching.value,
             showPatchProfilesTab = showPatchProfilesTab.value,
             showToolsTab = showToolsTab.value,
             showLsposedTab = showLsposedTab.value,
+            appSelectorSortMode = appSelectorSortMode.value,
+            batchQueueAppSelectorSortMode = batchQueueAppSelectorSortMode.value,
             themePresetSelectionName = themePresetSelectionName.value,
             themePresetSelectionEnabled = themePresetSelectionEnabled.value,
             theme = theme.value,
@@ -1074,12 +1086,18 @@ class PreferencesManager(
         snapshot.customBackgroundImageUri?.let { customBackgroundImageUri.value = it }
         snapshot.customBackgroundImageOpacity?.let { customBackgroundImageOpacity.value = it.coerceIn(0f, 1f) }
         snapshot.hideMainTabLabels?.let { hideMainTabLabels.value = it }
+        snapshot.showAppsTabUpdateCount?.let { showAppsTabUpdateCount.value = it }
+        snapshot.showBundlesTabUpdateCount?.let { showBundlesTabUpdateCount.value = it }
         snapshot.disableMainTabSwipe?.let { disableMainTabSwipe.value = it }
         snapshot.disablePatchSelectionTabSwipe?.let { disablePatchSelectionTabSwipe.value = it }
         snapshot.preventAccidentalTouching?.let { preventAccidentalTouching.value = it }
         snapshot.showPatchProfilesTab?.let { showPatchProfilesTab.value = it }
         snapshot.showToolsTab?.let { showToolsTab.value = it }
         snapshot.showLsposedTab?.let { showLsposedTab.value = it }
+        snapshot.appSelectorSortMode?.takeIf { it.isNotBlank() }?.let { appSelectorSortMode.value = it }
+        snapshot.batchQueueAppSelectorSortMode?.takeIf { it.isNotBlank() }?.let {
+            batchQueueAppSelectorSortMode.value = it
+        }
         snapshot.themePresetSelectionName?.let { themePresetSelectionName.value = it }
         snapshot.themePresetSelectionEnabled?.let { themePresetSelectionEnabled.value = it }
         snapshot.theme?.let { theme.value = it }

@@ -348,6 +348,7 @@ class JsonPatchBundle(
     lastNotifiedVersion: String?,
     enabled: Boolean,
     val usePrereleases: Boolean = false,
+    val useLatest: Boolean = false,
 ) : RemotePatchBundle(
     name,
     uid,
@@ -366,11 +367,29 @@ class JsonPatchBundle(
     override val supportsHistoricalChangelog: Boolean = true
     private val releaseApi: ReVancedAPI by inject()
     val supportsPrereleases: Boolean = repositoryReleaseSource() != null
+    val releaseChannel: RepositoryBundleReleaseChannel
+        get() = when {
+            useLatest -> RepositoryBundleReleaseChannel.LATEST
+            usePrereleases -> RepositoryBundleReleaseChannel.PRERELEASE
+            else -> RepositoryBundleReleaseChannel.RELEASE
+        }
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         val releaseSource = repositoryReleaseSource()
-        if (!usePrereleases || releaseSource == null) {
+        if (!supportsPrereleases || releaseSource == null) {
             return@withContext requestManifest(endpoint)
+        }
+        if (
+            releaseSource is RepositoryReleaseSource.GitLab &&
+            releaseChannel == RepositoryBundleReleaseChannel.RELEASE
+        ) {
+            return@withContext requestManifest(endpoint)
+        }
+
+        val prerelease = when (releaseChannel) {
+            RepositoryBundleReleaseChannel.RELEASE -> false
+            RepositoryBundleReleaseChannel.PRERELEASE -> true
+            RepositoryBundleReleaseChannel.LATEST -> null
         }
 
         resolveRepositoryBundleRelease(
@@ -378,9 +397,12 @@ class JsonPatchBundle(
             requestRelease = { manifest ->
                 requestLatestRepositoryRelease(
                     source = releaseSource,
-                    preferredExtension = manifest?.downloadUrl?.patchBundleExtension()
+                    preferredExtension = manifest?.downloadUrl?.patchBundleExtension(),
+                    prerelease = prerelease,
                 )
-            }
+            },
+            fallbackToManifestWhenReleaseMissing =
+                releaseChannel != RepositoryBundleReleaseChannel.PRERELEASE,
         )
     }
 
@@ -388,17 +410,21 @@ class JsonPatchBundle(
         val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
         fetchGitHubChangelogHistory(
             limit,
-            if (usePrereleases) null else false,
+            when (releaseChannel) {
+                RepositoryBundleReleaseChannel.RELEASE -> false
+                RepositoryBundleReleaseChannel.PRERELEASE -> true
+                RepositoryBundleReleaseChannel.LATEST -> null
+            },
             latest?.pageUrl,
             latest?.downloadUrl,
             endpoint
         )
     }
 
-    override suspend fun latestInfoCacheIdentity(): String = "$endpoint|prereleases=$usePrereleases"
+    override suspend fun latestInfoCacheIdentity(): String = "$endpoint|channel=${releaseChannel.name}"
 
     override suspend fun historicalInfoCacheIdentity(): String =
-        "$endpoint|history|prereleases=$usePrereleases"
+        "$endpoint|history|channel=${releaseChannel.name}"
 
     override fun copy(
         error: Throwable?,
@@ -424,10 +450,11 @@ class JsonPatchBundle(
         searchUpdate,
         lastNotifiedVersion,
         enabled,
-        usePrereleases
+        usePrereleases,
+        useLatest,
     )
 
-    fun withUsePrereleases(value: Boolean) = JsonPatchBundle(
+    fun withReleaseChannel(channel: RepositoryBundleReleaseChannel) = JsonPatchBundle(
         name,
         uid,
         displayName,
@@ -441,7 +468,8 @@ class JsonPatchBundle(
         searchUpdate,
         lastNotifiedVersion,
         enabled,
-        value
+        channel == RepositoryBundleReleaseChannel.PRERELEASE,
+        channel == RepositoryBundleReleaseChannel.LATEST,
     )
 
     private suspend fun requestManifest(manifestUrl: String) = http.request<ReVancedAsset> {
@@ -453,10 +481,11 @@ class JsonPatchBundle(
 
     private suspend fun requestLatestRepositoryRelease(
         source: RepositoryReleaseSource,
-        preferredExtension: String?
+        preferredExtension: String?,
+        prerelease: Boolean?,
     ): ReVancedAsset? = when (source) {
         is RepositoryReleaseSource.GitHub -> releaseApi
-            .getRepositoryReleaseHistory(source.repositoryUrl, prerelease = null, limit = 50)
+            .getRepositoryReleaseHistory(source.repositoryUrl, prerelease = prerelease, limit = 50)
             .getOrThrow()
             .asSequence()
             .mapNotNull { release ->

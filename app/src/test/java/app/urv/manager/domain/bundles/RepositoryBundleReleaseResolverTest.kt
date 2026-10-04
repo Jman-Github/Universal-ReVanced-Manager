@@ -56,6 +56,18 @@ class RepositoryBundleReleaseResolverTest {
     }
 
     @Test
+    fun successfulLookupWithoutBundleCanRejectManifestFallback() = runBlocking {
+        val thrown = assertFailsWith<NoSuchElementException> {
+            resolveRepositoryBundleRelease(
+                requestManifest = { stable },
+                requestRelease = { null },
+                fallbackToManifestWhenReleaseMissing = false,
+            )
+        }
+        assertSame(NoSuchElementException::class, thrown::class)
+    }
+
+    @Test
     fun missingManifestAndNoReleasePreservesOriginalFailure() = runBlocking {
         val failure = IOException("Manifest not found")
         val thrown = assertFailsWith<IOException> {

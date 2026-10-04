@@ -378,7 +378,8 @@ class InstalledAppInfoViewModel(
         val newVariantIdentity = buildSavedAppVariantIdentity(
             appVersion = resolvedVersion,
             selectionPayload = selectionPayload,
-            patchSelection = selection
+            patchSelection = selection,
+            useMount = app.useMount
         )
         val matchingSavedEntries = installedAppRepository
             .getByInstallType(InstallType.SAVED)
@@ -405,6 +406,8 @@ class InstalledAppInfoViewModel(
                 installType = installType,
                 patchSelection = selection,
                 selectionPayload = selectionPayload,
+                useMount = app.useMount,
+                updateUseMount = true,
                 customInstallerPackageName = customInstallerPackageName,
                 repatchSourcePath = app.repatchSourcePath,
                 updateRepatchSource = true
@@ -533,7 +536,8 @@ class InstalledAppInfoViewModel(
         buildSavedAppVariantIdentity(
             appVersion = app.version,
             selectionPayload = app.selectionPayload,
-            patchSelection = resolveAppliedSelection(app)
+            patchSelection = resolveAppliedSelection(app),
+            useMount = app.useMount
         )
 
     private suspend fun collapseMatchingSavedEntriesForInstalledVariant(
@@ -1398,7 +1402,9 @@ class InstalledAppInfoViewModel(
                 currentApp.version,
                 InstallType.SAVED,
                 persistableSelection,
-                payload
+                payload,
+                useMount = currentApp.useMount,
+                updateUseMount = true
             )
         }
 

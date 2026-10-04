@@ -10,9 +10,15 @@ private const val UNSPECIFIED_SAVED_APP_VERSION = "unspecified"
 fun buildSavedAppVariantIdentity(
     appVersion: String,
     selectionPayload: PatchProfilePayload?,
-    patchSelection: PatchSelection = emptyMap()
+    patchSelection: PatchSelection = emptyMap(),
+    useMount: Boolean?
 ): String {
     val normalizedVersion = appVersion.ifBlank { UNSPECIFIED_SAVED_APP_VERSION }
+    val patchMode = when (useMount) {
+        true -> "mount"
+        false -> "standard"
+        null -> "unknown"
+    }
     val canonicalBundles = selectionPayload?.bundles
         ?.takeIf { it.isNotEmpty() }
         ?.sortedBy { it.bundleUid }
@@ -32,7 +38,7 @@ fun buildSavedAppVariantIdentity(
             "uid=$uid|patches=${patches.sorted().joinToString(separator = ",")}"
         }.ifBlank { "none" }
 
-    return "appVersion=$normalizedVersion;$canonicalBundles"
+    return "appVersion=$normalizedVersion;patchMode=$patchMode;$canonicalBundles"
 }
 
 private fun canonicalizeBundleOptions(

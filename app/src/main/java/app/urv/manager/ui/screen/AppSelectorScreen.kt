@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.PlaylistPlay
+import androidx.compose.material.icons.automirrored.outlined.Sort
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.outlined.Search
@@ -38,6 +39,8 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -98,11 +101,15 @@ import app.urv.manager.ui.viewmodel.AppSelectorViewModel
 import app.urv.manager.ui.viewmodel.BundleVersionSuggestion
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.util.EventEffect
+import app.urv.manager.util.AppInfo
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.openUrl
 import java.io.File
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import app.urv.manager.ui.component.CenteredDialogTitle
@@ -132,6 +139,15 @@ fun AppSelectorScreen(
     val searchEngineHost by prefs.searchEngineHost.getAsState()
     val filterInstalledOnly by prefs.appSelectorFilterInstalledOnly.getAsState()
     val filterPatchesAvailable by prefs.appSelectorFilterPatchesAvailable.getAsState()
+    val sortModePreference = if (batchQueueMode) {
+        prefs.batchQueueAppSelectorSortMode
+    } else {
+        prefs.appSelectorSortMode
+    }
+    val persistedSortMode by sortModePreference.getAsState()
+    val sortMode = remember(persistedSortMode) {
+        AppSelectorSortMode.fromStorage(persistedSortMode)
+    }
     val apkInputDirectory by prefs.apkInputLastDirectory.getAsState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -210,6 +226,7 @@ fun AppSelectorScreen(
 
     var filterText by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf(false) }
+    var showSortMenu by rememberSaveable { mutableStateOf(false) }
 
     InterceptBackHandler(
         enabled = search || filterText.isNotBlank() || batchQueueMode
@@ -222,13 +239,37 @@ fun AppSelectorScreen(
     }
 
     val appList by vm.appList.collectAsStateWithLifecycle(initialValue = emptyList())
+    val notInstalledLabel = stringResource(R.string.not_installed)
+    var appDisplayLabels by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(appList) {
+        appDisplayLabels = appList.associate { it.packageName to it.packageName }
+        appDisplayLabels = withContext(Dispatchers.IO) {
+            appList.associate { app ->
+                app.packageName to (app.packageInfo?.let(vm::loadLabel) ?: app.packageName)
+            }
+        }
+    }
     val filteredAppList = remember(
         appList,
+        appDisplayLabels,
+        notInstalledLabel,
         filterText,
         filterInstalledOnly,
         filterPatchesAvailable,
-        allowUniversalPatches
+        allowUniversalPatches,
+        sortMode,
     ) {
+        val sortKeys = appList.associate { app ->
+            app.packageName to
+                appDisplayLabels.getOrElse(app.packageName) { app.packageName }
+                    .trim()
+                    .lowercase(Locale.ROOT)
+        }
+        val comparator = compareBy<AppInfo>(
+            { app -> sortKeys.getValue(app.packageName) },
+            { app -> app.packageName.lowercase(Locale.ROOT) },
+            AppInfo::packageName,
+        )
         appList
             .asSequence()
             .filter { app ->
@@ -239,9 +280,20 @@ fun AppSelectorScreen(
             }
             .filter { app ->
                 if (filterText.isBlank()) return@filter true
-                (vm.loadLabel(app.packageInfo)).contains(filterText, true) ||
+                val searchableLabel = if (app.packageInfo == null) {
+                    notInstalledLabel
+                } else {
+                    appDisplayLabels.getOrElse(app.packageName) { app.packageName }
+                }
+                searchableLabel.contains(filterText, true) ||
                     app.packageName.contains(filterText, true)
             }
+            .sortedWith(
+                when (sortMode) {
+                    AppSelectorSortMode.NAME_ASC -> comparator
+                    AppSelectorSortMode.NAME_DESC -> comparator.reversed()
+                }
+            )
             .toList()
     }
 
@@ -347,6 +399,38 @@ fun AppSelectorScreen(
                     }
                 },
                 actions = {
+                    Box {
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(
+                                Icons.AutoMirrored.Outlined.Sort,
+                                contentDescription = stringResource(R.string.app_selector_sort_title)
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            AppSelectorSortMode.entries.forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(mode.labelRes)) },
+                                    leadingIcon = {
+                                        if (sortMode == mode) {
+                                            Icon(
+                                                Icons.Filled.Check,
+                                                contentDescription = null
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        showSortMenu = false
+                                        coroutineScope.launch {
+                                            sortModePreference.update(mode.storageValue)
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = { search = true }) {
                         Icon(Icons.Outlined.Search, stringResource(R.string.search))
                     }
@@ -581,6 +665,19 @@ fun AppSelectorScreen(
 
     if (vm.storageSelectionInProgress) {
         TransparentLoadingDialog()
+    }
+}
+
+private enum class AppSelectorSortMode(
+    val storageValue: String,
+    val labelRes: Int,
+) {
+    NAME_ASC("NAME_ASC", R.string.app_selector_sort_name_asc),
+    NAME_DESC("NAME_DESC", R.string.app_selector_sort_name_desc);
+
+    companion object {
+        fun fromStorage(value: String?): AppSelectorSortMode =
+            entries.firstOrNull { it.storageValue == value } ?: NAME_ASC
     }
 }
 

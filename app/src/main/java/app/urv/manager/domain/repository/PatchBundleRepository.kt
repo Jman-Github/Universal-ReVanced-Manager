@@ -34,10 +34,12 @@ import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
+import app.urv.manager.domain.bundles.RepositoryBundleReleaseChannel
 import app.urv.manager.domain.bundles.RepositoryBundleSettings
 import app.urv.manager.domain.bundles.RepositoryBundleSettingsStore
 import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.dto.ExternalBundleSnapshot
+import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
@@ -57,7 +59,9 @@ import app.urv.manager.util.tag
 import app.urv.manager.util.toast
 import kotlinx.collections.immutable.*
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,6 +70,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,6 +85,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.yield
 import kotlin.coroutines.coroutineContext
 import io.ktor.http.Url
 import java.io.File
@@ -388,10 +394,15 @@ class PatchBundleRepository(
 
     private fun isRemoteUpdateCancelled(uid: Int): Boolean = cancelledUpdateUids.contains(uid)
 
+    private fun RemotePatchBundle.isManualUpdateEligible(): Boolean =
+        !autoUpdate &&
+            searchUpdate &&
+            enabled &&
+            state is PatchBundleSource.State.Available
+
     private suspend fun cancelUpdateJob() {
         updateJobMutex.withLock {
             updateJob?.cancel()
-            updateJob = null
         }
     }
 
@@ -820,7 +831,7 @@ class PatchBundleRepository(
         manualUpdateInfoFlow.update { current ->
             current.filterKeys { uid ->
                 val bundle = sources[uid] as? RemotePatchBundle
-                bundle != null && !bundle.autoUpdate
+                bundle?.isManualUpdateEligible() == true
             }
         }
 
@@ -1438,42 +1449,46 @@ class PatchBundleRepository(
                 enabled,
             )
 
-            is SourceInfo.Remote -> JsonPatchBundle(
-                actualName,
-                uid,
-                normalizedDisplayName,
-                createdAt,
-                updatedAt,
-                versionHash,
-                null,
-                dir,
-                source.url.toString(),
-                autoUpdate,
-                searchUpdate,
-                lastNotifiedVersion,
-                enabled,
-                RepositoryBundleSettingsStore.read(dir).usePrereleases,
-            ).let { jsonBundle ->
-                val external = ExternalBundleMetadataStore.read(dir)
-                if (external == null) {
-                    jsonBundle
-                } else {
-                    ExternalGraphqlPatchBundle(
-                        actualName,
-                        uid,
-                        normalizedDisplayName,
-                        createdAt,
-                        updatedAt,
-                        versionHash,
-                        null,
-                        dir,
-                        source.url.toString(),
-                        autoUpdate,
-                        searchUpdate,
-                        lastNotifiedVersion,
-                        enabled,
-                        external
-                    )
+            is SourceInfo.Remote -> {
+                val repositorySettings = RepositoryBundleSettingsStore.read(dir)
+                JsonPatchBundle(
+                    actualName,
+                    uid,
+                    normalizedDisplayName,
+                    createdAt,
+                    updatedAt,
+                    versionHash,
+                    null,
+                    dir,
+                    source.url.toString(),
+                    autoUpdate,
+                    searchUpdate,
+                    lastNotifiedVersion,
+                    enabled,
+                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.PRERELEASE,
+                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.LATEST,
+                ).let { jsonBundle ->
+                    val external = ExternalBundleMetadataStore.read(dir)
+                    if (external == null) {
+                        jsonBundle
+                    } else {
+                        ExternalGraphqlPatchBundle(
+                            actualName,
+                            uid,
+                            normalizedDisplayName,
+                            createdAt,
+                            updatedAt,
+                            versionHash,
+                            null,
+                            dir,
+                            source.url.toString(),
+                            autoUpdate,
+                            searchUpdate,
+                            lastNotifiedVersion,
+                            enabled,
+                            external
+                        )
+                    }
                 }
             }
             // PR #35: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/35
@@ -1692,7 +1707,35 @@ class PatchBundleRepository(
         }
     }
 
-    suspend fun disable(vararg bundles: PatchBundleSource) =
+    // Enter the cleanup block even if cancellation arrives before the job is dispatched.
+    @OptIn(DelicateCoroutinesApi::class)
+    private fun launchRemoteUpdateJob(request: UpdateRequest): Job = scope.launch(start = CoroutineStart.ATOMIC) {
+        try {
+            coroutineContext.ensureActive()
+            performRemoteUpdate(
+                force = request.force,
+                showToast = request.showToast,
+                allowUnsafeNetwork = request.allowUnsafeNetwork,
+                showProgress = request.showProgress,
+                onPerBundleProgress = request.onPerBundleProgress,
+                onBundleUpdated = null,
+                predicate = request.predicate
+            )
+        } finally {
+            finishRemoteUpdateJob(coroutineContext.job)
+        }
+    }
+
+    private suspend fun finishRemoteUpdateJob(owner: Job) = withContext(NonCancellable) {
+        updateJobMutex.withLock {
+            if (updateJob != null && updateJob != owner) return@withLock
+            val next = drainPendingUpdateRequests()
+            updateJob = next?.let(::launchRemoteUpdateJob)
+        }
+    }
+
+    suspend fun disable(vararg bundles: PatchBundleSource) {
+        val toggledUids = bundles.map(PatchBundleSource::uid).toIntArray()
         dispatchAction("Disable (${bundles.map { it.uid }.joinToString(",")})") { state ->
             bundles.forEach { bundle ->
                 updateDb(bundle.uid) { it.copy(enabled = !it.enabled) }
@@ -1710,16 +1753,26 @@ class PatchBundleRepository(
                     map[uid] = map[uid]?.copy(enabled = enabled) ?: return@forEach
                 }
             }
+            val ineligibleUids = toggledUids.filterTo(mutableSetOf()) { uid ->
+                (sources[uid] as? RemotePatchBundle)?.isManualUpdateEligible() != true
+            }
+            if (ineligibleUids.isNotEmpty()) {
+                manualUpdateInfoFlow.update { current -> current - ineligibleUids }
+            }
 
             state.copy(sources = sources, info = info)
         }
+        if (toggledUids.isNotEmpty()) checkManualUpdates(*toggledUids)
+    }
 
-    suspend fun setEnabledStates(states: Map<Int, Boolean>) =
+    suspend fun setEnabledStates(states: Map<Int, Boolean>) {
+        var changedUids = emptySet<Int>()
         dispatchAction("Set bundle enabled states") { state ->
             val updates = states.filter { (uid, enabled) ->
                 state.sources[uid]?.enabled != enabled
             }
             if (updates.isEmpty()) return@dispatchAction state
+            changedUids = updates.keys
 
             updates.forEach { (uid, enabled) ->
                 updateDb(uid) { it.copy(enabled = enabled) }
@@ -1735,9 +1788,17 @@ class PatchBundleRepository(
                     map[uid] = map[uid]?.copy(enabled = enabled) ?: return@forEach
                 }
             }
+            val ineligibleUids = updates.keys.filterTo(mutableSetOf()) { uid ->
+                (sources[uid] as? RemotePatchBundle)?.isManualUpdateEligible() != true
+            }
+            if (ineligibleUids.isNotEmpty()) {
+                manualUpdateInfoFlow.update { current -> current - ineligibleUids }
+            }
 
             state.copy(sources = sources, info = info)
         }
+        if (changedUids.isNotEmpty()) checkManualUpdates(*changedUids.toIntArray())
+    }
 
     suspend fun remove(vararg bundles: PatchBundleSource) =
         dispatchAction("Remove (${bundles.map { it.uid }.joinToString(",")})") { state ->
@@ -1851,51 +1912,58 @@ class PatchBundleRepository(
             return false
         }
 
-        if (normalizedUrl == src.endpoint) return false
-
-        dispatchAction("Update bundle url (${src.uid})") { state ->
-            val props = dao.getProps(src.uid) ?: return@dispatchAction state
-            val now = System.currentTimeMillis()
-            changelogHistoryMutex.withLock {
-                writeChangelogHistoryInternal(src.uid, emptyList())
-                writeChangelogHistoryIdentityInternal(src.uid, null)
-            }
-            ExternalBundleMetadataStore.clear(directoryOf(src.uid))
-            RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
-            updateDb(src.uid) {
-                it.copy(
+        var endpointChanged = false
+        withRemoteUpdateReservation {
+            dispatchAction("Update bundle url (${src.uid})") { state ->
+                val currentSource = state.sources[src.uid] as? RemotePatchBundle
+                    ?: return@dispatchAction state
+                if (normalizedUrl == currentSource.endpoint) return@dispatchAction state
+                val props = dao.getProps(src.uid) ?: return@dispatchAction state
+                val now = System.currentTimeMillis()
+                changelogHistoryMutex.withLock {
+                    writeChangelogHistoryInternal(src.uid, emptyList())
+                    writeChangelogHistoryIdentityInternal(src.uid, null)
+                }
+                ExternalBundleMetadataStore.clear(directoryOf(src.uid))
+                RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
+                updateDb(src.uid) {
+                    it.copy(
+                        source = SourceInfo.from(normalizedUrl),
+                        versionHash = null,
+                        lastNotifiedVersion = null,
+                        updatedAt = now
+                    )
+                }
+                val updatedProps = props.copy(
                     source = SourceInfo.from(normalizedUrl),
                     versionHash = null,
                     lastNotifiedVersion = null,
                     updatedAt = now
                 )
+                val entity = PatchBundleEntity(
+                    uid = src.uid,
+                    name = updatedProps.name,
+                    displayName = updatedProps.displayName,
+                    versionHash = updatedProps.versionHash,
+                    source = updatedProps.source,
+                    autoUpdate = updatedProps.autoUpdate,
+                    searchUpdate = updatedProps.searchUpdate,
+                    lastNotifiedVersion = updatedProps.lastNotifiedVersion,
+                    enabled = updatedProps.enabled,
+                    sortOrder = updatedProps.sortOrder,
+                    createdAt = updatedProps.createdAt,
+                    updatedAt = updatedProps.updatedAt
+                )
+                val updatedSource = entity.load()
+                manualUpdateInfoFlow.update { current -> current - src.uid }
+                endpointChanged = true
+                State(
+                    sources = state.sources.put(src.uid, updatedSource),
+                    info = state.info.remove(src.uid)
+                )
             }
-            val updatedProps = props.copy(
-                source = SourceInfo.from(normalizedUrl),
-                versionHash = null,
-                lastNotifiedVersion = null,
-                updatedAt = now
-            )
-            val entity = PatchBundleEntity(
-                uid = src.uid,
-                name = updatedProps.name,
-                displayName = updatedProps.displayName,
-                versionHash = updatedProps.versionHash,
-                source = updatedProps.source,
-                autoUpdate = updatedProps.autoUpdate,
-                searchUpdate = updatedProps.searchUpdate,
-                lastNotifiedVersion = updatedProps.lastNotifiedVersion,
-                enabled = updatedProps.enabled,
-                sortOrder = updatedProps.sortOrder,
-                createdAt = updatedProps.createdAt,
-                updatedAt = updatedProps.updatedAt
-            )
-            val updatedSource = entity.load()
-            State(
-                sources = state.sources.put(src.uid, updatedSource),
-                info = state.info.remove(src.uid)
-            )
         }
+        if (!endpointChanged) return false
 
         val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return true
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
@@ -2151,6 +2219,7 @@ class PatchBundleRepository(
         searchUpdate: Boolean,
         autoUpdate: Boolean,
         usePrereleases: Boolean = false,
+        useLatest: Boolean = false,
         createdAt: Long? = null,
         updatedAt: Long? = null,
         showInAppProgress: Boolean = false,
@@ -2174,10 +2243,13 @@ class PatchBundleRepository(
             createdAt = createdAt,
             updatedAt = updatedAt
         )
-        if (usePrereleases) {
+        if (usePrereleases || useLatest) {
             RepositoryBundleSettingsStore.write(
                 directoryOf(entity.uid),
-                RepositoryBundleSettings(usePrereleases = true)
+                RepositoryBundleSettings(
+                    usePrereleases = usePrereleases && !useLatest,
+                    useLatest = useLatest,
+                )
             )
         }
         val src = entity.load() as RemotePatchBundle
@@ -2508,13 +2580,14 @@ class PatchBundleRepository(
             updateDb(uid) { it.copy(autoUpdate = value) }
             val newSrc = (state.sources[uid] as? RemotePatchBundle)?.copy(autoUpdate = value)
                 ?: return@dispatchAction state
+            if (!newSrc.isManualUpdateEligible()) {
+                manualUpdateInfoFlow.update { map -> map - uid }
+            }
 
             state.copy(sources = state.sources.put(uid, newSrc))
         }
 
-        if (value) {
-            manualUpdateInfoFlow.update { map -> map - uid }
-        } else {
+        if (!value) {
             checkManualUpdates(uid)
         }
     }
@@ -2524,30 +2597,88 @@ class PatchBundleRepository(
             updateDb(uid) { it.copy(searchUpdate = value) }
             val newSrc = (state.sources[uid] as? RemotePatchBundle)?.copy(searchUpdate = value)
                 ?: return@dispatchAction state
+            if (!newSrc.isManualUpdateEligible()) {
+                manualUpdateInfoFlow.update { map -> map - uid }
+            }
 
             state.copy(sources = state.sources.put(uid, newSrc))
         }
+        if (value) checkManualUpdates(uid)
     }
 
-    suspend fun JsonPatchBundle.setUsePrereleases(value: Boolean): JsonPatchBundle {
-        if (!supportsPrereleases || usePrereleases == value) return this
-        RepositoryBundleSettingsStore.write(
-            directoryOf(uid),
-            RepositoryBundleSettings(usePrereleases = value)
-        )
+    suspend fun JsonPatchBundle.setRepositoryReleaseChannel(
+        channel: RepositoryBundleReleaseChannel
+    ): JsonPatchBundle {
         var updatedSource = this
-        dispatchAction("Set repository bundle prereleases ($name, $value)") { state ->
-            val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
-            updatedSource = source.withUsePrereleases(value)
-            state.copy(sources = state.sources.put(uid, updatedSource))
+        withRemoteUpdateReservation {
+            dispatchAction("Set repository bundle release channel ($name, $channel)") { state ->
+                val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                if (!source.supportsPrereleases) {
+                    updatedSource = source
+                    return@dispatchAction state
+                }
+                if (source.releaseChannel == channel) {
+                    updatedSource = source
+                    return@dispatchAction state
+                }
+                RepositoryBundleSettingsStore.write(
+                    directoryOf(uid),
+                    RepositoryBundleSettings.forReleaseChannel(channel)
+                )
+                updatedSource = source.withReleaseChannel(channel)
+                manualUpdateInfoFlow.update { current -> current - uid }
+                state.copy(sources = state.sources.put(uid, updatedSource))
+            }
         }
         return updatedSource
     }
 
-    private suspend fun updateLastNotifiedVersion(uid: Int, version: String?) {
+    suspend fun JsonPatchBundle.setUsePrereleases(value: Boolean): JsonPatchBundle =
+        setRepositoryReleaseChannel(
+            if (value) RepositoryBundleReleaseChannel.PRERELEASE
+            else RepositoryBundleReleaseChannel.RELEASE
+        )
+
+    suspend fun JsonPatchBundle.setUseLatest(value: Boolean): JsonPatchBundle =
+        setRepositoryReleaseChannel(
+            if (value) RepositoryBundleReleaseChannel.LATEST
+            else RepositoryBundleReleaseChannel.RELEASE
+        )
+
+    private suspend fun updateLastNotifiedVersion(
+        uid: Int,
+        version: String?,
+        expectedSource: RemotePatchBundle? = null,
+        expectedInstalledSha256: String? = null,
+    ) {
         dispatchAction("Set last notified version ($uid)") { state ->
-            updateDb(uid) { it.copy(lastNotifiedVersion = version) }
             val src = (state.sources[uid] as? RemotePatchBundle) ?: return@dispatchAction state
+            if (expectedSource != null) {
+                if (src.endpoint != expectedSource.endpoint) return@dispatchAction state
+                if (src.autoUpdate != expectedSource.autoUpdate) return@dispatchAction state
+                if (src.searchUpdate != expectedSource.searchUpdate) return@dispatchAction state
+                if (src.enabled != expectedSource.enabled) return@dispatchAction state
+                if (
+                    normalizeVersionForCompare(src.installedVersionSignature) !=
+                    normalizeVersionForCompare(expectedSource.installedVersionSignature)
+                ) {
+                    return@dispatchAction state
+                }
+                if (
+                    src is JsonPatchBundle &&
+                    expectedSource is JsonPatchBundle &&
+                    src.releaseChannel != expectedSource.releaseChannel
+                ) {
+                    return@dispatchAction state
+                }
+            }
+            if (
+                expectedInstalledSha256 != null &&
+                installedBundleSha256(uid) != expectedInstalledSha256
+            ) {
+                return@dispatchAction state
+            }
+            updateDb(uid) { it.copy(lastNotifiedVersion = version) }
             val updated = src.copy(lastNotifiedVersion = version)
             state.copy(sources = state.sources.put(uid, updated))
         }
@@ -2576,48 +2707,94 @@ class PatchBundleRepository(
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
-    ): Boolean {
+    ): Boolean = coroutineScope {
         while (true) {
+            val operation = async(start = CoroutineStart.LAZY) {
+                performRemoteUpdate(
+                    force = force,
+                    showToast = false,
+                    allowUnsafeNetwork = allowUnsafeNetwork,
+                    showProgress = showProgress,
+                    onPerBundleProgress = onPerBundleProgress,
+                    onBundleUpdated = onBundleUpdated,
+                    predicate = predicate
+                )
+            }
             val activeJob = updateJobMutex.withLock {
-                if (updateJob?.isActive == true) {
-                    updateJob
+                val current = updateJob?.takeUnless { it.isCompleted }
+                if (current != null) {
+                    current
                 } else {
-                    updateJob = coroutineContext.job
+                    updateJob = operation
                     null
                 }
             }
-            if (activeJob == null) break
-            activeJob.join()
-        }
+            if (activeJob != null) {
+                operation.cancel()
+                activeJob.join()
+                continue
+            }
 
-        return try {
-            performRemoteUpdate(
-                force = force,
-                showToast = false,
-                allowUnsafeNetwork = allowUnsafeNetwork,
-                showProgress = showProgress,
-                onPerBundleProgress = onPerBundleProgress,
-                onBundleUpdated = onBundleUpdated,
-                predicate = predicate
-            )
-        } finally {
-            updateJobMutex.withLock {
-                if (updateJob == coroutineContext.job) {
-                    updateJob = null
+            try {
+                return@coroutineScope operation.await()
+            } finally {
+                withContext(NonCancellable) {
+                    // A cancelled download must finish cleanup before the next update starts.
+                    operation.join()
+                    finishRemoteUpdateJob(operation)
                 }
             }
-            val next = drainPendingUpdateRequests()
-            if (next != null) {
-                startRemoteUpdateJob(
-                    force = next.force,
-                    showToast = next.showToast,
-                    allowUnsafeNetwork = next.allowUnsafeNetwork,
-                    showProgress = next.showProgress,
-                    onPerBundleProgress = next.onPerBundleProgress,
-                    predicate = next.predicate
-                )
-            }
         }
+        error("Unreachable")
+    }
+
+    private suspend fun <T> withRemoteUpdateReservation(block: suspend () -> T): T = coroutineScope {
+        val operation = async(start = CoroutineStart.LAZY) {
+            // Store actions keep running after their caller is cancelled.
+            withContext(NonCancellable) { block() }
+        }
+        withRemoteUpdatesIdleLock {
+            updateJob = operation
+        }
+        try {
+            // Store actions can acquire updateJobMutex themselves. Reserve the update
+            // slot above, then release the mutex before dispatching or awaiting them.
+            withContext(NonCancellable) { operation.await() }
+        } finally {
+            finishRemoteUpdateJob(operation)
+        }
+    }
+
+    private suspend fun <T> withRemoteUpdatesIdleLock(block: suspend () -> T): T {
+        while (true) {
+            updateJobMutex.lock()
+            val activeJob: Job?
+            val hasPending: Boolean
+            try {
+                activeJob = updateJob?.takeUnless { it.isCompleted }
+                hasPending = withContext(NonCancellable) {
+                    updateStateMutex.withLock { pendingUpdateRequests.isNotEmpty() }
+                }
+            } catch (error: Throwable) {
+                updateJobMutex.unlock()
+                throw error
+            }
+            if (activeJob == null && !hasPending) {
+                return try {
+                    block()
+                } finally {
+                    updateJobMutex.unlock()
+                }
+            }
+            updateJobMutex.unlock()
+            if (activeJob != null) activeJob.join() else yield()
+        }
+    }
+
+    suspend fun <T> withManualUpdateSnapshot(
+        block: (Map<Int, ManualBundleUpdateInfo>) -> T,
+    ): T = withRemoteUpdatesIdleLock {
+        block(manualUpdateInfoFlow.value)
     }
 
     suspend fun redownloadRemoteBundles(): Boolean =
@@ -2660,81 +2837,274 @@ class PatchBundleRepository(
                 if (!bundle.searchUpdate || !bundle.enabled) return@forEach
                 if (bundle.state !is PatchBundleSource.State.Available) return@forEach
 
-                val info = runCatching { bundle.fetchLatestReleaseInfo() }.getOrElse { error ->
+                val info = try {
+                    bundle.fetchLatestReleaseInfo()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
                     Log.e(tag, "Failed to check update for ${bundle.name}", error)
                     return@forEach
                 }
 
-                val latestSignature = normalizeVersionForCompare(info.version) ?: return@forEach
-                val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                val manifestSignature = normalizeVersionForCompare(bundle.version)
-                val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
-                    ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
-                    ?: false
-                if (
-                    !artifactChanged &&
-                    (
-                        (installedSignature != null && installedSignature == latestSignature) ||
-                            (manifestSignature != null && manifestSignature == latestSignature)
-                        )
-                ) {
-                    return@forEach
-                }
-
-                val versionLabel = latestSignature
-                val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
-                    ?.artifactNotificationIdentity(info)
-                val notificationIdentity = artifactIdentity?.let {
-                    "$versionLabel|$it"
-                } ?: versionLabel
-                val persistedNotificationIdentity = bundle.lastNotifiedVersion
-                    ?.trim()
-                    .orEmpty()
-                val alreadyNotified = when {
-                    artifactIdentity == null ->
-                        normalizeVersionForCompare(
-                            persistedNotificationIdentity.substringBefore('|')
-                        ) == versionLabel
-
-                    artifactIdentity.startsWith("sha256:", ignoreCase = true) ->
-                        persistedNotificationIdentity.equals(
-                            notificationIdentity,
-                            ignoreCase = true
-                        )
-
-                    else -> {
-                        val persistedVersion = normalizeVersionForCompare(
-                            persistedNotificationIdentity.substringBefore('|')
-                        )
-                        val persistedArtifactIdentity = persistedNotificationIdentity
-                            .substringAfter('|', missingDelimiterValue = "")
-                        persistedVersion == versionLabel &&
-                            persistedArtifactIdentity == artifactIdentity
-                    }
-                }
-                if (alreadyNotified) {
-                    val effectiveNotificationIdentity = persistedNotificationIdentity
-                        .takeIf { it.isNotBlank() }
-                        ?: notificationIdentity
+                val decision = commitFetchedManualUpdate(
+                    fetchedFrom = bundle,
+                    info = info,
+                    predicate = predicate,
+                ) ?: return@forEach
+                if (decision.alreadyNotified) {
                     onAlreadyNotified?.invoke(
-                        bundle,
-                        info.version,
-                        effectiveNotificationIdentity
+                        decision.bundle,
+                        decision.bundleVersion,
+                        decision.notificationIdentity,
                     )
                     return@forEach
                 }
 
-                val notified = onNotification(bundle, info.version, notificationIdentity)
+                val notified = onNotification(
+                    decision.bundle,
+                    decision.bundleVersion,
+                    decision.notificationIdentity,
+                )
                 if (notified) {
-                    updateLastNotifiedVersion(bundle.uid, notificationIdentity)
+                    updateLastNotifiedVersion(
+                        decision.bundle.uid,
+                        decision.notificationIdentity,
+                        expectedSource = decision.bundle,
+                        expectedInstalledSha256 = decision.installedSha256,
+                    )
                     notifiedAny = true
                 }
             }
         notifiedAny
     }
 
-    suspend fun checkManualUpdates(vararg bundleUids: Int) =
-        store.dispatch(ManualUpdateCheck(bundleUids.toSet().takeIf { it.isNotEmpty() }))
+    private data class ManualNotificationDecision(
+        val bundle: RemotePatchBundle,
+        val bundleVersion: String,
+        val notificationIdentity: String,
+        val alreadyNotified: Boolean,
+        val installedSha256: String?,
+    )
+
+    private suspend fun commitFetchedManualUpdate(
+        fetchedFrom: RemotePatchBundle,
+        info: ReVancedAsset,
+        predicate: (bundle: RemotePatchBundle) -> Boolean,
+    ): ManualNotificationDecision? = withRemoteUpdatesIdleLock {
+        val bundle = store.state.value.sources[fetchedFrom.uid] as? RemotePatchBundle
+            ?: return@withRemoteUpdatesIdleLock null
+        if (bundle.endpoint != fetchedFrom.endpoint) return@withRemoteUpdatesIdleLock null
+        if (
+            bundle is JsonPatchBundle &&
+            fetchedFrom is JsonPatchBundle &&
+            bundle.releaseChannel != fetchedFrom.releaseChannel
+        ) {
+            return@withRemoteUpdatesIdleLock null
+        }
+        if (!predicate(bundle)) return@withRemoteUpdatesIdleLock null
+        if (!bundle.searchUpdate || !bundle.enabled) return@withRemoteUpdatesIdleLock null
+        if (bundle.state !is PatchBundleSource.State.Available) return@withRemoteUpdatesIdleLock null
+
+        val latestSignature = normalizeVersionForCompare(info.version)
+        if (latestSignature == null) {
+            if (!bundle.autoUpdate) {
+                manualUpdateInfoFlow.update { current -> current - bundle.uid }
+            }
+            return@withRemoteUpdatesIdleLock null
+        }
+        val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+        val manifestSignature = normalizeVersionForCompare(bundle.version)
+        val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+            ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+            ?: false
+        if (
+            !artifactChanged &&
+            (
+                (installedSignature != null && installedSignature == latestSignature) ||
+                    (manifestSignature != null && manifestSignature == latestSignature)
+                )
+        ) {
+            if (!bundle.autoUpdate) {
+                manualUpdateInfoFlow.update { current -> current - bundle.uid }
+            }
+            return@withRemoteUpdatesIdleLock null
+        }
+
+        val versionLabel = latestSignature
+        val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
+            ?.artifactNotificationIdentity(info)
+        val notificationIdentity = artifactIdentity?.let {
+            "$versionLabel|$it"
+        } ?: versionLabel
+        if (!bundle.autoUpdate) {
+            manualUpdateInfoFlow.update { current ->
+                current + (
+                    bundle.uid to ManualBundleUpdateInfo(
+                        latestVersion = info.version,
+                        pageUrl = info.pageUrl,
+                        notificationIdentity = notificationIdentity,
+                    )
+                    )
+            }
+        }
+        val installedSha256 = (bundle as? ExternalGraphqlPatchBundle)
+            ?.let { installedBundleSha256(bundle.uid) }
+        val persistedNotificationIdentity = bundle.lastNotifiedVersion
+            ?.trim()
+            .orEmpty()
+        val alreadyNotified = when {
+            artifactIdentity == null ->
+                normalizeVersionForCompare(
+                    persistedNotificationIdentity.substringBefore('|')
+                ) == versionLabel
+
+            artifactIdentity.startsWith("sha256:", ignoreCase = true) ->
+                persistedNotificationIdentity.equals(
+                    notificationIdentity,
+                    ignoreCase = true
+                )
+
+            else -> {
+                val persistedVersion = normalizeVersionForCompare(
+                    persistedNotificationIdentity.substringBefore('|')
+                )
+                val persistedArtifactIdentity = persistedNotificationIdentity
+                    .substringAfter('|', missingDelimiterValue = "")
+                persistedVersion == versionLabel &&
+                    persistedArtifactIdentity == artifactIdentity
+            }
+        }
+        if (alreadyNotified) {
+            val effectiveNotificationIdentity = persistedNotificationIdentity
+                .takeIf { it.isNotBlank() }
+                ?: notificationIdentity
+            return@withRemoteUpdatesIdleLock ManualNotificationDecision(
+                bundle = bundle,
+                bundleVersion = info.version,
+                notificationIdentity = effectiveNotificationIdentity,
+                alreadyNotified = true,
+                installedSha256 = installedSha256,
+            )
+        }
+
+        ManualNotificationDecision(
+            bundle = bundle,
+            bundleVersion = info.version,
+            notificationIdentity = notificationIdentity,
+            alreadyNotified = false,
+            installedSha256 = installedSha256,
+        )
+    }
+
+    suspend fun checkManualUpdates(vararg bundleUids: Int) = coroutineScope {
+        val targetUids = bundleUids.toSet().takeIf { it.isNotEmpty() }
+        val snapshot = store.state.value
+        val manualBundles = snapshot.sources.values
+            .filterIsInstance<RemotePatchBundle>()
+            .filter { bundle ->
+                bundle.isManualUpdateEligible() &&
+                    (targetUids == null || bundle.uid in targetUids)
+            }
+        val eligibleUids = manualBundles.mapTo(mutableSetOf(), RemotePatchBundle::uid)
+
+        manualUpdateInfoFlow.update { map ->
+            if (targetUids != null) {
+                map - (targetUids - eligibleUids)
+            } else {
+                map.filterKeys { it in eligibleUids }
+            }
+        }
+
+        if (manualBundles.isEmpty()) {
+            return@coroutineScope
+        }
+
+        val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
+        if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+            Log.d(tag, "Skipping manual update check because the network is down or metered.")
+            return@coroutineScope
+        }
+
+        val fetched = manualBundles.map { bundle ->
+            async {
+                val info = try {
+                    bundle.fetchLatestReleaseInfo()
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(tag, "Failed to check manual update for ${bundle.name}", error)
+                    null
+                }
+                bundle to info
+            }
+        }.awaitAll()
+
+        withRemoteUpdatesIdleLock {
+            val current = store.state.value
+            val currentManualUids = current.sources.values
+                .filterIsInstance<RemotePatchBundle>()
+                .filter { bundle ->
+                    bundle.isManualUpdateEligible() &&
+                        (targetUids == null || bundle.uid in targetUids)
+                }
+                .mapTo(mutableSetOf(), RemotePatchBundle::uid)
+
+            manualUpdateInfoFlow.update { map ->
+                val next = map.toMutableMap()
+                if (targetUids == null) {
+                    next.keys.retainAll(currentManualUids)
+                } else {
+                    (targetUids - currentManualUids).forEach(next::remove)
+                }
+
+                fetched.forEach { (fetchedFrom, info) ->
+                    val bundle = current.sources[fetchedFrom.uid] as? RemotePatchBundle
+                        ?: return@forEach
+                    if (bundle.uid !in currentManualUids) return@forEach
+                    if (bundle.endpoint != fetchedFrom.endpoint) return@forEach
+                    if (
+                        bundle is JsonPatchBundle &&
+                        fetchedFrom is JsonPatchBundle &&
+                        bundle.releaseChannel != fetchedFrom.releaseChannel
+                    ) {
+                        return@forEach
+                    }
+
+                    if (info == null) {
+                        return@forEach
+                    }
+                    val latestSignature = normalizeVersionForCompare(info.version)
+                    if (latestSignature == null) {
+                        next.remove(bundle.uid)
+                        return@forEach
+                    }
+                    val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
+                    val manifestSignature = normalizeVersionForCompare(bundle.version)
+                    val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
+                        ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
+                        ?: false
+                    val hasMatchingInstalledSignature =
+                        (installedSignature != null && installedSignature == latestSignature) ||
+                            (manifestSignature != null && manifestSignature == latestSignature)
+                    if (hasMatchingInstalledSignature && !artifactChanged) {
+                        next.remove(bundle.uid)
+                    } else {
+                        val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
+                            ?.artifactNotificationIdentity(info)
+                        val notificationIdentity = artifactIdentity?.let {
+                            "$latestSignature|$it"
+                        } ?: latestSignature
+                        next[bundle.uid] = ManualBundleUpdateInfo(
+                            latestVersion = info.version,
+                            pageUrl = info.pageUrl,
+                            notificationIdentity = notificationIdentity,
+                        )
+                    }
+                }
+                next
+            }
+        }
+    }
 
     suspend fun reorderBundles(prioritizedUids: List<Int>) = withTrackedReload {
         dispatchAction("Reorder bundles") { state ->
@@ -2811,43 +3181,15 @@ class PatchBundleRepository(
             onPerBundleProgress,
             predicate
         )
-        var queued = false
         updateJobMutex.withLock {
-            if (updateJob?.isActive == true) {
-                queued = true
+            if (updateJob?.isCompleted == false) {
+                // Queue while holding the same mutex the active job uses before it drains
+                // pending work. Otherwise the active job can finish between observing it
+                // above and enqueueing here, leaving this request stranded with no runner.
+                enqueueUpdateRequest(request)
             } else {
-                updateJob = scope.launch {
-                    try {
-                        performRemoteUpdate(
-                            force = request.force,
-                            showToast = request.showToast,
-                            allowUnsafeNetwork = request.allowUnsafeNetwork,
-                            showProgress = request.showProgress,
-                            onPerBundleProgress = request.onPerBundleProgress,
-                            onBundleUpdated = null,
-                            predicate = request.predicate
-                        )
-                    } finally {
-                        updateJobMutex.withLock {
-                            updateJob = null
-                        }
-                        val next = drainPendingUpdateRequests()
-                        if (next != null) {
-                            startRemoteUpdateJob(
-                                force = next.force,
-                                showToast = next.showToast,
-                                allowUnsafeNetwork = next.allowUnsafeNetwork,
-                                showProgress = next.showProgress,
-                                onPerBundleProgress = next.onPerBundleProgress,
-                                predicate = next.predicate
-                            )
-                        }
-                    }
-                }
+                updateJob = launchRemoteUpdateJob(request)
             }
-        }
-        if (queued) {
-            enqueueUpdateRequest(request)
         }
     }
 
@@ -3083,33 +3425,37 @@ class PatchBundleRepository(
                 return@coroutineScope false
             }
 
-            withTrackedReload {
-                dispatchAction("Apply updated bundles") {
-                    updated.forEach { (src, downloadResult) ->
-                        if (dao.getProps(src.uid) == null) return@forEach
-                        val rawName = runCatching {
-                            PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
-                        }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
-                        val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
-                        val now = System.currentTimeMillis()
+            withContext(NonCancellable) {
+                // Store commits outlive their caller; keep the update slot until they finish.
+                withTrackedReload {
+                    dispatchAction("Apply updated bundles") {
+                        updated.forEach { (src, downloadResult) ->
+                            if (dao.getProps(src.uid) == null) return@forEach
+                            val rawName = runCatching {
+                                PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
+                            }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
+                            val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
+                            val now = System.currentTimeMillis()
 
-                        updateDb(src.uid) {
-                            it.copy(
-                                versionHash = downloadResult.versionSignature,
-                                name = name,
-                                createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
-                                updatedAt = now
-                            )
+                            updateDb(src.uid) {
+                                it.copy(
+                                    versionHash = downloadResult.versionSignature,
+                                    lastNotifiedVersion = null,
+                                    name = name,
+                                    createdAt = downloadResult.assetCreatedAtMillis ?: it.createdAt,
+                                    updatedAt = now
+                                )
+                            }
                         }
+
+                        doReload()
                     }
-
-                    doReload()
                 }
-            }
 
-            val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
-            manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
-            if (showToast) toast(R.string.patches_update_success)
+                val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
+                manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
+                if (showToast) toast(R.string.patches_update_success)
+            }
             true
         } finally {
             clearActiveUpdateState()
@@ -3117,80 +3463,6 @@ class PatchBundleRepository(
     }
 
     private class BundleUpdateCancelled(val uid: Int) : Exception()
-
-    private inner class ManualUpdateCheck(
-        private val targetUids: Set<Int>? = null
-    ) : Action<State> {
-        override suspend fun ActionContext.execute(current: State) = coroutineScope {
-            val manualBundles = current.sources.values
-                .filterIsInstance<RemotePatchBundle>()
-                .filter {
-                    targetUids?.contains(it.uid) ?: !it.autoUpdate
-                }
-
-            if (manualBundles.isEmpty()) {
-                if (targetUids != null) {
-                    manualUpdateInfoFlow.update { it - targetUids }
-                } else {
-                    manualUpdateInfoFlow.update { map ->
-                        map.filterKeys { uid ->
-                            val bundle = current.sources[uid] as? RemotePatchBundle
-                            bundle != null && !bundle.autoUpdate
-                        }
-                    }
-                }
-                return@coroutineScope current
-            }
-
-            val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-            if (!allowMeteredUpdates && !networkInfo.isSafe()) {
-                Log.d(tag, "Skipping manual update check because the network is down or metered.")
-                return@coroutineScope current
-            }
-
-            val results = manualBundles
-                .map { bundle ->
-                    async {
-                        try {
-                            val info = bundle.fetchLatestReleaseInfo()
-                            val latestSignature = normalizeVersionForCompare(info.version)
-                                ?: return@async bundle.uid to null
-                            val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                            val manifestSignature = normalizeVersionForCompare(bundle.version)
-                            val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
-                                ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
-                                ?: false
-                            val hasMatchingInstalledSignature =
-                                (installedSignature != null && installedSignature == latestSignature) ||
-                                    (manifestSignature != null && manifestSignature == latestSignature)
-                            if (hasMatchingInstalledSignature && !artifactChanged) {
-                                return@async bundle.uid to null
-                            }
-                            bundle.uid to ManualBundleUpdateInfo(
-                                latestVersion = info.version,
-                                pageUrl = info.pageUrl
-                            )
-                        } catch (t: Throwable) {
-                            Log.e(tag, "Failed to check manual update for ${bundle.name}", t)
-                            bundle.uid to null
-                        }
-                    }
-                }
-                .awaitAll()
-
-            manualUpdateInfoFlow.update { map ->
-                val next = map.toMutableMap()
-                val manualUids = manualBundles.map(RemotePatchBundle::uid).toSet()
-                next.keys.retainAll(manualUids)
-                results.forEach { (uid, info) ->
-                    if (info == null) next.remove(uid) else next[uid] = info
-                }
-                next
-            }
-
-            current
-        }
-    }
 
     private fun suggestedVersionsForRevanced(patches: Set<RevancedPatch>): Map<String, String?> {
         val versionCounts = patches.revancedMostCommonCompatibleVersions(countUnusedPatches = true)
@@ -3353,6 +3625,7 @@ class PatchBundleRepository(
     data class ManualBundleUpdateInfo(
         val latestVersion: String?,
         val pageUrl: String?,
+        val notificationIdentity: String,
     )
 
     private fun normalizeVersionForCompare(raw: String?): String? {

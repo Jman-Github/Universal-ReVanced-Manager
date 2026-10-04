@@ -7,8 +7,29 @@ import java.io.File
 
 @Serializable
 data class RepositoryBundleSettings(
-    val usePrereleases: Boolean = false
-)
+    val usePrereleases: Boolean = false,
+    val useLatest: Boolean = false,
+) {
+    val releaseChannel: RepositoryBundleReleaseChannel
+        get() = when {
+            useLatest -> RepositoryBundleReleaseChannel.LATEST
+            usePrereleases -> RepositoryBundleReleaseChannel.PRERELEASE
+            else -> RepositoryBundleReleaseChannel.RELEASE
+        }
+
+    companion object {
+        fun forReleaseChannel(channel: RepositoryBundleReleaseChannel) = RepositoryBundleSettings(
+            usePrereleases = channel == RepositoryBundleReleaseChannel.PRERELEASE,
+            useLatest = channel == RepositoryBundleReleaseChannel.LATEST,
+        )
+    }
+}
+
+enum class RepositoryBundleReleaseChannel {
+    RELEASE,
+    PRERELEASE,
+    LATEST,
+}
 
 object RepositoryBundleSettingsStore {
     private const val FILE_NAME = "repository_bundle_settings.json"

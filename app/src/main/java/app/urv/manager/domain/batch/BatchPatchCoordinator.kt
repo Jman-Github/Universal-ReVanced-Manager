@@ -1078,7 +1078,12 @@ class BatchPatchCoordinator(
                 item.selection,
                 item.options
             ))?.copy(signatureWorkflow = item.signatureWorkflow)
-        val identity = buildSavedAppVariantIdentity(version, selectionPayload, item.selection)
+        val identity = buildSavedAppVariantIdentity(
+            version,
+            selectionPayload,
+            item.selection,
+            item.useMount
+        )
         // Automatic repatching updates its source entry even when manual saves keep variants.
         val overwriteDisabled = mutableState.value?.scheduled != true &&
             prefs.enableSavedApps.get() && prefs.disableSavedAppOverwrite.get()
@@ -1158,6 +1163,7 @@ class BatchPatchCoordinator(
                 installType = InstallType.SAVED,
                 patchSelection = item.selection,
                 selectionPayload = selectionPayload,
+                useMount = item.useMount,
                 resetCreatedAt = true,
                 repatchSourcePath = item.repatchSourcePath,
                 updateRepatchSource = true
@@ -2652,7 +2658,8 @@ class BatchPatchCoordinator(
         val variantIdentity = buildSavedAppVariantIdentity(
             version,
             selectionPayload,
-            item.selection
+            item.selection,
+            item.useMount
         )
         val replacementTimestamp = System.currentTimeMillis()
         val sourceSavedEntry = item.sourceEntryKey
@@ -2737,6 +2744,7 @@ class BatchPatchCoordinator(
                     installType = installType,
                     patchSelection = item.selection,
                     selectionPayload = selectionPayload,
+                    useMount = item.useMount,
                     createdAtOverride = replacementTimestamp,
                     sortOrderOverride = replacementSortOrder,
                     customInstallerPackageName = customInstallerPackageName,
@@ -2943,7 +2951,8 @@ class BatchPatchCoordinator(
             selectionPayload = savedApp.selectionPayload,
             patchSelection = installedAppRepository.getAppliedPatches(
                 savedApp.currentPackageName
-            )
+            ),
+            useMount = savedApp.useMount
         )
 
     private suspend fun findMatchingSavedEntriesForInstalledVariant(

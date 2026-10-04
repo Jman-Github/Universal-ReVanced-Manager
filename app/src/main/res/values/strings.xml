@@ -25,6 +25,9 @@
     <string name="app_filter_installed_only">Installed only</string>
     <string name="app_filter_patches_available">Patches available</string>
     <string name="app_filter_no_results">No apps found</string>
+    <string name="app_selector_sort_title">Sort apps</string>
+    <string name="app_selector_sort_name_asc">Name (A to Z)</string>
+    <string name="app_selector_sort_name_desc">Name (Z to A)</string>
     <string name="new_downloader_plugins_notification">New downloader plugins available. Click here to configure them.</string>
     <string name="new_patcher_runtime_plugins_notification">New runtime plugins available. Click here to configure them.</string>
     <string name="unsupported_architecture_warning">Patching on this device architecture is unsupported and will most likely fail.</string>
@@ -115,7 +118,9 @@
     <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>
     <string name="repository_bundle_prereleases">Use pre-releases</string>
-    <string name="repository_bundle_prereleases_description">Include pre-release versions when checking this repository for updates</string>
+    <string name="repository_bundle_prereleases_description">Use pre-release versions when checking this repository for updates</string>
+    <string name="repository_bundle_latest">Use latest</string>
+    <string name="repository_bundle_latest_description">Use the newest release or pre-release when checking this repository for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background.</string>
     <string name="bundle_reorder">Organize bundles</string>
     <string name="bundle_reorder_title">Organize patch bundles</string>
@@ -340,6 +345,10 @@
     <string name="theme_reset">Reset all theme settings</string>
     <string name="hide_main_tab_labels">Hide main tab labels</string>
     <string name="hide_main_tab_labels_description">Hide the text labels under the Apps, Patch Bundles, Patch Profiles, and Tools tab icons on the main screen</string>
+    <string name="show_apps_tab_update_count">Show Apps tab update count</string>
+    <string name="show_apps_tab_update_count_description">Show the number of apps with patch bundle updates on the Apps tab</string>
+    <string name="show_bundles_tab_update_count">Show Patch Bundles tab update count</string>
+    <string name="show_bundles_tab_update_count_description">Show the number of patch bundles with updates on the Patch Bundles tab</string>
     <string name="disable_main_tab_swipe">Disable main screen tab swipe gesture</string>
     <string name="disable_main_tab_swipe_description">Disable swiping between tabs on the main screen. Use the tab buttons to switch tabs</string>
     <string name="disable_patch_selection_tab_swipe">Disable patch selection tab swipe gesture</string>

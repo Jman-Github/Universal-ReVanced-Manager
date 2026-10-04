@@ -309,3 +309,19 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
         db.execSQL("ALTER TABLE installed_app ADD COLUMN repatch_source_path TEXT")
     }
 }
+
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE installed_app ADD COLUMN use_mount INTEGER")
+        // Root installer types do not identify the patch mode: Standard outputs can be
+        // explicitly installed through Rooted Mount/Root Play Store. Keep those and SAVED
+        // entries unknown so repatch falls back to the pre-existing installer preference.
+        db.execSQL(
+            """
+            UPDATE installed_app
+            SET use_mount = 0
+            WHERE install_type NOT IN ('SAVED', 'MOUNT', 'ROOT_PLAY_STORE')
+            """.trimIndent()
+        )
+    }
+}

@@ -23,6 +23,7 @@ import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.PM
 import app.urv.manager.util.APK_FILE_EXTENSIONS
 import app.urv.manager.util.resolveSupportedApkExtension
+import app.urv.manager.util.resolveAppDisplayLabel
 import app.urv.manager.util.toast
 import app.urv.manager.util.saveableVar
 import kotlinx.coroutines.Dispatchers
@@ -157,8 +158,10 @@ class AppSelectorViewModel(
     var universalFallbackDialogSuggestedVersion by mutableStateOf<String?>(null)
         private set
 
-    fun loadLabel(app: PackageInfo?) =
-        with(pm) { app?.label() ?: this@AppSelectorViewModel.app.getString(R.string.not_installed) }
+    fun loadLabel(app: PackageInfo?): String {
+        val fallback = this.app.getString(R.string.not_installed)
+        return resolveAppDisplayLabel(this.app, app, fallback) ?: fallback
+    }
 
     fun dismissNonSuggestedVersionDialog() {
         nonSuggestedVersionDialogSubject = null

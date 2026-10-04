@@ -549,6 +549,8 @@ class InstalledAppsViewModel(
                             installType = resolvedInstallType,
                             patchSelection = selection,
                             selectionPayload = installedApp.selectionPayload,
+                            useMount = installedApp.useMount,
+                            updateUseMount = true,
                             createdAtOverride = installedApp.createdAt
                         )
                     }
@@ -802,7 +804,8 @@ class InstalledAppsViewModel(
         buildSavedAppVariantIdentity(
             appVersion = app.version,
             selectionPayload = app.selectionPayload,
-            patchSelection = loadAppliedPatches(app.currentPackageName)
+            patchSelection = loadAppliedPatches(app.currentPackageName),
+            useMount = app.useMount
         )
 
     private fun appsBasePackage(app: InstalledApp): String =
