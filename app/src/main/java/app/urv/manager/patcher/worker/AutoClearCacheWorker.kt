@@ -17,14 +17,19 @@ import androidx.work.WorkManager
 import app.universal.revanced.manager.R
 import app.urv.manager.MainActivity
 import app.urv.manager.domain.storage.CacheCleanupGuard
+import app.urv.manager.domain.storage.RepatchSourceCleanup
 import app.urv.manager.domain.storage.clearManagerCache
 import app.urv.manager.domain.worker.Worker
 import app.urv.manager.util.permission.hasNotificationPermission
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 class AutoClearCacheWorker(
     context: Context,
     parameters: WorkerParameters
-) : Worker<AutoClearCacheWorker.Args>(context, parameters) {
+) : Worker<AutoClearCacheWorker.Args>(context, parameters), KoinComponent {
+    private val repatchSourceCleanup: RepatchSourceCleanup by inject()
+
     class Args
 
     private val cacheNotificationChannel = NotificationChannel(
@@ -49,6 +54,7 @@ class AutoClearCacheWorker(
 
         return try {
             val clearedBytes = clearManagerCache(applicationContext)
+            repatchSourceCleanup.pruneUnusedSources()
             val notificationManager =
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             cacheNotificationChannel.description =
@@ -112,7 +118,7 @@ class AutoClearCacheWorker(
                         info.state == WorkInfo.State.RUNNING ||
                         info.state == WorkInfo.State.BLOCKED
                 }
-        }.getOrDefault(false)
+        }.getOrDefault(true)
     }
 
     companion object {

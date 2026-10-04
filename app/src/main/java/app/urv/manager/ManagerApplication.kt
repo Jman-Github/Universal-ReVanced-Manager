@@ -16,7 +16,6 @@ import androidx.core.graphics.drawable.toBitmap
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.di.*
 import app.urv.manager.domain.batch.batchOriginalPackageName
-import app.urv.manager.domain.batch.retainedBatchOutputPaths
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.root.RootMountResult
@@ -167,20 +166,6 @@ class ManagerApplication : Application() {
         scope.launch {
             prefs.preload()
             repatchSourceCleanup.pruneUnusedSources()
-            val persistedBatchResults = listOf(
-                prefs.lastBatchPatchResult.get(),
-                prefs.lastAutoPatchResult.get()
-            )
-            val staleBatchOutputCutoff =
-                System.currentTimeMillis() - BATCH_OUTPUT_STALE_AGE_MILLIS
-            runCatching {
-                fs.pruneBatchPatchOutputFiles(
-                    retainedPaths = retainedBatchOutputPaths(json, persistedBatchResults),
-                    olderThanTimestampMillis = staleBatchOutputCutoff
-                )
-            }.onFailure { error ->
-                Log.w(tag, "Failed to prune stale batch patch outputs", error)
-            }
             prefs.enableManagerPrereleasesForVersion(BuildConfig.VERSION_NAME)
             prefs.migrateAnnouncementPushNotificationInterval()
             prefs.migrateDashboardBundleBannerState()
@@ -591,7 +576,6 @@ class ManagerApplication : Application() {
         private const val DEFAULT_API_URL = "https://api.revanced.app"
         private const val LEGACY_MANAGER_REPO_URL = "https://github.com/Jman-Github/universal-revanced-manager"
         private const val LEGACY_MANAGER_REPO_API_URL = "https://api.github.com/repos/Jman-Github/universal-revanced-manager"
-        private const val BATCH_OUTPUT_STALE_AGE_MILLIS = 24L * 60 * 60 * 1_000
     }
 }
 

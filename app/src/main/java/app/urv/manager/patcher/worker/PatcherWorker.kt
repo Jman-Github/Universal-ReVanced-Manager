@@ -38,6 +38,7 @@ import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.domain.repository.InstalledAppRepository
 import app.urv.manager.domain.repository.PatchBundleRepository
+import app.urv.manager.domain.storage.PatcherWorkspaceGate
 import app.urv.manager.domain.worker.Worker
 import app.urv.manager.domain.worker.WorkerRepository
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
@@ -1330,7 +1331,12 @@ class PatcherWorker(
         else -> false
     }
 
-    override suspend fun doWork(): Result {
+    override suspend fun doWork(): Result = PatcherWorkspaceGate.withWorkspace {
+        if (runAttemptCount > 0) {
+            Log.d(tag, "Android requested retrying but retrying is disabled.".logFmt())
+            return@withWorkspace Result.failure()
+        }
+
         resetNotificationProgressTracking()
         val workerFinished = AtomicBoolean(false)
         val stopMonitor = CoroutineScope(Dispatchers.Default + SupervisorJob()).launch {
@@ -1351,11 +1357,6 @@ class PatcherWorker(
                 delay(250)
             }
         }
-        if (runAttemptCount > 0) {
-            Log.d(tag, "Android requested retrying but retrying is disabled.".logFmt())
-            return Result.failure()
-        }
-
         val wakeLock: PowerManager.WakeLock =
             (applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$tag::Patcher")
@@ -1372,7 +1373,7 @@ class PatcherWorker(
             Log.d(tag, "Failed to set initial foreground info:", e)
         }
 
-        return try {
+        try {
             val args = workerRepository.claimInput(this)
             allowBackgroundExecution = args.allowBackgroundExecution
             backgroundExecutionActive = allowBackgroundExecution
@@ -2224,8 +2225,14 @@ class PatcherWorker(
             foregroundStarted = false
             patchedApk.delete()
             if (!retainSignatureMetadata) signatureMetadataOutput?.delete()
-            downloadCleanup?.invoke()
-            cleanupTemporarySplitArtifacts()
+            try {
+                downloadCleanup?.invoke()
+            } finally {
+                cleanupTemporarySplitArtifacts()
+                runCatching { fs.pruneTemporaryPatchFiles() }.onFailure { error ->
+                    Log.w(tag, "Failed to clean the temporary patch workspace", error)
+                }
+            }
         }
     }
 

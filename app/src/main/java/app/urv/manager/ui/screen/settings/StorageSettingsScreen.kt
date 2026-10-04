@@ -901,7 +901,6 @@ private enum class StorageClearTarget {
     PatchProfileInputs,
     TemporaryWorkspace,
     UiTemporaryWorkspace,
-    OtherInternalData,
     ExternalCache,
     ExternalFiles;
 
@@ -917,7 +916,6 @@ private enum class StorageClearTarget {
             RetainedOriginals,
             RepatchInputs,
             PatchProfileInputs,
-            OtherInternalData,
             ExternalFiles -> true
             InternalCache,
             CodeCache,
@@ -942,7 +940,6 @@ private enum class StorageClearTarget {
             RetainedOriginals -> R.string.storage_clear_retained_originals_warning_description
             RepatchInputs -> R.string.storage_clear_repatch_inputs_warning_description
             PatchProfileInputs -> R.string.storage_clear_patch_profile_inputs_warning_description
-            OtherInternalData -> R.string.storage_clear_other_internal_data_warning_description
             ExternalFiles -> R.string.storage_clear_external_files_warning_description
             InternalCache,
             CodeCache,
@@ -974,7 +971,6 @@ private enum class StorageClearTarget {
             PatchProfileInputs,
             TemporaryWorkspace,
             UiTemporaryWorkspace,
-            OtherInternalData,
             ExternalCache,
             ExternalFiles -> true
             CustomBackgrounds -> false
@@ -1000,7 +996,6 @@ private enum class StorageClearTarget {
             PatchProfileInputs -> R.string.storage_patch_profile_inputs
             TemporaryWorkspace -> R.string.storage_temporary_workspace
             UiTemporaryWorkspace -> R.string.storage_ui_temporary_workspace
-            OtherInternalData -> R.string.storage_other_internal_data
             ExternalCache -> R.string.storage_external_cache
             ExternalFiles -> R.string.storage_external_files
         }
@@ -1255,8 +1250,8 @@ private suspend fun loadStorageSnapshot(
             title = context.getString(R.string.storage_other_internal_data),
             description = context.getString(R.string.storage_other_internal_data_description),
             stats = otherInternalStats,
-            clearTarget = StorageClearTarget.OtherInternalData,
-            clearableBytes = dataRoot.clearableStorageBytes(context.knownInternalStorageRoots())
+            // This bucket includes durable private state; only owned orphan files are pruned.
+            clearTarget = null
         ),
         StorageAreaUsage(
             targetKey = R.string.storage_external_cache,
@@ -1390,11 +1385,6 @@ private suspend fun clearStorageTarget(
         context.privateAppDir("ui_ephemeral")
     )
     StorageClearTarget.UiTemporaryWorkspace -> clearStorageDirectories(context.privateAppDir("ui_ephemeral"))
-    StorageClearTarget.OtherInternalData -> measureClearedStorage(context.managerStorageRoot) {
-        withContext(Dispatchers.IO) {
-            context.managerStorageRoot.deleteContentsExcept(context.knownInternalStorageRoots())
-        }
-    }
     StorageClearTarget.ExternalCache -> clearStorageDirectories(context.managerStorageContext.externalCacheDirs.filterNotNull())
     StorageClearTarget.ExternalFiles -> clearStorageDirectoriesExcept(
         directories = context.managerStorageContext.getExternalFilesDirs(null).filterNotNull(),
@@ -1432,29 +1422,6 @@ private suspend fun measureClearedStorage(
 
 private fun Context.privateAppDir(name: String): File =
     File(managerStorageRoot, "app_$name")
-
-private fun Context.knownInternalStorageRoots(): List<File> = listOf(
-    File(applicationInfo.dataDir, "app_pr_profile"),
-    File(applicationInfo.dataDir, "shared_prefs"),
-    File(applicationInfo.dataDir, "no_backup/pr_profile"),
-    managerStorageContext.cacheDir,
-    managerStorageContext.codeCacheDir,
-    managerStorageContext.filesDir,
-    managerStorageContext.noBackupFilesDir,
-    File(managerStorageRoot, "databases"),
-    privateAppDir("downloaded-apps"),
-    privateAppDir("patch_bundles"),
-    privateAppDir("signing"),
-    privateAppDir("managed_downloader_plugins"),
-    privateAppDir("managed_patcher_runtime_plugins"),
-    privateAppDir("patched-apps"),
-    privateAppDir("original-apps"),
-    privateAppDir("repatch-inputs"),
-    privateAppDir("repatch-input-staging"),
-    privateAppDir("patch-profile-inputs"),
-    privateAppDir("ephemeral"),
-    privateAppDir("ui_ephemeral")
-)
 
 private suspend fun pruneUnreferencedPatchedAppFiles(
     filesystem: Filesystem,

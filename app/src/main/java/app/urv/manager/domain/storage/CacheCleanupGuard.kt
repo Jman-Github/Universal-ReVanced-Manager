@@ -7,6 +7,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 object CacheCleanupGuard {
+    private val cleanupLock = Any()
     private val activeCacheUsers = AtomicInteger(0)
     private val mutableIdleGeneration = MutableStateFlow(0L)
 
@@ -17,7 +18,7 @@ object CacheCleanupGuard {
         get() = activeCacheUsers.get() > 0
 
     fun begin(): AutoCloseable {
-        activeCacheUsers.incrementAndGet()
+        synchronized(cleanupLock) { activeCacheUsers.incrementAndGet() }
         val closed = AtomicBoolean(false)
         return AutoCloseable {
             if (closed.compareAndSet(false, true)) {
@@ -26,6 +27,11 @@ object CacheCleanupGuard {
                 }
             }
         }
+    }
+
+    // Keep new cache users out while disposable files are detached from their original paths.
+    internal fun <T> runIfIdle(block: () -> T): T? = synchronized(cleanupLock) {
+        if (isCacheInUse) null else block()
     }
 
     suspend fun <T> withCacheInUse(block: suspend () -> T): T {

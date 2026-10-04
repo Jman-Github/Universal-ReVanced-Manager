@@ -1,6 +1,7 @@
 package app.urv.manager.domain.storage
 
 import android.util.Log
+import app.urv.manager.data.platform.DisposableFileCleanup
 import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.domain.batch.BatchResultSnapshot
 import app.urv.manager.domain.manager.PreferencesManager
@@ -49,13 +50,15 @@ class RepatchSourceCleanup(
                 if (workInfos.any { !it.state.isFinished }) return@withLock
 
                 // Decode strictly: unreadable pending results cannot prove that a source is unused.
+                val retainedBatchOutputs = mutableSetOf<String>()
                 val retainedPaths = buildSet {
                     listOf(
                         prefs.lastBatchPatchResult.get(),
                         prefs.lastAutoPatchResult.get()
                     ).filter(String::isNotBlank).forEach { serialized ->
-                        json.decodeFromString<BatchResultSnapshot>(serialized)
-                            .items.mapNotNullTo(this) { it.repatchSourcePath }
+                        val snapshot = json.decodeFromString<BatchResultSnapshot>(serialized)
+                        snapshot.items.mapNotNullTo(this) { it.repatchSourcePath }
+                        snapshot.items.mapNotNullTo(retainedBatchOutputs) { it.patchedFilePath }
                     }
                     workInfos.mapNotNullTo(this) {
                         it.outputData.getString(PatcherWorker.REPATCH_SOURCE_PATH_KEY)
@@ -64,10 +67,15 @@ class RepatchSourceCleanup(
                 if (isPatcherActive()) return@withLock
                 installedAppRepository.pruneRepatchInputs(retainedPaths)
                 filesystem.pruneRepatchInputStagingFiles(retainedPaths)
+                val detachedFiles = CacheCleanupGuard.runIfIdle {
+                    filesystem.pruneRestoredBatchPatchOutputFiles(retainedBatchOutputs)
+                    filesystem.detachTemporaryPatchFiles()
+                }.orEmpty()
+                DisposableFileCleanup.deleteDetached(detachedFiles)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                Log.w("RepatchSourceCleanup", "Unable to prune unused Repatch sources", error)
+                Log.w("RepatchSourceCleanup", "Unable to prune unused patch files", error)
             }
         }
     }

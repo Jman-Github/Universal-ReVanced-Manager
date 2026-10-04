@@ -68,6 +68,15 @@ class Filesystem(private val app: Application) {
     val uiTempDir: File = app.getDir("ui_ephemeral", Context.MODE_PRIVATE)
     private val batchPatchOutputsDir: File =
         app.getDir("batch-patch-outputs", Context.MODE_PRIVATE).apply { mkdirs() }
+    private val patchWorkspaceCleanup = PatchWorkspaceCleanup(tempDir, batchPatchOutputsDir)
+
+    fun pruneTemporaryPatchFiles(): Int = patchWorkspaceCleanup.pruneScratchFiles()
+
+    fun detachTemporaryPatchFiles(): List<File> = patchWorkspaceCleanup.detachScratchFiles()
+
+    fun pruneRestoredBatchPatchOutputFiles(retainedPaths: Collection<String>): Int =
+        patchWorkspaceCleanup.pruneRestoredBatchOutputs(retainedPaths)
+
     private val patchedAppsDir: File = app.getDir("patched-apps", Context.MODE_PRIVATE).apply { mkdirs() }
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
