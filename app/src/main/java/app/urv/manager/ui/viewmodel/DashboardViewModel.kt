@@ -1605,6 +1605,7 @@ class DashboardViewModel(
         pendingCacheUseToken: AutoCloseable? = null
     ) {
         val ownerJob = coroutineContext[Job]
+        val skipSigning = prefs.skipSplitMergeSigning.getBlocking()
         val runCacheUseToken = CacheCleanupGuard.begin()
         val runWorkspace = newSplitMergeRunWorkspace()
         var keepRunWorkspace = false
@@ -1750,32 +1751,43 @@ class DashboardViewModel(
                 appendSplitMergeLogIfCurrent(ownerJob, app.getString(R.string.merge_split_apk_merged))
                 appendSplitMergeLogIfCurrent(ownerJob, app.getString(R.string.merge_split_apk_written))
 
-                val signedCopy = runWorkspace.resolve("last-merged.apk")
-                signedCopy.parentFile?.mkdirs()
+                val mergedCopy = runWorkspace.resolve("last-merged.apk")
+                mergedCopy.parentFile?.mkdirs()
+                val signingCompletionMessage = app.getString(
+                    if (skipSigning) {
+                        R.string.merge_split_apk_signing_skipped
+                    } else {
+                        R.string.merge_split_apk_signed
+                    }
+                )
 
-                updateSplitMergeStateForCurrentOwner(ownerJob) { current ->
-                    current.copy(
-                        currentMessage = app.getString(R.string.merge_split_apk_signing),
-                        signStep = current.signStep.copy(
-                            status = SplitMergeStepStatus.RUNNING,
-                            message = app.getString(R.string.merge_split_apk_signing)
-                        )
-                    )
-                }
-                appendSplitMergeLogIfCurrent(ownerJob, app.getString(R.string.merge_split_apk_signing))
                 ensureCurrentSplitMergeOwner(ownerJob)
-                keystoreManager.sign(unsignedCopy, signedCopy)
+                if (skipSigning) {
+                    unsignedCopy.copyTo(mergedCopy, overwrite = true)
+                } else {
+                    updateSplitMergeStateForCurrentOwner(ownerJob) { current ->
+                        current.copy(
+                            currentMessage = app.getString(R.string.merge_split_apk_signing),
+                            signStep = current.signStep.copy(
+                                status = SplitMergeStepStatus.RUNNING,
+                                message = app.getString(R.string.merge_split_apk_signing)
+                            )
+                        )
+                    }
+                    appendSplitMergeLogIfCurrent(ownerJob, app.getString(R.string.merge_split_apk_signing))
+                    keystoreManager.sign(unsignedCopy, mergedCopy)
+                }
                 runCatching { unsignedCopy.delete() }
 
                 val mergedOutputName = resolveMergedOutputName(
-                    mergedApk = signedCopy,
+                    mergedApk = mergedCopy,
                     fallbackSourceName = inputDisplayName
                 )
 
                 synchronized(splitMergeNotificationLock) {
                     ensureCurrentSplitMergeOwner(ownerJob)
                     cachedMergedApk?.let(::cleanupCachedMergedApk)
-                    cachedMergedApk = signedCopy
+                    cachedMergedApk = mergedCopy
                     keepRunWorkspace = true
                     splitMergeStateFlow.update { current ->
                         current.copy(
@@ -1786,25 +1798,25 @@ class DashboardViewModel(
                             outputName = mergedOutputName,
                             sessionInfo = current.sessionInfo
                                 .finished(SystemClock.elapsedRealtime())
-                                .copy(outputApkSizeBytes = signedCopy.length()),
+                                .copy(outputApkSizeBytes = mergedCopy.length()),
                             mergeStep = current.mergeStep.copy(
                                 status = SplitMergeStepStatus.COMPLETED,
                                 message = app.getString(R.string.merge_split_apk_merged)
                             ),
                             signStep = current.signStep.copy(
                                 status = SplitMergeStepStatus.COMPLETED,
-                                message = app.getString(R.string.merge_split_apk_signed)
+                                message = signingCompletionMessage
                             ),
                             writeStep = current.writeStep.copy(
                                 status = SplitMergeStepStatus.COMPLETED,
                                 message = app.getString(R.string.merge_split_apk_written)
                             ),
-                            currentMessage = app.getString(R.string.merge_split_apk_signed)
+                            currentMessage = signingCompletionMessage
                         )
                     }
                     updateSplitMergeNotificationLocked()
                 }
-                appendSplitMergeLogIfCurrent(ownerJob, app.getString(R.string.merge_split_apk_signed))
+                appendSplitMergeLogIfCurrent(ownerJob, signingCompletionMessage)
             }
         }.onFailure { error ->
             if (error is CancellationException) {

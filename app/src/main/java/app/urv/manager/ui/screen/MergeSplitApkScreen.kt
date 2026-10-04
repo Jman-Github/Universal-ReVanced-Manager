@@ -132,6 +132,7 @@ fun MergeSplitApkScreen(
     val mergedApkExportDirectory by prefs.mergedApkExportLastDirectory.getAsState()
     val mergeLogExportDirectory by prefs.mergeLogExportLastDirectory.getAsState()
     val splitMergeModuleSortModePref by prefs.splitMergeModuleSortMode.getAsState()
+    val skipSplitMergeSigning by prefs.skipSplitMergeSigning.getAsState()
     val splitMergeAutoCollapseSteps by prefs.splitMergeAutoCollapseSteps.getAsState()
     val showSplitMergeMemoryUsageGraph by prefs.showSplitMergeMemoryUsageGraph.getAsState()
     val compactResourceGraphs by prefs.compactSplitMergeResourceGraphs.getAsState()
@@ -509,7 +510,7 @@ fun MergeSplitApkScreen(
         )
     }
 
-    val stepsByCategory by remember(state) {
+    val stepsByCategory by remember(state, skipSplitMergeSigning) {
         derivedStateOf {
             val preparingSteps = buildList {
                 if (state.showDownloadStep) {
@@ -538,20 +539,27 @@ fun MergeSplitApkScreen(
             }
             linkedMapOf(
                 StepCategory.PREPARING to preparingSteps,
-                StepCategory.SAVING to listOf(
-                    Step(
-                        id = StepId.WriteAPK,
-                        title = context.getString(R.string.merge_split_apk_step_write),
-                        category = StepCategory.SAVING,
-                        state = state.writeStep.status.toUiState()
-                    ),
-                    Step(
-                        id = StepId.SignAPK,
-                        title = context.getString(R.string.merge_split_apk_step_sign),
-                        category = StepCategory.SAVING,
-                        state = state.signStep.status.toUiState()
+                StepCategory.SAVING to buildList {
+                    add(
+                        Step(
+                            id = StepId.WriteAPK,
+                            title = context.getString(R.string.merge_split_apk_step_write),
+                            category = StepCategory.SAVING,
+                            state = state.writeStep.status.toUiState()
+                        )
                     )
-                )
+                    if (!skipSplitMergeSigning) {
+                        add(
+                            Step(
+                                id = StepId.SignAPK,
+                                title = context.getString(R.string.merge_split_apk_step_sign),
+                                category = StepCategory.SAVING,
+                                state = state.signStep.status.toUiState(),
+                                message = state.signStep.message
+                            )
+                        )
+                    }
+                }
             )
         }
     }

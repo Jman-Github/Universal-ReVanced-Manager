@@ -941,6 +941,12 @@ Patch profiles are not affected.</string>
     <string name="patcher_launch_failed">Failed to start patching</string>
     <string name="continue_on_patch_error">Continue after patch errors</string>
     <string name="continue_on_patch_error_description">Try to keep patching when an individual patch fails. The patched app may be missing that failed patch</string>
+    <string name="skip_split_merge_signing">Skip merged APK signing</string>
+    <string name="skip_split_merge_signing_description">Leave APKs created by the split APK Merger tool unsigned. You can still save or send them to the selected installer, but Android normally rejects unsigned APKs</string>
+    <string name="merge_split_apk_signing_skipped">APK signing skipped; output left unsigned</string>
+    <string name="disable_apk_signature_checks">Disable APK signature checks</string>
+    <string name="disable_apk_signature_checks_description">Skip URV’s signature checks and mismatch prompts for APK installers. Root mounting keeps its required checks</string>
+    <string name="disable_apk_signature_checks_confirmation">This setting is intended for devices using Core Patch or another modification that bypasses Android’s signature enforcement. For APK installs, URV will skip its signature checks and mismatch prompts. Root mounting keeps all of its required checks. Android normally rejects unsigned APKs, invalid signatures, and updates whose signatures do not match the installed app. This setting does not bypass Android’s checks, and root access alone does not disable them. Installation may still fail without a compatible system modification.</string>
     <string name="skip_apk_signing">Skip APK signing</string>
     <string name="skip_apk_signing_description">Leave patched APKs unsigned. You can still save or send them to the selected installer, but Android normally rejects unsigned APKs</string>
     <string name="patcher_log_mode">Patcher logging</string>

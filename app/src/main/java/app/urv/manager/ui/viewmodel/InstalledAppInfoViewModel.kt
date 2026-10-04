@@ -754,7 +754,9 @@ class InstalledAppInfoViewModel(
                     }
 
                     is PackageInstallResult.Conflict -> {
-                        if (installerManager.isSignatureMismatch(result.message)) {
+                        if (installerManager.apkSignatureChecksEnabled &&
+                            installerManager.isSignatureMismatch(result.message)
+                        ) {
                             showSignatureMismatchPrompt(targetPackage)
                         } else {
                             val hint = installerManager.formatFailureHint(
@@ -1099,6 +1101,7 @@ class InstalledAppInfoViewModel(
     }.getOrNull()
 
     private fun hasSignatureMismatch(packageName: String, file: File): Boolean {
+        if (!installerManager.apkSignatureChecksEnabled) return false
         val installed = readInstalledSignatureBytes(packageName) ?: return false
         val expected = readArchiveSignatureBytes(file) ?: return false
         return !installed.contentEquals(expected)

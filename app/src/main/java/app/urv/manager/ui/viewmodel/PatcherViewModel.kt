@@ -1772,6 +1772,7 @@ class PatcherViewModel(
     }.getOrNull()
 
     private fun hasSignatureMismatch(packageName: String, file: File): Boolean {
+        if (!installerManager.apkSignatureChecksEnabled) return false
         val installed = readInstalledSignatureBytes(packageName) ?: return false
         val expected = readArchiveSignatureBytes(file) ?: return false
         return !installed.contentEquals(expected)
@@ -3684,7 +3685,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
                         is InstallResult.Conflict -> {
                             val backendReason = result.message
-                            if (installerManager.isSignatureMismatch(backendReason)) {
+                            if (installerManager.apkSignatureChecksEnabled &&
+                                installerManager.isSignatureMismatch(backendReason)
+                            ) {
                                 val plan = installerManager.resolvePlan(
                                     InstallerManager.InstallTarget.PATCHER,
                                     outputFile,
@@ -3991,7 +3994,9 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         } catch (error: Exception) {
             Log.e(tag, "Failed to install as Play Store with root", error)
             val targetPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
-            if (installerManager.isSignatureMismatch(error.message)) {
+            if (installerManager.apkSignatureChecksEnabled &&
+                installerManager.isSignatureMismatch(error.message)
+            ) {
                 showSignatureMismatchPrompt(
                     targetPackage,
                     InstallerManager.InstallPlan.RootPlayStore(
@@ -4081,6 +4086,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val currentPackage = pm.getPackageInfo(outputFile)?.packageName ?: packageName
             if (
                 allowAutoUninstall &&
+                installerManager.apkSignatureChecksEnabled &&
                 installerManager.isSignatureMismatch(error.message) &&
                 tryAutoUninstallSignatureConflict(currentPackage, automatic = true)
             ) {

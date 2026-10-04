@@ -110,6 +110,8 @@ class PreferencesManager(
     val chooseSplitApksBeforePatching = booleanPreference("choose_split_apks_before_patching", false)
     val continueOnPatchError = booleanPreference("continue_on_patch_error", false)
     val skipApkSigning = booleanPreference("skip_apk_signing", false)
+    val skipSplitMergeSigning = booleanPreference("skip_split_merge_signing", false)
+    val disableApkSignatureChecks = booleanPreference("disable_apk_signature_checks", false)
     val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
@@ -637,6 +639,8 @@ class PreferencesManager(
         val chooseSplitApksBeforePatching: Boolean? = null,
         val continueOnPatchError: Boolean? = null,
         val skipApkSigning: Boolean? = null,
+        val skipSplitMergeSigning: Boolean? = null,
+        val disableApkSignatureChecks: Boolean? = null,
         val injectSignatureMetadataAfterPatching: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
@@ -909,6 +913,8 @@ class PreferencesManager(
             chooseSplitApksBeforePatching = chooseSplitApksBeforePatching.value,
             continueOnPatchError = continueOnPatchError.value,
             skipApkSigning = skipApkSigning.value,
+            skipSplitMergeSigning = skipSplitMergeSigning.value,
+            disableApkSignatureChecks = disableApkSignatureChecks.value,
             injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
             morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
             patcherLogMode = patcherLogMode.value,
@@ -1140,6 +1146,8 @@ class PreferencesManager(
         snapshot.chooseSplitApksBeforePatching?.let { chooseSplitApksBeforePatching.value = it }
         snapshot.continueOnPatchError?.let { continueOnPatchError.value = it }
         snapshot.skipApkSigning?.let { skipApkSigning.value = it }
+        snapshot.skipSplitMergeSigning?.let { skipSplitMergeSigning.value = it }
+        snapshot.disableApkSignatureChecks?.let { disableApkSignatureChecks.value = it }
         snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)

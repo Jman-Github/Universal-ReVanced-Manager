@@ -829,6 +829,21 @@ fun AdvancedSettingsScreen(
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
                 SettingsSearchHighlight(
+                    targetKey = R.string.disable_apk_signature_checks,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    SafeguardBooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.disableApkSignatureChecks,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.disable_apk_signature_checks,
+                        description = R.string.disable_apk_signature_checks_description,
+                        confirmationText = R.string.disable_apk_signature_checks_confirmation
+                    )
+                }
+                ExpressiveSettingsDivider()
+                SettingsSearchHighlight(
                     targetKey = R.string.installer_choose_per_install_title,
                     activeKey = highlightTarget,
                     onHighlightComplete = { highlightTarget = null }
@@ -1679,6 +1694,20 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.skip_split_merge_signing,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        preference = viewModel.prefs.skipSplitMergeSigning,
+                        coroutineScope = viewModel.viewModelScope,
+                        headline = R.string.skip_split_merge_signing,
+                        description = R.string.skip_split_merge_signing_description,
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.merge_split_memory_usage_graph_title,
                     activeKey = highlightTarget,

@@ -126,6 +126,9 @@ class InstallerManager(
     private val rootInstaller: RootInstaller,
     private val shizukuInstaller: ShizukuInstaller
 ) {
+    val apkSignatureChecksEnabled: Boolean
+        get() = !prefs.disableApkSignatureChecks.getBlocking()
+
     private val packageManager: PackageManager = app.packageManager
     private val authority = InstallerFileProvider.authority(app)
     private val shareDir: File = File(app.cacheDir, SHARE_DIR).apply { mkdirs() }

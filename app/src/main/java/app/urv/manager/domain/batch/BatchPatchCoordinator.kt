@@ -2013,6 +2013,7 @@ class BatchPatchCoordinator(
                         if (
                             operation.status != PackageInstaller.STATUS_SUCCESS &&
                             allowAutomaticUninstall &&
+                            installerManager.apkSignatureChecksEnabled &&
                             installerManager.isSignatureMismatch(operation.message)
                         ) {
                             val installedPackageInfo = pm.getPackageInfo(targetPackage)
