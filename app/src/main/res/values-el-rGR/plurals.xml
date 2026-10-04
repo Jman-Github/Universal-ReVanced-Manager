@@ -1,2 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <plurals name="patch_count">
+        <item quantity="one">%d τροποποίηση</item>
+        <item quantity="other">%d τροποποιήσεις</item>
+    </plurals>
+    <plurals name="selected_count">
+        <item quantity="one">%d επιλέχθηκε</item>
+        <item quantity="other">%d επιλέχθηκαν</item>
+    </plurals>
+</resources>

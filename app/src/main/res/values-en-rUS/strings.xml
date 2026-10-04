@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="patcher">Patcher</string>
     <string name="patches">Patches</string>
@@ -115,6 +116,10 @@
     <string name="bundle_updates_notification_available">%1$d updates available.</string>
     <string name="bundle_updates_notification_failed">Update failed</string>
     <string name="bundle_search_update">Search for updates</string>
+    <string name="repository_bundle_prereleases">Use pre-releases</string>
+    <string name="repository_bundle_prereleases_description">Use pre-release versions when checking this repository for updates</string>
+    <string name="repository_bundle_latest">Use latest</string>
+    <string name="repository_bundle_latest_description">Use the newest release or pre-release when checking this repository for updates</string>
     <string name="bundle_search_update_description">Check this bundle for updates in the background.</string>
     <string name="bundle_reorder">Organize bundles</string>
     <string name="bundle_reorder_title">Organize patch bundles</string>
@@ -697,6 +702,8 @@
     <string name="patch_profile_action_order_description">Choose the layout order for the patch profile action buttons</string>
     <string name="patch_profile_action_visibility_title">Hide patch profile action buttons</string>
     <string name="patch_profile_action_visibility_description">Choose which patch profile action buttons are shown</string>
+    <string name="patch_profile_action_visibility_reset">Show all action buttons</string>
+    <string name="patch_profile_action_order_reset">Reset to default order</string>
     <string name="minimal_patch_selection_view_title">Use minimal patch option view</string>
     <string name="minimal_patch_selection_view_description">Hide optional patch details for a cleaner patch selection screen</string>
     <string name="patch_selection_version_tags_title">Patch version tags</string>
@@ -714,8 +721,6 @@
     <string name="patch_bundle_action_visibility_reset">Show all action buttons</string>
     <string name="saved_app_action_order_reset">Reset to default order</string>
     <string name="saved_app_action_visibility_reset">Show all action buttons</string>
-    <string name="patch_profile_action_order_reset">Reset to default order</string>
-    <string name="patch_profile_action_visibility_reset">Show all action buttons</string>
     <string name="saved_app_action_install_update">Install/Update/Uninstall/Mount/Use stock app</string>
     <string name="patch_selection_confirm_deselect_bundle_title">Deselect bundle?</string>
     <string name="patch_selection_confirm_deselect_bundle_message">This clears every selected patch provided by %1$s.</string>
@@ -781,8 +786,8 @@ Patch profiles are not affected.</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
     <string name="downloader_source_delete_title">Delete</string>
-    <string name="downloader_source_delete_description">Are you sure you want to delete "%1$s" and its downloaded source APK?</string>
-    <string name="downloader_source_revoke_trust_description">Revoke trust for "%1$s"? You can trust it again later</string>
+    <string name="downloader_source_delete_description">Are you sure you want to delete \"%1$s\" and its downloaded source APK?</string>
+    <string name="downloader_source_revoke_trust_description">Revoke trust for \"%1$s\"? You can trust it again later</string>
     <string name="downloader_source_state_loaded">Loaded</string>
     <string name="downloader_source_state_missing">File missing. Update to download it again.</string>
     <string name="downloader_source_state_failed">Failed to load</string>
@@ -815,9 +820,9 @@ Patch profiles are not affected.</string>
     <string name="downloader_plugin_trust_dialog_signature">Signature</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin</string>
     <string name="downloader_plugin_view_error">View error details</string>
-    <string name="downloader_plugin_failed_dialog_body">Failed to load "%1$s". You can view the error details or uninstall the plugin.</string>
+    <string name="downloader_plugin_failed_dialog_body">Failed to load \"%1$s\". You can view the error details or uninstall the plugin.</string>
     <string name="downloader_plugin_uninstall_title">Uninstall</string>
-    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall "%1$s"?</string>
+    <string name="downloader_plugin_uninstall_description">Are you sure you want to uninstall \"%1$s\"?</string>
     <string name="downloader_settings_no_apps">No downloaded apps found</string>
     <string name="search_apps">Search apps</string>
     <string name="options">Options</string>
@@ -1070,8 +1075,6 @@ Patch profiles are not affected.</string>
     <string name="language_restart_later">Later</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
-    <string name="language_option_german">German</string>
-    <string name="language_option_spanish">Spanish</string>
     <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>
@@ -1082,7 +1085,6 @@ Patch profiles are not affected.</string>
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
     <string name="language_option_russian">Russian</string>
-    <string name="language_option_turkish">Turkish</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
@@ -1128,8 +1130,8 @@ Patch profiles are not affected.</string>
     <string name="tools_youtube_assets_light_header">Light header</string>
     <string name="tools_youtube_assets_dark_header">Dark header</string>
     <string name="tools_youtube_assets_sync_header_transforms">Sync light/dark size and position</string>
-    <string name="tools_youtube_assets_copy_light_to_dark">Copy light -> dark</string>
-    <string name="tools_youtube_assets_copy_dark_to_light">Copy dark -> light</string>
+    <string name="tools_youtube_assets_copy_light_to_dark">Copy light -&gt; dark</string>
+    <string name="tools_youtube_assets_copy_dark_to_light">Copy dark -&gt; light</string>
     <string name="tools_youtube_assets_select_light_header">Select light header image</string>
     <string name="tools_youtube_assets_select_dark_header">Select dark header image</string>
     <string name="tools_youtube_assets_light_header_name">Light header file name</string>
@@ -1460,9 +1462,9 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_update_existing_title">Update existing profile</string>
     <string name="patch_profile_update_existing_description">Tap a saved profile to overwrite it, or leave everything unselected to create a new profile.</string>
     <string name="patch_profile_name_hint">Profile name</string>
-    <string name="patch_profile_saved_toast">Patch profile "%1$s" saved</string>
-    <string name="patch_profile_duplicate_toast">Patch profile "%1$s" already exists for this app</string>
-    <string name="patch_profile_updated_toast">Patch profile "%1$s" updated</string>
+    <string name="patch_profile_saved_toast">Patch profile \"%1$s\" saved</string>
+    <string name="patch_profile_duplicate_toast">Patch profile \"%1$s\" already exists for this app</string>
+    <string name="patch_profile_updated_toast">Patch profile \"%1$s\" updated</string>
     <string name="patch_profile_save_failed_toast">Failed to save patch profile</string>
     <string name="patch_profile_rename">Rename</string>
     <string name="patch_profile_rename_title">Rename patch profile</string>
@@ -1472,12 +1474,12 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_apk_not_set">No package selected</string>
     <string name="patch_profile_downloaded_apps_empty">No APK for this package</string>
     <string name="patch_profile_apk_missing">Selected package missing</string>
-    <string name="patch_profile_apk_saved_toast">Saved package for "%1$s"</string>
-    <string name="patch_profile_apk_cleared_toast">Cleared saved package for "%1$s"</string>
+    <string name="patch_profile_apk_saved_toast">Saved package for \"%1$s\"</string>
+    <string name="patch_profile_apk_cleared_toast">Cleared saved package for \"%1$s\"</string>
     <string name="patch_profile_apk_invalid_toast">Invalid package file</string>
     <string name="patch_profile_apk_mismatch_toast">Selected package does not match this profile</string>
     <string name="patch_profile_apk_failed_toast">Failed to save package</string>
-    <string name="patch_profile_settings_title">Settings for "%1$s"</string>
+    <string name="patch_profile_settings_title">Settings for \"%1$s\"</string>
     <string name="patch_profile_installer_title">Installer</string>
     <string name="patch_profile_installer_default">Use global installer settings</string>
     <string name="patch_profile_installer_choose">Choose installer</string>
@@ -1488,7 +1490,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_auto_patch_description">When enabled and an APK is saved, tapping this profile starts patching instead of opening patch selection.</string>
     <string name="apk_file_type">APK</string>
     <string name="patch_profile_version_override_action">Patch profile version settings</string>
-    <string name="patch_profile_version_override_title">Version settings for "%1$s"</string>
+    <string name="patch_profile_version_override_title">Version settings for \"%1$s\"</string>
     <string name="patch_profile_version_override_message">Set a specific app version to store with this profile, or target all versions.</string>
     <string name="patch_profile_version_override_label">App version</string>
     <string name="patch_profile_version_override_hint">e.g. 18.27.35</string>
@@ -1496,7 +1498,7 @@ Patch profiles are not affected.</string>
     <string name="patch_profile_version_override_all_versions">Use all versions</string>
     <string name="patch_profile_version_override_saved_toast">Profile version updated</string>
     <string name="patch_profile_version_override_failed_toast">Failed to update profile version</string>
-    <string name="patch_profile_version_override_set_to_all">No version entered, saved as "%1$s"</string>
+    <string name="patch_profile_version_override_set_to_all">No version entered, saved as \"%1$s\"</string>
     <string name="patch_profile_version_conflict_title">Keep version override?</string>
     <string name="patch_profile_version_conflict_message">Current version: %1$s\nIncoming version: %2$s\nWhich should be saved to this profile?</string>
     <string name="patch_profile_version_conflict_use_new">Use incoming version</string>
@@ -1571,11 +1573,11 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <plurals name="patch_profile_bundle_patch_count">
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
-        </plurals>
+    </plurals>
     <plurals name="patch_profile_bundle_count">
         <item quantity="one">%d bundle</item>
         <item quantity="other">%d bundles</item>
-        </plurals>
+    </plurals>
     <string name="this_version">This version</string>
     <string name="universal">Any app</string>
     <string name="non_universal">Non-universal</string>
@@ -1709,7 +1711,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="installer_primary_title">Primary installer</string>
     <string name="installer_fallback_title">Fallback installer</string>
     <string name="installer_choose_per_install_title">Choose installer per install</string>
-    <string name="installer_choose_per_install_description">When enabled, the patcher screen and saved patched app screen will ask which installer to use each time. Primary and fallback installer settings below are disabled while this is on</string>
+    <string name="installer_choose_per_install_description">When enabled, the patcher, saved patched app, and downloaded apps screens will ask which installer to use each time. Primary and fallback installer settings below are disabled while this is on</string>
     <string name="installer_choose_for_this_install_title">Choose installer for this install</string>
     <string name="installer_fallback_prompt_title">Try fallback installer?</string>
     <string name="installer_fallback_prompt_failure_label">Primary installer failed</string>
@@ -1838,8 +1840,6 @@ Details: %2$s</string>
     <string name="install_app_fail">Failed to install app: %s</string>
     <string name="install_app_fail_missing_stock">Missing original APK for mount.</string>
     <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
-    <string name="root_mount_automatic_success">%1$s was remounted automatically</string>
-    <string name="root_mount_automatic_failure">%1$s could not be remounted. Export root diagnostics.</string>
     <string name="root_mount_notification_channel">Root mount safety</string>
     <string name="root_mount_repatch_title">Root mount needs repatching</string>
     <string name="root_mount_repair_notification_title">Root mount needs repair</string>
@@ -1848,6 +1848,8 @@ Details: %2$s</string>
     <string name="root_mount_recovered_previous_message">The previous patched build was restored. Diagnostic %1$s.</string>
     <string name="root_mount_recovered_stock_message">The stock app was restored and left unmounted. Diagnostic %1$s.</string>
     <string name="root_mount_recovery_in_progress">URV found an unfinished root-mount rollback but could not resume it: %1$s</string>
+    <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
     <string name="root_mount_update_guidance_title">Mounted app updates</string>
     <string name="root_mount_safe_update_notice">For fully safe updates, update mounted apps through URV Manager and disable external automatic updates. If KernelSU has Unmount modules by default enabled, open KernelSU &gt; Superuser &gt; the mounted app &gt; Profile &gt; Custom and disable Unmount modules. Otherwise the mounted patched APK may not take effect.</string>
     <string name="root_mount_renamed_package_not_supported">Root mount cannot be used because the patched APK has a different package name from the original app.</string>
@@ -1857,9 +1859,6 @@ Details: %2$s</string>
     <string name="root_mount_downgrade_confirmation">Android rejected the in-place downgrade. Continuing briefly unregisters the app for this user, keeps app data, and immediately installs verified stock. App data created by a newer version may still be incompatible.</string>
     <string name="root_mount_downgrade_title">Confirm safe downgrade fallback</string>
     <string name="root_mount_repair">Repair root mount</string>
-    <string name="root_mount_repair_progress">Repairing root mount…</string>
-    <string name="root_mount_repair_success">Root mount repaired successfully</string>
-    <string name="root_mount_repair_failed">Failed to repair root mount: %1$s</string>
     <string name="root_mount_tools">Root mount tools</string>
     <string name="root_mount_use_stock">Use stock app</string>
     <string name="root_mount_export_diagnostics">Export mount diagnostics</string>
@@ -2063,7 +2062,7 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Are you sure you want to delete \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
     <string name="about_revanced_manager">About URV Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is an Android manager for ReVanced and Morphe. It expands the patching workflow with third-party patch bundles, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and built-in APK tools. See the full feature list</string>
+    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is a fork of ReVanced Manager. Both applications use the ReVanced Patcher, which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features URV Manager has to offer</string>
     <string name="here">here.</string>
     <string name="update_available">An update is available</string>
     <string name="ready_to_install_update">Ready to install update</string>
@@ -2174,10 +2173,6 @@ Details: %2$s</string>
     <string name="auto_update_description">Automatically update when a new version is available</string>
     <string name="patches_prereleases">Use pre-releases</string>
     <string name="patches_prereleases_description">Use pre-release versions of %s</string>
-    <string name="repository_bundle_prereleases">Use pre-releases</string>
-    <string name="repository_bundle_prereleases_description">Use pre-release versions when checking this repository for updates</string>
-    <string name="repository_bundle_latest">Use latest</string>
-    <string name="repository_bundle_latest_description">Use the newest release or pre-release when checking this repository for updates</string>
     <string name="patches_url">Patch bundle URL</string>
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="patch_bundle_discovery_title">Discover patch bundles</string>
@@ -2285,7 +2280,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_missing">Missing file</string>
     <string name="patcher_runtime_source_delete_title">Delete</string>
     <string name="patcher_runtime_source_delete_description">Delete &quot;%1$s&quot; and its managed APK?</string>
-    <string name="patcher_runtime_revoke_trust_description">Revoke trust for "%1$s"? You can trust it again later</string>
+    <string name="patcher_runtime_revoke_trust_description">Revoke trust for \"%1$s\"? You can trust it again later</string>
     <string name="patcher_runtime_signature_after_trust">The package signature will be saved after trust is confirmed.</string>
     <string name="patcher_runtime_signature_label">Signature</string>
     <string name="patcher_runtime_uninstall_title">Uninstall</string>
@@ -2298,7 +2293,6 @@ Details: %2$s</string>
     <string name="import_button">Import</string>
     <string name="use_latest_release">Use latest release</string>
     <string name="use_prereleases">Use prereleases</string>
-
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
     <string name="batch_patch_title">Batch patch</string>
     <string name="batch_patch_reorder">Reorder patch queue</string>
@@ -2349,7 +2343,6 @@ Details: %2$s</string>
     <string name="batch_patch_progress_title">Patch progress</string>
     <string name="batch_patch_result_unavailable">The saved batch result is no longer available.</string>
     <string name="batch_patch_details_unavailable">Detailed progress is not available for this app.</string>
-
     <string name="auto_patch_section">Automatic patching</string>
     <string name="auto_patch_enabled">Automatically repatch apps</string>
     <string name="auto_patch_enabled_description">Periodically patch saved apps when their patch bundles change</string>

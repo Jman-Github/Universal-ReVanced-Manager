@@ -6,4 +6,13 @@
     <plurals name="selected_count">
         <item quantity="other">%d 개가 선택됨</item>
     </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="other">%d 개의 앱</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="other">선택된 패치 번들을 삭제하시겠습니까?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="other">선택된 패치 프로필을 삭제하시겠습니까?</item>
+    </plurals>
 </resources>

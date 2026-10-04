@@ -1,2 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <string name="patcher">Τροποποιητής</string>
+    <string name="patches">Τροποποιήσεις</string>
+    <string name="patch_bundles">Πακέτα Τροποποίησης</string>
+    <string name="patch_bundle">Πακέτο Τροποποίησης</string>
+    <string name="manager">Διαχειριστής</string>
+    <string name="copy_to_clipboard">Αντιγραφή στο πρόχειρο</string>
+    <string name="settings">Ρυθμίσεις</string>
+    <string name="settings_search_hint">Αναζήτηση ρυθμίσεων</string>
+    <string name="select_app">Επιλέξτε μια εφαρμογή</string>
+    <string name="app_filter_title">Φιλτράρισμα εφαρμογών</string>
+    <string name="app_filter_installed_only">Μόνο εγκατεστημένες</string>
+    <string name="app_filter_patches_available">Διαθέσιμες τροποποιήσεις</string>
+    <string name="import_">Εισαγωγή</string>
+    <string name="patches_missing">Λείπει</string>
+    <string name="patches_error">Σφάλμα</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
+    <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information
+         https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436 -->
+    <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
+    <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+</resources>

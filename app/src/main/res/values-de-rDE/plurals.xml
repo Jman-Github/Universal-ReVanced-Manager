@@ -1,2 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <plurals name="patch_count">
+        <item quantity="one">%d Patch</item>
+        <item quantity="other">%d Patches</item>
+    </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">%d Patch wurde entfernt</item>
+        <item quantity="other">%d Patches wurden entfernt</item>
+    </plurals>
+    <plurals name="selected_count">
+        <item quantity="one">%d ausgewählt</item>
+        <item quantity="other">%d ausgewählt</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d App ausgewählt</item>
+        <item quantity="other">%d Apps ausgewählt</item>
+    </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">Möchtest du die ausgewählte App wirklich löschen?\nEinträge mit Root-Mount-Einstellungen werden ebenfalls entfernt, ihre Root-Module eingeschlossen. Standard-Apps werden weiterhin installiert.</item>
+        <item quantity="other">Möchtest du die ausgewählten Apps wirklich löschen?\nEinträge mit Root-Mount-Einstellungen werden ebenfalls entfernt, ihre Root-Module eingeschlossen. Standard-Apps werden weiterhin installiert.</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Möchtest du das ausgewählte Patch-Bundle wirklich löschen?</item>
+        <item quantity="other">Möchtest du die ausgewählten Patch-Bundles wirklich löschen?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Möchtest du das ausgewählte Patch-Profil wirklich löschen?</item>
+        <item quantity="other">Möchtest du die ausgewählten Patch-Profile wirklich löschen?</item>
+    </plurals>
+</resources>

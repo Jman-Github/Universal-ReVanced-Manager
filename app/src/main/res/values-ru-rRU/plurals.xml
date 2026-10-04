@@ -3,13 +3,31 @@
     <plurals name="patch_count">
         <item quantity="one">%d патч</item>
         <item quantity="few">%d патчи</item>
-        <item quantity="many">%d патчи</item>
-        <item quantity="other">%d патчи</item>
+        <item quantity="many">%d патчей</item>
+        <item quantity="other">%d патчей</item>
     </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d выбран</item>
         <item quantity="few">%d выбрано</item>
         <item quantity="many">%d выбранные</item>
         <item quantity="other">%d выбранные</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d Выбрано приложение</item>
+        <item quantity="few">%d Выбранные программы</item>
+        <item quantity="many">%d Выбранные программы</item>
+        <item quantity="other">%d Выбранные программы</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Вы уверены, что хотите удалить выбранный пакет обновлений?</item>
+        <item quantity="few">Вы уверены, что хотите удалить выбранные пакеты патчей?</item>
+        <item quantity="many">Вы уверены, что хотите удалить выбранные пакеты патчей?</item>
+        <item quantity="other">Вы уверены, что хотите удалить выбранные пакеты патчей?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Вы уверены, что хотите удалить выбранный профиль патча?</item>
+        <item quantity="few">Вы уверены, что хотите удалить выбранные профили патчей?</item>
+        <item quantity="many">Вы уверены, что хотите удалить выбранные профили патчей?</item>
+        <item quantity="other">Вы уверены, что хотите удалить выбранные профили патчей?</item>
     </plurals>
 </resources>

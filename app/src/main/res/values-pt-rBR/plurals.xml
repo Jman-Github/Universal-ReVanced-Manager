@@ -4,8 +4,24 @@
         <item quantity="one">%d patch</item>
         <item quantity="other">%d patches</item>
     </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">O patch %d foi removido</item>
+        <item quantity="other">%d patches foram removidos</item>
+    </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d selecionado</item>
         <item quantity="other">%d selecionados</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d aplicativo selecionado</item>
+        <item quantity="other">%d aplicativos selecionados</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Tem certeza de que deseja excluir o pacote de patches selecionado?</item>
+        <item quantity="other">Tem certeza de que deseja excluir os pacotes de patches selecionados?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Tem certeza de que deseja excluir o perfil de patch selecionado?</item>
+        <item quantity="other">Tem certeza de que deseja excluir os perfis de patch selecionados?</item>
     </plurals>
 </resources>

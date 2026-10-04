@@ -1,2 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources></resources>
+<resources>
+    <plurals name="patch_count">
+        <item quantity="one">%d patch</item>
+        <item quantity="other">%d patches</item>
+    </plurals>
+    <plurals name="selected_count">
+        <item quantity="one">%d selezionato</item>
+        <item quantity="other">%d selezionate</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d app selezionata</item>
+        <item quantity="other">%d app selezionate</item>
+    </plurals>
+</resources>

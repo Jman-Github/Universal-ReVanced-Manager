@@ -6,4 +6,7 @@
     <plurals name="selected_count">
         <item quantity="other">%d 個選択済み</item>
     </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="other">%d 件のアプリが選択されています</item>
+    </plurals>
 </resources>

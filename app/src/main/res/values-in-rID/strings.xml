@@ -5,18 +5,13 @@
     <string name="patch_bundles">Paket Penambal</string>
     <string name="patch_bundle">Paket Penambal</string>
     <string name="manager">Manajer</string>
-    <string name="plugin_host_permission_label">Host plugin untuk Manajer Universal ReVanced</string>
-    <string name="plugin_host_permission_description">Digunakan untuk mengontrola akses ke plugin Manajer Universal ReVanced. Hanya Manajer Universal ReVanced yang memiliki ini.</string>
-    <string name="toast_copied_to_clipboard">Disalin!</string>
     <string name="copy_to_clipboard">Salin ke papan klip</string>
     <string name="settings">Setelan</string>
     <string name="settings_search_hint">Setelan pencarian</string>
-    <string name="settings_search_no_results">Tidak ada setelan yang ditemukan.</string>
     <string name="select_app">Pilih aplikasi</string>
     <string name="app_filter_title">Filter aplikasi</string>
     <string name="app_filter_installed_only">Terpasang saja</string>
     <string name="app_filter_patches_available">Penambal yang tersedia</string>
-    <string name="app_filter_no_results">Tidak ada aplikasi yang sesuai dengan filter anda.</string>
     <string name="new_downloader_plugins_notification">Plugin pengunduh baru tersedia. Klik disini untuk mengkonfigurasinya.</string>
     <string name="unsupported_architecture_warning">Menambal pada arsitektur perangkat ini tidak didukung dan kemungkinan besar akan gagal.</string>
     <string name="import_">Impor</string>
@@ -41,10 +36,10 @@
     <string name="app_version_unspecified">tidak ditentukan</string>
     <string name="app_source_dialog_title">Pilih sumber</string>
     <string name="app_source_dialog_option_auto">Otomatis</string>
-    <string name="app_source_dialog_option_auto_description">Gunakan semua pengunduh yang tersedia untuk mengunduh aplikasi</string>
+    <string name="app_source_dialog_option_auto_description">Gunakan APK yang telah diunduh sebelumnya atau semua plugin pengunduh yang tersedia</string>
     <string name="app_source_dialog_option_auto_unavailable">Tidak ada plugin tersedia</string>
     <string name="app_source_dialog_option_storage">Penyimpanan</string>
-    <string name="app_source_dialog_option_storage_description">Pilih APK dari penyimpanan lokal</string>
+    <string name="app_source_dialog_option_storage_description">Pilih paket aplikasi yang mendukung penyimpanan lokal</string>
     <string name="app_source_dialog_option_installed_no_root">Aplikasi yang dimount tidak bisa ditambal ulang tanpa akses root</string>
     <string name="app_source_dialog_option_installed_version_not_suggested">Versi %s tidak sesuai dengan versi yang disarankan</string>
     <string name="bundle_version_item">Rekomendasi paket</string>
@@ -62,26 +57,18 @@
     <string name="bundle_update_manual_available_with_version">Pembaruan tersedia: %1$s</string>
     <string name="patch_bundle_force_redownload_title">Paksa unduh ulang</string>
     <string name="patch_bundle_force_redownload_description">Unduh ulang %1$s dan timpa salinan lokal?</string>
-    <string name="bundle_update_progress">%1$d/%2$d paket diproses</string>
-    <string name="bundle_update_banner_title">Memperbarui paket penambal</string>
-    <string name="bundle_update_banner_collapsed">Memperbarui paket penambal • %1$d dari %2$d</string>
     <string name="bundle_updates_notification_progress">Memperbarui %1$d dari %2$d: %3$s</string>
     <string name="bundle_updates_notification_completed">Pembaruan selesai</string>
-    <string name="bundle_updates_notification_completed_with_available">Pembaruan selesai. %1$d pembaruan tersedia.</string>
     <string name="bundle_updates_notification_completed_named">Terbarukan: %1$s</string>
+    <string name="bundle_updates_notification_completed_with_available">Pembaruan selesai. %1$d pembaruan tersedia.</string>
     <string name="bundle_updates_notification_completed_named_with_available">Terbarukan: %1$s. %2$d pembaruan tersedia.</string>
     <string name="bundle_updates_notification_available">%1$d pembaruan tersedia.</string>
     <string name="bundle_updates_notification_failed">Pembaruan gagal</string>
     <string name="bundle_search_update">Mencari pembaruan</string>
-    <string name="bundle_search_update_description">Periksa paket ini untuk pembaruan di latar belakang</string>
     <string name="bundle_reorder">Atur paket</string>
     <string name="bundle_reorder_title">Atur paket penambal</string>
     <string name="bundle_reorder_description">Geser pegangan untuk mengatur urutan kemunculan bundle pada daftar dan menu seleksi patch.</string>
     <string name="bundle_reorder_empty_toast">Tambah paket penambal untuk mengaturnya.</string>
-    <string name="apps_search_hint">Cari aplikasi</string>
-    <string name="bundles_search_hint">Cari paketan</string>
-    <string name="profiles_search_hint">Cari profil</string>
-    <string name="search_no_results">Tidak ada hasil yang ditemukan.</string>
     <string name="apps_reorder">Atur aplikasi</string>
     <string name="apps_reorder_title">Atur aplikasi</string>
     <string name="apps_reorder_description">Geser gagang untuk mengatur urutan aplikasi yang muncul pada daftar.</string>
@@ -115,53 +102,39 @@
     <string name="patch_versions_dialog_title">Versi yang didukung untuk %1$s</string>
     <string name="patch_selector_item">Pilih penambal</string>
     <string name="patch_selector_item_description">%d penambal dipilih</string>
-    <string name="patch_selector_bundle_selected_count">Jumlah yang dipilih pada penambal ini: %d</string>
     <string name="patch_selector_filter_clear_label">Saring/Bersihkan</string>
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Tidak ada penambal yang dipilih</string>
     <string name="mixed_patch_bundles_title">Paket penambal campuran</string>
-    <string name="mixed_patch_bundles_description">Penambal ReVanced (.rvp), Ample (.rvp), and Morphe (.mpp) tidak dapat dikombinasikan. Pilih penambal dari hanya satu tipe paketan. Apabila kamu mau menggunakan beberapa, anda harus menambal dua kali dengan penambal lain yang diinginkan.</string>
     <string name="network_unavailable_warning">Perangkat anda tidak tersambung ke internet. Pengunduhan akan gagal nanti.</string>
     <string name="network_metered_warning">Anda saat ini sedang berada di koneksi berbasis kuota data. Tagihan dari penyedia layanan koneksi anda mungkin berlaku.</string>
     <string name="apk_source_selector_item">Pilih sumber APK</string>
     <string name="apk_source_auto">Menggunakan semua pengunduh APK</string>
     <string name="apk_source_downloader">Menggunakan %s</string>
     <string name="apk_source_installed">Menggunakan APK yang telah dipasang</string>
-    <string name="apk_source_local">Menggunakan file APK lokal</string>
     <string name="apk_source_downloaded">Menggunakan APK yang telah diunduh</string>
     <string name="legacy_import_failed">Tidak dapat mengimpor setelan lama</string>
     <string name="auto_updates_dialog_title">Konfigurasi pembaruan</string>
-    <string name="auto_updates_dialog_description">Apakah anda ingin Universal ReVanced Manager untuk secara berkala mengecek pembaruan untuk komponen berikut?</string>
-    <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
     <string name="auto_updates_dialog_patches">Patch ReVanced Resmi</string>
     <string name="auto_updates_dialog_note">Pengaturan ini dapat diubah nanti.</string>
     <string name="background_bundle_update">Pembaruan paketan latar belakang</string>
-    <string name="background_bundle_update_description">Kontrol notifikasi pembaruan untuk penambal dan paket. Saat dinyalakan, pembaruan paket akan diunduh di latar belakang. Apabila notifikasi diperbolehkan, anda akan melihat proses dan penyelesaian pembaruan, juga proses saat penambalan.</string>
     <string name="background_radio_menu_title">Pembaruan latar belakang</string>
     <string name="background_bundle_ask_notification">Izinkan notifikasi?</string>
-    <string name="background_bundle_ask_notification_description">Nyalakan notifikasi agar manajer dapat memberitahu anda saat pembaruan penambal tersedia.</string>
     <string name="notification_channel_bundle_updates_name">Pembaruan paket di latar belakang</string>
     <string name="notification_channel_bundle_updates_description">Tampilkan proses saat pembaruan paket penambal di latar belakang.</string>
+    <string name="notification_channel_manager_updates_name">Pembaruan pengelola latar belakang</string>
+    <string name="notification_channel_announcements_description">Memberi tahu Anda saat pengumuman ReVanced baru diterbitkan.</string>
     <string name="never">Tidak pernah</string>
     <string name="minutes_15">Per 15 menit</string>
     <string name="hourly">Per jam</string>
     <string name="daily">Per hari</string>
-    <string name="general">Umum</string>
-    <string name="general_description">Tema, warna dinamis</string>
     <string name="updates">Pembaruan</string>
-    <string name="updates_description">Cek untuk pembaruan dan tampilkan catatan perubahan</string>
     <string name="downloads">Unduhan</string>
-    <string name="downloads_description">Plugin pengunduh dan aplikasi yang telah diunduh</string>
     <string name="plugins_help_title">Apa itu pengunduh?</string>
-    <string name="plugins_help_description">Pengunduh adalah plugin yang membolehkan URV untuk mengunduh APK bawaan dari berbagai sumber. APK yang telah diunduh akan tampil di bagian bawah. Saat proses penamvalan, anda dapat memilih APK yang sudah diunduh sebelumnya atau anda dapat mengunduhnya menggunakan plugin.\n\nDaftar plugin yang didukung dapat ditemukan</string>
-    <string name="import_export">Impor &amp; ekspor</string>
-    <string name="import_export_description">Keystone, opsi penambal dan pilihan</string>
     <string name="changelog">Lihat catatan perubahan</string>
     <string name="changelog_loading">Memuat catatan perubahan</string>
     <string name="changelog_download_fail">Gagal untuk mengunduh catatan perubahan: %s</string>
     <string name="changelog_description">Lihat perubahan terbaru pada pembaruan ini</string>
-    <string name="advanced">Lanjutan</string>
-    <string name="advanced_description">URL API, batas memori, debugging</string>
     <string name="about">Tentang</string>
     <string name="contributors">Kontributor</string>
     <string name="dynamic_color">Warna dinamis</string>
@@ -183,16 +156,13 @@
     <string name="theme_preview_title">Pratinjau tema</string>
     <string name="theme_preview_description">Perbarui secara instan saat mengubah pengaturan tema</string>
     <string name="theme_presets">Preset tema</string>
-    <string name="theme_presets_description">Pilih bagaimana aplikasi mengikuti sistem, cerah, gelap, Material You, atau hitam pekat</string>
     <string name="theme_preset_default">Mengikuti sistem</string>
     <string name="theme_preset_amoled">Hitam pekat</string>
     <string name="theme_preset_dynamic">Material You</string>
     <string name="custom_background_image">Gambar latar belakang kustom</string>
-    <string name="custom_background_image_description">Atur gambar untuk latar belakang aplikasi. Tipe yang didukung: JPEG, PNG, GIF, SVG, TIFF, WebP.</string>
     <string name="custom_background_image_selected">Gambar sekarang: %1$s</string>
     <string name="custom_background_image_preview">Pratinjau gambar</string>
     <string name="custom_background_image_transparency">Transparansi gambar latar belakang</string>
-    <string name="custom_background_image_transparency_description">Sesuaikan seberapa transparan gambar latar belakang khusus akan ditampilkan.</string>
     <string name="clear_custom_background_image">Hapus gambar latar belakang khusus</string>
     <string name="theme_reset">Atur ulang setelan tema</string>
     <string name="color_channel_red">Merah</string>
@@ -201,4 +171,14 @@
     <string name="safeguards">Perlindungan</string>
     <string name="patch_compat_check">Nonaktifkan pengecekan kompatibilitas versi</string>
     <string name="suggested_version_safeguard">Membutuhkan penggunaan versi yang disarankan</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
+    <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information
+         https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436 -->
+    <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
+    <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
 </resources>

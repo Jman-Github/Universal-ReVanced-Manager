@@ -6,10 +6,46 @@
         <item quantity="many">%d патчів</item>
         <item quantity="other">%d патчів</item>
     </plurals>
+    <plurals name="removed_saved_patches_title">
+        <item quantity="one">Видалено %d патч</item>
+        <item quantity="few">Видалено %d патчі</item>
+        <item quantity="many">Видалено %d патчів</item>
+        <item quantity="other">Видалено %d патчів</item>
+    </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d обраний</item>
         <item quantity="few">%d обрано</item>
         <item quantity="many">%d обрані</item>
         <item quantity="other">%d обрані</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d Вибрано додаток</item>
+        <item quantity="few">%d Вибрані додатки</item>
+        <item quantity="many">%d Вибрані додатки</item>
+        <item quantity="other">%d Вибрані додатки</item>
+    </plurals>
+    <plurals name="selected_apps_delete_dialog_description_quantity">
+        <item quantity="one">Ви дійсно хочете видалити вибраний додаток?\nТочки монтування root також буде демонтовано, а їхні root-модулі видалено. Стокові додатки залишаться встановленими.</item>
+        <item quantity="few">Ви дійсно хочете видалити вибрані додатки?\nТочки монтування root також буде демонтовано, а їхні root-модулі видалено. Стокові додатки залишаться встановленими.</item>
+        <item quantity="many">Ви дійсно хочете видалити вибрані додатки?\nТочки монтування root також буде демонтовано, а їхні root-модулі видалено. Стокові додатки залишаться встановленими.</item>
+        <item quantity="other">Ви дійсно хочете видалити вибрані додатки?\nТочки монтування root також буде демонтовано, а їхні root-модулі видалено. Стокові додатки залишаться встановленими.</item>
+    </plurals>
+    <plurals name="patches_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Ви впевнені, що хочете видалити вибраний пакет патчів?</item>
+        <item quantity="few">Ви впевнені, що хочете видалити вибрані пакети патчів?</item>
+        <item quantity="many">Ви впевнені, що хочете видалити вибрані пакети патчів?</item>
+        <item quantity="other">Ви впевнені, що хочете видалити вибрані пакети патчів?</item>
+    </plurals>
+    <plurals name="patch_profile_delete_multiple_dialog_description_quantity">
+        <item quantity="one">Ви впевнені, що хочете видалити вибраний профіль патча?</item>
+        <item quantity="few">Ви впевнені, що хочете видалити вибрані профілі патчів?</item>
+        <item quantity="many">Ви впевнені, що хочете видалити вибрані профілі патчів?</item>
+        <item quantity="other">Ви впевнені, що хочете видалити вибрані профілі патчів?</item>
+    </plurals>
+    <plurals name="patcher_cpu_core_count">
+        <item quantity="one">%d ядро</item>
+        <item quantity="few">%d ядра</item>
+        <item quantity="many">%d ядер</item>
+        <item quantity="other">%d ядер</item>
     </plurals>
 </resources>
