@@ -188,31 +188,36 @@ object SplitApkPreparer {
 
         return try {
             extractSplitEntries(source, modulesDir)
-            coroutineContext.ensureActive()
-
-            val mergeOrder = withContext(Dispatchers.IO) {
-                Merger.listMergeOrder(modulesDir.toPath())
-            }
-            val inspection = inspectMergeOrder(mergeOrder)
-            val modules = mergeOrder.map { moduleName ->
-                SplitArchiveModule(
-                    name = moduleName,
-                    kind = classifyModule(moduleName),
-                    detail = moduleDetail(moduleName)
-                )
-            }
-            SplitArchiveInspection(
-                modules = modules,
-                baseModuleName = mergeOrder.firstOrNull(),
-                recommendedModules = buildRecommendedModules(modules, inspection),
-                languageTrimmedModules = mergeOrder.toSet() - inspection.unusedLanguageModules,
-                densityTrimmedModules = mergeOrder.toSet() - inspection.unusedDensityModules,
-                abiTrimmedModules = mergeOrder.toSet() - inspection.unusedAbiModules,
-                hasUnusedAbiModules = inspection.unusedAbiModules.isNotEmpty()
-            )
+            inspectDirectory(modulesDir)
         } finally {
             workingDir.deleteRecursively()
         }
+    }
+
+    /** Inspect components already extracted by a runtime without creating another full copy. */
+    suspend fun inspectDirectory(modulesDir: File): SplitArchiveInspection {
+        coroutineContext.ensureActive()
+        val operationContext = coroutineContext
+        val mergeOrder = runInterruptible(Dispatchers.IO) {
+            SplitManifestInspector.directoryOrder(modulesDir, operationContext::ensureActive)
+        }
+        val inspection = inspectMergeOrder(mergeOrder)
+        val modules = mergeOrder.map { moduleName ->
+            SplitArchiveModule(
+                name = moduleName,
+                kind = classifyModule(moduleName, isBase = moduleName == mergeOrder.first()),
+                detail = moduleDetail(moduleName)
+            )
+        }
+        return SplitArchiveInspection(
+            modules = modules,
+            baseModuleName = mergeOrder.firstOrNull(),
+            recommendedModules = buildRecommendedModules(modules, inspection),
+            languageTrimmedModules = mergeOrder.toSet() - inspection.unusedLanguageModules,
+            densityTrimmedModules = mergeOrder.toSet() - inspection.unusedDensityModules,
+            abiTrimmedModules = mergeOrder.toSet() - inspection.unusedAbiModules,
+            hasUnusedAbiModules = inspection.unusedAbiModules.isNotEmpty()
+        )
     }
 
     private fun Collection<String>.toLogList(): String =
@@ -291,6 +296,12 @@ object SplitApkPreparer {
         }
         // Flatten retries re-feed merged APKs that already have a root manifest,
         // so keep verifying those containers instead of rejecting them early.
+        // Downloaders store containers as base.apk. Without a root manifest this
+        // cannot be an installable APK; identify it like a ZIP instead of extracting
+        // and loading every component on each metadata/progress query.
+        if (!hasRootManifest(zip) && resolveZipApkEntryNames(candidates).isNotEmpty()) {
+            return candidates.mapTo(LinkedHashSet()) { it.name }
+        }
         if (!isVerifiedSplitCandidateSet(zip, candidates)) return emptySet()
         return candidates.mapTo(LinkedHashSet()) { it.name }
     }
@@ -720,9 +731,9 @@ object SplitApkPreparer {
         }
     }
 
-    private fun classifyModule(moduleName: String): SplitArchiveModuleKind {
+    private fun classifyModule(moduleName: String, isBase: Boolean): SplitArchiveModuleKind {
         val lower = moduleName.lowercase(Locale.ROOT)
-        if (isBaseModuleName(moduleName)) return SplitArchiveModuleKind.BASE
+        if (isBase) return SplitArchiveModuleKind.BASE
         if (isAbiSplit(moduleName)) return SplitArchiveModuleKind.ABI
         val qualifiers = splitConfigQualifiers(moduleName)
         return when {

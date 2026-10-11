@@ -16,7 +16,8 @@ data class PatchedAppExportData(
     val appVersion: String?,
     val patchBundles: List<PatchBundleExportData> = emptyList(),
     val generatedAt: Instant = Instant.now(),
-    val managerVersion: String = BuildConfig.VERSION_NAME
+    val managerVersion: String = BuildConfig.VERSION_NAME,
+    val fileExtension: String = "apk"
 )
 
 object ExportNameFormatter {
@@ -58,7 +59,7 @@ object ExportNameFormatter {
     ): String {
         val resolvedTemplate = template?.takeIf { it.isNotBlank() } ?: defaultTemplate
         val sanitizedTemplate = replaceVariables(resolvedTemplate, data)
-        val ensuredExtension = ensureExtension(sanitizedTemplate)
+        val ensuredExtension = ensureExtension(sanitizedTemplate, data.fileExtension)
         val clean = ensuredExtension.trim().ifEmpty { defaultTemplate }
         return FilenameUtils.sanitize(clean)
     }
@@ -159,6 +160,12 @@ object ExportNameFormatter {
         return effective.joinToString(separator)
     }
 
-    private fun ensureExtension(value: String): String =
-        if (value.endsWith(".apk", ignoreCase = true)) value else "$value.apk"
+    private fun ensureExtension(value: String, extension: String): String {
+        if (extension != "apks") {
+            return if (value.endsWith(".apk", true)) value else "$value.apk"
+        }
+        if (value.endsWith(".apks", true)) return value
+        val stem = if (value.endsWith(".apk", true)) value.substringBeforeLast('.') else value
+        return "$stem.apks"
+    }
 }

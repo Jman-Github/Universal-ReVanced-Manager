@@ -53,6 +53,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -428,7 +429,8 @@ class InstalledAppsViewModel(
                 val exportData = buildExportMetadata(app, source)
                 val fileName = ExportNameFormatter.format(exportTemplate, exportData)
                 val targetName = resolveUniqueDocumentName(root, fileName)
-                val target = root.createFile("application/vnd.android.package-archive", targetName)
+                val target = root.createFile(if (exportData.fileExtension == "apks") "application/zip"
+                    else "application/vnd.android.package-archive", targetName)
                 if (target == null) {
                     failed++
                     return@forEach
@@ -659,7 +661,8 @@ class InstalledAppsViewModel(
             appName = label,
             packageName = packageInfo?.packageName ?: displayPackageName,
             appVersion = app.version,
-            patchBundles = patchBundles
+            patchBundles = patchBundles,
+            fileExtension = if (SplitApkPreparer.isSplitArchive(source)) "apks" else "apk"
         )
     }
 

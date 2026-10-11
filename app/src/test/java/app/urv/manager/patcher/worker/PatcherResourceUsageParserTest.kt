@@ -46,6 +46,19 @@ class PatcherResourceUsageParserTest {
     }
 
     @Test
+    fun nativeProcessMemoryIsSeparateFromTheJavaHeapLimit() {
+        val sample = parsePatcherResourceUsage(
+            "URV resources: used=64 max=512 time=3000 processMemory=900"
+        )!!
+        assertEquals(64L, sample.usedMb)
+        assertEquals(512L, sample.maxMb)
+        assertEquals(900L, sample.processMemoryMb)
+        assertNull(parsePatcherResourceUsage(
+            "URV resources: used=64 max=512 time=3000 processMemory=invalid"
+        )!!.processMemoryMb)
+    }
+
+    @Test
     fun malformedMemoryOrOrdinaryLogsAreIgnored() {
         assertNull(parsePatcherResourceUsage("URV resources: used=-1 max=512 time=3000"))
         assertNull(parsePatcherResourceUsage("URV resources: used=64 max=0 time=3000"))

@@ -22,6 +22,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.manager.InstallerPreferenceTokens
 import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import app.universal.revanced.manager.R
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.io.IOException
 import java.util.LinkedHashMap
@@ -159,8 +160,8 @@ class InstallerManager(
         if (componentMimeCandidates == listOf(APK_MIME_CANDIDATE)) {
             entryFor(Token.PlayStore, target, checkRoot = false)?.let(entries::add)
             entryFor(Token.RootPlayStore, target, checkRoot = false)?.let(entries::add)
+            entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
         }
-        entryFor(Token.AutoSaved, target, checkRoot = false)?.let(entries::add)
         entryFor(Token.Shizuku, target, checkRoot = false)?.let(entries::add)
         entryFor(Token.ShizukuGooglePlay, target, checkRoot = false)?.let(entries::add)
 
@@ -504,6 +505,9 @@ class InstallerManager(
         installerLabel: String,
         token: Token
     ): InstallPlan.External {
+        require(!SplitApkPreparer.isSplitArchive(sourceFile)) {
+            "Split APKs require an installation session. Please retry the split installation."
+        }
         val shared = copyToShareDir(sourceFile)
         val uri = InstallerFileProvider.buildUri(app, shared)
         val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
@@ -597,6 +601,11 @@ class InstallerManager(
         expectedPackage: String,
         sourceLabel: String?
     ): InstallPlan? {
+        if (token == Token.AutoSaved || token == Token.RootPlayStore) {
+            require(!SplitApkPreparer.isSplitArchive(sourceFile)) {
+                app.getString(R.string.mount_split_not_supported)
+            }
+        }
         return when (token) {
             Token.Internal -> InstallPlan.Internal(target)
             // Code adapted from Morphe, see third-party/NOTICE for more information
@@ -791,7 +800,9 @@ class InstallerManager(
     }
 
     private fun copyToShareDir(source: File): File {
-        val sourceExtension = source.extension.lowercase()
+        val sourceExtension = source.extension.lowercase().let { extension ->
+            if (extension == "apk" && SplitApkPreparer.isSplitArchive(source)) "apks" else extension
+        }
         val extension = sourceExtension
             .takeIf { it == "apk" || it in SPLIT_ARCHIVE_EXTENSIONS }
             ?: "apk"
@@ -945,7 +956,9 @@ class InstallerManager(
     }
 
     private fun mimeCandidatesFor(sourceFile: File): List<InstallerMimeCandidate> {
-        val extension = sourceFile.extension.lowercase()
+        val extension = sourceFile.extension.lowercase().let { extension ->
+            if (extension == "apk" && SplitApkPreparer.isSplitArchive(sourceFile)) "apks" else extension
+        }
         val mimeTypes = when (extension) {
             "apks" -> listOf(
                 APKS_MIME,

@@ -21,6 +21,8 @@ data class Parameters(
     val continueOnPatchError: Boolean,
     val patcherLogMode: PatcherLogMode,
     val runtimeClassPath: String? = null,
+    val ignorePatchVersions: Boolean = false,
+    val includedSplitModules: Set<String>? = null,
 ) : Parcelable
 
 @Parcelize

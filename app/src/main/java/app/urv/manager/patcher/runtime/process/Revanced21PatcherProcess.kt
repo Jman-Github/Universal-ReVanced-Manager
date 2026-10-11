@@ -35,7 +35,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.system.exitProcess
 
 class Revanced21PatcherProcess(
-    private val appContext: Context
+    private val appContext: Context,
+    private val reseam: Boolean = false
 ) : IPatcherProcess.Stub() {
     private var eventBinder: IPatcherEvents? = null
     private val eventsEnabled = AtomicBoolean(true)
@@ -118,12 +119,22 @@ class Revanced21PatcherProcess(
                 start(mirrorToOriginal = logMode == PatcherLogMode.VERBOSE)
             }
             var exitCode = 0
-            val resourceMonitor = PatcherResourceMonitor.start { safeLog(LogLevel.INFO.name, it) }
+            val resourceMonitor = PatcherResourceMonitor.start(includeProcessMemory = reseam) {
+                safeLog(LogLevel.INFO.name, it)
+            }
 
             try {
-                Revanced21RuntimeBridge.initialize(appContext, parameters.runtimeClassPath)
                 val params = buildRuntimeParams(parameters)
-                val error = Revanced21RuntimeBridge.runPatcher(params, logger, ::safeEvent)
+                val error = if (reseam) {
+                    app.urv.manager.patcher.reseam.ReseamRuntimeBridge.initialize(appContext, parameters.runtimeClassPath)
+                    app.urv.manager.patcher.reseam.ReseamRuntimeBridge.runPatcher(
+                        params, logger, ::safeEvent,
+                        isCancelled = { exitRequested.get() || !eventsEnabled.get() }
+                    )
+                } else {
+                    Revanced21RuntimeBridge.initialize(appContext, parameters.runtimeClassPath)
+                    Revanced21RuntimeBridge.runPatcher(params, logger, ::safeEvent)
+                }
                 if (error.isNullOrBlank()) {
                     safeFinished(null)
                     exitCode = 0
@@ -175,6 +186,8 @@ class Revanced21PatcherProcess(
             put("continueOnPatchError", parameters.continueOnPatchError)
             put("patcherLogMode", parameters.patcherLogMode.name)
             put("configurations", configs)
+            put("ignorePatchVersions", parameters.ignorePatchVersions)
+            put("includedSplitModules", parameters.includedSplitModules)
         }
     }
 
@@ -209,7 +222,7 @@ class Revanced21PatcherProcess(
                 }
             }
 
-            val ipcInterface = Revanced21PatcherProcess(appContext)
+            val ipcInterface = Revanced21PatcherProcess(appContext, args.getOrNull(1) == "reseam")
 
             appContext.sendBroadcast(Intent().apply {
                 action = Revanced21ProcessRuntime.CONNECT_TO_APP_ACTION

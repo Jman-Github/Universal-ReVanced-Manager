@@ -37,7 +37,7 @@ run_gradle() {
     ./gradlew --no-daemon "$@"
 }
 
-run_gradle -PsignAsDebug -Pversion="$VERSION" :app:testDebugUnitTest
+run_gradle -PsignAsDebug -Pversion="$VERSION" --continue testDebugUnitTest
 
 if [[ "$BRANCH" == "dev" ]]; then
   MANAGER_TASK=":app:assembleDev"
@@ -47,7 +47,7 @@ else
   APK_DIR="app/build/outputs/apk/release"
 fi
 
-run_gradle -Pversion="$VERSION" "$MANAGER_TASK" :revanced.v21-runtime-plugin:assembleRelease
+run_gradle -Pversion="$VERSION" "$MANAGER_TASK" :revanced.v21-runtime-plugin:assembleRelease :reseam-runtime-plugin:assembleRelease
 
 rm -rf release-assets
 mkdir -p release-assets
@@ -76,10 +76,16 @@ if [[ ! -f "$PLUGIN" ]]; then
   exit 1
 fi
 cp "$PLUGIN" release-assets/
+RESEAM_PLUGIN="reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk"
+if [[ ! -f "$RESEAM_PLUGIN" ]]; then
+  echo "Missing expected runtime plugin APK: $RESEAM_PLUGIN" >&2
+  exit 1
+fi
+cp "$RESEAM_PLUGIN" release-assets/
 
 count="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')"
-if [[ "$count" != "6" ]]; then
-  echo "Expected 6 release APKs, found $count" >&2
+if [[ "$count" != "7" ]]; then
+  echo "Expected 7 release APKs, found $count" >&2
   find release-assets -maxdepth 1 -type f -print
   exit 1
 fi

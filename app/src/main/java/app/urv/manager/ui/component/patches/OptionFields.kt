@@ -97,6 +97,7 @@ import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.CenteredDialogTitle
 import app.urv.manager.ui.component.FloatInputDialog
+import app.urv.manager.ui.component.DoubleInputDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.IntInputDialog
 import app.urv.manager.ui.component.LongInputDialog
@@ -204,7 +205,8 @@ private val optionEditors = mapOf(
     *StringOptionEditor.toMapEditorElements(),
     *IntOptionEditor.toMapEditorElements(),
     *LongOptionEditor.toMapEditorElements(),
-    *FloatOptionEditor.toMapEditorElements()
+    *FloatOptionEditor.toMapEditorElements(),
+    *DoubleOptionEditor.toMapEditorElements()
 )
 
 @Composable
@@ -1249,6 +1251,16 @@ private object FloatOptionEditor : NumberOptionEditor<Float>() {
         validator: (Float?) -> Boolean,
         onSubmit: (Float?) -> Unit
     ) = FloatInputDialog(current, title, validator, onSubmit)
+}
+
+private object DoubleOptionEditor : NumberOptionEditor<Double>() {
+    @Composable
+    override fun NumberDialog(
+        title: String,
+        current: Double?,
+        validator: (Double?) -> Boolean,
+        onSubmit: (Double?) -> Unit
+    ) = DoubleInputDialog(current, title, validator, onSubmit)
 }
 
 private object BooleanOptionEditor : OptionEditor<Boolean> {

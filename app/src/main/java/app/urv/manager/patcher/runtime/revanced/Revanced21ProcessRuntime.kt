@@ -46,7 +46,10 @@ import org.koin.core.component.inject
 
 class Revanced21ProcessRuntime(
     private val context: Context,
-    private val memoryLimitMb: Int = MemoryLimitConfig.maxLimitMb(context)
+    private val memoryLimitMb: Int = MemoryLimitConfig.maxLimitMb(context),
+    private val pluginKind: app.urv.manager.network.runtime.PatcherRuntimeKind =
+        app.urv.manager.network.runtime.PatcherRuntimeKind.REVANCED_V21,
+    private val includedSplitModules: Set<String>? = null
 ) : Runtime(context) {
     private val pm: PM by inject()
     private val binderRef = AtomicReference<IPatcherProcess?>()
@@ -124,6 +127,10 @@ class Revanced21ProcessRuntime(
         val appProcessBin = resolveAppProcessBin(context)
         val env = System.getenv().toMutableMap().apply {
             put("CLASSPATH", managerBaseApk)
+            if (pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM) {
+                // Rust uses TMPDIR, independently of Java's java.io.tmpdir property.
+                put("TMPDIR", cacheDir)
+            }
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
             val limit = "${MemoryLimitConfig.resolveMemoryLimitMb(context, memoryLimitMb)}M"
@@ -178,9 +185,10 @@ class Revanced21ProcessRuntime(
                         appProcessBin,
                         "-Djava.io.tmpdir=$cacheDir",
                         "/",
-                        "--nice-name=${context.packageName}:Revanced21Patcher",
+                        "--nice-name=${context.packageName}:${pluginKind.displayName.replace(" ", "")}Patcher",
                         Revanced21PatcherProcess::class.java.name,
                         context.packageName,
+                        pluginKind.id,
                         env = env,
                         stdout = Redirect.CAPTURE,
                         stderr = Redirect.CAPTURE,
@@ -191,7 +199,7 @@ class Revanced21ProcessRuntime(
                     stdioWarnings.flush()
                 }
 
-                Log.d(tag, "ReVanced v21 process finished with exit code ${result.resultCode}")
+                Log.d(tag, "${pluginKind.displayName} process finished with exit code ${result.resultCode}")
 
                 if (result.resultCode == 0) {
                     if (cancellationRequested.get()) {
@@ -212,7 +220,7 @@ class Revanced21ProcessRuntime(
                                 return@launch
                             }
                             runtimeLogger.warn(
-                                "ReVanced v21 process exited without finished callback; using process exit fallback."
+                                "${pluginKind.displayName} process exited without finished callback; using process exit fallback."
                             )
                             completeSuccess()
                         }
@@ -245,7 +253,12 @@ class Revanced21ProcessRuntime(
                         val progressEvent = it.toEvent()
                         eventQueue.trySend(progressEvent)
                         progressEvent.fatalFailureOrNull()?.let { failure ->
-                            completeFailure(RemoteFailureException(failure.failureDetail()))
+                            completeFailure(RemoteFailureException(
+                                failure.failureDetail(),
+                                if (pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM) {
+                                    progressEvent as ProgressEvent.Failed
+                                } else null
+                            ))
                             runCatching { binder.exit() }
                         }
                     }
@@ -270,9 +283,22 @@ class Revanced21ProcessRuntime(
 
             val activeSelectedPatches = selectedPatches.filterValues { it.isNotEmpty() }
             val selectedBundleIds = activeSelectedPatches.keys
-            val bundlesByUid = bundles()
-            val selectedBundlesByUid = bundlesByUid.filterKeys { it in selectedBundleIds }
+            val bundlesByUid = bundles(
+                if (pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM) {
+                    app.urv.manager.patcher.patch.PatchBundleType.RESEAM
+                } else {
+                    app.urv.manager.patcher.patch.PatchBundleType.REVANCED
+                },
+                enabledOnly = pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM
+            )
+            // Include enabled Reseam catalogs that supply dependencies without selecting their patches.
+            val selectedBundlesByUid =
+                if (pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM) bundlesByUid
+                else bundlesByUid.filterKeys { it in selectedBundleIds }
             val staleBundleIds = selectedBundleIds - selectedBundlesByUid.keys
+            require(pluginKind != app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM || staleBundleIds.isEmpty()) {
+                "Selected Reseam patch sources are unavailable. Re-open patch selection and select patches again."
+            }
             if (staleBundleIds.isNotEmpty()) {
                 runtimeLogger.warn("Ignoring missing patch bundle IDs in selection: ${staleBundleIds.joinToString(",")}")
             }
@@ -281,7 +307,11 @@ class Revanced21ProcessRuntime(
                     "Selected patches are unavailable. Re-open patch selection and select patches again."
                 )
             }
-            val runtimeClassPath = Revanced21RuntimeAssets.ensureRuntimeClassPath(context).absolutePath
+            val runtimeClassPath = if (pluginKind == app.urv.manager.network.runtime.PatcherRuntimeKind.RESEAM) {
+                app.urv.manager.patcher.runtime.reseam.ReseamRuntimeAssets.ensureRuntimeClassPath(context).absolutePath
+            } else {
+                Revanced21RuntimeAssets.ensureRuntimeClassPath(context).absolutePath
+            }
 
             val parameters = Parameters(
                 aaptPath = aaptModernPath,
@@ -302,7 +332,9 @@ class Revanced21ProcessRuntime(
                 skipUnneededSplits = skipUnneededSplits,
                 continueOnPatchError = continueOnPatchError,
                 patcherLogMode = logMode,
-                runtimeClassPath = runtimeClassPath
+                runtimeClassPath = runtimeClassPath,
+                ignorePatchVersions = prefs.disablePatchVersionCompatCheck.get(),
+                includedSplitModules = includedSplitModules
             )
 
             binder.start(parameters, eventHandler)
@@ -349,7 +381,10 @@ class Revanced21ProcessRuntime(
         }
     }
 
-    class RemoteFailureException(val originalStackTrace: String) : Exception()
+    class RemoteFailureException(
+        val originalStackTrace: String,
+        val failure: ProgressEvent.Failed? = null
+    ) : Exception()
 
     class ProcessExitException(val exitCode: Int) :
         Exception("Process exited with nonzero exit code $exitCode")

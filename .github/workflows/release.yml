@@ -112,6 +112,14 @@ jobs:
       - name: Setup release keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 --decode > app/keystore.jks
 
+      - name: Run shell regression tests
+        shell: bash
+        run: |
+          for test_script in app/src/test/scripts/*-test.sh; do
+            echo "Running $test_script"
+            sh "$test_script"
+          done
+
       - name: Semantic Release
         id: semantic-release
         uses: cycjimmy/semantic-release-action@v5
@@ -125,6 +133,25 @@ jobs:
           KEYSTORE_ENTRY_ALIAS: ${{ secrets.KEYSTORE_ENTRY_ALIAS }}
           KEYSTORE_ENTRY_PASSWORD: ${{ secrets.KEYSTORE_ENTRY_PASSWORD }}
           ORG_GRADLE_JAVA_HOME: ${{ steps.setup-java.outputs.path }}
+
+      - name: Upload JVM test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: urv-release-test-reports
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+            api/build/test-results/testDebugUnitTest/
+            api/build/reports/tests/testDebugUnitTest/
+            morphe-runtime/build/test-results/testDebugUnitTest/
+            morphe-runtime/build/reports/tests/testDebugUnitTest/
+            revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
+            revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
+            reseam-runtime-plugin/build/test-results/testDebugUnitTest/
+            reseam-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Upload release workflow artifacts
         if: steps.semantic-release.outputs.new_release_published == 'true'

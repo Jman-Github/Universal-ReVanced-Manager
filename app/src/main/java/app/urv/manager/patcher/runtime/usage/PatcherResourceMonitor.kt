@@ -19,7 +19,7 @@ object PatcherResourceMonitor {
     private const val BYTES_PER_MB = 1024L * 1024L
 
     /** Sends one complete snapshot through the existing process log channel. */
-    fun start(onSample: (String) -> Unit): Session {
+    fun start(includeProcessMemory: Boolean = false, onSample: (String) -> Unit): Session {
         val running = AtomicBoolean(true)
         val thread = Thread {
             runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
@@ -36,6 +36,9 @@ object PatcherResourceMonitor {
                 val fields = buildList {
                     add("used=$usedMb")
                     add("max=$maxMb")
+                    if (includeProcessMemory) {
+                        processResidentMemoryMb()?.let { add("processMemory=$it") }
+                    }
                     add("time=${System.nanoTime() / 1_000_000L}")
                     add("resourceTime=$now")
                     if (cpu.isNotEmpty()) {

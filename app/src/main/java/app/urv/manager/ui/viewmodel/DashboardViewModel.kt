@@ -50,6 +50,7 @@ import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ReVancedAnnouncement
 import app.urv.manager.network.dto.ReVancedAsset
+import app.urv.manager.patcher.patch.ReseamBundleFormat
 import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.urv.manager.patcher.split.SplitApkPreparer
@@ -476,8 +477,11 @@ class DashboardViewModel(
                                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                                 if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
                             }
-                    }.getOrNull()
-                    patchBundleRepository.createLocal(size, displayName) {
+                    }.getOrNull() ?: patchBundle.lastPathSegment
+                    val sourceNameHint = if (runCatching { contentResolver.getType(patchBundle) }.getOrNull() ==
+                        ReseamBundleFormat.MIME_TYPE
+                    ) "bundle.reseam" else displayName
+                    patchBundleRepository.createLocal(size, sourceNameHint) {
                         contentResolver.openInputStream(patchBundle)
                             ?: throw FileNotFoundException("Unable to open $patchBundle")
                     }
