@@ -42,32 +42,16 @@
       }
     ],
     [
-      "./.github/scripts/release-notes.mjs",
+      "@semantic-release/release-notes-generator",
       {
-        "preset": "angular",
-        "migration": {
-          "branch": "dev",
-          "version": "1.9.0-dev.1",
-          "changelogFile": "api/DEV-CHANGELOG.md",
-          "heading": "# v1.9.0-dev.1"
-        },
-        "stableMigration": {
-          "branch": "main",
-          "version": "1.9.0",
-          "changelogFile": "api/DEV-CHANGELOG.md",
-          "includeVersions": [
-            "^1\\.9\\.0-dev\\.1$",
-            "^1\\.8\\.1-dev\\.\\d+$"
-          ],
-          "automaticSinceTag": "v1.9.0-dev.1"
-        }
+        "preset": "angular"
       }
     ],
     [
       "@semantic-release/changelog",
       {
         "changelogFile": "CHANGELOG.md",
-        "changelogTitle": "# Changelog\n\nRelease notes from the Semantic Release migration onward are generated automatically from Conventional Commits.\n\nHistorical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`."
+        "changelogTitle": "# Changelog\n\nRelease notes are generated automatically from Conventional Commits.\n\nHistorical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`."
       }
     ],
     [

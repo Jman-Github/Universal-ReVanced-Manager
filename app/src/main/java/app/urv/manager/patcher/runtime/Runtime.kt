@@ -32,8 +32,15 @@ sealed class Runtime(context: Context) : KoinComponent {
     protected val frameworkPath: String =
         context.managerStorageContext.cacheDir.resolve("framework").also { it.mkdirs() }.absolutePath
 
-    protected suspend fun bundles() =
-        patchBundlesRepo.bundlesByType(PatchBundleType.REVANCED).first()
+    protected suspend fun bundles(
+        type: PatchBundleType = PatchBundleType.REVANCED,
+        enabledOnly: Boolean = false
+    ): Map<Int, app.urv.manager.patcher.patch.PatchBundle> {
+        val bundles = patchBundlesRepo.bundlesByType(type).first()
+        if (!enabledOnly) return bundles
+        val enabledIds = patchBundlesRepo.enabledBundlesInfoFlow.first().keys
+        return bundles.filterKeys { it in enabledIds }
+    }
 
     protected fun resolveAaptPath(
         inputFile: File,

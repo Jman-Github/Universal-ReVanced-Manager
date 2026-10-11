@@ -211,6 +211,12 @@ object SplitApkPreparer {
         if (candidates.size < 2 || candidates.none { isLikelySplitApkEntryName(it.name) }) {
             return emptySet()
         }
+        // Downloaders store containers as base.apk. Without a root manifest this
+        // cannot be an installable APK; identify it like a ZIP instead of extracting
+        // and loading every component on each metadata/progress query.
+        if (!hasRootManifest(zip) && resolveZipApkEntryNames(candidates).isNotEmpty()) {
+            return candidates.mapTo(LinkedHashSet()) { it.name }
+        }
         if (!isVerifiedSplitCandidateSet(zip, candidates)) return emptySet()
         return candidates.mapTo(LinkedHashSet()) { it.name }
     }

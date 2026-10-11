@@ -91,6 +91,9 @@ dependencyResolutionManagement {
                 password = gprKey.orEmpty()
             }
         }
+        maven("https://git.reseam.app/api/packages/reseam/maven") {
+            content { includeGroup("app.reseam") }
+        }
         maven("https://jitpack.io") {
             metadataSources {
                 mavenPom()
@@ -118,4 +121,5 @@ fun includeIfAvailable(path: String) {
 include(":app", ":api")
 includeIfAvailable(":morphe-runtime")
 includeIfAvailable(":revanced.v21-runtime-plugin")
+includeIfAvailable(":reseam-runtime-plugin")
 

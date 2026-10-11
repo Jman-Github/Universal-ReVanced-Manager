@@ -40,16 +40,16 @@ class SessionInstaller(
         apkFile: File,
         expectedPackage: String,
         onUserActionLaunched: () -> Unit = {}
-    ): InstallResult {
+    ): InstallResult = withInstallApkFiles(apkFile, app.cacheDir) { apkFiles ->
         val beforeInstall = withContext(Dispatchers.IO) {
             pm.installedPackageSnapshot(expectedPackage, includeHashes = false)
         }
-        return try {
-            installInternal(apkFile, onUserActionLaunched)
+        try {
+            installInternal(apkFiles, onUserActionLaunched)
         } catch (_: InstallCancelledException) {
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/598
-            if (confirmInstallCompleted(apkFile, expectedPackage, beforeInstall)) {
+            if (confirmInstallCompleted(apkFiles, expectedPackage, beforeInstall)) {
                 Log.w(
                     TAG,
                     "Install callback reported cancelled but APK verification succeeded for $expectedPackage"
@@ -63,10 +63,10 @@ class SessionInstaller(
 
     @SuppressLint("RequestInstallPackagesPolicy")
     private suspend fun installInternal(
-        apkFile: File,
+        apkFiles: List<File>,
         onUserActionLaunched: () -> Unit
     ): InstallResult = withContext(Dispatchers.IO) {
-        require(apkFile.isFile) { "APK does not exist: ${apkFile.path}" }
+        require(apkFiles.isNotEmpty() && apkFiles.all { it.isFile }) { "APK files do not exist." }
 
         suspendCancellableCoroutine { continuation ->
             val completionClaimed = AtomicBoolean(false)
@@ -88,14 +88,17 @@ class SessionInstaller(
             }
 
             val sessionId = installer.createSession(params)
-            Log.d(TAG, "Created session $sessionId for ${apkFile.name}")
+            Log.d(TAG, "Created session $sessionId for ${apkFiles.size} APK(s)")
             var registeredReceiver: BroadcastReceiver? = null
 
             try {
                 installer.openSession(sessionId).use { session ->
-                    session.openWrite("base.apk", 0, apkFile.length()).use { output ->
-                        apkFile.inputStream().use { input -> input.copyTo(output) }
-                        session.fsync(output)
+                    apkFiles.forEachIndexed { index, apkFile ->
+                        val name = if (index == 0) "base.apk" else "split-$index.apk"
+                        session.openWrite(name, 0, apkFile.length()).use { output ->
+                            apkFile.inputStream().use { input -> input.copyTo(output) }
+                            session.fsync(output)
+                        }
                     }
 
                     val statusIntent = Intent(ACTION_INSTALL_STATUS).apply {
@@ -211,13 +214,13 @@ class SessionInstaller(
     }
 
     private suspend fun confirmInstallCompleted(
-        apkFile: File,
+        apkFiles: List<File>,
         expectedPackage: String,
         beforeInstall: InstalledPackageSnapshot?
     ): Boolean = withContext(Dispatchers.IO) {
         val afterInstall = pm.installedPackageSnapshot(expectedPackage)
             ?: return@withContext false
-        afterInstall.changedSince(beforeInstall) && afterInstall.matches(listOf(apkFile))
+        afterInstall.changedSince(beforeInstall) && afterInstall.matches(apkFiles)
     }
 
     private fun <T> CancellableContinuation<T>.resumeSafely(

@@ -416,6 +416,7 @@ fun BundleInformationDialog(
                     supportingText = when (bundleInfo[src.uid]?.bundleType) {
                         PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
                         PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
+                        PatchBundleType.RESEAM -> stringResource(R.string.bundle_type_reseam)
                         PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
                         null -> stringResource(field_not_set)
                     }

@@ -46,6 +46,7 @@ import app.urv.manager.ui.model.Step
 import app.urv.manager.ui.model.StepCategory
 import app.urv.manager.ui.model.StepDetail
 import app.urv.manager.ui.model.StepLog
+import app.urv.manager.ui.model.isComponentCountProgress
 import java.util.Locale
 import kotlin.math.floor
 
@@ -145,11 +146,15 @@ fun Steps(
                     .padding(top = 10.dp)
             ) {
                 filteredSteps.forEachIndexed { index, step ->
-                    val (progress, progressText) = step.progress?.let { (current, total) ->
-                        if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
-                        else null to "${current.megaBytes} MB"
-                    } ?: (null to null)
                     val subSteps = subStepsById[step.id].orEmpty()
+                    val (progress, progressText) = if (subSteps.isNotEmpty()) {
+                        step.progress?.let { (current, total) ->
+                            total?.takeIf { it > 0L }?.let {
+                                val fraction = (current.toFloat() / it).coerceIn(0f, 1f)
+                                fraction to "${(fraction * 100).toInt()}%"
+                            }
+                        } ?: (null to null)
+                    } else step.progress.asDisplayProgress()
 
                     if (subSteps.isNotEmpty()) {
                         ExpandableSubStep(
@@ -273,7 +278,7 @@ private fun ExpandableSubStep(
                             isLast = index == subSteps.lastIndex,
                         )
                     } else {
-                        val (subProgress, subProgressText) = detail.progress.asDisplayProgress()
+                        val (subProgress, subProgressText) = detail.progress.asDisplayProgress(isComponentCountProgress(detail.title))
 
                         SubStep(
                             name = detail.title,
@@ -305,7 +310,7 @@ private fun ExpandableDetailSubStep(
     var expanded by rememberSaveable(detail.title) { mutableStateOf(false) }
     var autoCollapsed by rememberSaveable("${detail.title}-auto") { mutableStateOf(false) }
     val completedChildren = detail.children.count { it.state == State.COMPLETED || it.skipped }
-    val (progress, progressText) = detail.progress.asDisplayProgress()
+    val (progress, progressText) = detail.progress.asDisplayProgress(isComponentCountProgress(detail.title))
 
     LaunchedEffect(detail.state, detail.children.size) {
         if (detail.state != State.COMPLETED) {
@@ -388,7 +393,7 @@ private fun ExpandableDetailSubStep(
                 modifier = Modifier.padding(start = 18.dp, top = 4.dp)
             ) {
                 detail.children.forEachIndexed { index, child ->
-                    val (childProgress, childProgressText) = child.progress.asDisplayProgress()
+                    val (childProgress, childProgressText) = child.progress.asDisplayProgress(isComponentCountProgress(child.title))
                     MiniSubStep(
                         name = child.title,
                         state = child.state,
@@ -598,8 +603,13 @@ fun StepIcon(state: State, progress: Float? = null, size: Dp, partialFailure: Bo
 
 private val Long.megaBytes get() = "%.1f".format(locale = Locale.ROOT, toDouble() / 1_000_000)
 
-private fun Pair<Long, Long?>?.asDisplayProgress(): Pair<Float?, String?> =
+private fun Pair<Long, Long?>?.asDisplayProgress(componentCount: Boolean = false): Pair<Float?, String?> =
     this?.let { (current, total) ->
-        if (total != null) current.toFloat() / total.toFloat() to "${current.megaBytes}/${total.megaBytes} MB"
-        else null to "${current.megaBytes} MB"
+        val fraction = total?.takeIf { it > 0L }?.let { (current.toFloat() / it).coerceIn(0f, 1f) }
+        val text = if (componentCount) {
+            if (total != null && total > 0L) "$current/$total" else "$current"
+        } else {
+            if (total != null && total > 0L) "${current.megaBytes}/${total.megaBytes} MB" else "${current.megaBytes} MB"
+        }
+        fraction to text
     } ?: (null to null)

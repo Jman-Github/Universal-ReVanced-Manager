@@ -95,6 +95,7 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.ms-project" />
                 <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/vnd.reseam.bundle" />
                 <data android:mimeType="application/x-java-archive" />
             </intent-filter>
 

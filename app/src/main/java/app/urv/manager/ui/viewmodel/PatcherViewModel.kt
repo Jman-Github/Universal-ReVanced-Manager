@@ -1834,10 +1834,7 @@ class PatcherViewModel(
     }.getOrNull()
 
     private fun readArchiveSignatureBytes(file: File): ByteArray? = runCatching {
-        @Suppress("DEPRECATION")
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
-        @Suppress("DEPRECATION")
-        val pkgInfo = app.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return null
+        val pkgInfo = pm.getPackageInfo(file, includeSigning = true) ?: return null
 
         val signature: Signature? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -2130,7 +2127,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val bundleName = displayNames[uid]
                 ?: globalBundles[uid]?.name
                 ?: "Unknown bundle ($uid)"
-            patchNames.sorted().map { patchName -> "$patchName - $bundleName" }
+            val metadata = globalBundles[uid]?.patches?.associateBy { it.name }.orEmpty()
+            patchNames.sorted().map { patchName ->
+                "${metadata[patchName]?.displayName ?: patchName} - $bundleName"
+            }
         }
     }
 
@@ -2176,7 +2176,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appName = label,
             packageName = info.packageName,
             appVersion = versionName,
-            patchBundles = patchBundles
+            patchBundles = patchBundles,
+            fileExtension = if (SplitApkPreparer.isSplitArchive(outputFile)) "apks" else "apk"
         )
     }
 
@@ -2203,7 +2204,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 appliedSelection,
                 requiresSplitPreparation,
                 skipApkSigning,
-                input.injectSignatureMetadata
+                input.injectSignatureMetadata,
+                preserveSplitApks = isReseamSelection()
             ).toMutableStateList()
         }
     val stepSubSteps = mutableStateMapOf<StepId, SnapshotStateList<StepDetail>>()
@@ -2403,18 +2405,19 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         val runSelection = currentSelectionSnapshot()
         val runOptions = currentOptionsSnapshot()
         persistRunConfiguration(runSelection, runOptions)
+        val selectedBundleType = patchBundleRepository.selectionBundleType(runSelection)
         val runSteps = generateSteps(
             app,
             input.selectedApp,
             runSelection,
             requiresSplitPreparation,
             skipApkSigning,
-            input.injectSignatureMetadata
+            input.injectSignatureMetadata,
+            preserveSplitApks = selectedBundleType == PatchBundleType.RESEAM
         )
         steps.clear()
         steps.addAll(runSteps)
         stepSubSteps.clear()
-        val selectedBundleType = patchBundleRepository.selectionBundleType(runSelection)
         val hasMixedRevancedPatcherVersions =
             selectedBundleType == PatchBundleType.REVANCED &&
                 patchBundleRepository.selectionHasMixedRevancedPatcherVersions(runSelection)
@@ -5449,6 +5452,10 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         }
     }
 
+    private fun isReseamSelection(): Boolean =
+        patcherSessionInfo.bundleType?.let { it == PatchBundleType.RESEAM.name }
+            ?: (selectionBundleType == PatchBundleType.RESEAM)
+
     private fun isMorpheSelection(): Boolean =
         patcherSessionInfo.bundleType?.let { it == PatchBundleType.MORPHE.name }
             ?: (selectionBundleType == PatchBundleType.MORPHE)
@@ -5527,7 +5534,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     // Code adapted from Morphe, see third-party/NOTICE for more information
                     // https://github.com/MorpheApp/morphe-manager/pull/779
                     val patchedPackageInfo = pm.getPackageInfo(outputFile)
-                    supportsRootMount = patchedPackageInfo?.packageName == packageName
+                    supportsRootMount = patchedPackageInfo?.packageName == packageName &&
+                        !SplitApkPreparer.isSplitArchive(outputFile)
                     supportsRootMountModeOverride = false
                     if (input.injectSignatureMetadata) {
                         _patcherSucceeded.value = null
@@ -5661,7 +5669,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             val loadPatchesIndex = steps.indexOfFirst { it.id == StepId.LoadPatches }
                 .takeIf { it >= 0 }
                 ?: 0
-            steps.add(loadPatchesIndex, buildSplitStep(app))
+            steps.add(loadPatchesIndex, buildSplitStep(app, preserveSplitApks = isReseamSelection()))
         }
 
         val stepIndex = event.stepId?.let { stepId ->
@@ -5756,7 +5764,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             appliedSelection,
             requiresSplitPreparation,
             skipApkSigning,
-            input.injectSignatureMetadata
+            input.injectSignatureMetadata,
+            preserveSplitApks = isReseamSelection()
         ).toMutableStateList()
         steps.clear()
         progressState.resetDexCompileState()
@@ -5810,7 +5819,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             loadIndex >= 0 -> loadIndex
             else -> steps.indexOfFirst { it.id == StepId.ReadAPK }.takeIf { it >= 0 } ?: steps.size
         }
-        steps.add(insertIndex, buildSplitStep(app))
+        steps.add(insertIndex, buildSplitStep(app, preserveSplitApks = isReseamSelection()))
         progressState.pauseLoadPatchesForSplitPreparation()
     }
 
@@ -5988,7 +5997,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             selectedPatches: PatchSelection,
             splitStepActive: Boolean,
             skipApkSigning: Boolean,
-            injectSignatureMetadata: Boolean = false
+            injectSignatureMetadata: Boolean = false,
+            preserveSplitApks: Boolean = false
         ): List<Step> = buildList {
             if (selectedApp is SelectedApp.Download || selectedApp is SelectedApp.Search) {
                 add(
@@ -6001,7 +6011,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             }
 
             if (splitStepActive) {
-                add(buildSplitStep(context))
+                add(buildSplitStep(context, preserveSplitApks = preserveSplitApks))
             }
 
             add(
@@ -6033,7 +6043,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 add(
                     Step(
                         StepId.ExecutePatch(index),
-                        name,
+                        if (preserveSplitApks) app.urv.manager.patcher.patch.ReseamBundleFormat.patchDisplayName(name) else name,
                         StepCategory.PATCHING
                     )
                 )
@@ -6065,10 +6075,14 @@ private fun InstallType?.isShizukuInstall(): Boolean =
 
 private fun buildSplitStep(
     context: Context,
-    message: String? = null
+    message: String? = null,
+    preserveSplitApks: Boolean = false
 ) = Step(
     id = StepId.PrepareSplitApk,
-    title = context.getString(R.string.patcher_step_prepare_split_apk),
+    title = context.getString(
+        if (preserveSplitApks) R.string.patcher_step_prepare_separate_apks
+        else R.string.patcher_step_prepare_split_apk
+    ),
     category = StepCategory.PREPARING,
     message = message
 )
