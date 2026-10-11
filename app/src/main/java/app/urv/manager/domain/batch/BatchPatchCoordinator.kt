@@ -1973,7 +1973,7 @@ class BatchPatchCoordinator(
             updateItem(index) {
                 it.copy(
                     installOutcome = BatchInstallOutcome.FAILED,
-                    installMessage = app.getString(R.string.mount_split_not_supported),
+                    installMessage = app.getString(R.string.root_mount_incompatible_output),
                     installedPackageName = targetPackage,
                     installing = false
                 )
