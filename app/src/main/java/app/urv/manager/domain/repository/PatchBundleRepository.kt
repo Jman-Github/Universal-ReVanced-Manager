@@ -2293,12 +2293,13 @@ class PatchBundleRepository(
         preferLatestAcrossChannels: Boolean = false,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
-        if (bundle.isBundleV3) {
-            toast(R.string.patch_bundle_discovery_v3_warning)
+        if (bundle.isBundleV3 || bundle.bundleType.equals("Reseam", true)) {
+            toast(R.string.catalog_unsupported_format)
             return
         }
+        val downloadUrl = bundle.downloadUrl?.trim()?.takeIf { it.isNotBlank() }
         val rawUrl = externalBundleEndpoint(bundle, preferLatestAcrossChannels).trim()
-        if (rawUrl.isBlank()) {
+        if (rawUrl.isBlank() || downloadUrl == null) {
             toast(R.string.patch_bundle_discovery_error)
             return
         }
@@ -2312,22 +2313,24 @@ class PatchBundleRepository(
 
         val metadata = ExternalBundleMetadata(
             bundleId = bundle.bundleId,
-            downloadUrl = bundle.downloadUrl
-                ?.trim()
-                ?.takeUnless { it.isBlank() }
-                ?: validatedUrl,
+            downloadUrl = downloadUrl,
             signatureDownloadUrl = bundle.signatureDownloadUrl,
             version = bundle.version.ifBlank { "unknown" },
             createdAt = bundle.createdAt.takeUnless { it.isBlank() },
             description = bundle.description,
             ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
             repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
+            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease,
+            iconUrl = bundle.iconUrl,
+            ownerAvatarUrl = bundle.ownerAvatarUrl,
+            sourceUrl = bundle.sourceUrl,
+            apiHost = bundle.apiHost,
+            fileHash = bundle.fileHash
         )
 
         val entity = createEntity(
             "",
-            SourceInfo.from(externalBundleEndpoint(bundle, preferLatestAcrossChannels)),
+            SourceInfo.from(validatedUrl),
             autoUpdate,
             searchUpdate = searchUpdate
         )
@@ -2375,7 +2378,7 @@ class PatchBundleRepository(
         val sourceUrl = bundle.sourceUrl.trim().takeIf { it.isNotBlank() }
             ?: if (owner.isNotBlank() && repo.isNotBlank()) "https://github.com/$owner/$repo" else ""
         val host = bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         ExternalBundlesEndpoints.latestBundleUrl(
             host = host,
             sourceUrl = sourceUrl,
@@ -2386,7 +2389,7 @@ class PatchBundleRepository(
 
     private fun externalBundleEndpoint(bundleId: Int, apiHost: String): String {
         val host = apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         return "https://$host/bundles/id?id=$bundleId"
     }
 

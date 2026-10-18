@@ -2185,7 +2185,7 @@ Details: %2$s</string>
     <string name="patches_url">Patch bundle URL</string>
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
     <string name="patch_bundle_discovery_title">Discover patch bundles</string>
-    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to URV Manager.</string>
+    <string name="patch_bundle_discovery_description">Browse patch bundles and supported apps from the Patch Bundle Registry.</string>
     <string name="patch_bundle_discovery_package_label">Search packages</string>
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
     <string name="patch_bundle_discovery_empty">No bundles found</string>
@@ -2503,4 +2503,33 @@ Details: %2$s</string>
     <string name="merger_resource_graph_options_title">Show extra information (standard merger graphs)</string>
     <string name="merger_compact_resource_graph_options_title">Show extra information (compact merger graphs)</string>
     <string name="resource_graph_current_accessibility">%1$s. %2$s. %3$s.</string>
+
+    <string name="catalog_bundles">Bundles</string>
+    <string name="catalog_apps">Apps</string>
+    <string name="catalog_all">All</string>
+    <string name="catalog_source">Source</string>
+    <string name="catalog_bundle_type">Bundle type</string>
+    <string name="catalog_bundle_version">Bundle version</string>
+    <string name="catalog_view_bundles">View compatible bundles</string>
+    <string name="catalog_refresh">Refresh catalog</string>
+    <string name="catalog_search">Search</string>
+    <string name="catalog_unsupported_format">This bundle format requires a runtime that URV does not currently support.</string>
+    <string name="catalog_clear_filters">Clear filters</string>
+    <string name="catalog_hide_filters">Hide filters</string>
+    <string name="catalog_show_filters">Show filters</string>
+    <string name="catalog_sources_error">Could not load sources. Try again.</string>
+    <string name="catalog_retry">Retry</string>
+    <string name="catalog_search_apps">Search apps</string>
+    <string name="catalog_apps_empty">No apps found</string>
+    <string name="catalog_release_history">Release history</string>
+    <string name="catalog_history_empty">No release history found.</string>
+    <string name="catalog_history_more">Load older releases</string>
+    <string name="catalog_history_unavailable">The upstream release or download is no longer available.</string>
+    <string name="catalog_hide_changelog">Hide changelog</string>
+    <string name="catalog_history_no_changelog">No changelog was recorded for this release.</string>
+    <string name="catalog_history_no_bundle">No indexed patch bundle is available for this release.</string>
+    <string name="catalog_history_open_release">Open release</string>
+    <string name="catalog_requires_v21">Requires the ReVanced v21 runtime plugin to be used in URV.</string>
+    <string name="catalog_requires_reseam">Requires the Reseam runtime plugin to be used in URV.</string>
+    <string name="scroll_position">Scroll position</string>
 </resources>

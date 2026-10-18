@@ -917,6 +917,10 @@ class ExternalGraphqlPatchBundle(
     )
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
+        // Discovery already supplied the selected artifact, including historical releases.
+        if (externalBundlesHost() == ExternalBundlesEndpoints.REGISTRY_HOST && !hasInstalled()) {
+            return@withContext snapshotToAsset(null)
+        }
         val endpointMetadata = parseEndpointMetadata()
         val owner = endpointMetadata.owner?.trim().takeIf { !it.isNullOrBlank() }
             ?: metadata.ownerName?.trim().takeIf { !it.isNullOrBlank() }
@@ -932,7 +936,8 @@ class ExternalGraphqlPatchBundle(
         val trackLatestAcrossChannels = owner.isNotBlank() && repo.isNotBlank() && prerelease == null
         val (endpointAsset, latestFromServices) = coroutineScope {
             val endpointDeferred = async {
-                if (endpointMetadata.hasExplicitChannel && endpointMetadata.isLatestApiEndpoint) {
+                if (externalBundlesHost() != ExternalBundlesEndpoints.REGISTRY_HOST &&
+                    endpointMetadata.hasExplicitChannel && endpointMetadata.isLatestApiEndpoint) {
                     withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
                         http.request<ReVancedAsset> { url(endpoint) }.getOrNull()
                     }
@@ -979,6 +984,8 @@ class ExternalGraphqlPatchBundle(
                 downloadUrl = endpointAsset.downloadUrl,
                 signatureDownloadUrl = endpointAsset.signatureDownloadUrl,
                 version = endpointAsset.version,
+                fileHash = endpointAsset.fileHash ?: matchingServiceSnapshot
+                    ?.takeIf { it.downloadUrl?.trim() == endpointAsset.downloadUrl.trim() }?.fileHash,
                 createdAt = endpointAsset.createdAt.toString(),
                 description = endpointAsset.description.ifBlank { metadata.description },
                 ownerName = owner.takeIf { it.isNotBlank() } ?: metadata.ownerName,
@@ -1008,6 +1015,10 @@ class ExternalGraphqlPatchBundle(
                     downloadUrl = officialAsset.downloadUrl,
                     signatureDownloadUrl = officialAsset.signatureDownloadUrl,
                     version = officialAsset.version,
+                    fileHash = officialAsset.fileHash ?: latestFromServices?.takeIf {
+                        it.version.trim() == officialAsset.version.trim() &&
+                            it.downloadUrl?.trim() == officialAsset.downloadUrl.trim()
+                    }?.fileHash,
                     createdAt = officialAsset.createdAt.toString(),
                     description = officialAsset.description.ifBlank { metadata.description },
                     isPrerelease = prerelease
@@ -1025,7 +1036,7 @@ class ExternalGraphqlPatchBundle(
             }
         }
         val latest = latestFromServices
-            ?: api.getBundleById(metadata.bundleId, externalBundlesHost()).getOrNull()
+            ?: api.getBundleById(metadata.bundleId, metadata.apiHost ?: externalBundlesHost()).getOrNull()
         if (latest != null) {
             metadata = metadataFromSnapshot(
                 snapshot = latest,
@@ -1099,6 +1110,12 @@ class ExternalGraphqlPatchBundle(
         repo: String,
         prerelease: Boolean?
     ): ExternalBundleSnapshot? {
+        val sourceUrl = metadata.sourceUrl ?: runCatching {
+            Url(endpoint).parameters["source_url"]
+        }.getOrNull()
+        if (!sourceUrl.isNullOrBlank()) {
+            return api.getLatestBundleForSource(sourceUrl, prerelease).getOrNull()
+        }
         if (owner.isBlank() || repo.isBlank()) return null
         return if (prerelease != null) {
             api.getLatestBundle(owner, repo, prerelease).getOrNull()
@@ -1192,7 +1209,7 @@ class ExternalGraphqlPatchBundle(
         snapshot: ExternalBundleSnapshot,
         preserveChannelSelection: Boolean
     ) = ExternalBundleMetadata(
-        bundleId = metadata.bundleId,
+        bundleId = snapshot.bundleId,
         downloadUrl = safeArtifactUrl(snapshot.downloadUrl) ?: metadata.downloadUrl,
         signatureDownloadUrl = snapshot.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
         version = snapshot.version.ifBlank { metadata.version },
@@ -1200,8 +1217,17 @@ class ExternalGraphqlPatchBundle(
         description = snapshot.description ?: metadata.description,
         ownerName = snapshot.ownerName.takeIf { it.isNotBlank() } ?: metadata.ownerName,
         repoName = snapshot.repoName.takeIf { it.isNotBlank() } ?: metadata.repoName,
-        isPrerelease = if (preserveChannelSelection) null else snapshot.isPrerelease
-    )
+        isPrerelease = if (preserveChannelSelection) null else snapshot.isPrerelease,
+        iconUrl = snapshot.iconUrl ?: metadata.iconUrl,
+        ownerAvatarUrl = snapshot.ownerAvatarUrl ?: metadata.ownerAvatarUrl,
+        sourceUrl = snapshot.sourceUrl.ifBlank { metadata.sourceUrl },
+        apiHost = snapshot.apiHost,
+        fileHash = snapshot.fileHash
+    ).also {
+        check(!snapshot.isBundleV3 && !snapshot.bundleType.equals("Reseam", true)) {
+            "This bundle format is not supported"
+        }
+    }
 
     private fun snapshotToAsset(snapshot: ExternalBundleSnapshot?): ReVancedAsset {
         val downloadUrl = safeArtifactUrl(snapshot?.downloadUrl)
@@ -1217,10 +1243,10 @@ class ExternalGraphqlPatchBundle(
             downloadUrl = downloadUrl,
             createdAt = createdAt,
             signatureDownloadUrl = signatureUrl,
-            pageUrl = snapshot?.sourceUrl,
+            pageUrl = snapshot?.sourceUrl ?: metadata.sourceUrl,
             description = description,
             version = version,
-            fileHash = snapshot?.fileHash
+            fileHash = if (snapshot != null) snapshot.fileHash else metadata.fileHash
         )
     }
 
@@ -1296,7 +1322,7 @@ class ExternalGraphqlPatchBundle(
         limit: Int
     ): List<PatchBundleChangelogEntry> {
         if (source.owner.isBlank() || source.repo.isBlank()) return emptyList()
-        return api.getBundleHistory(source.owner, source.repo, prerelease = prerelease, limit = limit)
+        return api.getBundleHistory(source.owner, source.repo, prerelease = prerelease, limit = limit, sourceUrl = metadata.sourceUrl)
             .getOrNull()
             .orEmpty()
             .map { snapshot -> snapshot.toChangelogEntry() }
