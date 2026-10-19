@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 256 256" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g id="Logo">
+        <clipPath id="_clip1">
+            <circle id="Background" cx="128" cy="128" r="116.48"/>
+        </clipPath>
+        <g clip-path="url(#_clip1)">
+            <rect x="0" y="0" width="256" height="256" style="fill:rgb(27,27,27);"/>
+        </g>
+        <path id="Ring" d="M128,0C198.645,0 256,57.355 256,128C256,198.645 198.645,256 128,256C57.355,256 0,198.645 0,128C0,57.355 57.355,0 128,0ZM128,11.52C63.713,11.52 11.52,63.713 11.52,128C11.52,192.287 63.713,244.48 128,244.48C192.287,244.48 244.48,192.287 244.48,128C244.48,63.713 192.287,11.52 128,11.52Z" style="fill:url(#_Linear2);"/>
+        <g id="Shape">
+            <g id="V-Shape" serif:id="V Shape" transform="matrix(1,0,0,1,1.01146e-05,-0.0493818)">
+                <path d="M172.397,86.408C172.871,85.326 172.767,84.078 172.12,83.089C171.474,82.1 170.372,81.504 169.191,81.504C167.543,81.504 165.852,81.504 164.658,81.504C163.666,81.504 162.768,82.091 162.369,82.999C158.379,92.086 137.322,140.046 130.289,156.064C129.89,156.972 128.992,157.559 128,157.559C127.008,157.559 126.11,156.972 125.711,156.064C118.678,140.046 97.62,92.086 93.631,82.999C93.232,82.091 92.334,81.504 91.342,81.504C90.148,81.504 88.456,81.504 86.809,81.504C85.628,81.504 84.526,82.1 83.879,83.089C83.233,84.078 83.129,85.326 83.603,86.408C91.141,103.614 116.202,160.815 121.322,172.499C121.88,173.772 123.138,174.595 124.528,174.595C126.541,174.595 129.458,174.595 131.472,174.595C132.862,174.595 134.12,173.772 134.678,172.499C139.797,160.815 164.859,103.614 172.397,86.408Z" style="fill:white;"/>
+            </g>
+            <g id="Diamond" transform="matrix(-1.54007,-1.88604e-16,1.88604e-16,-1.54007,327.925,209.689)">
+                <path d="M128.129,54.017C128.477,53.414 129.12,53.043 129.816,53.043C130.512,53.043 131.155,53.414 131.503,54.017C135.035,60.134 143.171,74.227 146.703,80.344C147.051,80.947 147.051,81.689 146.703,82.292C146.355,82.894 145.712,83.266 145.016,83.266L114.616,83.266C113.92,83.266 113.277,82.894 112.929,82.292C112.581,81.689 112.581,80.947 112.929,80.344C116.461,74.227 124.597,60.134 128.129,54.017Z" style="fill:url(#_Linear3);"/>
+            </g>
+        </g>
+    </g>
+    <defs>
+        <linearGradient id="_Linear2" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(1.56755e-14,256,-256,1.56755e-14,128,1.06127e-10)"><stop offset="0" style="stop-color:rgb(240,78,152);stop-opacity:1"/><stop offset="0.5" style="stop-color:rgb(95,101,212);stop-opacity:1"/><stop offset="1" style="stop-color:rgb(78,152,240);stop-opacity:1"/></linearGradient>
+        <linearGradient id="_Linear3" x1="0" y1="0" x2="1" y2="0" gradientUnits="userSpaceOnUse" gradientTransform="matrix(-1.1043e-14,-60.1151,58.7061,-1.07841e-14,129.816,83.2658)"><stop offset="0" style="stop-color:rgb(240,78,152);stop-opacity:1"/><stop offset="0.5" style="stop-color:rgb(95,101,212);stop-opacity:1"/><stop offset="1" style="stop-color:rgb(78,152,240);stop-opacity:1"/></linearGradient>
+    </defs>
+</svg>

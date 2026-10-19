@@ -11,6 +11,8 @@ import app.urv.manager.domain.repository.*
 import app.urv.manager.domain.storage.RepatchSourceCleanup
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.domain.bundles.BundleIconRepository
+import app.urv.manager.domain.bundles.BundleReleasePageRepository
 import app.urv.manager.network.api.ExternalBundlesApi
 import app.urv.manager.network.api.ReVancedAPI
 import org.koin.core.module.dsl.createdAtStart
@@ -20,6 +22,8 @@ import org.koin.dsl.module
 
 val repositoryModule = module {
     singleOf(::ExternalBundlesApi)
+    singleOf(::BundleIconRepository)
+    singleOf(::BundleReleasePageRepository)
     singleOf(::ReVancedAPI)
     singleOf(::Filesystem) {
         createdAtStart()

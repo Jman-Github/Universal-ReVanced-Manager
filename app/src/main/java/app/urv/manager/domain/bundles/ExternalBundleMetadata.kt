@@ -15,7 +15,12 @@ data class ExternalBundleMetadata(
     val description: String? = null,
     val ownerName: String? = null,
     val repoName: String? = null,
-    val isPrerelease: Boolean? = null
+    val isPrerelease: Boolean? = null,
+    val iconUrl: String? = null,
+    val ownerAvatarUrl: String? = null,
+    val sourceUrl: String? = null,
+    val apiHost: String? = null,
+    val fileHash: String? = null
 )
 
 object ExternalBundleMetadataStore {

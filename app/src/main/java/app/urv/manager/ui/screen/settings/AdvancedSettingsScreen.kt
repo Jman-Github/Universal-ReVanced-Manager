@@ -4126,7 +4126,7 @@ private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
     when (key) {
         PatchBundleActionKey.EDIT -> Icons.Outlined.Edit
         PatchBundleActionKey.REFRESH -> Icons.Outlined.Update
-        PatchBundleActionKey.LINKS -> Icons.Outlined.Link
+        PatchBundleActionKey.RELEASE_PAGE -> Icons.Outlined.Link
         PatchBundleActionKey.CHANGELOG_LATEST -> Icons.Outlined.Description
         PatchBundleActionKey.CHANGELOG_HISTORY -> Icons.Outlined.History
         PatchBundleActionKey.TOGGLE -> Icons.Outlined.Block

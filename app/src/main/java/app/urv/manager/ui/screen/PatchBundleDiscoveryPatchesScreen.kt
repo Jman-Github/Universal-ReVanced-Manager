@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import app.urv.manager.ui.component.bundle.CatalogIcon
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,7 +77,10 @@ fun PatchBundleDiscoveryPatchesScreen(
     patchCount: Int,
     ownerName: String,
     repoName: String,
+    bundleType: String,
+    downloadUrl: String?,
     onBackClick: () -> Unit,
+    historicalGeneration: String? = null,
     viewModel: BundleDiscoveryViewModel = koinViewModel(),
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
@@ -98,7 +102,10 @@ fun PatchBundleDiscoveryPatchesScreen(
         isPrerelease,
         patchCount,
         ownerName,
-        repoName
+        repoName,
+        bundleType,
+        downloadUrl,
+        historicalGeneration
     ) {
         ExternalBundleSnapshot(
             apiHost = apiHost,
@@ -109,10 +116,14 @@ fun PatchBundleDiscoveryPatchesScreen(
             isPrerelease = isPrerelease,
             patchCount = patchCount,
             ownerName = ownerName,
-            repoName = repoName
+            repoName = repoName,
+            bundleType = bundleType,
+            downloadUrl = downloadUrl,
+            historicalGeneration = historicalGeneration
         )
     }
     val bundle = remember(bundles, routedBundle) {
+        if (historicalGeneration != null) return@remember routedBundle
         val routedSourceUrl = routedBundle.sourceUrl.trim().removeSuffix("/")
         val routedFileHash = routedBundle.fileHash?.takeUnless(String::isBlank)
         bundles?.firstOrNull {
@@ -140,6 +151,15 @@ fun PatchBundleDiscoveryPatchesScreen(
     }
     val localPatches = importedUid?.let { bundleInfos[it]?.patches }
     val useLocalPatches = !localPatches.isNullOrEmpty()
+    LaunchedEffect(localPatches, patches) {
+        val names = if (useLocalPatches) localPatches.orEmpty().flatMap { patch ->
+            patch.compatiblePackages.orEmpty().map { it.packageName }
+        } else patches.orEmpty().flatMap { patch ->
+            patch.compatiblePackages.filter { it.appName.isNullOrBlank() || it.iconUrl.isNullOrBlank() }
+                .map { it.name }
+        }
+        viewModel.loadAppMetadata(names)
+    }
     val filteredLocalPatches = remember(localPatches, query) {
         val trimmed = query.trim()
         if (trimmed.isBlank()) {
@@ -168,9 +188,10 @@ fun PatchBundleDiscoveryPatchesScreen(
         }
     }
 
-    val title = bundle?.let {
+    val baseTitle = bundle?.let {
         stringResource(R.string.patch_bundle_discovery_patches_title, it.ownerName, it.repoName)
     } ?: stringResource(R.string.patch_bundle_discovery_patches_title_fallback)
+    val title = if (historicalGeneration != null) "$baseTitle · $version" else baseTitle
 
     Scaffold(
         topBar = {
@@ -191,6 +212,11 @@ fun PatchBundleDiscoveryPatchesScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (app.urv.manager.ui.component.bundle.catalogRuntimeNotice(bundle.bundleType) != null) {
+                item(key = "runtime_notice") {
+                    app.urv.manager.ui.component.bundle.BundleRuntimeNotice(bundle.bundleType)
+                }
+            }
             persistentControls(key = "patches_search") {
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
@@ -225,11 +251,16 @@ fun PatchBundleDiscoveryPatchesScreen(
 
                 !useLocalPatches && patchesError != null -> {
                     item {
-                        PatchBundlePatchesEmptyState(
-                            message = patchesError ?: errorMessage ?: stringResource(
-                                R.string.patch_bundle_discovery_patches_empty
+                        Column {
+                            PatchBundlePatchesEmptyState(
+                                message = patchesError ?: errorMessage ?: stringResource(
+                                    R.string.patch_bundle_discovery_patches_empty
+                                )
                             )
-                        )
+                            androidx.compose.material3.TextButton(onClick = {
+                                viewModel.loadPatches(bundle)
+                            }) { Text(stringResource(R.string.bundle_changelog_retry)) }
+                        }
                     }
                 }
 
@@ -281,7 +312,8 @@ fun PatchBundleDiscoveryPatchesScreen(
                             onExpandVersions = { expandVersions = !expandVersions },
                             expandOptions,
                             onExpandOptions = { expandOptions = !expandOptions },
-                            searchEngineHost = searchEngineHost
+                            searchEngineHost = searchEngineHost,
+                            appMetadata = viewModel.appMetadata
                         )
                     }
                 }
@@ -295,7 +327,8 @@ fun PatchBundleDiscoveryPatchesScreen(
                         PatchBundlePatchItem(
                             patch = patch,
                             searchEngineHost = searchEngineHost,
-                            stateKey = "${bundleId}-${patch.name ?: "patch"}-$index"
+                            stateKey = "${bundleId}-${patch.name ?: "patch"}-$index",
+                            appMetadata = viewModel.appMetadata
                         )
                     }
                 }
@@ -331,6 +364,7 @@ private fun PatchBundlePatchItem(
     patch: ExternalBundlePatch,
     searchEngineHost: String,
     stateKey: String,
+    appMetadata: Map<String, app.urv.manager.network.dto.PackageNode>,
 ) {
     val context = LocalContext.current
     val anyPackageLabel = stringResource(R.string.patches_view_any_package)
@@ -386,6 +420,16 @@ private fun PatchBundlePatchItem(
                             .toSet()
                         val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val application = appMetadata[packageName]
+                            val appName = compatiblePackage.appName?.takeIf { it.isNotBlank() }
+                                ?: application?.appName?.takeIf { it.isNotBlank() } ?: packageName
+                            CatalogIcon(compatiblePackage.iconUrl?.takeIf { it.isNotBlank() }
+                                ?: application?.iconUrl, description = appName,
+                                modifier = Modifier.size(24.dp))
+                            Text(appName, style = MaterialTheme.typography.labelMedium)
+                        }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
