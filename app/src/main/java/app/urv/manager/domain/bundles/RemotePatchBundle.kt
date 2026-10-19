@@ -1303,7 +1303,7 @@ class ExternalGraphqlPatchBundle(
         apiHost = snapshot.apiHost,
         fileHash = snapshot.fileHash
     ).also {
-        check(!snapshot.isBundleV3 && !snapshot.bundleType.equals("Reseam", true)) {
+        check(!snapshot.isBundleV3) {
             "This bundle format is not supported"
         }
     }

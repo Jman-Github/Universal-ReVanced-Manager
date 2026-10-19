@@ -63,20 +63,36 @@ class ReseamProgressTest {
         assertFalse(recorder.events.any { it["type"] == "Failed" })
     }
 
-    @Test fun sdkRestartReportsExcludedSelectionAndKeepsCompletedRows() {
+    @Test fun revertedPatchesRequireFreshResultsBeforePublication() {
         val recorder = Recorder()
         val progress = ReseamProgress(listOf("b/a", "b/z"), listOf("A", "Z"), false, recorder)
         progress.invoke(RunEvent.PatchFinished("b/a", PatchStatus.Applied))
-        progress.invoke(RunEvent.Restarted(listOf("b/z")))
-        progress.invoke(RunEvent.PatchStarted("b/a"))
-        progress.invoke(RunEvent.PatchFinished("b/a", PatchStatus.Applied))
-        assertEquals("b/z", progress.terminalFailure)
+        progress.invoke(RunEvent.PatchFinished("b/z", PatchStatus.Applied))
+        progress.invoke(RunEvent.PatchesReverted(listOf("b/z")))
+        assertEquals(listOf("b/a"), progress.successfulReferences())
+        assertFalse(progress.statuses.containsKey("b/z"))
+        assertNull(progress.terminalFailure)
+        assertThrows(IllegalStateException::class.java) { progress.beforePublish() }
+        progress.invoke(RunEvent.PatchStarted("b/z"))
+        progress.invoke(RunEvent.PatchFinished("b/z", PatchStatus.Applied))
+        progress.beforePublish()
         val firstPatchRows = recorder.events.filter {
             val step = it["stepId"] as Map<*, *>
             step["kind"] == "ExecutePatch" && step["index"] == 0
         }
         assertEquals(listOf("Completed"), firstPatchRows.map { it["type"] })
-        assertThrows(IllegalStateException::class.java) { progress.beforePublish() }
+    }
+
+    @Test fun revertedFailureDoesNotBlockSuccessfulRerun() {
+        val progress = ReseamProgress(listOf("b/a"), listOf("A"), false, Recorder())
+        progress.invoke(RunEvent.PatchFinished("b/a", PatchStatus.Failed("rolled back")))
+        assertEquals("b/a", progress.terminalFailure)
+        progress.invoke(RunEvent.PatchesReverted(listOf("b/a")))
+        assertNull(progress.terminalFailure)
+        assertTrue(progress.successfulReferences().isEmpty())
+        progress.invoke(RunEvent.PatchFinished("b/a", PatchStatus.Applied))
+        progress.beforePublish()
+        assertEquals(listOf("b/a"), progress.successfulReferences())
     }
 
     @Test fun dependencyOrderUsesSelectionIndexes() {

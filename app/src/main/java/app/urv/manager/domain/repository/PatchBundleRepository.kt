@@ -2322,7 +2322,7 @@ class PatchBundleRepository(
         preferLatestAcrossChannels: Boolean = false,
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
-        if (bundle.isBundleV3 || bundle.bundleType.equals("Reseam", true)) {
+        if (bundle.isBundleV3) {
             toast(R.string.catalog_unsupported_format)
             return
         }

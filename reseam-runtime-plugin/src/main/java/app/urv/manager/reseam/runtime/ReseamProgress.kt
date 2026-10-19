@@ -59,12 +59,14 @@ internal class ReseamProgress(
                 beginExecution()
                 finishPatch(arg0.patch, arg0.status)
             }
-            is RunEvent.Restarted -> {
-                callback.log("WARN", "Reseam restarted from the original APK; excluded manifest-changing patches: " +
-                    arg0.unmountable.joinToString())
-                arg0.unmountable.forEach { reference ->
-                    finishPatch(reference, PatchStatus.Unmountable("Patch changes the manifest and cannot be mounted."))
+            is RunEvent.PatchesReverted -> {
+                callback.log("WARN", "Reseam reverted patches and will run them again: " +
+                    arg0.patches.joinToString())
+                arg0.patches.forEach { reference ->
+                    statuses.remove(reference)
+                    completed.remove(reference)
                 }
+                updateTerminalFailure()
             }
             is RunEvent.PatchLog -> {
                 val entry = arg0.field0
@@ -90,13 +92,16 @@ internal class ReseamProgress(
                 }
             }
         }
-        // The SDK also reports unselected catalog entries as skipped. Only selected
-        // skips are failures; a failed dependency still makes the whole run fail.
-        val isFailure = status is PatchStatus.Failed ||
-            (reference in indexes && (status is PatchStatus.Skipped || status is PatchStatus.Unmountable))
-        if (!continueOnPatchError && isFailure && terminalFailure == null) {
-            terminalFailure = reference
-        }
+        updateTerminalFailure()
+    }
+
+    private fun updateTerminalFailure() {
+        // Unselected catalog skips are expected. Failed dependencies still block output.
+        // Recompute after rollback or a changed result so stale failures cannot survive.
+        terminalFailure = if (continueOnPatchError) null else statuses.entries.firstOrNull { (reference, status) ->
+            status is PatchStatus.Failed ||
+                (reference in indexes && (status is PatchStatus.Skipped || status is PatchStatus.Unmountable))
+        }?.key
     }
 
     fun successfulReferences(): List<String> = references.filter { statuses[it] is PatchStatus.Applied }
