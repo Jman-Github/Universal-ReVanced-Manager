@@ -97,6 +97,7 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -914,30 +915,37 @@ private suspend fun loadApkIconInfo(
     pm: PM,
     filesystem: Filesystem
 ): ApkIconInfo? = withContext(Dispatchers.IO) {
-    val file = path.toFile()
-    if (!file.exists()) return@withContext null
-    val extension = file.extension.lowercase()
-    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
-    if (extension != "apk" && !isSplitArchive) return@withContext null
+    try {
+        val file = path.toFile()
+        if (!file.exists()) return@withContext null
+        val extension = file.extension.lowercase(Locale.ROOT)
+        val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
+        if (extension != "apk" && !isSplitArchive) return@withContext null
 
-    if (isSplitArchive) {
-        val resolved = SplitArchiveDisplayResolver.resolve(
-            source = file,
-            workspace = filesystem.tempDir,
-            app = pm.application,
-            pm = pm
-        ) ?: return@withContext null
-        ApkIconInfo(
-            packageInfo = resolved.packageInfo,
-            iconOverride = resolved.icon,
-            cleanup = null
-        )
-    } else {
-        ApkIconInfo(
-            packageInfo = pm.getPackageInfo(file),
-            iconOverride = null,
-            cleanup = null
-        )
+        if (isSplitArchive) {
+            val resolved = SplitArchiveDisplayResolver.resolve(
+                source = file,
+                workspace = filesystem.tempDir,
+                app = pm.application,
+                pm = pm
+            ) ?: return@withContext null
+            ApkIconInfo(
+                packageInfo = resolved.packageInfo,
+                iconOverride = resolved.icon,
+                cleanup = null
+            )
+        } else {
+            ApkIconInfo(
+                packageInfo = pm.getPackageInfo(file),
+                iconOverride = null,
+                cleanup = null
+            )
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        // Previews are optional: unreadable or damaged archives keep the generic file icon.
+        null
     }
 }
 

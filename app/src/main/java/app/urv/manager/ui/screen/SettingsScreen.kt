@@ -353,7 +353,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.show_lsposed_tab, R.string.show_lsposed_tab_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_preview_title, R.string.theme_preview_description, R.string.general, Settings.General),
             SearchEntry(R.string.theme_reset, null, R.string.general, Settings.General),
-            SearchEntry(R.string.app_language, null, R.string.advanced_system, Settings.AdvancedSystem),
+            SearchEntry(R.string.app_language, R.string.app_language_description, R.string.advanced_system, Settings.AdvancedSystem),
             SearchEntry(R.string.update_on_metered_connections, R.string.update_on_metered_connections_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.manual_update_check, R.string.manual_update_check_description, R.string.updates, Settings.Updates),
             SearchEntry(R.string.changelog, R.string.changelog_description, R.string.updates, Settings.Updates),

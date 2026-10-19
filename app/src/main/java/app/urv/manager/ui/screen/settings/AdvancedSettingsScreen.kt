@@ -206,8 +206,11 @@ import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
+import app.urv.manager.util.AppLanguageOption
 import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.appLanguageOptions
 import app.urv.manager.util.applyAppLanguage
+import app.urv.manager.util.isAppLanguageApplied
 import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.openUrl
 import app.urv.manager.util.permission.hasNotificationPermission
@@ -350,26 +353,7 @@ fun AdvancedSettingsScreen(
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
-    val languageOptions = remember {
-        listOf(
-            LanguageOption("system", R.string.language_option_system),
-            LanguageOption("en", R.string.language_option_english),
-            LanguageOption("de", R.string.language_option_german),
-            LanguageOption("es", R.string.language_option_spanish),
-            LanguageOption("fr", R.string.language_option_french),
-            LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
-            LanguageOption("in", R.string.language_option_indonesian),
-            LanguageOption("hi", R.string.language_option_hindi),
-            LanguageOption("gu", R.string.language_option_gujarati),
-            LanguageOption("pt-BR", R.string.language_option_portuguese_brazil),
-            LanguageOption("vi", R.string.language_option_vietnamese),
-            LanguageOption("ko", R.string.language_option_korean),
-            LanguageOption("ja", R.string.language_option_japanese),
-            LanguageOption("ru", R.string.language_option_russian),
-            LanguageOption("tr", R.string.language_option_turkish),
-            LanguageOption("uk", R.string.language_option_ukrainian)
-        )
-    }
+    val languageOptions = appLanguageOptions
     val memoryLimit = remember {
         val activityManager = context.getSystemService<ActivityManager>()!!
         context.getString(
@@ -433,22 +417,22 @@ fun AdvancedSettingsScreen(
             SettingsSearchState.clear()
         }
     }
-    val commitLanguageChange: (String, Boolean) -> Unit = { code, recreate ->
+    val commitLanguageChange: (String, Boolean) -> Unit = { code, applyNow ->
+        pendingLanguageRestart = null
         viewModel.viewModelScope.launch {
             viewModel.prefs.appLanguage.update(code)
+            if (applyNow) {
+                // AppCompat recreates the activity when the locale changes.
+                applyAppLanguage(code)
+            }
         }
-        applyAppLanguage(code)
-        if (recreate) {
-            (context as? android.app.Activity)?.recreate()
-        }
-        pendingLanguageRestart = null
     }
     if (showLanguageDialog) {
         LanguageDialog(
             options = languageOptions,
             selectedCode = appLanguage,
             onSelect = { code ->
-                if (code == appLanguage) {
+                if (code == appLanguage && isAppLanguageApplied(code)) {
                     showLanguageDialog = false
                 } else {
                     pendingLanguageRestart = code
@@ -481,6 +465,8 @@ fun AdvancedSettingsScreen(
             }
         )
     }
+    val canResetLanguage = appLanguage != viewModel.prefs.appLanguage.default ||
+        !isAppLanguageApplied(viewModel.prefs.appLanguage.default)
     val selectedLanguageLabel = when (appLanguage) {
         "system" -> R.string.language_option_system
         else -> languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
@@ -528,11 +514,11 @@ fun AdvancedSettingsScreen(
                         supportingContent = stringResource(selectedLanguageLabel),
                         secondaryActionLabel = stringResource(R.string.reset),
                         onSecondaryAction = {
-                            if (appLanguage != viewModel.prefs.appLanguage.default) {
+                            if (canResetLanguage) {
                                 pendingLanguageRestart = viewModel.prefs.appLanguage.default
                             }
                         },
-                        secondaryActionEnabled = appLanguage != viewModel.prefs.appLanguage.default,
+                        secondaryActionEnabled = canResetLanguage,
                         primaryActionLabel = stringResource(R.string.edit),
                         onPrimaryAction = { showLanguageDialog = true }
                     )
@@ -2144,11 +2130,9 @@ private enum class InstallerDialogTarget {
     Fallback
 }
 
-private data class LanguageOption(val code: String, @StringRes val labelRes: Int)
-
 @Composable
 private fun LanguageDialog(
-    options: List<LanguageOption>,
+    options: List<AppLanguageOption>,
     selectedCode: String,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
