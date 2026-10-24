@@ -1,5 +1,6 @@
 package app.urv.manager.ui.viewmodel
 
+import app.urv.manager.patcher.runtime.PatcherJvm
 import android.app.Activity
 
 import android.app.Application
@@ -101,8 +102,6 @@ import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.logger.isVerbosePatcherExportLog
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
-import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.worker.PatcherWorker
@@ -2227,18 +2226,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/viewmodel/PatcherViewModel.kt
-    data class MemoryAdjustmentDialogState(
-        val previousLimit: Int,
-        val newLimit: Int,
-        val adjusted: Boolean
-    )
 
-    var memoryAdjustmentDialog by mutableStateOf<MemoryAdjustmentDialogState?>(null)
-        private set
-
-    fun dismissMemoryAdjustmentDialog() {
-        memoryAdjustmentDialog = null
-    }
 
     private val workManager = WorkManager.getInstance(app)
     private val _patcherSucceeded = MediatorLiveData<Boolean?>()
@@ -2396,10 +2384,6 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         patcherMemoryUsageSequence = Long.MIN_VALUE
         patcherMemoryUsageSampleTimeMs = Long.MIN_VALUE
         patcherMemoryUsageSamples.clear()
-        val configuredProcessMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
-            app,
-            prefs.processMemoryLimit.get()
-        )
         val runSelection = currentSelectionSnapshot()
         val runOptions = currentOptionsSnapshot()
         persistRunConfiguration(runSelection, runOptions)
@@ -2437,19 +2421,15 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             PatcherSessionInfo(
                 patchCount = runSelection.values.sumOf { it.size },
                 selectedPatchLines = collectSelectedPatchDescriptions(runSelection),
-                runtimeProcess = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
-                memoryLimitMb = configuredProcessMemoryLimit,
+                runtimeProcess = null,
+
                 nativeLibsStripped = selectedSplitConfiguration?.stripNativeLibs
                     ?: prefs.stripUnusedNativeLibs.get(),
                 skipUnusedSplits = prefs.skipUnneededSplitApks.get(),
                 bundleType = selectedBundleType?.name,
                 patcherEngine = selectedPatcherEngine,
                 morpheBytecodeMode = configuredMorpheBytecodeMode,
-                memoryOverride = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    "enabled"
-                } else {
-                    "disabled"
-                },
+                memoryOverride = "disabled",
                 batteryOptimization = batteryOptimization,
                 environment = environment
             )
@@ -3311,17 +3291,14 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                     ?.removePrefix("Memory limit:")
                     ?.trim()
             )
-        val effectiveLimit = runtimeReportedLimit ?: MemoryLimitConfig.resolveMemoryLimitMb(
-            context,
-            prefs.processMemoryLimit.getBlocking()
-        )
-        val processRuntimeEnabled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-        val runtimeMode = patcherSessionInfo.runtimeProcess?.let { if (it) "process" else "in-process" }
-            ?: findLogValue("Runtime mode:")
-            ?: if (processRuntimeEnabled) "process" else "in-process"
+        val effectiveLimit = runtimeReportedLimit ?: PatcherJvm.heapLimitMb(context)
+        val runtimeMode = findLogValue("Runtime mode:")
+            ?: patcherSessionInfo.runtimeName
+            ?: patcherSessionInfo.runtimeProcess?.let { if (it) "bound ART service" else "in-app" }
+            ?: "bound service"
         val memoryOverride = patcherSessionInfo.memoryOverride
             ?: findLogValue("Memory override:")
-            ?: if (processRuntimeEnabled) "enabled" else "disabled"
+            ?: "disabled"
         val aapt2 = patcherSessionInfo.aapt2 ?: findLogValue("AAPT2:")
         val aapt2Fallback = patcherSessionInfo.aapt2Fallback
             ?: findLogValue("AAPT2 fallback:")
@@ -5702,43 +5679,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
     private fun handleWorkerFailure(workInfo: WorkInfo) {
         if (!handledFailureIds.add(workInfo.id)) return
         progressState.reconcileFailureState(workInfo.outputData.getString(PatcherWorker.PROCESS_FAILURE_MESSAGE_KEY))
-        val exitCode = workInfo.outputData.getInt(PatcherWorker.PROCESS_EXIT_CODE_KEY, Int.MIN_VALUE)
-        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE ||
-            exitCode == Revanced22ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE ||
-            exitCode == Revanced22ProcessRuntime.SEGMENTATION_FAULT_EXIT_CODE) {
-            forceKeepLocalInput = true
-        }
-
-        // Code adapted from Morphe, see third-party/NOTICE for more information
-        // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/viewmodel/PatcherViewModel.kt
-        if (exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE) {
-            viewModelScope.launch {
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@launch
-                val previousFromWorker = workInfo.outputData.getInt(
-                    PatcherWorker.PROCESS_PREVIOUS_LIMIT_KEY,
-                    -1
-                )
-                val storedLimit = if (previousFromWorker > 0) {
-                    previousFromWorker
-                } else {
-                    prefs.processMemoryLimit.get()
-                }
-                val previousLimit =
-                    MemoryLimitConfig.clampConfiguredMemoryLimitMb(storedLimit)
-                val newLimit = (
-                    previousLimit - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP
-                ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_MINIMUM)
-                val adjusted = newLimit < previousLimit
-                if (newLimit != storedLimit) {
-                    prefs.processMemoryLimit.update(newLimit)
-                }
-                memoryAdjustmentDialog = MemoryAdjustmentDialogState(
-                    previousLimit = previousLimit,
-                    newLimit = if (adjusted) newLimit else previousLimit,
-                    adjusted = adjusted
-                )
-            }
-        }
+        forceKeepLocalInput = true
 
         // Missing patch issues are handled during preflight validation.
     }

@@ -1,6 +1,6 @@
 package app.urv.manager.patcher.morphe
 
-import android.os.Build
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.morphe.patcher.Patcher
 import app.morphe.patcher.PatcherConfig
 import app.morphe.patcher.PatcherResult
@@ -67,8 +67,6 @@ class MorpheSession(
         PatcherConfig(
             apkFile = input,
             temporaryFilesPath = tempDir,
-            frameworkFileDirectory = frameworkDirFile.absolutePath,
-            aaptBinaryPath = resolvedAaptPath,
             useBytecodeMode = bytecodeMode,
             fileWorkspacePath = fileWorkspace,
         )
@@ -324,7 +322,7 @@ class MorpheSession(
             }
         }
 
-        logger.warn("No bundled Android framework resource was found for SDK ${Build.VERSION.SDK_INT} or lower")
+        logger.warn("No bundled Android framework resource was found for SDK ${RuntimeDevice.sdk} or lower")
         return false
     }
 
@@ -333,7 +331,7 @@ class MorpheSession(
             javaClass.classLoader?.getResource("prebuilt/android-framework.jar") != null
 
     private fun bundledFrameworkSdkCandidates(): IntProgression {
-        val maxSdk = Build.VERSION.SDK_INT.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
+        val maxSdk = RuntimeDevice.sdk.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
         return maxSdk downTo MIN_BUNDLED_FRAMEWORK_SDK
     }
 

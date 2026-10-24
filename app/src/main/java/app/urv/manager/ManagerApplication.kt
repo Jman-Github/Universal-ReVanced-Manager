@@ -78,6 +78,11 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.io.File
 
 class ManagerApplication : Application() {
+    private val isPatcherProcess by lazy {
+        val processName = if (Build.VERSION.SDK_INT >= 28) Application.getProcessName()
+            else File("/proc/self/cmdline").readText().substringBefore('\u0000')
+        processName.substringAfterLast(':', "").startsWith("patcher")
+    }
 
     private val scope = MainScope()
     private var rootExternalInstallRecoveryJob: Job? = null
@@ -100,6 +105,10 @@ class ManagerApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Code adapted from Morphe, see third-party/NOTICE for more information.
+        // https://github.com/MorpheApp/morphe-manager/pull/1202
+        // A bound ART service must not start workers, open databases or initialize the UI.
+        if (isPatcherProcess) return
 
         startKoin {
             androidContext(this@ManagerApplication)
@@ -347,6 +356,8 @@ class ManagerApplication : Application() {
     override fun attachBaseContext(base: Context?) {
         val storageBase = base?.let { app.urv.manager.util.BuildProfileContext.wrap(it) }
         super.attachBaseContext(storageBase)
+        // The ART service must not open the main process's single-process DataStore.
+        if (isPatcherProcess) return
 
         // Apply stored app language as early as possible using DataStore, but never crash startup.
         val storedLang = runCatching {

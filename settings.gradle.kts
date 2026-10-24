@@ -27,6 +27,14 @@ dependencyResolutionManagement {
     repositories {
         mavenCentral()
         google()
+        ivy {
+            // Standalone D8 builds are published as versioned JARs in the official R8 bucket.
+            name = "R8 releases"
+            url = uri("https://storage.googleapis.com/r8-releases/raw")
+            patternLayout { artifact("[revision]/[artifact].[ext]") }
+            metadataSources { artifact() }
+            content { includeModule("com.android.tools", "r8") }
+        }
         maven {
             // From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
             url = uri("https://maven.pkg.github.com/brosssh/registry")
@@ -115,7 +123,9 @@ fun includeIfAvailable(path: String) {
     if (moduleExists(path)) include(path)
 }
 
-include(":app", ":api")
+include(":app", ":api", ":urv-patcher-core", ":jvm-host", ":revanced21-patcher-core", ":revanced22-patcher-core")
 includeIfAvailable(":morphe-runtime")
 includeIfAvailable(":revanced.v21-runtime-plugin")
+includeIfAvailable(":reseam-runtime-plugin")
 
+include(":revanced-legacy-patcher-core")

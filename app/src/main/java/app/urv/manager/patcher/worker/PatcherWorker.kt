@@ -2,6 +2,7 @@ package app.urv.manager.patcher.worker
 
 import app.urv.manager.patcher.runtime.usage.PatcherResourceMonitor
 
+import app.urv.manager.patcher.runtime.RevancedJvmRuntime
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.Notification
@@ -51,19 +52,13 @@ import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.allows
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
-import app.urv.manager.patcher.split.SplitMergeProcessRuntime
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
+import app.urv.manager.patcher.split.SplitMergeRuntime
 import app.urv.manager.patcher.morphe.MorpheBridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced21BridgeFailureException
 import app.urv.manager.patcher.revanced.Revanced22BridgeFailureException
-import app.urv.manager.patcher.runtime.morphe.MorpheBridgeRuntime
-import app.urv.manager.patcher.runtime.morphe.MorpheProcessRuntime
+import app.urv.manager.patcher.runtime.morphe.MorpheJvmRuntime
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
-import app.urv.manager.patcher.runtime.Revanced21BridgeRuntime
-import app.urv.manager.patcher.runtime.Revanced21ProcessRuntime
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
-import app.urv.manager.patcher.runtime.Revanced22BridgeRuntime
-import app.urv.manager.patcher.runtime.Revanced22ProcessRuntime
 import app.urv.manager.patcher.runCancellableBlockingIo
 import app.urv.manager.patcher.runStep
 import app.urv.manager.patcher.toRemoteError
@@ -129,7 +124,7 @@ class PatcherWorker(
     private val patchBundleRepository: PatchBundleRepository by inject()
     private var activeRuntime: app.urv.manager.patcher.runtime.Runtime? = null
     private var activeMorpheRuntime: app.urv.manager.patcher.runtime.morphe.MorpheRuntime? = null
-    private var activeSplitMergeRuntime: SplitMergeProcessRuntime? = null
+    private var activeSplitMergeRuntime: SplitMergeRuntime? = null
     @Volatile
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
@@ -175,7 +170,10 @@ class PatcherWorker(
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val morpheProcessingClassesPattern =
-        Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+        Regex(
+            "Processing\\s+(\\d+)\\s+classes(?:\\s+in\\s+parallel|\\s+\\(single threaded mode\\))",
+            RegexOption.IGNORE_CASE
+        )
     private val morpheWroteDexFilesPattern =
         Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
     private val morpheStrippedDexPattern =
@@ -1702,21 +1700,11 @@ class PatcherWorker(
             }
             val stripNativeLibs = prefs.stripUnusedNativeLibs.get()
             val skipUnneededSplits = prefs.skipUnneededSplitApks.get()
-            val configuredProcessMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
-                applicationContext,
-                prefs.processMemoryLimit.get()
-            )
-            requestedPatcherMemoryLimitMb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                configuredProcessMemoryLimit.toLong()
-            } else {
-                null
-            }
+            requestedPatcherMemoryLimitMb = null
             // Code adapted from Morphe, see third-party/NOTICE for more information.
             // https://github.com/MorpheApp/morphe-manager/pull/1088
             if (!args.skipApkSigning) keystoreManager.preloadSigner()
             val selectedCount = totalPatchCount
-            val useProcessRuntime = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-            val effectiveLimit = configuredProcessMemoryLimit
             val manualSplitSelectionRequested = inputIsSplitArchive && args.splitSelection != null
             val inputSplitCount = if (inputIsSplitArchive) {
                 try {
@@ -1748,12 +1736,10 @@ class PatcherWorker(
                     "nativeLibsStripped=$nativeLibsStripped"
             )
             workerLogger.info(
-                "Patcher runtime: bundle=$bundleType memoryLimit=${effectiveLimit}MB"
+                "Patcher runtime: bundle=$bundleType; automatic memory budget"
             )
             patcherEngine?.let { workerLogger.info("Patcher engine: $it") }
             morpheBytecodeMode?.let { workerLogger.info("Morphe bytecode mode: $it") }
-            workerLogger.info("Runtime mode: ${if (useProcessRuntime) "process" else "in-process"}")
-            workerLogger.info("Memory override: ${if (useProcessRuntime) "enabled" else "disabled"}")
             workerLogger.info("Strip native libs: ${if (nativeLibsStripped) "on" else "off"}")
             workerLogger.info("Skip unused splits: ${if (skipUnusedSplitsForRun) "on" else "off"}")
 
@@ -1765,7 +1751,7 @@ class PatcherWorker(
                     deleteRecursively()
                     mkdirs()
                 }
-                val mergeRuntime = SplitMergeProcessRuntime(applicationContext)
+                val mergeRuntime = SplitMergeRuntime(applicationContext)
                 activeSplitMergeRuntime = mergeRuntime
                 eventDispatcher(
                     ProgressEvent.Started(
@@ -1780,7 +1766,7 @@ class PatcherWorker(
                         stripNativeLibs = selection.stripNativeLibs,
                         skipUnneededSplits = false,
                         includedModules = selection.includedModules,
-                        memoryLimitMb = configuredProcessMemoryLimit,
+
                         onProgress = { message ->
                             eventDispatcher(
                                 ProgressEvent.Progress(
@@ -1827,8 +1813,6 @@ class PatcherWorker(
                 )
             }
             suspend fun executeSelectedRuntime(
-                processMode: Boolean,
-                memoryLimitMb: Int,
                 attemptLogger: Logger
             ) {
                 when (bundleType) {
@@ -1836,11 +1820,9 @@ class PatcherWorker(
                     check(MorpheRuntimeAssets.isAvailable(applicationContext)) {
                         "Morphe runtime is not included in this build."
                     }
-                    val runtime = if (processMode) {
-                        MorpheProcessRuntime(applicationContext, memoryLimitMb)
-                    } else {
-                        MorpheBridgeRuntime(applicationContext)
-                    }
+                    // Code adapted from Morphe, see third-party/NOTICE for more information.
+                    // https://github.com/MorpheApp/morphe-manager/pull/1202
+                    val runtime = MorpheJvmRuntime(applicationContext)
                     activeMorpheRuntime = runtime
                     runtime.execute(
                         runtimeInputFile.absolutePath,
@@ -1862,26 +1844,7 @@ class PatcherWorker(
                             "ReVanced v21 runtime plugin is not installed or trusted."
                         }
                     }
-                    val runtime: app.urv.manager.patcher.runtime.Runtime =
-                        if (useRevancedPatcher22) {
-                            if (processMode) {
-                                Revanced22ProcessRuntime(
-                                    applicationContext,
-                                    memoryLimitMb
-                                )
-                            } else {
-                                Revanced22BridgeRuntime(applicationContext)
-                            }
-                        } else {
-                            if (processMode) {
-                                Revanced21ProcessRuntime(
-                                    applicationContext,
-                                    memoryLimitMb
-                                )
-                            } else {
-                                Revanced21BridgeRuntime(applicationContext)
-                            }
-                        }
+                    val runtime = RevancedJvmRuntime(applicationContext, useRevancedPatcher22)
                     activeRuntime = runtime
                     runtime.execute(
                         runtimeInputFile.absolutePath,
@@ -1902,47 +1865,7 @@ class PatcherWorker(
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
-            var attemptMemoryLimit = effectiveLimit
-            var retryingProcessRuntime = false
-            while (true) {
-                val attemptLogger = if (retryingProcessRuntime) {
-                    object : Logger() {
-                        override fun log(level: LogLevel, message: String) {
-                            if (isRepeatableSplitPreparationLog(message)) {
-                                val key = "${level.name}\u0000$message"
-                                if (!reportedSplitPreparationLogs.add(key)) return
-                            }
-                            workerLogger.log(level, message)
-                        }
-                    }
-                } else {
-                    workerLogger
-                }
-                try {
-                    executeSelectedRuntime(
-                        useProcessRuntime,
-                        attemptMemoryLimit,
-                        attemptLogger
-                    )
-                    break
-                } catch (error: Exception) {
-                    if (!useProcessRuntime || !isProcessMemoryFailure(error)) {
-                        throw error
-                    }
-                    if (attemptMemoryLimit <=
-                        MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM
-                    ) {
-                        throw error
-                    }
-                    attemptMemoryLimit = (
-                        attemptMemoryLimit - MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_STEP
-                    ).coerceAtLeast(MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_RETRY_MINIMUM)
-                    workerLogger.info(
-                        "Patcher runtime: bundle=$bundleType memoryLimit=${attemptMemoryLimit}MB"
-                    )
-                    retryingProcessRuntime = true
-                }
-            }
+            executeSelectedRuntime(workerLogger)
 
             if (args.skipApkSigning) {
                 workerLogger.warn("APK signing skipped; saving unsigned output")
@@ -2003,59 +1926,14 @@ class PatcherWorker(
         } catch (e: CancellationException) {
             Log.i(tag, "Patching cancelled".logFmt())
             throw e
-        } catch (e: SplitMergeProcessRuntime.ProcessExitException) {
-            Log.e(
-                tag,
-                "Split merge process exited with code ${e.exitCode}".logFmt(),
-                e
-            )
-            val message = e.message ?: applicationContext.getString(
-                R.string.patcher_process_exit_message,
-                e.exitCode
-            )
-            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
+        } catch (e: app.urv.manager.patcher.runtime.BoundRuntimeFailureException) {
+            Log.e(tag, "An exception occurred in the patcher runtime".logFmt(), e)
+            // Keep the engine's trace identical to its earlier Failed event, so the progress
+            // tracker recognizes the terminal wrapper and preserves the actual failed stage.
+            val error = e.toRemoteError()
+            eventDispatcher(ProgressEvent.Failed(null, error))
             Result.failure(
-                workDataOf(
-                    PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to prefs.processMemoryLimit.get(),
-                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
-                )
-            )
-        } catch (e: MorpheProcessRuntime.ProcessExitException) {
-            Log.e(
-                tag,
-                "Morphe patcher process exited with code ${e.exitCode}".logFmt(),
-                e
-            )
-            val message = applicationContext.getString(
-                R.string.patcher_process_exit_message,
-                e.exitCode
-            )
-            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            Result.failure(
-                workDataOf(
-                    PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to prefs.processMemoryLimit.get(),
-                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
-                )
-            )
-        } catch (e: MorpheProcessRuntime.RemoteFailureException) {
-            Log.e(
-                tag,
-                "An exception occurred in the Morphe remote process while patching. ${e.originalStackTrace}".logFmt()
-            )
-            eventDispatcher(
-                ProgressEvent.Failed(
-                    null,
-                    RemoteError(
-                        type = e::class.java.name,
-                        message = e.message,
-                        stackTrace = e.originalStackTrace
-                    )
-                )
-            )
-            Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
+                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(error.stackTrace))
             )
         } catch (e: MorpheBridgeFailureException) {
             Log.e(
@@ -2075,84 +1953,10 @@ class PatcherWorker(
             Result.failure(
                 workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
             )
-        } catch (e: Revanced22ProcessRuntime.ProcessExitException) {
-            Log.e(
-                tag,
-                "ReVanced v22 patcher process exited with code ${e.exitCode}".logFmt(),
-                e
-            )
-            val message = applicationContext.getString(
-                R.string.patcher_process_exit_message,
-                e.exitCode
-            )
-            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-            Result.failure(
-                workDataOf(
-                    PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to prefs.processMemoryLimit.get(),
-                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
-                )
-            )
-        } catch (e: Revanced22ProcessRuntime.RemoteFailureException) {
-            Log.e(
-                tag,
-                "An exception occurred in the ReVanced v22 remote process while patching. ${e.originalStackTrace}".logFmt()
-            )
-            eventDispatcher(
-                ProgressEvent.Failed(
-                    null,
-                    RemoteError(
-                        type = e::class.java.name,
-                        message = e.message,
-                        stackTrace = e.originalStackTrace
-                    )
-                )
-            )
-            Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
-            )
         } catch (e: Revanced22BridgeFailureException) {
             Log.e(
                 tag,
                 "An exception occurred in the ReVanced v22 bridge runtime while patching. ${e.originalStackTrace}".logFmt()
-            )
-            eventDispatcher(
-                ProgressEvent.Failed(
-                    null,
-                    RemoteError(
-                        type = e::class.java.name,
-                        message = e.message,
-                        stackTrace = e.originalStackTrace
-                    )
-                )
-            )
-            Result.failure(
-                workDataOf(PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(e.originalStackTrace))
-            )
-        } catch (e: Revanced21ProcessRuntime.ProcessExitException) {
-            Log.e(
-                tag,
-                "ReVanced v21 patcher process exited with code ${e.exitCode}".logFmt(),
-                e
-            )
-            val message = applicationContext.getString(
-                R.string.patcher_process_exit_message,
-                e.exitCode
-            )
-            eventDispatcher(ProgressEvent.Failed(null, Exception(message).toRemoteError()))
-
-            Result.failure(
-                workDataOf(
-                    PROCESS_EXIT_CODE_KEY to e.exitCode,
-                    PROCESS_PREVIOUS_LIMIT_KEY to prefs.processMemoryLimit.get(),
-
-                    PROCESS_FAILURE_MESSAGE_KEY to trimForWorkData(message)
-                )
-            )
-        } catch (e: Revanced21ProcessRuntime.RemoteFailureException) {
-            Log.e(
-                tag,
-                "An exception occurred in the ReVanced v21 remote process while patching. ${e.originalStackTrace}".logFmt()
             )
             eventDispatcher(
                 ProgressEvent.Failed(
@@ -2238,27 +2042,6 @@ class PatcherWorker(
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
-    private fun isProcessMemoryFailure(error: Exception): Boolean = when (error) {
-        is MorpheProcessRuntime.ProcessExitException ->
-            error.exitCode == MorpheProcessRuntime.OOM_EXIT_CODE ||
-                error.exitCode == MorpheProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE ||
-                error.exitCode == MorpheProcessRuntime.SEGMENTATION_FAULT_EXIT_CODE
-        is Revanced21ProcessRuntime.ProcessExitException ->
-            error.exitCode == Revanced21ProcessRuntime.OOM_EXIT_CODE ||
-                error.exitCode == Revanced21ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE ||
-                error.exitCode == Revanced21ProcessRuntime.SEGMENTATION_FAULT_EXIT_CODE
-        is Revanced22ProcessRuntime.ProcessExitException ->
-            error.exitCode == Revanced22ProcessRuntime.OOM_EXIT_CODE ||
-                error.exitCode == Revanced22ProcessRuntime.LOW_MEMORY_KILL_EXIT_CODE ||
-                error.exitCode == Revanced22ProcessRuntime.SEGMENTATION_FAULT_EXIT_CODE
-        is MorpheProcessRuntime.RemoteFailureException ->
-            error.originalStackTrace.contains("OutOfMemoryError", ignoreCase = true)
-        is Revanced21ProcessRuntime.RemoteFailureException ->
-            error.originalStackTrace.contains("OutOfMemoryError", ignoreCase = true)
-        is Revanced22ProcessRuntime.RemoteFailureException ->
-            error.originalStackTrace.contains("OutOfMemoryError", ignoreCase = true)
-        else -> false
-    }
 
     private fun publishPatcherMemoryUsage(
         memoryUsage: PatcherMemoryUsage,
@@ -2307,7 +2090,6 @@ class PatcherWorker(
         internal const val PATCHING_NOTIFICATION_CHANNEL_ID = "revanced-patcher-patching"
         internal const val NOTIFICATION_ID = 1
         const val PROCESS_EXIT_CODE_KEY = "process_exit_code"
-        const val PROCESS_PREVIOUS_LIMIT_KEY = "process_previous_memory_limit"
 
         const val PROCESS_FAILURE_MESSAGE_KEY = "process_failure_message"
         const val PATCHING_ACTIVE_KEY = "patching_active"

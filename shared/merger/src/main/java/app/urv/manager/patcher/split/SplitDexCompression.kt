@@ -6,13 +6,16 @@ import com.reandroid.arsc.value.ValueType
 import java.util.zip.ZipEntry
 
 object SplitDexCompression {
+    // android.R.attr.useEmbeddedDex: inlined here so this policy also runs outside Android.
+    private const val USE_EMBEDDED_DEX_ATTR = 0x101059e
+
     @JvmStatic
     fun apply(module: ApkModule) {
         val application = module.androidManifest?.applicationElement ?: return
         // Direct DEX loading requires uncompressed entries:
         // https://developer.android.com/privacy-and-security/security-dex
         val embeddedDex = application.getAttributes {
-            it.nameId == android.R.attr.useEmbeddedDex || it.name == "useEmbeddedDex"
+            it.nameId == USE_EMBEDDED_DEX_ATTR || it.name == "useEmbeddedDex"
         }.asSequence().any {
             // An unresolved reference could enable direct loading; keep its DEX stored.
             it.valueType != ValueType.BOOLEAN || it.valueAsBoolean

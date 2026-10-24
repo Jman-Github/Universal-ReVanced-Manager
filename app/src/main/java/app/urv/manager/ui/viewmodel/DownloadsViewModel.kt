@@ -37,10 +37,9 @@ import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
 import app.urv.manager.patcher.split.SplitApkPreparer
-import app.urv.manager.patcher.split.SplitMergeProcessRuntime
+import app.urv.manager.patcher.split.SplitMergeRuntime
 import app.urv.manager.domain.repository.DownloaderPluginRepository
 import app.urv.manager.network.downloader.ApkDownloadHelperContract
 import app.urv.manager.network.downloader.DownloaderPluginSourceState
@@ -127,7 +126,7 @@ class DownloadsViewModel(
     var installingApp by mutableStateOf<DownloadedApp?>(null)
         private set
     private val appContext = pm.application
-    private val splitMergeRuntime = SplitMergeProcessRuntime(appContext)
+    private val splitMergeRuntime = SplitMergeRuntime(appContext)
     private val installWorkspaceRoot =
         appContext.managerStorageContext.cacheDir.resolve("download-install").apply { mkdirs() }
     private val displayWorkspaceRoot =
@@ -283,10 +282,7 @@ class DownloadsViewModel(
                     workspace = installWorkspace,
                     stripNativeLibs = prefs.stripUnusedNativeLibs.getBlocking(),
                     skipUnneededSplits = prefs.skipUnneededSplitApks.getBlocking(),
-                    memoryLimitMb = MemoryLimitConfig.resolveMemoryLimitMb(
-                        appContext,
-                        prefs.processMemoryLimit.get()
-                    ),
+
                     onProgress = ::updateInstallProgress,
                     onSubSteps = {},
                     onLog = ::appendMergeLog

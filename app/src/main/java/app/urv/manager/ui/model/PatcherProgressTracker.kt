@@ -45,7 +45,10 @@ internal class PatcherProgressTracker(
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val morpheProcessingClassesPattern =
-        Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+        Regex(
+            "Processing\\s+(\\d+)\\s+classes(?:\\s+in\\s+parallel|\\s+\\(single threaded mode\\))",
+            RegexOption.IGNORE_CASE
+        )
     private val morpheWroteDexFilesPattern =
         Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
     private val morpheStrippedDexPattern =
@@ -650,8 +653,12 @@ internal class PatcherProgressTracker(
     private fun matchesWriteApkDexGroup(detail: StepDetail): Boolean =
         isDexCompileGroupTitle(detail.title)
 
+    private fun hasLaterWriteApkPhaseStarted(list: List<StepDetail>, phaseIndex: Int): Boolean =
+        list.drop(phaseIndex + 1).any { !it.skipped && it.state != State.WAITING }
+
     private fun activateWriteApkDexGroup(list: SnapshotStateList<StepDetail>) {
         val groupIndex = ensureWriteApkDexGroupIndex(list)
+        if (hasLaterWriteApkPhaseStarted(list, groupIndex)) return
         completeWriteApkApplyChanges(list)
         completeWriteApkPriorSteps(list, groupIndex)
 
@@ -698,12 +705,23 @@ internal class PatcherProgressTracker(
         list: SnapshotStateList<StepDetail>,
         normalizedTitle: String
     ) {
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        if (hasLaterWriteApkPhaseStarted(list, groupIndex)) {
+            // A delayed compile report belongs to the finished DEX phase, not the active output chip.
+            val group = list[groupIndex]
+            val children = group.children.toMutableList()
+            val index = children.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+            if (index == -1) {
+                children.add(StepDetail(title = normalizedTitle, state = State.COMPLETED))
+            }
+            list[groupIndex] = group.copy(children = children)
+            return
+        }
         if (isMorpheSelection() && isMorpheWriteApkDexChildTitle(normalizedTitle)) {
             updateMorpheWriteApkDexChildSubStep(list, normalizedTitle)
             return
         }
 
-        val groupIndex = ensureWriteApkDexGroupIndex(list)
         val group = list[groupIndex]
         val initialChildren = group.children
         val initialRunningChildIndex = initialChildren.indexOfFirst { !it.skipped && it.state == State.RUNNING }
@@ -841,6 +859,7 @@ internal class PatcherProgressTracker(
             list.add(insertIndex, StepDetail(title = "Compiling modified resources", state = State.WAITING))
             insertIndex
         }
+        if (hasLaterWriteApkPhaseStarted(list, resourceIndex)) return
         completeWriteApkPriorSteps(list, resourceIndex)
         completeWriteApkDexGroup(list)
 
@@ -862,6 +881,7 @@ internal class PatcherProgressTracker(
     ) {
         val existingIndex = list.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
         if (existingIndex == -1) return
+        if (hasLaterWriteApkPhaseStarted(list, existingIndex)) return
 
         completeWriteApkDexGroup(list)
         completeWriteApkPriorSteps(list, existingIndex)

@@ -1,8 +1,6 @@
 package app.urv.manager.patcher.split
 
-import android.content.res.Resources
-import android.os.Build
-import android.util.DisplayMetrics
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.util.NativeLibStripper
@@ -34,13 +32,13 @@ object SplitApkPreparer {
 
     private val KNOWN_ABIS = setOf("armeabi", "armeabi-v7a", "arm64-v8a", "x86", "x86_64")
     private val DENSITY_DPI_VALUES = linkedMapOf(
-        "ldpi" to DisplayMetrics.DENSITY_LOW,
-        "mdpi" to DisplayMetrics.DENSITY_MEDIUM,
-        "tvdpi" to DisplayMetrics.DENSITY_TV,
-        "hdpi" to DisplayMetrics.DENSITY_HIGH,
-        "xhdpi" to DisplayMetrics.DENSITY_XHIGH,
-        "xxhdpi" to DisplayMetrics.DENSITY_XXHIGH,
-        "xxxhdpi" to DisplayMetrics.DENSITY_XXXHIGH
+        "ldpi" to 120,
+        "mdpi" to 160,
+        "tvdpi" to 213,
+        "hdpi" to 240,
+        "xhdpi" to 320,
+        "xxhdpi" to 480,
+        "xxxhdpi" to 640
     )
     private val DENSITY_QUALIFIERS = DENSITY_DPI_VALUES.keys
 
@@ -557,7 +555,7 @@ object SplitApkPreparer {
     }
 
     private fun supportedAbiTokens(abiModules: List<String>): Set<String> =
-        selectPrimaryAbi(Build.SUPPORTED_ABIS.toList(), abiModules)
+        selectPrimaryAbi(RuntimeDevice.supportedAbis, abiModules)
             ?.let { primary ->
                 buildAbiTokens(primary)
                     .map { it.lowercase(Locale.ROOT) }
@@ -814,12 +812,7 @@ object SplitApkPreparer {
     }
 
     private fun deviceLocaleTokens(): Set<String> {
-        val locales = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            val list = Resources.getSystem().configuration.locales
-            (0 until list.size()).map { index -> list[index] }
-        } else {
-            listOf(Locale.getDefault())
-        }
+        val locales = RuntimeDevice.locales
 
         return locales.flatMap { locale ->
             buildLocaleTokens(locale)
@@ -851,21 +844,21 @@ object SplitApkPreparer {
     }
 
     private fun deviceDensityQualifier(): String? {
-        val density = Resources.getSystem().displayMetrics?.densityDpi ?: return null
+        val density = RuntimeDevice.densityDpi
         return when {
-            density <= DisplayMetrics.DENSITY_LOW -> "ldpi"
-            density <= DisplayMetrics.DENSITY_MEDIUM -> "mdpi"
-            density <= DisplayMetrics.DENSITY_TV -> "tvdpi"
-            density <= DisplayMetrics.DENSITY_HIGH -> "hdpi"
-            density <= DisplayMetrics.DENSITY_XHIGH -> "xhdpi"
-            density <= DisplayMetrics.DENSITY_XXHIGH -> "xxhdpi"
+            density <= 120 -> "ldpi"
+            density <= 160 -> "mdpi"
+            density <= 213 -> "tvdpi"
+            density <= 240 -> "hdpi"
+            density <= 320 -> "xhdpi"
+            density <= 480 -> "xxhdpi"
             else -> "xxxhdpi"
         }
     }
 
     private fun selectPreferredAbiTokens(entryNames: Collection<String>): Set<String> {
         val normalizedEntries = entryNames.map { it.lowercase(Locale.ROOT) }
-        Build.SUPPORTED_ABIS.forEach { abi ->
+        RuntimeDevice.supportedAbis.toTypedArray().forEach { abi ->
             val tokens = buildAbiTokens(abi)
                 .map { it.lowercase(Locale.ROOT) }
                 .toSet()

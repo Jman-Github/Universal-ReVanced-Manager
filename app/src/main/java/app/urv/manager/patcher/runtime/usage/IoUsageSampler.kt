@@ -5,7 +5,6 @@
 
 package app.urv.manager.patcher.runtime.usage
 
-import android.os.SystemClock
 import java.io.File
 
 // Code adapted from Morphe, see third-party/NOTICE for more information.
@@ -33,7 +32,7 @@ internal class IoUsageSampler {
         val counters = readCounters() ?: return null
         val (read, write) = counters
 
-        val uptimeMs = SystemClock.elapsedRealtime()
+        val uptimeMs = UsagePlatform.elapsedMillis()
         val elapsed = uptimeMs - previousUptimeMs
         val hadReading = previousRead >= 0L
         val readDelta = read - previousRead

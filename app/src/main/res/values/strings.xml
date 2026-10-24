@@ -2537,4 +2537,6 @@ Details: %2$s</string>
     <string name="catalog_requires_v21">Requires the ReVanced v21 runtime plugin to be used in URV.</string>
     <string name="catalog_requires_reseam">Requires the Reseam runtime plugin to be used in URV.</string>
     <string name="scroll_position">Scroll position</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>
