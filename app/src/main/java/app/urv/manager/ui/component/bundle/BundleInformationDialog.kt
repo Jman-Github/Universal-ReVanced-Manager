@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -116,6 +117,7 @@ fun BundleInformationDialog(
     var viewBundleChangelog by remember { mutableStateOf(false) }
     var viewBundleChangelogHistory by remember { mutableStateOf(false) }
     var showForceUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var showVersionDialog by rememberSaveable(src.uid) { mutableStateOf(false) }
     var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
     var changelogHistoryFetchedOnce by remember { mutableStateOf(false) }
     var changelogHistoryLoading by remember { mutableStateOf(false) }
@@ -175,6 +177,31 @@ fun BundleInformationDialog(
             (src as? JsonPatchBundle)?.setUseLatest(new)
         } ?: return@launch
         bundleRepo.update(updatedSource, showToast = true)
+    }
+
+    fun onVersionSelectionChange(enabled: Boolean) = composableScope.launch {
+        val updated = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.setVersionSelection(enabled)
+        } ?: return@launch
+        if (enabled && updated.selectedVersion == null) {
+            showVersionDialog = true
+        } else {
+            bundleRepo.update(updated, showToast = true)
+        }
+    }
+
+    if (showVersionDialog && src is JsonPatchBundle && src.useSpecificVersion) {
+        BundleVersionDialog(
+            source = src,
+            onDismiss = { showVersionDialog = false },
+            onSelect = { asset ->
+                showVersionDialog = false
+                composableScope.launch {
+                    val updated = with(bundleRepo) { src.setVersionSelection(true, asset) }
+                    bundleRepo.update(updated, showToast = true)
+                }
+            }
+        )
     }
 
     fun openReleasePage() = composableScope.launch {
@@ -491,12 +518,15 @@ fun BundleInformationDialog(
                         trailingContent = {
                             HapticSwitch(
                                 checked = repositoryBundle.usePrereleases,
+                                enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
                                 onCheckedChange = ::onRepositoryPrereleasesChange
                             )
                         },
-                        modifier = Modifier.clickable {
-                            onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
-                        }
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion || repositoryBundle.useLatest) 0.38f else 1f)
+                            .clickable(enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest) {
+                                onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
+                            }
                     )
 
                     BundleListItem(
@@ -505,12 +535,42 @@ fun BundleInformationDialog(
                         trailingContent = {
                             HapticSwitch(
                                 checked = repositoryBundle.useLatest,
+                                enabled = !repositoryBundle.useSpecificVersion,
                                 onCheckedChange = ::onRepositoryLatestChange
                             )
                         },
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion) 0.38f else 1f)
+                            .clickable(enabled = !repositoryBundle.useSpecificVersion) {
+                                onRepositoryLatestChange(!repositoryBundle.useLatest)
+                            }
+                    )
+
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_use_specific_version),
+                        supportingText = stringResource(R.string.bundle_use_specific_version_description),
+                        trailingContent = {
+                            HapticSwitch(
+                                checked = repositoryBundle.useSpecificVersion,
+                                onCheckedChange = ::onVersionSelectionChange
+                            )
+                        },
                         modifier = Modifier.clickable {
-                            onRepositoryLatestChange(!repositoryBundle.useLatest)
+                            onVersionSelectionChange(!repositoryBundle.useSpecificVersion)
                         }
+                    )
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_select_version),
+                        supportingText = repositoryBundle.selectedVersion?.version
+                            ?: stringResource(R.string.field_not_set),
+                        trailingContent = {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowRight, contentDescription = null)
+                        },
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion) 1f else 0.38f)
+                            .clickable(enabled = repositoryBundle.useSpecificVersion) {
+                                showVersionDialog = true
+                            }
                     )
                 }
 

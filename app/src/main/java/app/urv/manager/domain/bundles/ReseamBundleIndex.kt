@@ -15,6 +15,17 @@ import kotlinx.serialization.json.contentOrNull
 internal object ReseamBundleIndex {
     data class Release(val asset: ReVancedAsset, val publicKey: String?)
 
+    fun parseAll(json: JsonObject, endpoint: String): List<Release>? {
+        if (json["bundle"] !is JsonObject) return null
+        val releases = json["releases"] as? JsonArray
+            ?: return listOfNotNull(parse(json, endpoint, null))
+        require(releases.isNotEmpty()) { "Reseam index has no releases." }
+        return releases.map { release ->
+            require(release is JsonObject) { "Invalid Reseam release." }
+            requireNotNull(parse(JsonObject(json + ("releases" to JsonArray(listOf(release)))), endpoint, null))
+        }
+    }
+
     fun parse(json: JsonObject, endpoint: String, prerelease: Boolean?): Release? {
         val publisher = json["bundle"] as? JsonObject ?: return null
         val releases = (json["releases"] as? JsonArray)?.mapNotNull { it as? JsonObject }

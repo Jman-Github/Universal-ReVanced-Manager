@@ -2546,4 +2546,10 @@ Details: %2$s</string>
     <string name="scroll_position">Scroll position</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
+    <string name="bundle_setting_change_queued">This setting will change after the ongoing bundle update finishes.</string>
+    <string name="bundle_use_specific_version">Use specific version</string>
+    <string name="bundle_use_specific_version_description">Keep this bundle on a selected version. Previous release preferences are restored when disabled.</string>
+    <string name="bundle_select_version">Select version</string>
+    <string name="bundle_versions_load_error">Could not load bundle versions.</string>
+    <string name="bundle_versions_empty">No bundle versions are available.</string>
 </resources>

@@ -27,6 +27,23 @@ class ReseamBundleIndexTest {
         assertNull(parse(json)!!.publicKey)
     }
 
+    @Test fun versionPickerIncludesBothChannelsAndResolvesEachUrl() {
+        val json = Json.parseToJsonElement("""{"bundle":{"name":"Test"},"releases":[
+            {"version":"2-dev","download_url":"dev.reseam","prerelease":true},
+            {"version":"1","download_url":"release.reseam"}]}""").jsonObject
+        val releases = ReseamBundleIndex.parseAll(json, endpoint)!!
+        assertEquals(listOf("2-dev", "1"), releases.map { it.asset.version })
+        assertEquals("https://example.com/patches/release.reseam", releases[1].asset.downloadUrl)
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun versionPickerRejectsInvalidUrlsInOlderReleases() {
+        val json = Json.parseToJsonElement("""{"bundle":{},"releases":[
+            {"version":"2","download_url":"new.reseam"},
+            {"version":"1","download_url":"file:///tmp/unsafe.reseam"}]}""").jsonObject
+        ReseamBundleIndex.parseAll(json, endpoint)
+    }
+
     @Test fun existingRevancedManifestIsNotIntercepted() {
         assertNull(parse("""{"version":"1","download_url":"https://example.com/test.rvp"}"""))
     }

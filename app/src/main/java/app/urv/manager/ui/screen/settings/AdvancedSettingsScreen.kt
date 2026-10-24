@@ -2102,6 +2102,15 @@ private fun LanguageDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val sortedOptions = remember(options, configuration) {
+        app.urv.manager.util.sortLanguageOptions(
+            options, configuration.locales[0],
+            code = { it.code },
+            label = { context.getString(it.labelRes) }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -2114,14 +2123,14 @@ private fun LanguageDialog(
         },
         text = {
             val scrollState = rememberScrollState()
-            Column(
+            ColumnWithScrollbar(
+                state = scrollState,
                 modifier = Modifier
                     .heightIn(max = 360.dp)
-                    .verticalScroll(scrollState)
                     .padding(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                options.forEach { option ->
+                sortedOptions.forEach { option ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()

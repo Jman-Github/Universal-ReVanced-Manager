@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import app.universal.revanced.manager.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
@@ -28,7 +29,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun LazyListScrollbar(state: LazyListState, modifier: Modifier, prominent: Boolean) {
+internal fun LazyListScrollbar(
+    state: LazyListState,
+    modifier: Modifier,
+    prominent: Boolean,
+    thumbLength: Dp? = null
+) {
     val measurements = remember(state) { LazyScrollbarMeasurements() }
     val geometry by remember(state) {
         derivedStateOf {
@@ -69,6 +75,7 @@ internal fun LazyListScrollbar(state: LazyListState, modifier: Modifier, promine
         if (geometry.scrollable && (visible || prominent)) if (prominent) 0.6f else 0.35f else 0f,
         label = "scrollbar_visibility")
     val minimum = with(LocalDensity.current) { 24.dp.toPx() }
+    val fixedThumb = with(LocalDensity.current) { thumbLength?.toPx() }
     val thickness = with(LocalDensity.current) { (if (prominent) 6.dp else 4.dp).toPx() }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val label = stringResource(R.string.scroll_position)
@@ -82,13 +89,13 @@ internal fun LazyListScrollbar(state: LazyListState, modifier: Modifier, promine
                 setProgress { fraction -> targets.trySend(geometry.target(fraction)).isSuccess }
             }
         }
-        .pointerInput(state, minimum) {
+        .pointerInput(state, minimum, fixedThumb) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 val initial = currentGeometry
                 if (!initial.scrollable) return@awaitEachGesture
                 val track = size.height.toFloat()
-                val thumb = initial.thumbSize(track, minimum)
+                val thumb = initial.thumbSize(track, minimum, fixedThumb)
                 val travel = track - thumb
                 if (travel <= 0f) return@awaitEachGesture
                 val top = initial.progress * travel
@@ -114,7 +121,7 @@ internal fun LazyListScrollbar(state: LazyListState, modifier: Modifier, promine
         }) {
         val model = dragGeometry ?: geometry
         if (!model.scrollable) return@Canvas
-        val thumb = model.thumbSize(size.height, minimum)
+        val thumb = model.thumbSize(size.height, minimum, fixedThumb)
         val progress = if (dragging) dragProgress else model.progress
         drawRoundRect(
             color = color,

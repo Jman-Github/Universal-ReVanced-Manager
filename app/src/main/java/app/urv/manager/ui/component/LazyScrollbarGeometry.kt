@@ -36,8 +36,8 @@ internal data class LazyScrollbarGeometry(
         return if (reverse) 1f - fraction else fraction
     }
 
-    fun thumbSize(track: Float, minimum: Float): Float =
-        if (contentSize <= 0) track else (track * viewportSize / contentSize).toFloat()
+    fun thumbSize(track: Float, minimum: Float, fixedLength: Float? = null): Float =
+        (fixedLength ?: if (contentSize <= 0) track else (track * viewportSize / contentSize).toFloat())
             .coerceIn(minimum.coerceAtMost(track), track)
 
     fun target(visualProgress: Float): Pair<Int, Int> {

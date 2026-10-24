@@ -1494,6 +1494,8 @@ class PatchBundleRepository(
                     enabled,
                     repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.PRERELEASE,
                     repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.LATEST,
+                    repositorySettings.useSpecificVersion,
+                    repositorySettings.selectedVersion,
                 ).let { jsonBundle ->
                     val external = ExternalBundleMetadataStore.read(dir)
                     if (external == null) {
@@ -1995,7 +1997,7 @@ class PatchBundleRepository(
         val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return true
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification =
-            downloadProgressNotifier.begin(progressLabelFor(updatedSource))
+            downloadProgressNotifier.begin(bundleImportLabel(updatedSource.endpoint, progressLabelFor(updatedSource)))
         val updated = try {
             updateNow(
                 force = true,
@@ -2254,6 +2256,8 @@ class PatchBundleRepository(
         showInAppProgress: Boolean = false,
         importLabel: String? = null,
         onProgress: PatchBundleDownloadProgress? = null,
+        useSpecificVersion: Boolean = false,
+        selectedVersion: ReVancedAsset? = null,
     ) {
         val normalizedUrl = try {
             normalizeRemoteBundleUrl(url)
@@ -2272,12 +2276,14 @@ class PatchBundleRepository(
             createdAt = createdAt,
             updatedAt = updatedAt
         )
-        if (usePrereleases || useLatest) {
+        if (usePrereleases || useLatest || useSpecificVersion || selectedVersion != null) {
             RepositoryBundleSettingsStore.write(
                 directoryOf(entity.uid),
                 RepositoryBundleSettings(
                     usePrereleases = usePrereleases && !useLatest,
                     useLatest = useLatest,
+                    useSpecificVersion = useSpecificVersion,
+                    selectedVersion = selectedVersion,
                 )
             )
         }
@@ -2643,10 +2649,10 @@ class PatchBundleRepository(
         channel: RepositoryBundleReleaseChannel
     ): JsonPatchBundle {
         var updatedSource = this
-        withRemoteUpdateReservation {
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
             dispatchAction("Set repository bundle release channel ($name, $channel)") { state ->
                 val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
-                if (!source.supportsPrereleases) {
+                if (!source.supportsPrereleases || source.useSpecificVersion) {
                     updatedSource = source
                     return@dispatchAction state
                 }
@@ -2656,7 +2662,10 @@ class PatchBundleRepository(
                 }
                 RepositoryBundleSettingsStore.write(
                     directoryOf(uid),
-                    RepositoryBundleSettings.forReleaseChannel(channel)
+                    RepositoryBundleSettingsStore.read(directoryOf(uid)).copy(
+                        usePrereleases = channel == RepositoryBundleReleaseChannel.PRERELEASE,
+                        useLatest = channel == RepositoryBundleReleaseChannel.LATEST
+                    )
                 )
                 updatedSource = source.withReleaseChannel(channel)
                 manualUpdateInfoFlow.update { current -> current - uid }
@@ -2664,6 +2673,47 @@ class PatchBundleRepository(
             }
         }
         return updatedSource
+    }
+
+    suspend fun JsonPatchBundle.restoreRepositorySettings(
+        settings: RepositoryBundleSettings
+    ): JsonPatchBundle {
+        var restored = this
+        withRemoteUpdateReservation {
+            dispatchAction("Restore repository bundle settings ($uid)") { state ->
+                val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                restored = source
+                if (source.repositorySettings == settings) return@dispatchAction state
+                RepositoryBundleSettingsStore.write(directoryOf(uid), settings)
+                restored = source.withRepositorySettings(settings)
+                manualUpdateInfoFlow.update { it - uid }
+                state.copy(sources = state.sources.put(uid, restored))
+            }
+        }
+        return restored
+    }
+
+    suspend fun JsonPatchBundle.setVersionSelection(
+        enabled: Boolean,
+        asset: ReVancedAsset? = null,
+    ): JsonPatchBundle {
+        var updatedSource = this
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
+            dispatchAction("Set repository bundle version ($uid)") { state ->
+                val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                // Preserve channel preferences while the pin is active.
+                val settings = source.repositorySettings.withVersionSelection(enabled, asset)
+                RepositoryBundleSettingsStore.write(directoryOf(uid), settings)
+                updatedSource = source.withRepositorySettings(settings)
+                manualUpdateInfoFlow.update { it - uid }
+                state.copy(sources = state.sources.put(uid, updatedSource))
+            }
+        }
+        return updatedSource
+    }
+
+    private suspend fun notifyQueuedBundleSetting() = withContext(Dispatchers.Main.immediate) {
+        app.toast(app.getString(R.string.bundle_setting_change_queued))
     }
 
     suspend fun JsonPatchBundle.setUsePrereleases(value: Boolean): JsonPatchBundle =
@@ -2700,7 +2750,7 @@ class PatchBundleRepository(
                 if (
                     src is JsonPatchBundle &&
                     expectedSource is JsonPatchBundle &&
-                    src.releaseChannel != expectedSource.releaseChannel
+                    src.releaseSelectionKey != expectedSource.releaseSelectionKey
                 ) {
                     return@dispatchAction state
                 }
@@ -2781,12 +2831,15 @@ class PatchBundleRepository(
         error("Unreachable")
     }
 
-    private suspend fun <T> withRemoteUpdateReservation(block: suspend () -> T): T = coroutineScope {
+    private suspend fun <T> withRemoteUpdateReservation(
+        onQueued: suspend () -> Unit = {},
+        block: suspend () -> T
+    ): T = coroutineScope {
         val operation = async(start = CoroutineStart.LAZY) {
             // Store actions keep running after their caller is cancelled.
             withContext(NonCancellable) { block() }
         }
-        withRemoteUpdatesIdleLock {
+        withRemoteUpdatesIdleLock(onQueued) {
             updateJob = operation
         }
         try {
@@ -2798,7 +2851,11 @@ class PatchBundleRepository(
         }
     }
 
-    private suspend fun <T> withRemoteUpdatesIdleLock(block: suspend () -> T): T {
+    private suspend fun <T> withRemoteUpdatesIdleLock(
+        onQueued: suspend () -> Unit = {},
+        block: suspend () -> T
+    ): T {
+        var notified = false
         while (true) {
             updateJobMutex.lock()
             val activeJob: Job?
@@ -2820,6 +2877,10 @@ class PatchBundleRepository(
                 }
             }
             updateJobMutex.unlock()
+            if (!notified) {
+                notified = true
+                onQueued()
+            }
             if (activeJob != null) activeJob.join() else yield()
         }
     }
@@ -2930,7 +2991,7 @@ class PatchBundleRepository(
         if (
             bundle is JsonPatchBundle &&
             fetchedFrom is JsonPatchBundle &&
-            bundle.releaseChannel != fetchedFrom.releaseChannel
+            bundle.releaseSelectionKey != fetchedFrom.releaseSelectionKey
         ) {
             return@withRemoteUpdatesIdleLock null
         }
@@ -3090,7 +3151,7 @@ class PatchBundleRepository(
                     if (
                         bundle is JsonPatchBundle &&
                         fetchedFrom is JsonPatchBundle &&
-                        bundle.releaseChannel != fetchedFrom.releaseChannel
+                        bundle.releaseSelectionKey != fetchedFrom.releaseSelectionKey
                     ) {
                         return@forEach
                     }
@@ -3323,7 +3384,7 @@ class PatchBundleRepository(
                         }
                         if (showProgress && onPerBundleProgress == null) {
                             val notification = progressNotification
-                                ?: downloadProgressNotifier.begin(progressLabelFor(bundle)).also {
+                                ?: downloadProgressNotifier.begin(bundleImportLabel(bundle.endpoint, progressLabelFor(bundle))).also {
                                     progressNotification = it
                                 }
                             notification.update(bytesRead, bytesTotal)

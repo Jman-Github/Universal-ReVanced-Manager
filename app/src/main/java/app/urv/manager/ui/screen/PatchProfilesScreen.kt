@@ -94,6 +94,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.InterceptBackHandler
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
 import app.urv.manager.ui.component.LoadingIndicator
 import app.urv.manager.ui.component.Scrollbar
 import app.urv.manager.ui.component.TextInputDialog
@@ -517,6 +518,7 @@ fun PatchProfilesScreen(
     }
 
     LazyColumnWithScrollbar(
+        thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)

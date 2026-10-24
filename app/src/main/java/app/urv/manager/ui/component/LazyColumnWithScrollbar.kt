@@ -14,6 +14,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
+
+internal val DASHBOARD_SCROLLBAR_THUMB_LENGTH = 64.dp
 
 @Composable
 fun LazyColumnWithScrollbar(
@@ -26,6 +29,7 @@ fun LazyColumnWithScrollbar(
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     flingBehavior: FlingBehavior = ScrollableDefaults.flingBehavior(),
     userScrollEnabled: Boolean = true,
+    thumbLength: Dp? = null,
     content: LazyListScope.() -> Unit
 ) {
     Box(modifier) {
@@ -42,7 +46,8 @@ fun LazyColumnWithScrollbar(
         )
         Scrollbar(
             state,
-            Modifier.align(Alignment.CenterEnd)
+            Modifier.align(Alignment.CenterEnd),
+            thumbLength = thumbLength
         )
     }
 }

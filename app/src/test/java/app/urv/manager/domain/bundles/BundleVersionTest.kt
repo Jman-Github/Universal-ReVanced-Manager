@@ -45,6 +45,19 @@ class BundleVersionTest {
     }
 
     @Test
+    fun pinUsesTheExactReleaseTagRatherThanTheInternalManifest() {
+        assertTrue(isRemoteBundleVersionUpdate("v4.4.0", "v4.4.0-dev.2", "4.4.0", pinnedVersion = true))
+        assertTrue(isRemoteBundleVersionUpdate("4.4.0+new", "4.4.0+old", "4.4.0", pinnedVersion = true))
+        assertFalse(isRemoteBundleVersionUpdate("v4.4.0", "v4.4.0", "100.0.0", pinnedVersion = true))
+    }
+
+    @Test
+    fun pinDownloadsWhenTheInstalledReleaseTagIsUnknown() {
+        assertTrue(isRemoteBundleVersionUpdate("v4.4.0", null, "4.4.0", pinnedVersion = true))
+        assertFalse(isRemoteBundleVersionUpdate("", null, null, pinnedVersion = true))
+    }
+
+    @Test
     fun newInstallsAndNonNumericTagsRetainUpdateSupport() {
         assertTrue(isRemoteBundleVersionUpdate("4.3.0", null, null, true))
         assertTrue(isRemoteBundleVersionUpdate("new-tag", "old-tag", null, true))

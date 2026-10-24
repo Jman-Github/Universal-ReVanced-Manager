@@ -11,11 +11,18 @@ internal fun isRemoteBundleVersionUpdate(
     installedVersion: String?,
     manifestVersion: String?,
     preventDowngrade: Boolean = false,
+    pinnedVersion: Boolean = false,
 ): Boolean {
     fun normalize(raw: String?): String? = raw?.trim()
         ?.removePrefix("v")?.removePrefix("V")?.substringBefore('+')
         ?.takeIf(String::isNotBlank)
 
+    // A pin identifies an exact release tag. The manifest version may be shared
+    // by stable/dev releases, and build metadata can distinguish separate tags.
+    if (pinnedVersion) {
+        val selected = latestVersion.trim().takeIf(String::isNotBlank) ?: return false
+        return selected != installedVersion?.trim()
+    }
     val latest = normalize(latestVersion) ?: return false
     val installed = listOfNotNull(normalize(installedVersion), normalize(manifestVersion))
     if (latest in installed) return false

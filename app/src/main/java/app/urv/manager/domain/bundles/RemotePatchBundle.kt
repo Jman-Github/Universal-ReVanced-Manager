@@ -172,7 +172,8 @@ sealed class RemotePatchBundle(
             latestVersion = info.version,
             installedVersion = installedVersionSignatureInternal.takeIf { hasInstalled() },
             manifestVersion = version.takeIf { hasInstalled() },
-            preventDowngrade = this is JsonPatchBundle && useLatest,
+            preventDowngrade = this is JsonPatchBundle && useLatest && !useSpecificVersion,
+            pinnedVersion = this is JsonPatchBundle && useSpecificVersion,
         )
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
@@ -360,6 +361,8 @@ class JsonPatchBundle(
     enabled: Boolean,
     val usePrereleases: Boolean = false,
     val useLatest: Boolean = false,
+    val useSpecificVersion: Boolean = false,
+    val selectedVersion: ReVancedAsset? = null,
 ) : RemotePatchBundle(
     name,
     uid,
@@ -385,7 +388,16 @@ class JsonPatchBundle(
             else -> RepositoryBundleReleaseChannel.RELEASE
         }
 
+    override suspend fun update(onProgress: PatchBundleDownloadProgress?): PatchBundleDownloadResult? {
+        if (useSpecificVersion && selectedVersion == null) return null
+        return super.update(onProgress)
+    }
+
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
+        if (useSpecificVersion) {
+            return@withContext selectedVersion
+                ?: error("Select a patch bundle version before updating.")
+        }
         val releaseSource = repositoryReleaseSource()
         val repositoryUrl = when (releaseSource) {
             is RepositoryReleaseSource.Forgejo -> releaseSource.repositoryUrl
@@ -459,7 +471,11 @@ class JsonPatchBundle(
         )
     }
 
-    override suspend fun latestInfoCacheIdentity(): String = "$endpoint|channel=${releaseChannel.name}"
+    val releaseSelectionKey: String
+        get() = "$endpoint|channel=${releaseChannel.name}|pin=$useSpecificVersion|" +
+            "${selectedVersion?.version}|${selectedVersion?.downloadUrl}"
+
+    override suspend fun latestInfoCacheIdentity(): String = releaseSelectionKey
 
     override suspend fun historicalInfoCacheIdentity(): String =
         "$endpoint|history|channel=${releaseChannel.name}"
@@ -490,6 +506,8 @@ class JsonPatchBundle(
         enabled,
         usePrereleases,
         useLatest,
+        useSpecificVersion,
+        selectedVersion,
     )
 
     fun withReleaseChannel(channel: RepositoryBundleReleaseChannel) = JsonPatchBundle(
@@ -508,7 +526,96 @@ class JsonPatchBundle(
         enabled,
         channel == RepositoryBundleReleaseChannel.PRERELEASE,
         channel == RepositoryBundleReleaseChannel.LATEST,
+        useSpecificVersion,
+        selectedVersion,
     )
+
+    val repositorySettings: RepositoryBundleSettings
+        get() = RepositoryBundleSettings(usePrereleases, useLatest, useSpecificVersion, selectedVersion)
+
+    fun withRepositorySettings(settings: RepositoryBundleSettings) = JsonPatchBundle(
+        name, uid, displayName, createdAt, updatedAt, installedVersionSignature, error,
+        directory, endpoint, autoUpdate, searchUpdate, lastNotifiedVersion, enabled,
+        settings.usePrereleases, settings.useLatest, settings.useSpecificVersion, settings.selectedVersion
+    )
+
+    /** All published stable and development releases with a usable bundle asset. */
+    suspend fun fetchAvailableVersions(): List<ReVancedAsset> = withContext(Dispatchers.IO) {
+        val document = try {
+            http.request<JsonObject> { url(endpoint) }.getOrThrow()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
+        document?.let { json ->
+            ReseamBundleIndex.parseAll(json, endpoint)?.let { releases ->
+                return@withContext releases.map(::acceptReseamRelease).distinctBy { it.version }
+            }
+        }
+        val source = repositoryReleaseSource() ?: error("This source has no release history.")
+        val preferredExtension = if (ReseamBundleFormat.isBundle(patchesFile)) {
+            "reseam"
+        } else {
+            document?.let { json ->
+                runCatching { http.json.decodeFromJsonElement<ReVancedAsset>(json) }
+                    .getOrNull()?.downloadUrl?.patchBundleExtension()
+            }
+        }
+        suspend fun gitLabVersions(source: RepositoryReleaseSource.GitLab): List<ReVancedAsset> {
+            val project = URLEncoder.encode(source.repositoryPath, StandardCharsets.UTF_8.name())
+                .replace("+", "%20")
+            val result = mutableListOf<ReVancedAsset>()
+            var page = 1
+            while (true) {
+                val batch = http.request<List<GitLabRelease>> {
+                    url("${source.origin}/api/v4/projects/$project/releases?per_page=100&page=$page")
+                }.getOrThrow()
+                result += batch.filterNot { it.upcomingRelease }.mapNotNull {
+                    it.toPatchBundleAsset(source.repositoryPath, preferredExtension, source.origin)
+                }
+                if (batch.size < 100) break
+                page++
+            }
+            return result
+        }
+        val assets = when (source) {
+            is RepositoryReleaseSource.GitHub -> releaseApi.getRepositoryReleaseHistory(
+                source.repositoryUrl, prerelease = null, limit = Int.MAX_VALUE
+            ).getOrThrow().mapNotNull {
+                it.toPatchBundleAsset(source.repositoryUrl, preferredExtension)
+            }
+            is RepositoryReleaseSource.GitLab -> gitLabVersions(source)
+            is RepositoryReleaseSource.Forgejo -> {
+                val result = mutableListOf<ReVancedAsset>()
+                val seenTags = mutableSetOf<String>()
+                var page = 1
+                while (true) {
+                    val response = http.request<List<GitHubRelease>> {
+                        url("${source.apiUrl}/releases?limit=50&page=$page")
+                    }
+                    if (page == 1 && response is APIResponse.Error &&
+                        response.error.code == HttpStatusCode.NotFound) {
+                        result += gitLabVersions(RepositoryReleaseSource.GitLab(
+                            source.repositoryPath, source.origin
+                        ))
+                        break
+                    }
+                    val batch = response.getOrThrow()
+                    // Servers may cap page sizes. Continue until exhausted, and guard
+                    // against servers that ignore the page parameter.
+                    val unseen = batch.filter { seenTags.add(it.tagName) }
+                    if (unseen.isEmpty()) break
+                    result += unseen.filterNot { it.draft }.mapNotNull {
+                        it.toPatchBundleAsset(source.repositoryUrl, preferredExtension)
+                    }
+                    page++
+                }
+                result
+            }
+        }
+        assets.distinctBy { it.version }.sortedByDescending { it.createdAt }
+    }
 
     private fun acceptReseamRelease(reseam: ReseamBundleIndex.Release): ReVancedAsset {
         reseam.publicKey?.let { key ->
