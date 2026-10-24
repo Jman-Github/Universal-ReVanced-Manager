@@ -6,6 +6,25 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
 import android.text.format.Formatter
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.role
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.outlined.FilterAltOff
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.LinearProgressIndicator
@@ -13,6 +32,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -23,7 +46,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +82,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -98,6 +122,9 @@ import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
+import app.urv.manager.network.api.CatalogFilters
+import app.urv.manager.ui.component.bundle.CatalogIcon
+import app.urv.manager.ui.component.bundle.CatalogAppItem
 import app.urv.manager.ui.viewmodel.BundleDiscoveryViewModel
 import app.urv.manager.util.isAllowedPatchBundleFile
 import app.urv.manager.util.openUrl
@@ -128,6 +155,29 @@ fun PatchBundleDiscoveryScreen(
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val browsingState by viewModel.browsingState.collectAsStateWithLifecycle()
+    val appsTab = browsingState.appsTab
+    val filtersExpanded = browsingState.filtersExpanded
+    var historyBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
+    var historicalPatchesBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
+    historyBundle?.let { selected ->
+        BundleHistorySheet(selected, viewModel, onDismiss = { historyBundle = null },
+            onViewPatches = { historicalPatchesBundle = it })
+    }
+    historicalPatchesBundle?.let { selected ->
+        app.urv.manager.ui.component.FullscreenDialog(
+            onDismissRequest = { historicalPatchesBundle = null }) {
+            PatchBundleDiscoveryPatchesScreen(
+                bundleId = selected.bundleId, apiHost = selected.apiHost,
+                sourceUrl = selected.sourceUrl, version = selected.version,
+                fileHash = selected.fileHash, isPrerelease = selected.isPrerelease,
+                patchCount = selected.patchCount, ownerName = selected.ownerName,
+                repoName = selected.repoName, bundleType = selected.bundleType,
+                downloadUrl = selected.downloadUrl, historicalGeneration = selected.historicalGeneration,
+                onBackClick = { historicalPatchesBundle = null }, viewModel = viewModel)
+        }
+    }
     val prefs: PreferencesManager = koinInject()
     val patchBundleRepository: PatchBundleRepository = koinInject()
     val filesystem: Filesystem = koinInject()
@@ -149,84 +199,42 @@ fun PatchBundleDiscoveryScreen(
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
     val isSearchingMore = viewModel.isSearchingMore
-    val listState = rememberLazyListState()
-    val query = viewModel.bundleSearchQuery
-    val packageQuery = viewModel.packageSearchQuery
-    val showReleasePref by prefs.patchBundleDiscoveryShowRelease.getAsState()
-    val showPrereleasePref by prefs.patchBundleDiscoveryShowPrerelease.getAsState()
-    val latestPref by prefs.patchBundleDiscoveryLatest.getAsState()
-    val sortModePref by prefs.patchBundleDiscoverySortMode.getAsState()
+    val bundlesListState = rememberSaveable(browsingState.bundlesFilters, saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    val appsListState = rememberSaveable(browsingState.appsFilters, saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    val listState = if (appsTab) appsListState else bundlesListState
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val patchBundleDiscoveryExportDirectory by
         prefs.patchBundleDiscoveryExportLastDirectory.getAsState()
     val pickerScope = rememberCoroutineScope()
-    var showRelease by remember { mutableStateOf(showReleasePref) }
-    var showPrerelease by remember { mutableStateOf(showPrereleasePref) }
-    var latestSelected by remember { mutableStateOf(latestPref) }
-    var discoverySortMode by remember {
-        mutableStateOf(BundleDiscoverySortMode.fromStorage(sortModePref))
-    }
+    val currentFilters = browsingState.filtersFor(appsTab)
+    val defaultFilters = CatalogFilters(release = if (appsTab) "all" else "latest")
+    val query = currentFilters.query
+    val packageQuery = currentFilters.packageName
+    val selectedSource = currentFilters.sourceUrl
+    val selectedType = currentFilters.bundleType
+    val selectedVersion = currentFilters.version
+    val releaseSelection = currentFilters.release
+    val toggleRotation by animateFloatAsState(if (filtersExpanded) 180f else 0f,
+        animationSpec = tween(280, easing = FastOutSlowInEasing), label = "filter_toggle")
+    val showRelease = releaseSelection == "release" || releaseSelection == "all"
+    val showPrerelease = releaseSelection == "prerelease" || releaseSelection == "all"
+    val latestSelected = releaseSelection == "latest"
+    val discoverySortMode = BundleDiscoverySortMode.values().firstOrNull {
+        it.storageValue == currentFilters.sort
+    } ?: BundleDiscoverySortMode.UPDATED_DESC
     var showSortMenu by remember { mutableStateOf(false) }
     val filterChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
     )
-    LaunchedEffect(showRelease, showPrerelease, latestSelected) {
-        if (latestSelected) {
-            if (showRelease) showRelease = false
-            if (showPrerelease) showPrerelease = false
-        } else {
-            when {
-                showRelease && showPrerelease -> {
-                    showPrerelease = false
-                }
-                !showRelease && !showPrerelease -> {
-                    showRelease = true
-                }
-            }
-        }
+    val requestedFilters = currentFilters.copy(query = query.trim(), packageName = packageQuery.trim())
+    LaunchedEffect(requestedFilters, appsTab) {
+        viewModel.configure(requestedFilters, appsTab)
     }
-    LaunchedEffect(latestSelected) {
-        if (latestSelected != latestPref) {
-            prefs.patchBundleDiscoveryLatest.update(latestSelected)
-        }
-    }
-    LaunchedEffect(showReleasePref) {
-        if (showRelease != showReleasePref) {
-            showRelease = showReleasePref
-        }
-    }
-    LaunchedEffect(showPrereleasePref) {
-        if (showPrerelease != showPrereleasePref) {
-            showPrerelease = showPrereleasePref
-        }
-    }
-    LaunchedEffect(latestPref) {
-        if (latestSelected != latestPref) {
-            latestSelected = latestPref
-        }
-    }
-    LaunchedEffect(sortModePref) {
-        val parsed = BundleDiscoverySortMode.fromStorage(sortModePref)
-        if (discoverySortMode != parsed) {
-            discoverySortMode = parsed
-        }
-    }
-    LaunchedEffect(showRelease, showReleasePref) {
-        if (showRelease != showReleasePref) {
-            prefs.patchBundleDiscoveryShowRelease.update(showRelease)
-        }
-    }
-    LaunchedEffect(showPrerelease, showPrereleasePref) {
-        if (showPrerelease != showPrereleasePref) {
-            prefs.patchBundleDiscoveryShowPrerelease.update(showPrerelease)
-        }
-    }
-    LaunchedEffect(discoverySortMode) {
-        val serialized = discoverySortMode.storageValue
-        if (serialized != sortModePref) {
-            prefs.patchBundleDiscoverySortMode.update(serialized)
-        }
-    }
+    LaunchedEffect(selectedSource) { viewModel.clearVersions() }
     val groupedBundles by remember(
         bundles,
         query,
@@ -237,55 +245,22 @@ fun PatchBundleDiscoveryScreen(
     ) {
         derivedStateOf {
             if (bundles == null) return@derivedStateOf null
-            val trimmedQuery = query.trim().lowercase()
             val grouped = LinkedHashMap<String, BundleGroup>()
             val order = mutableListOf<String>()
-
             bundles.forEach { bundle ->
-                val owner = bundle.ownerName.takeIf { it.isNotBlank() }
-                val repo = bundle.repoName.takeIf { it.isNotBlank() }
-                val key = if (owner != null || repo != null) {
-                    listOfNotNull(owner, repo).joinToString("/")
-                } else {
-                    bundle.sourceUrl
-                }
+                val sourceKey = bundle.sourceUrl.ifBlank { "${bundle.ownerName}/${bundle.repoName}" }
+                val key = if (latestSelected) sourceKey else "$sourceKey|${bundle.bundleId}"
                 val entry = grouped.getOrPut(key) {
                     order.add(key)
                     BundleGroup(key = key, release = null, prerelease = null)
                 }
                 grouped[key] = if (bundle.isPrerelease) {
-                    if (entry.prerelease == null) entry.copy(prerelease = bundle) else entry
+                    entry.copy(prerelease = entry.prerelease ?: bundle)
                 } else {
-                    if (entry.release == null) entry.copy(release = bundle) else entry
+                    entry.copy(release = entry.release ?: bundle)
                 }
             }
-
-            val allowRelease = showRelease || latestSelected
-            val allowPrerelease = showPrerelease || latestSelected
-            val filteredByType = order.mapNotNull { grouped[it] }.filter { group ->
-                val hasRelease = group.release != null
-                val hasPrerelease = group.prerelease != null
-
-                (allowRelease && hasRelease) || (allowPrerelease && hasPrerelease)
-            }
-
-            val filtered = filteredByType.filter { group ->
-                if (trimmedQuery.isEmpty()) return@filter true
-                val haystack = listOfNotNull(group.release, group.prerelease)
-                    .flatMap {
-                        listOfNotNull(
-                            it.sourceUrl,
-                            it.ownerName,
-                            it.repoName,
-                            it.repoDescription,
-                            it.version
-                        )
-                    }
-                    .joinToString(" ")
-                    .lowercase()
-                haystack.contains(trimmedQuery)
-            }
-
+            val filtered = order.mapNotNull { grouped[it] }
             when (discoverySortMode) {
                 BundleDiscoverySortMode.BUNDLE_NAME_ASC -> {
                     filtered.sortedBy { groupDisplayNameSortKey(it) }
@@ -303,12 +278,33 @@ fun PatchBundleDiscoveryScreen(
         }
     }
 
+    val listReady = viewModel.isAppsTab == appsTab && viewModel.filters == requestedFilters &&
+        (if (appsTab) viewModel.apps != null else groupedBundles != null)
+    LaunchedEffect(listState, currentFilters, appsTab, listReady) {
+        if (!listReady) return@LaunchedEffect
+        // Wait for this query's results, so loading placeholders cannot erase the saved position.
+        val saved = browsingState.scrollFor(appsTab)
+        listState.scrollToItem(saved.index, saved.offset)
+        snapshotFlow {
+            Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, listState.isScrollInProgress)
+        }.collect { (index, offset, scrolling) ->
+            if (!scrolling) viewModel.saveDiscoveryScroll(appsTab, currentFilters, index, offset)
+        }
+    }
+    DisposableEffect(listState, currentFilters, appsTab, listReady) {
+        onDispose {
+            if (listReady) viewModel.saveDiscoveryScroll(appsTab, currentFilters,
+                listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
+        }
+    }
+
     fun mergeLatest(latest: ExternalBundleSnapshot?, fallback: ExternalBundleSnapshot?): ExternalBundleSnapshot? {
         if (latest == null) return fallback
         if (fallback == null) return latest
         return latest.copy(
             ownerName = latest.ownerName.ifBlank { fallback.ownerName },
             ownerAvatarUrl = latest.ownerAvatarUrl ?: fallback.ownerAvatarUrl,
+            iconUrl = latest.iconUrl ?: fallback.iconUrl,
             repoName = latest.repoName.ifBlank { fallback.repoName },
             repoDescription = latest.repoDescription ?: fallback.repoDescription,
             sourceUrl = latest.sourceUrl.ifBlank { fallback.sourceUrl },
@@ -326,22 +322,13 @@ fun PatchBundleDiscoveryScreen(
         )
     }
 
-    LaunchedEffect(query, packageQuery, showRelease, showPrerelease, latestSelected, bundles) {
-        viewModel.ensureSearchCoverage(
-            bundleQuery = query,
-            packageQuery = packageQuery,
-            allowRelease = showRelease || latestSelected,
-            allowPrerelease = showPrerelease || latestSelected
-        )
-    }
-
-    LaunchedEffect(listState, groupedBundles, viewModel.canLoadMore, viewModel.isLoadingMore) {
+    LaunchedEffect(listState, groupedBundles, viewModel.apps, appsTab, viewModel.canLoadMore, viewModel.isLoadingMore) {
         snapshotFlow {
             val total = listState.layoutInfo.totalItemsCount
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             lastVisible to total
         }.collect { (lastVisible, totalItems) ->
-            if (groupedBundles.isNullOrEmpty()) return@collect
+            if (if (appsTab) viewModel.apps.isNullOrEmpty() else groupedBundles.isNullOrEmpty()) return@collect
             if (totalItems > 0 && lastVisible >= totalItems - 3) {
                 viewModel.loadMore()
             }
@@ -529,6 +516,19 @@ fun PatchBundleDiscoveryScreen(
                         activeExportBundle = menu.bundle
                     }
                 }
+                if (menu.bundle.sourceUrl.isNotBlank()) {
+                    LinkOptionRow(
+                        icon = { Icon(Icons.Outlined.NewReleases, contentDescription = null,
+                            modifier = Modifier.size(20.dp)) },
+                        text = stringResource(R.string.catalog_release_history)
+                    ) {
+                        coroutineScope.launch {
+                            sheetState.hide()
+                            activeBundleMenu = null
+                            historyBundle = menu.bundle
+                        }
+                    }
+                }
                 if (menu.latestVisible) {
                     LinkOptionRow(
                         icon = {
@@ -545,14 +545,13 @@ fun PatchBundleDiscoveryScreen(
                         latestOverrides[menu.groupKey] = newValue
                         activeBundleMenu = menu.copy(useLatest = newValue)
                         if (newValue) {
-                            val owner = menu.bundle.ownerName.trim()
-                            val repo = menu.bundle.repoName.trim()
-                            if (owner.isNotBlank() && repo.isNotBlank()) {
+                            if (menu.bundle.sourceUrl.isNotBlank() ||
+                                (menu.bundle.ownerName.isNotBlank() && menu.bundle.repoName.isNotBlank())) {
                                 coroutineScope.launch {
                                     latestSnapshots[latestKey(menu.groupKey, false)] =
-                                        viewModel.fetchLatestBundle(owner, repo, prerelease = false)
+                                        viewModel.fetchLatestBundle(menu.bundle, prerelease = false)
                                     latestSnapshots[latestKey(menu.groupKey, true)] =
-                                        viewModel.fetchLatestBundle(owner, repo, prerelease = true)
+                                        viewModel.fetchLatestBundle(menu.bundle, prerelease = true)
                                 }
                             }
                         }
@@ -586,34 +585,40 @@ fun PatchBundleDiscoveryScreen(
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
                 actions = {
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Outlined.Sort,
-                            modifier = Modifier.size(24.dp),
-                            contentDescription = stringResource(R.string.patch_bundle_discovery_sort_title)
-                        )
+                    IconButton(onClick = { viewModel.refresh(force = true) }) {
+                        Icon(Icons.Outlined.Refresh,
+                            contentDescription = stringResource(R.string.catalog_refresh))
                     }
-                    DropdownMenu(
-                        expanded = showSortMenu,
-                        onDismissRequest = { showSortMenu = false }
-                    ) {
-                        BundleDiscoverySortMode.values().forEach { mode ->
-                            DropdownMenuItem(
-                                text = { Text(stringResource(mode.labelRes)) },
-                                onClick = {
-                                    discoverySortMode = mode
-                                    showSortMenu = false
-                                },
-                                leadingIcon = {
-                                    if (discoverySortMode == mode) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
+                    if (!appsTab) {
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Outlined.Sort,
+                                modifier = Modifier.size(24.dp),
+                                contentDescription = stringResource(R.string.patch_bundle_discovery_sort_title)
                             )
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            BundleDiscoverySortMode.values().forEach { mode ->
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(mode.labelRes)) },
+                                    onClick = {
+                                        viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(sort = mode.storageValue) }
+                                        showSortMenu = false
+                                    },
+                                    leadingIcon = {
+                                        if (discoverySortMode == mode) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                     IconButton(
@@ -626,7 +631,7 @@ fun PatchBundleDiscoveryScreen(
                         )
                     }
                     IconButton(
-                        onClick = { context.openUrl("https://github.com/brosssh/revanced-external-bundles") }
+                        onClick = { context.openUrl("https://github.com/Jman-Github/Patch-Bundle-Registry") }
                     ) {
                         Icon(
                             imageVector = FontAwesomeIcons.Brands.Github,
@@ -696,124 +701,215 @@ fun PatchBundleDiscoveryScreen(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(16.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = packageQuery,
-                            onValueChange = {
-                                viewModel.packageSearchQuery = it
-                                val trimmed = it.trim()
-                                viewModel.refreshDebounced(trimmed.ifBlank { null })
-                            },
-                            label = { Text(stringResource(R.string.patch_bundle_discovery_package_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = null
-                                )
-                            },
-                            trailingIcon = {
-                                if (packageQuery.isNotBlank()) {
-                                    IconButton(onClick = {
-                                        viewModel.packageSearchQuery = ""
-                                        viewModel.refreshDebounced(null)
-                                    }) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(shape = RoundedCornerShape(20.dp),
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.weight(1f)) {
+                                BoxWithConstraints(Modifier.padding(4.dp).selectableGroup()) {
+                                    val tabWidth = maxWidth / 2
+                                    val indicatorOffset by animateDpAsState(
+                                        targetValue = if (appsTab) tabWidth else 0.dp,
+                                        animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                        label = "discovery_tab_position"
+                                    )
+                                    // Match the row's measured height, including larger font sizes.
+                                    Box(Modifier.matchParentSize()) {
+                                        Surface(
+                                            modifier = Modifier.offset(x = indicatorOffset)
+                                                .width(tabWidth).fillMaxHeight(),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.secondaryContainer,
+                                            content = {}
+                                        )
+                                    }
+                                    Row {
+                                        listOf(false to R.string.catalog_bundles, true to R.string.catalog_apps)
+                                            .forEach { (isApps, label) ->
+                                                val selected = appsTab == isApps
+                                                val labelColor by animateColorAsState(
+                                                    targetValue = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    animationSpec = tween(200),
+                                                    label = "discovery_tab_label"
+                                                )
+                                                Surface(
+                                                    selected = selected,
+                                                    onClick = { viewModel.setDiscoveryTab(isApps) },
+                                                    shape = RoundedCornerShape(16.dp),
+                                                    color = Color.Transparent,
+                                                    contentColor = labelColor,
+                                                    modifier = Modifier.weight(1f).semantics { role = Role.Tab },
+                                                ) {
+                                                    Box(Modifier.heightIn(min = 40.dp).padding(horizontal = 8.dp),
+                                                        contentAlignment = Alignment.Center) {
+                                                        Text(stringResource(label), style = MaterialTheme.typography.labelLarge)
+                                                    }
+                                                }
+                                            }
+                                    }
+                                }
+                            }
+                            IconButton(onClick = {
+                                viewModel.setDiscoveryFilters(appsTab, defaultFilters)
+                                focusManager.clearFocus()
+                            }, enabled = currentFilters != defaultFilters) {
+                                Icon(Icons.Outlined.FilterAltOff,
+                                    contentDescription = stringResource(R.string.catalog_clear_filters))
+                            }
+                            IconButton(onClick = {
+                                viewModel.toggleDiscoveryFiltersExpanded()
+                                if (filtersExpanded) focusManager.clearFocus()
+                            }) {
+                                Icon(Icons.Outlined.ExpandMore, modifier = Modifier.rotate(toggleRotation),
+                                    contentDescription = stringResource(if (filtersExpanded) R.string.catalog_hide_filters
+                                        else R.string.catalog_show_filters))
+                            }
+                        }
+                        AnimatedVisibility(visible = filtersExpanded,
+                            enter = expandVertically(animationSpec = tween(300, easing = FastOutSlowInEasing),
+                                expandFrom = Alignment.Top) + fadeIn(tween(220, delayMillis = 60)),
+                            exit = shrinkVertically(animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                shrinkTowards = Alignment.Top) + fadeOut(tween(140))) {
+                            Column(Modifier.padding(top = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    CatalogFilterMenu(
+                                        label = stringResource(R.string.catalog_source),
+                                        selected = selectedSource,
+                                        options = viewModel.sourceOptions.map { source ->
+                                            source.url.orEmpty() to listOfNotNull(
+                                                source.sourceMetadata?.ownerName,
+                                                source.sourceMetadata?.repoName
+                                            ).joinToString("/").ifBlank { source.url.orEmpty() }
+                                        },
+                                        onOpen = { viewModel.loadSources() },
+                                        loading = viewModel.isSourcesLoading,
+                                        error = viewModel.sourcesError,
+                                        onRetry = { viewModel.loadSources(force = true) },
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(sourceUrl = it, version = "") } }
+                                    )
+                                    CatalogFilterMenu(
+                                        label = stringResource(R.string.catalog_bundle_type),
+                                        selected = selectedType,
+                                        options = listOf("Morphe:V1" to "Morphe", "ReVanced:v21" to "ReVanced v21",
+                                            "ReVanced:v22" to "ReVanced v22", "Reseam" to "Reseam"),
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(bundleType = it) } }
+                                    )
+                                    CatalogFilterMenu(
+                                        label = stringResource(R.string.catalog_bundle_version),
+                                        selected = selectedVersion,
+                                        options = viewModel.versions.map { it to it },
+                                        enabled = selectedSource.isNotBlank(),
+                                        onOpen = { viewModel.loadVersions(selectedSource) },
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(version = it,
+                                            release = if (it.isNotBlank()) "all" else filters.release) } }
+                                    )
+                                }
+                                OutlinedTextField(
+                                    value = packageQuery,
+                                    onValueChange = {
+                                        viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(packageName = it, exactPackage = false) }
+                                    },
+                                    label = { Text(stringResource(R.string.patch_bundle_discovery_package_label)) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    leadingIcon = {
                                         Icon(
-                                            imageVector = Icons.Outlined.Close,
+                                            imageVector = Icons.Outlined.Search,
                                             contentDescription = null
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (packageQuery.isNotBlank()) {
+                                            IconButton(onClick = {
+                                                viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(packageName = "", exactPackage = false) }
+                                            }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Close,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                OutlinedTextField(
+                                    value = query,
+                                    onValueChange = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(query = it) } },
+                                    label = { Text(stringResource(if (appsTab) R.string.catalog_search_apps
+                                        else R.string.patch_bundle_discovery_search_label)) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Search,
+                                            contentDescription = null
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (query.isNotBlank()) {
+                                            IconButton(onClick = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(query = "") } }) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Close,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    listOf("all" to R.string.catalog_all, "latest" to R.string.patch_bundle_discovery_latest,
+                                        "release" to R.string.patch_bundle_discovery_release,
+                                        "prerelease" to R.string.patch_bundle_discovery_prerelease).forEach { (value, label) ->
+                                        CheckedFilterChip(
+                                            selected = releaseSelection == value,
+                                            onClick = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(release = value) } },
+                                            colors = filterChipColors,
+                                            label = { Text(stringResource(label)) }
                                         )
                                     }
                                 }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = { viewModel.bundleSearchQuery = it },
-                            label = { Text(stringResource(R.string.patch_bundle_discovery_search_label)) },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = null
-                                )
-                            },
-                            trailingIcon = {
-                                if (query.isNotBlank()) {
-                                    IconButton(onClick = { viewModel.bundleSearchQuery = "" }) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.Close,
-                                            contentDescription = null
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            CheckedFilterChip(
-                                selected = showRelease,
-                                onClick = {
-                                    val newValue = !showRelease
-                                    if (!newValue && !showPrerelease) return@CheckedFilterChip
-                                    showRelease = newValue
-                                    if (newValue) {
-                                        showPrerelease = false
-                                        latestSelected = false
-                                    }
-                                },
-                                colors = filterChipColors,
-                                label = { Text(stringResource(R.string.patch_bundle_discovery_release)) }
-                            )
-                            CheckedFilterChip(
-                                selected = showPrerelease,
-                                onClick = {
-                                    val newValue = !showPrerelease
-                                    if (!newValue && !showRelease) return@CheckedFilterChip
-                                    showPrerelease = newValue
-                                    if (newValue) {
-                                        showRelease = false
-                                        latestSelected = false
-                                    }
-                                },
-                                colors = filterChipColors,
-                                label = { Text(stringResource(R.string.patch_bundle_discovery_prerelease)) }
-                            )
-                            CheckedFilterChip(
-                                selected = latestSelected,
-                                onClick = {
-                                    if (latestSelected) return@CheckedFilterChip
-                                    latestSelected = true
-                                    showRelease = false
-                                    showPrerelease = false
-                                },
-                                colors = filterChipColors,
-                                label = { Text(stringResource(R.string.patch_bundle_discovery_latest)) }
-                            )
+                            }
                         }
                     }
                 }
             }
 
+            if (!errorMessage.isNullOrBlank()) {
+                item(key = "catalog_error") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(errorMessage.orEmpty(), color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = { viewModel.refresh(force = true) }) {
+                            Text(stringResource(R.string.catalog_refresh))
+                        }
+                    }
+                }
+            }
             when {
+                appsTab -> {
+                    val applications = viewModel.apps
+                    if (isLoading && applications == null) {
+                        items(3) { BundleDiscoveryPlaceholderItem() }
+                    } else if (applications.isNullOrEmpty()) {
+                        item { Text(stringResource(R.string.catalog_apps_empty)) }
+                    } else {
+                        items(applications, key = { "app|${it.name}" }) { application ->
+                            CatalogAppItem(application) {
+                                viewModel.showBundlesForPackage(application.name.orEmpty())
+                            }
+                        }
+                        if (viewModel.isLoadingMore) item { BundleDiscoveryPlaceholderItem() }
+                    }
+                }
                 isLoading && visibleBundles == null -> {
                     items(3) {
                         BundleDiscoveryPlaceholderItem()
-                    }
-                }
-
-                !errorMessage.isNullOrBlank() -> {
-                    item {
-                        Text(
-                            text = errorMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
                     }
                 }
 
@@ -1076,7 +1172,7 @@ private fun BundleDiscoveryItem(
     val isImportingForGroup =
         groupProgress?.status == PatchBundleRepository.DiscoveryImportStatus.Importing
     val viewPatchesEnabled = patchCount > 0
-    val importEnabled = isSupported &&
+    val importEnabled = isSupported && !bundle.downloadUrl.isNullOrBlank() &&
         !isImported(bundle) &&
         !isImportQueuedForGroup &&
         !isImportingForGroup
@@ -1110,28 +1206,10 @@ private fun BundleDiscoveryItem(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!bundle.ownerAvatarUrl.isNullOrBlank()) {
-                    AsyncImage(
-                        model = bundle.ownerAvatarUrl,
-                        contentDescription = displayName,
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                    )
-                } else {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Source,
-                            contentDescription = null,
-                            modifier = Modifier.padding(8.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                val official = app.urv.manager.domain.bundles.bundleRepositoryUrl(bundle.sourceUrl)
+                    .equals(app.urv.manager.domain.bundles.OFFICIAL_PATCH_REPOSITORY, true)
+                CatalogIcon(if (official) app.urv.manager.domain.bundles.BundleIconRepository.OFFICIAL_ICON_URL
+                    else bundle.iconUrl, bundle.ownerAvatarUrl, displayName, isOfficial = official)
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1243,6 +1321,7 @@ private fun BundleDiscoveryItem(
                 }
             }
 
+            app.urv.manager.ui.component.bundle.BundleRuntimeNotice(bundle.bundleType)
             if (bundle.isRepoArchived) {
                 Text(
                     text = stringResource(R.string.patch_bundle_discovery_archived_notice),
@@ -1250,14 +1329,6 @@ private fun BundleDiscoveryItem(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            if (!isSupported) {
-                Text(
-                    text = stringResource(R.string.patch_bundle_discovery_v3_warning),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1566,7 +1637,7 @@ private fun groupUpdatedSortKey(group: BundleGroup): Long {
 
 private fun parseBundleUpdatedInstant(bundle: ExternalBundleSnapshot?): Instant? {
     if (bundle == null) return null
-    val candidate = listOf(bundle.repoPushedAt, bundle.lastRefreshedAt, bundle.createdAt)
+    val candidate = listOf(bundle.createdAt, bundle.repoPushedAt, bundle.lastRefreshedAt)
         .firstOrNull { !it.isNullOrBlank() }
         ?.trim()
         ?: return null

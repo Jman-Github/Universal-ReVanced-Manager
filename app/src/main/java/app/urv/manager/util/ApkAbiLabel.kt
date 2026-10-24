@@ -2,7 +2,10 @@ package app.urv.manager.util
 
 import android.content.Context
 import app.universal.revanced.manager.R
+import app.urv.manager.patcher.split.SplitApkFiles
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
+import java.nio.file.Files
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipFile
 
@@ -19,7 +22,10 @@ private fun File.abiFileStampOrNull(): ApkAbiFileStamp? =
     if (isFile) ApkAbiFileStamp(absolutePath, length(), lastModified()) else null
 
 // Cache the ABI names rather than the translated label, so language changes still take effect.
-internal fun File.savedApkAbisOrNull(): Set<String>? {
+internal fun File.savedApkAbisOrNull(): Set<String>? =
+    absoluteFile.parentFile?.let { savedApkAbisOrNull(it) }
+
+internal fun File.savedApkAbisOrNull(cacheDirectory: File): Set<String>? {
     val stamp = abiFileStampOrNull() ?: run {
         apkAbiCache.remove(absolutePath)
         return null
@@ -27,28 +33,45 @@ internal fun File.savedApkAbisOrNull(): Set<String>? {
     apkAbiCache[stamp.path]?.takeIf { it.first == stamp }?.let { return it.second }
 
     return runCatching {
-        ZipFile(this).use { zip ->
-            val found = linkedSetOf<String>()
-            val entries = zip.entries()
-            while (entries.hasMoreElements()) {
-                val name = entries.nextElement().name
-                if (!name.startsWith(APK_LIB_PREFIX)) continue
-                val relativeName = name.removePrefix(APK_LIB_PREFIX)
-                val abi = relativeName.substringBefore('/', missingDelimiterValue = "")
-                if (abi.isNotBlank()) {
-                    found += abi
+        if (SplitApkPreparer.isSplitArchive(this)) {
+            val directory = Files.createTempDirectory(cacheDirectory.toPath(), "split-abis-").toFile()
+            try {
+                val found = linkedSetOf<String>()
+                // Read each component's ZIP directory without merging or inflating its contents.
+                // Release components as we go to avoid another full split set in the cache.
+                SplitApkPreparer.splitApkEntryNames(this).forEach { name ->
+                    val component = SplitApkFiles.extract(this, directory, setOf(name)).single()
+                    try {
+                        found += component.apkAbis()
+                    } finally {
+                        component.delete()
+                    }
                 }
+                found
+            } finally {
+                directory.deleteRecursively()
             }
-            found
-        }
+        } else apkAbis()
     }.onSuccess { abis ->
         // A file replaced while scanning must be read again on the next request.
         if (abiFileStampOrNull() == stamp) apkAbiCache[stamp.path] = stamp to abis
     }.getOrNull()
 }
 
+private fun File.apkAbis(): Set<String> = ZipFile(this).use { zip ->
+    val found = linkedSetOf<String>()
+    val entries = zip.entries()
+    while (entries.hasMoreElements()) {
+        val name = entries.nextElement().name
+        if (!name.startsWith(APK_LIB_PREFIX)) continue
+        val abi = name.removePrefix(APK_LIB_PREFIX).substringBefore('/', missingDelimiterValue = "")
+        if (abi.isNotBlank()) found += abi
+    }
+    found
+}
+
 fun File.savedApkAbiLabel(context: Context): String? {
-    val abis = savedApkAbisOrNull() ?: return null
+    val abis = savedApkAbisOrNull(context.cacheDir) ?: return null
     if (abis.isEmpty()) {
         return context.getString(R.string.saved_app_abi_none)
     }

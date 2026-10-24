@@ -37,7 +37,9 @@ object PatchBundleFileIntentParser {
             ?.substringAfterLast('.', "")
             ?.lowercase(Locale.ROOT)
             .orEmpty()
-        if (extension !in setOf("mpp", "rvp")) return null
+        if (extension !in setOf("mpp", "rvp", "reseam") &&
+            intent.type != app.urv.manager.patcher.patch.ReseamBundleFormat.MIME_TYPE
+        ) return null
 
         return PatchBundleFileIntent(uri = uri, displayName = displayName)
     }

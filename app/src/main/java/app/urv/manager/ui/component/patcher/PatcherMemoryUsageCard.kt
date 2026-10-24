@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
+import app.urv.manager.patcher.worker.latestResourceUsage
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
@@ -86,16 +87,29 @@ fun PatcherMemoryUsageCard(
     if (samples.isEmpty()) return
     val latest = samples.last()
     val requestedMaxMb = latest.requestedMaxMb.coerceAtLeast(1L)
-    val peakMb = samples.maxOf { sample -> sample.usedMb }
-    val trendRes = memoryTrendRes(samples, requestedMaxMb)
-    val statusRes = if (isActive) {
-        R.string.patcher_memory_usage_live
-    } else {
-        R.string.patcher_memory_usage_final
+    val processMemory = samples.latestResourceUsage()?.processMemoryMb
+    val reportsProcessMemory = samples.any { it.processMemoryMb != null }
+    val displaySamples = if (reportsProcessMemory) samples.mapNotNull { sample ->
+        sample.processMemoryMb?.let { sample.copy(usedMb = it) }
+    } else samples
+    val peakMb = displaySamples.maxOf { sample -> sample.usedMb }
+    // Native memory is outside the Java heap cap. Scale its history to the observed
+    // peak and show heap pressure only on the existing managed-memory graph.
+    val graphMaxMb = if (reportsProcessMemory) maxOf(requestedMaxMb, peakMb) else requestedMaxMb
+    val trendRes = memoryTrendRes(displaySamples, graphMaxMb)
+    val statusRes = when {
+        reportsProcessMemory && processMemory == null -> R.string.patcher_resource_unavailable_short
+        isActive -> R.string.patcher_memory_usage_live
+        else -> R.string.patcher_memory_usage_final
     }
     val status = stringResource(statusRes)
     val trend = stringResource(trendRes)
-    val accessibilityText = stringResource(
+    val heapDetail = if (reportsProcessMemory) stringResource(
+        R.string.patcher_process_memory_detail, latest.usedMb, latest.maxMb
+    ) else null
+    val accessibilityText = if (reportsProcessMemory) stringResource(
+        R.string.patcher_process_memory_accessibility, processMemory ?: displaySamples.last().usedMb, peakMb, trend, status
+    ) + " " + heapDetail else stringResource(
         R.string.patcher_memory_usage_accessibility,
         latest.usedMb,
         requestedMaxMb,
@@ -103,12 +117,20 @@ fun PatcherMemoryUsageCard(
         trend,
         status
     )
-    val graphBars = buildMemoryGraphBars(samples, requestedMaxMb)
+    val graphBars = buildMemoryGraphBars(displaySamples, graphMaxMb).let { bars ->
+        if (reportsProcessMemory) bars.map { it.copy(pressureFraction = 0f) } else bars
+    }
     PatcherHistoryUsageCard(
         samples = samples,
         isActive = isActive,
-        title = stringResource(titleRes),
-        headline = stringResource(R.string.patcher_memory_usage_format, latest.usedMb, requestedMaxMb),
+        title = stringResource(if (reportsProcessMemory) R.string.patcher_process_memory_usage else titleRes),
+        headline = when {
+            !reportsProcessMemory -> stringResource(R.string.patcher_memory_usage_format, latest.usedMb, requestedMaxMb)
+            processMemory != null -> stringResource(R.string.patcher_process_memory_format, processMemory)
+            else -> stringResource(R.string.patcher_resource_unavailable_short)
+        },
+        currentAvailable = !reportsProcessMemory || processMemory != null,
+        detail = heapDetail,
         peak = stringResource(R.string.patcher_memory_usage_peak_format, peakMb),
         accessibilityText = accessibilityText,
         graphBars = graphBars,

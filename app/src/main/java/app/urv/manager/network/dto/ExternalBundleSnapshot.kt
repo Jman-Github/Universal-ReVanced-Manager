@@ -7,6 +7,7 @@ data class ExternalBundleSnapshot(
     val apiHost: String = "",
     val ownerName: String = "",
     val ownerAvatarUrl: String? = null,
+    val iconUrl: String? = null,
     val repoName: String = "",
     val repoDescription: String? = null,
     val sourceUrl: String = "",
@@ -26,6 +27,7 @@ data class ExternalBundleSnapshot(
     val isBundleV3: Boolean = false,
     val patchCount: Int = 0,
     val patches: List<ExternalBundlePatch> = emptyList(),
+    val historicalGeneration: String? = null,
 )
 
 @Serializable
@@ -40,4 +42,6 @@ data class ExternalBundlePackage(
     val name: String = "",
     val versions: List<String?> = emptyList(),
     val experimentalVersions: List<String?> = emptyList(),
+    val appName: String? = null,
+    val iconUrl: String? = null,
 )

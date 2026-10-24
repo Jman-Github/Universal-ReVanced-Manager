@@ -19,6 +19,8 @@ import kotlinx.coroutines.sync.withLock
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.DataInputStream
+import app.urv.manager.patcher.split.SplitApkFiles
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
@@ -251,26 +253,42 @@ class KeystoreManager(app: Application, private val prefs: PreferencesManager) {
     suspend fun signPatchedApk(apk: File) = withContext(Dispatchers.Default) {
         keystoreMutex.withLock {
             val signer = signingKey().inPlaceSigner
-            try {
-                runInterruptible(Dispatchers.IO) {
-                    signer.sign(apk, Build.VERSION.SDK_INT)
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                // ReVanced outputs can retain inconsistent ZIP headers from their input.
-                // Preserve the existing signing recovery before retrying the device-specific signer.
-                val sanitized = sanitizeZipIfNeeded(apk)
-                if (sanitized == apk) throw error
+            suspend fun signComponent(component: File) {
                 try {
-                    runInterruptible(Dispatchers.IO) {
-                        signer.sign(sanitized, Build.VERSION.SDK_INT)
-                        Files.move(sanitized.toPath(), apk.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    runInterruptible(Dispatchers.IO) { signer.sign(component, Build.VERSION.SDK_INT) }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    // Preserve recovery for inconsistent ZIP headers from the input.
+                    val sanitized = sanitizeZipIfNeeded(component)
+                    if (sanitized == component) throw error
+                    try {
+                        runInterruptible(Dispatchers.IO) {
+                            signer.sign(sanitized, Build.VERSION.SDK_INT)
+                            Files.move(sanitized.toPath(), component.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                        }
+                    } finally {
+                        sanitized.delete()
                     }
-                } finally {
-                    sanitized.delete()
                 }
             }
+            if (SplitApkPreparer.isSplitArchive(apk)) {
+                val directory = Files.createTempDirectory(apk.parentFile!!.toPath(), "split-sign-").toFile()
+                try {
+                    val components = runInterruptible(Dispatchers.IO) {
+                        SplitApkFiles.extract(apk, directory, SplitApkPreparer.splitApkEntryNames(apk))
+                    }
+                    // One key and one lock for the whole set: Android requires matching signers.
+                    components.forEach { signComponent(it) }
+                    runInterruptible(Dispatchers.IO) {
+                        val signed = directory.resolve("signed.apks")
+                        SplitApkFiles.pack(components, signed)
+                        Files.move(signed.toPath(), apk.toPath(), StandardCopyOption.REPLACE_EXISTING)
+                    }
+                } finally {
+                    directory.deleteRecursively()
+                }
+            } else signComponent(apk)
         }
     }
 

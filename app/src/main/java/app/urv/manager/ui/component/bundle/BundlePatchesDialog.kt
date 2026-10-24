@@ -37,6 +37,7 @@ import app.urv.manager.domain.bundles.PatchBundleSource
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.patcher.patch.PatchInfo
+import app.urv.manager.network.dto.PackageNode
 import app.urv.manager.ui.component.ArrowButton
 import app.urv.manager.ui.component.ExperimentalVersionBadge
 import app.urv.manager.ui.component.ExpandableText
@@ -162,7 +163,8 @@ fun PatchItem(
     searchEngineHost: String,
     showCompatibilityMeta: Boolean = true,
     showOptionValues: Boolean = false,
-    optionValues: Map<String, Any?>? = null
+    optionValues: Map<String, Any?>? = null,
+    appMetadata: Map<String, PackageNode> = emptyMap()
 ) {
     val context = LocalContext.current
     val anyPackageLabel = stringResource(R.string.patches_view_any_package)
@@ -186,7 +188,7 @@ fun PatchItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = patch.name,
+                    text = patch.displayName,
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
@@ -224,6 +226,14 @@ fun PatchItem(
                             val versions = compatiblePackage.versions.orEmpty().reversed()
                             val packageIsAny = isAnyPackageTag(packageName, anyPackageLabel)
 
+                            appMetadata[packageName]?.let { application ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically) {
+                                    CatalogIcon(application.iconUrl, modifier = Modifier.size(28.dp))
+                                    Text(application.appName?.takeIf { it.isNotBlank() } ?: packageName,
+                                        style = MaterialTheme.typography.labelLarge)
+                                }
+                            }
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)

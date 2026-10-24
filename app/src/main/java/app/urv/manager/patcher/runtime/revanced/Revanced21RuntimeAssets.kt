@@ -69,6 +69,33 @@ object Revanced21RuntimeAssets {
         return jar
     }
 
+    @Synchronized
+    fun ensureLegacyRuntimeClassPath(context: Context, runtimeApk: File = ensureRuntimeApk(context)): File {
+        val directory = File(runtimeOutputDir(context), "legacy").apply { mkdirs() }
+        val output = File(directory, "revanced-legacy-" + sha256(runtimeApk) + ".jar")
+        if (output.isFile && output.length() > 0L) {
+            ensureReadOnly(output)
+            return output
+        }
+        val staging = File(output.path + ".tmp")
+        try {
+            ZipFile(runtimeApk).use { zip ->
+                val entry = zip.getEntry("assets/runtimes/revanced-legacy-runtime.jar")
+                    ?: throw IOException("Update the ReVanced v21 runtime plugin to version 1.7.0 or newer to load legacy bundles.")
+                zip.getInputStream(entry).use { input ->
+                    staging.outputStream().use { input.copyTo(it) }
+                }
+            }
+            check(staging.length() > 0L && staging.renameTo(output)) { "Could not extract the legacy ReVanced runtime." }
+            ensureReadOnly(output)
+            directory.listFiles()?.filter { it != output && it.extension == "jar" }?.forEach {
+                it.setWritable(true, true)
+                it.delete()
+            }
+            return output
+        } finally { staging.delete() }
+    }
+
     private fun ensureReadOnly(file: File) {
         file.setReadable(true, false)
         file.setWritable(false, false)

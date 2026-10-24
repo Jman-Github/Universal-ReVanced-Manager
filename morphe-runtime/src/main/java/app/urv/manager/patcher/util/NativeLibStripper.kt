@@ -1,7 +1,7 @@
 package app.urv.manager.patcher.util
 
-import android.os.Build
-import android.util.Log
+import app.urv.manager.patcher.runtime.RuntimeDevice
+import app.urv.manager.patcher.runtime.RuntimeLog as Log
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -18,12 +18,12 @@ object NativeLibStripper {
     private const val TAG = "NativeLibStripper"
 
     suspend fun strip(apkFile: File): Boolean =
-        strip(apkFile, Build.SUPPORTED_ABIS.filter { it.isNotBlank() })
+        strip(apkFile, RuntimeDevice.supportedAbis.filter { it.isNotBlank() })
 
     suspend fun strip(
         apkFile: File,
         checkCancelled: () -> Unit,
-    ): Boolean = strip(apkFile, Build.SUPPORTED_ABIS.filter { it.isNotBlank() }, checkCancelled)
+    ): Boolean = strip(apkFile, RuntimeDevice.supportedAbis.filter { it.isNotBlank() }, checkCancelled)
 
     suspend fun strip(
         apkFile: File,
@@ -127,7 +127,7 @@ object NativeLibStripper {
         clone.time = entry.time
         clone.comment = entry.comment
         entry.extra?.let { clone.extra = it.copyOf() }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (RuntimeDevice.sdk >= 26) {
             try {
                 entry.creationTime?.let { clone.creationTime = it }
                 entry.lastAccessTime?.let { clone.lastAccessTime = it }

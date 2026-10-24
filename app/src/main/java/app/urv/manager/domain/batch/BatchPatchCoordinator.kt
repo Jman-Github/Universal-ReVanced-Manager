@@ -824,11 +824,13 @@ class BatchPatchCoordinator(
         val input = item.input ?: return BatchPatchWorkerResult(succeeded = false)
         val backgroundExecution = mutableState.value?.scheduled == true
         val skipSigning = prefs.skipApkSigning.get()
+        val preserveSplitApks = patchBundleRepository.selectionBundleType(item.selection) == PatchBundleType.RESEAM
         val progressSteps = PatcherViewModel.generateSteps(
             app, input, item.selection,
             splitStepActive = false,
             skipApkSigning = skipSigning,
-            injectSignatureMetadata = item.signatureWorkflow.enabled
+            injectSignatureMetadata = item.signatureWorkflow.enabled,
+            preserveSplitApks = preserveSplitApks
         ).toMutableStateList()
         val progressLock = Any()
         val visualProgress = PatcherProgressTracker(
@@ -846,7 +848,8 @@ class BatchPatchCoordinator(
                 val splitStep = PatcherViewModel.generateSteps(
                     app, input, item.selection, splitStepActive = true,
                     skipApkSigning = skipSigning,
-                    injectSignatureMetadata = item.signatureWorkflow.enabled
+                    injectSignatureMetadata = item.signatureWorkflow.enabled,
+                    preserveSplitApks = preserveSplitApks
                 ).first { it.id == StepId.PrepareSplitApk }
                 val loadIndex = progressSteps.indexOfFirst { it.id == StepId.LoadPatches }
                 val insertIndex = if (loadIndex >= 0) {
@@ -1966,6 +1969,17 @@ class BatchPatchCoordinator(
                 item = item,
                 patchedFile = file
             )
+        if (requestedMount && SplitApkPreparer.isSplitArchive(file)) {
+            updateItem(index) {
+                it.copy(
+                    installOutcome = BatchInstallOutcome.FAILED,
+                    installMessage = app.getString(R.string.root_mount_incompatible_output),
+                    installedPackageName = targetPackage,
+                    installing = false
+                )
+            }
+            return
+        }
         if (requestedMount && !supportsRootMount) {
             updateItem(index) {
                 it.copy(

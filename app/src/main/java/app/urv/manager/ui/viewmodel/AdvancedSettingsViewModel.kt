@@ -21,7 +21,6 @@ import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.logger.PatcherLogMode
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
 import app.urv.manager.patcher.worker.AutoPatchWorker
@@ -268,13 +267,6 @@ class AdvancedSettingsViewModel(
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/screen/settings/system/PerformanceSection.kt
-    fun setProcessMemoryLimit(memoryLimitMb: Int) =
-        viewModelScope.launch(Dispatchers.Default) {
-            prefs.processMemoryLimit.update(
-                MemoryLimitConfig.clampConfiguredMemoryLimitMb(memoryLimitMb)
-            )
-        }
-
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
     }

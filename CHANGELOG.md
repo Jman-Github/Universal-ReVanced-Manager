@@ -1,5 +1,25 @@
 # Changelog
 
+Release notes are generated automatically from Conventional Commits.
+
+Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
+
+# [1.10.0-dev.1](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.9.0...v1.10.0-dev.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **manager:** fix picker, exports, language and dynamic colors ([c7f44e6](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/c7f44e6cb0ffb6890b19e0c241a90b899e8499c1)), closes [#751](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/751) [#752](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/752) [#766](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/766)
+
+
+### Features
+
+* **discovery:** use the Patch Bundle Registry API ([ea9e377](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/ea9e3774d430d36d2437c60e60a02b44cfe833df))
+* **patcher:** add embedded JVM runtimes ([430625e](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/430625e3df1c4747f6f17c07e321dc9e96c2861e))
+* **patcher:** add Reseam runtime ([#770](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/770)) ([8de2cdc](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/8de2cdc3848e6d5fb34456857fb723e203e62b09))
+
+# Changelog
+
 Release notes from the Semantic Release migration onward are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.

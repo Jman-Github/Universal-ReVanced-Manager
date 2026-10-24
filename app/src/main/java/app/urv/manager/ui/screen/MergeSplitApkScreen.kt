@@ -86,7 +86,6 @@ import app.urv.manager.ui.component.ProgressPercentageBadge
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
-import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
 import app.urv.manager.ui.component.patcher.rememberResourceGraphState
 import app.urv.manager.ui.component.patcher.MergerInformationCard
@@ -761,7 +760,6 @@ fun MergeSplitApkScreen(
                 }
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
                     item(key = "legacy-android-memory-warning") {
-                        LegacyAndroidMemoryWarning()
                     }
                 }
             }

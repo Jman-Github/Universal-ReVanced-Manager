@@ -15,7 +15,7 @@ class PatchWorkspaceCleanupTest {
         val batch = root.resolve("batch").apply { mkdirs() }
         val names = listOf("patched.apk", "patcher", "patch-workspace", "patcher-inputs",
             "patch-input-metadata", "apkeditor-android-data", "split-patcher-selection-1",
-            "split-revanced22-1", "installed-splits-1")
+            "split-revanced22-1", "installed-splits-1", "reseam-2453774388913789795")
         names.forEach { name ->
             if (name.endsWith(".apk")) workspace.resolve(name).writeText("output")
             else workspace.resolve(name).apply { mkdirs() }.resolve("large.apk").writeText("data")

@@ -16,7 +16,6 @@ import com.gigamole.composescrollbars.config.layersType.ScrollbarsLayersType
 import com.gigamole.composescrollbars.config.layersType.thicknessType.ScrollbarsThicknessType
 import com.gigamole.composescrollbars.config.visibilitytype.ScrollbarsVisibilityType
 import com.gigamole.composescrollbars.scrolltype.ScrollbarsScrollType
-import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsDynamicKnobType
 import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobType
 
 @Composable
@@ -41,14 +40,7 @@ fun Scrollbar(
     modifier: Modifier = Modifier,
     prominent: Boolean = false
 ) {
-    Scrollbar(
-        ScrollbarsScrollType.Lazy.List.Dynamic(
-            knobType = ScrollbarsDynamicKnobType.Auto(),
-            state = lazyListState
-        ),
-        modifier,
-        prominent
-    )
+    LazyListScrollbar(lazyListState, modifier, prominent)
 }
 
 @Composable

@@ -181,7 +181,7 @@ object MorpheRuntimeBridge {
         }
     }
 
-    private fun mapToProgressEvent(map: Map<*, *>): ProgressEvent {
+    internal fun mapToProgressEvent(map: Map<*, *>): ProgressEvent {
         val type = map["type"] as? String ?: return ProgressEvent.Progress(StepId.LoadPatches)
         val stepId = mapToStepId(map["stepId"] as? Map<*, *>)
         return when (type) {

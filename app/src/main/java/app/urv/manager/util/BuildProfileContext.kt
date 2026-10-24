@@ -92,8 +92,8 @@ internal val PR_SCHEMA_DIRECTORY = "schema-${BuildConfig.DATABASE_VERSION}"
 internal fun prPreferenceName(name: String): String = "pr_profile_${BuildConfig.DATABASE_VERSION}_$name"
 
 /**
- * Activities/providers use the Application's selected storage profile. Standalone app_process
- * package contexts have no Application, so select the profile directly for those contexts.
+ * Components use the Application's selected storage profile; package-only contexts select
+ * the same profile directly.
  */
 val Context.managerStorageContext: Context
     get() = applicationContext ?: BuildProfileContext.wrap(this)

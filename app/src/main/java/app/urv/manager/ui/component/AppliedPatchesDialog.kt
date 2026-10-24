@@ -5,15 +5,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -30,22 +26,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.annotation.StringRes
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.patch.PatchInfo
@@ -269,87 +259,5 @@ private fun Scrollbar(
     listState: LazyListState,
     modifier: Modifier = Modifier
 ) {
-    val density = LocalDensity.current
-    val itemSizeCache = remember { mutableStateMapOf<Int, Int>() }
-
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.layoutInfo.visibleItemsInfo.map { it.index to it.size } }
-            .collect { visibleItems ->
-                visibleItems.forEach { (index, size) ->
-                    if (size > 0) itemSizeCache[index] = size
-                }
-            }
-    }
-
-    val scrollbarMetrics by remember(listState, density) { derivedStateOf {
-        val layoutInfo = listState.layoutInfo
-        val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
-        val visibleItems = layoutInfo.visibleItemsInfo
-        val totalItems = layoutInfo.totalItemsCount
-        if (viewportHeight <= 0f || visibleItems.isEmpty() || totalItems == 0) {
-            return@derivedStateOf null
-        }
-        val firstVisible = visibleItems.first()
-
-        val visibleAverageSize = visibleItems
-            .map { it.size }
-            .filter { it > 0 }
-            .average()
-            .toFloat()
-            .takeIf { it > 0f }
-            ?: firstVisible.size.toFloat().coerceAtLeast(1f)
-
-        val cachedAverageSize = itemSizeCache.values
-            .filter { it > 0 }
-            .average()
-            .toFloat()
-            .takeIf { it > 0f }
-
-        val averageItemSize = cachedAverageSize ?: visibleAverageSize
-        fun itemSize(index: Int): Float = itemSizeCache[index]?.takeIf { it > 0 }?.toFloat() ?: averageItemSize
-
-        val scrolledBeforeFirst = if (firstVisible.index <= 0) {
-            0f
-        } else {
-            (0 until firstVisible.index).sumOf { index -> itemSize(index).toDouble() }.toFloat()
-        }
-        val firstOffset = (-firstVisible.offset).coerceAtLeast(0).toFloat()
-        val scrolledPx = scrolledBeforeFirst + firstOffset
-
-        val totalContentPx = (0 until totalItems).sumOf { index -> itemSize(index).toDouble() }.toFloat()
-        val scrollablePx = (totalContentPx - viewportHeight).coerceAtLeast(1f)
-        val rawProgress = (scrolledPx / scrollablePx).coerceIn(0f, 1f)
-
-        val progress = when {
-            !listState.canScrollBackward -> 0f
-            !listState.canScrollForward -> 1f
-            else -> rawProgress.coerceAtMost(0.995f)
-        }
-
-        val thumbHeight = with(density) { 48.dp.toPx() }.coerceAtMost(viewportHeight)
-        val maxThumbOffset = (viewportHeight - thumbHeight).coerceAtLeast(0f)
-        val thumbOffset = progress * maxThumbOffset
-
-        thumbHeight to thumbOffset
-    } }
-
-    val (thumbHeight, thumbOffset) = scrollbarMetrics ?: return
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(8.dp),
-        contentAlignment = Alignment.TopEnd
-    ) {
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(with(density) { thumbHeight.toDp() })
-                .offset { IntOffset(0, thumbOffset.toInt()) }
-                .background(
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(99.dp)
-                )
-        )
-    }
+    LazyListScrollbar(listState, modifier, prominent = true)
 }

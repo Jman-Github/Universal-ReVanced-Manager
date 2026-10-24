@@ -1178,12 +1178,14 @@ fun DashboardScreen(
             packageName = installedAppsViewModel.packageInfoMap[app.currentPackageName]?.packageName
                 ?: displayPackageName,
             appVersion = app.version,
-            patchBundles = patchBundles
+            patchBundles = patchBundles,
+            fileExtension = quickActionViewModel?.savedFileExtension ?: "apk"
         )
         return ExportNameFormatter.format(exportFormat, exportData)
     }
     val quickExportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+        contract = RememberedCreateDocument(if (quickActionViewModel?.savedFileExtension == "apks") "application/zip"
+            else "application/vnd.android.package-archive") {
             dashboardQuickExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
         }
     ) { uri ->

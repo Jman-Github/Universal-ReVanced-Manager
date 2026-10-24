@@ -1,7 +1,6 @@
 package app.urv.manager.revanced.runtime
 
-import android.os.Build
-import app.revanced.patcher.patch.Option
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.PatchList
 import app.urv.manager.patcher.ProgressEvent
@@ -44,7 +43,7 @@ object RevancedRuntimeEntry {
 
     @JvmStatic
     fun loadMetadataForBundle(bundlePath: String): List<Map<String, Any?>> =
-        PatchBundle.Loader.metadata(PatchBundle(bundlePath)).map(::patchToMap)
+        PatchBundle.Loader.metadata(PatchBundle(bundlePath)).map(::patchMetadata)
 
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: RevancedRuntimeCallback): String? {
@@ -115,7 +114,7 @@ object RevancedRuntimeEntry {
 
                         return runCatching {
                             val patchBundles = configs.map { PatchBundle(it.bundlePath) }
-                            val allPatches = PatchBundle.Loader.patches(patchBundles, packageName)
+                            val allPatches = PatchBundle.Loader.patches(patchBundles, packageName, logger)
 
                             configs.flatMap { config ->
                                 val bundle = PatchBundle(config.bundlePath)
@@ -127,12 +126,12 @@ object RevancedRuntimeEntry {
                                     key is String && key in patches
                                 }
                                 filteredOptions.forEach { (patchName, opts) ->
-                                    val patchOptions = patches[patchName]?.options
+                                    val patch = patches[patchName]
                                         ?: throw Exception("Patch with name $patchName does not exist.")
                                     val patchOptionsMap = opts as? Map<*, *> ?: emptyMap<Any, Any?>()
                                     patchOptionsMap.forEach { (key, value) ->
                                         val keyString = key as? String ?: return@forEach
-                                        patchOptions[keyString] = value
+                                        setPatchOption(patch, keyString, value)
                                     }
                                 }
 
@@ -356,48 +355,6 @@ object RevancedRuntimeEntry {
         }
     }
 
-    private fun patchToMap(patch: Patch<*>): Map<String, Any?> {
-        val result = LinkedHashMap<String, Any?>()
-        result["name"] = patch.name.orEmpty()
-        result["description"] = patch.description
-        result["use"] = patch.use
-        result["compatiblePackages"] = patch.compatiblePackages?.map { (pkg, versions) ->
-            linkedMapOf(
-                "packageName" to pkg,
-                "versions" to versions?.toList()
-            )
-        }
-        val options = patch.options.values.map(::optionToMap)
-        result["options"] = options.ifEmpty { null }
-        return result
-    }
-
-    private fun optionToMap(option: Option<*>): Map<String, Any?> {
-        val result = LinkedHashMap<String, Any?>()
-        result["key"] = option.key
-        result["title"] = option.title ?: option.key
-        result["description"] = option.description.orEmpty()
-        result["required"] = option.required
-        result["type"] = option.type.toString()
-        result["default"] = normalizeValue(option.default)
-        result["presets"] = option.values
-            ?.mapValues { (_, value) -> normalizeValue(value) }
-            ?.ifEmpty { null }
-        return result
-    }
-
-    private fun normalizeValue(value: Any?): Any? = when (value) {
-        null -> null
-        is String -> value
-        is Boolean -> value
-        is Int -> value
-        is Long -> value
-        is Float -> value
-        is Double -> value.toFloat()
-        is Iterable<*> -> value.map(::normalizeValue)
-        else -> value.toString()
-    }
-
     private data class RuntimeConfiguration(
         val bundlePath: String,
         val patches: List<String>,
@@ -405,12 +362,12 @@ object RevancedRuntimeEntry {
     )
 
     private fun revanced21FrameworkRuntimeTag(): String {
-        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprint = RuntimeDevice.fingerprint.takeUnless { it.isNullOrBlank() } ?: "unknown"
         val fingerprintHash = MessageDigest.getInstance("SHA-256")
             .digest(fingerprint.toByteArray())
             .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
             .take(12)
-        return "revanced21_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+        return "revanced21_device${RuntimeDevice.sdk}_$fingerprintHash"
     }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {

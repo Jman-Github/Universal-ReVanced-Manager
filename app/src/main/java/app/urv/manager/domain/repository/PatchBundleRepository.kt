@@ -48,6 +48,9 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.PatchBundle
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.patcher.patch.ReseamBundleFormat
+import app.urv.manager.patcher.reseam.ReseamRuntimeBridge
+import app.urv.manager.patcher.runtime.reseam.ReseamRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
@@ -215,7 +218,7 @@ class PatchBundleRepository(
             .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
             .toSet()
         val morphePatches = bundleInfos.values
-            .filter { it.bundleType == PatchBundleType.MORPHE }
+            .filter { it.bundleType == PatchBundleType.MORPHE || it.bundleType == PatchBundleType.RESEAM }
             .flatMap { info -> info.patches }
         val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
         val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
@@ -232,6 +235,7 @@ class PatchBundleRepository(
                 PatchBundleType.MORPHE -> {
                     suggestedVersionsForMorphe(info.patches)
                 }
+                PatchBundleType.RESEAM -> suggestedVersionsForMorphe(info.patches)
                 PatchBundleType.AMPLE -> emptyMap()
             }
         }
@@ -807,6 +811,20 @@ class PatchBundleRepository(
             State(sources.toPersistentMap(), info.toPersistentMap())
         }
         val info = loadMetadata(sources).toMutableMap()
+        // Reseam stores identity in its signed catalog rather than a Java JAR manifest.
+        // Read it through the runtime so malformed or untrusted catalogs cannot supply names.
+        info.filterValues { it.bundleType == PatchBundleType.RESEAM }.keys.forEach { uid ->
+            val source = sources[uid] ?: return@forEach
+            val bundle = source.patchBundle ?: return@forEach
+            val catalogName = runCatching { ReseamRuntimeBridge.loadBundleName(bundle.patchesJar) }
+                .getOrNull() ?: return@forEach
+            if (catalogName != source.name) {
+                updateDb(uid) { it.copy(name = catalogName) }
+                val renamedSource = source.copy(name = catalogName)
+                sources[uid] = renamedSource
+                info[uid] = info[uid]?.copy(name = renamedSource.displayTitle) ?: return@forEach
+            }
+        }
 
         val officialSource = sources[0]
         val officialDisplayName = "Official ReVanced Patches"
@@ -1050,6 +1068,13 @@ class PatchBundleRepository(
     ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
         val declaredType = detectDeclaredBundleType(bundle, source)
+        if (declaredType == PatchBundleType.RESEAM) {
+            if (!ReseamRuntimeAssets.isAvailable(app)) {
+                throw missingRuntimeException("Reseam")
+            }
+            return PatchBundleType.RESEAM to
+                ReseamRuntimeBridge.loadMetadata(bundlePath)
+        }
         if (declaredType == PatchBundleType.MORPHE) {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
@@ -1151,6 +1176,8 @@ class PatchBundleRepository(
         source: PatchBundleSource?
     ): PatchBundleType? {
         val extension = resolveBundleExtension(bundle, source)
+        if (ReseamBundleFormat.isCandidate(java.io.File(bundle.patchesJar))) return PatchBundleType.RESEAM
+        if (extension == "reseam") return PatchBundleType.RESEAM
         if (extension == "mpp") return PatchBundleType.MORPHE
         return if (extension == "rvp") PatchBundleType.REVANCED else null
     }
@@ -1259,7 +1286,7 @@ class PatchBundleRepository(
                 val (bundleType, patches) = loadBundleMetadata(src.uid, bundle, src)
                 metadata[src.uid] = PatchBundleInfo.Global(
                     src.displayTitle,
-                    bundle.manifestAttributes?.version,
+                    src.version,
                     src.uid,
                     bundleType,
                     src.enabled,
@@ -1269,7 +1296,7 @@ class PatchBundleRepository(
                 detectDeclaredBundleType(bundle, src)?.let { declaredType ->
                     metadata[src.uid] = PatchBundleInfo.Global(
                         src.displayTitle,
-                        bundle.manifestAttributes?.version,
+                        src.version,
                         src.uid,
                         declaredType,
                         src.enabled,
@@ -2107,7 +2134,9 @@ class PatchBundleRepository(
                         uid = uid,
                         displayName = existingProps?.displayName
                     )
-                    writeLocalBundleHint(uid, sourceNameHint)
+                    writeLocalBundleHint(
+                        uid, if (ReseamBundleFormat.isCandidate(tempFile, sourceNameHint)) "bundle.reseam" else sourceNameHint
+                    )
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
@@ -2294,11 +2323,12 @@ class PatchBundleRepository(
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         if (bundle.isBundleV3) {
-            toast(R.string.patch_bundle_discovery_v3_warning)
+            toast(R.string.catalog_unsupported_format)
             return
         }
+        val downloadUrl = bundle.downloadUrl?.trim()?.takeIf { it.isNotBlank() }
         val rawUrl = externalBundleEndpoint(bundle, preferLatestAcrossChannels).trim()
-        if (rawUrl.isBlank()) {
+        if (rawUrl.isBlank() || downloadUrl == null) {
             toast(R.string.patch_bundle_discovery_error)
             return
         }
@@ -2312,22 +2342,24 @@ class PatchBundleRepository(
 
         val metadata = ExternalBundleMetadata(
             bundleId = bundle.bundleId,
-            downloadUrl = bundle.downloadUrl
-                ?.trim()
-                ?.takeUnless { it.isBlank() }
-                ?: validatedUrl,
+            downloadUrl = downloadUrl,
             signatureDownloadUrl = bundle.signatureDownloadUrl,
             version = bundle.version.ifBlank { "unknown" },
             createdAt = bundle.createdAt.takeUnless { it.isBlank() },
             description = bundle.description,
             ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
             repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
+            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease,
+            iconUrl = bundle.iconUrl,
+            ownerAvatarUrl = bundle.ownerAvatarUrl,
+            sourceUrl = bundle.sourceUrl,
+            apiHost = bundle.apiHost,
+            fileHash = bundle.fileHash
         )
 
         val entity = createEntity(
             "",
-            SourceInfo.from(externalBundleEndpoint(bundle, preferLatestAcrossChannels)),
+            SourceInfo.from(validatedUrl),
             autoUpdate,
             searchUpdate = searchUpdate
         )
@@ -2375,7 +2407,7 @@ class PatchBundleRepository(
         val sourceUrl = bundle.sourceUrl.trim().takeIf { it.isNotBlank() }
             ?: if (owner.isNotBlank() && repo.isNotBlank()) "https://github.com/$owner/$repo" else ""
         val host = bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         ExternalBundlesEndpoints.latestBundleUrl(
             host = host,
             sourceUrl = sourceUrl,
@@ -2386,7 +2418,7 @@ class PatchBundleRepository(
 
     private fun externalBundleEndpoint(bundleId: Int, apiHost: String): String {
         val host = apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         return "https://$host/bundles/id?id=$bundleId"
     }
 
@@ -2451,6 +2483,7 @@ class PatchBundleRepository(
         repositoryManifestUrl(parsed)?.let { manifestUrl ->
             return manifestUrl
         }
+        customGitRepositoryUrl(trimmed)?.let { return it }
 
         var host = parsed.host
         var pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
@@ -3641,7 +3674,7 @@ class PatchBundleRepository(
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
         const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
-        val supportedBundleExtensions = setOf("rvp", "mpp")
+        val supportedBundleExtensions = setOf("rvp", "mpp", "reseam")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,
