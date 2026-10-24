@@ -427,18 +427,22 @@ class PatcherRuntimePluginRepository(
     private suspend fun importSourceEntries(
         importRequest: ImportRequest
     ): List<PatcherRuntimePluginSourceEntry> {
-        val release = releaseForImport(importRequest)
-        val apkAssets = release.assets.filter(::isSupportedRuntimeAsset)
-        if (apkAssets.isEmpty()) {
-            error("No patcher runtime APK assets found for ${importRequest.repoUrl}")
-        }
-
         val selectedAssets = when (importRequest) {
-            is ImportRequest.Asset -> apkAssets.filter {
-                canonicalAssetSelector(normalizeAssetSelector(it.name)) ==
-                    canonicalAssetSelector(importRequest.assetSelector)
+            is ImportRequest.Asset -> {
+                val release = releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
+                release.assets.filter {
+                    isSupportedRuntimeAsset(it) && it.matchesAssetSelector(importRequest.assetSelector)
+                }.map { release to it }
             }
-            is ImportRequest.Repository -> apkAssets
+            is ImportRequest.Repository -> {
+                val stable = releaseHistoryFor(importRequest.repoUrl, prerelease = false, limit = 100)
+                val prereleases = releaseHistoryFor(importRequest.repoUrl, prerelease = true, limit = 100)
+                selectRuntimePluginAssets(stable + prereleases) { asset ->
+                    if (isSupportedRuntimeAsset(asset)) {
+                        canonicalAssetSelector(normalizeAssetSelector(asset.name))
+                    } else null
+                }
+            }
         }
         if (selectedAssets.isEmpty()) {
             error("No matching patcher runtime APK asset found for ${importRequest.repoUrl}")
@@ -446,7 +450,7 @@ class PatcherRuntimePluginRepository(
 
         val entries = readSourceEntries().toMutableList()
         val importedEntries = mutableListOf<PatcherRuntimePluginSourceEntry>()
-        selectedAssets.forEach { asset ->
+        selectedAssets.forEach { (release, asset) ->
             val selector = canonicalAssetSelector(normalizeAssetSelector(asset.name))
             val versionKey = releaseVersionKey(release, asset)
             val existingIndex = entries.indexOfFirst {
@@ -535,16 +539,6 @@ class PatcherRuntimePluginRepository(
             }
         }
     }
-
-    private suspend fun releaseForImport(importRequest: ImportRequest): GitHubRelease = when (importRequest) {
-        is ImportRequest.Repository -> latestImportReleaseFor(importRequest.repoUrl)
-        is ImportRequest.Asset -> releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
-    }
-
-    private suspend fun latestImportReleaseFor(repoUrl: String): GitHubRelease =
-        findLatestReleaseFor(repoUrl, prerelease = false, assetSelector = null)
-            ?: findLatestReleaseFor(repoUrl, prerelease = true, assetSelector = null)
-            ?: throw Exception("No patcher runtime APK assets found for $repoUrl")
 
     private suspend fun releaseForTag(repoUrl: String, releaseTag: String): GitHubRelease =
         releaseHistoryFor(repoUrl, prerelease = null, limit = 100)

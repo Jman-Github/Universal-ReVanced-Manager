@@ -982,7 +982,8 @@ fun DashboardScreen(
                 bundlePermissionLauncher.launch(bundlePermissionName)
             }
         } else {
-            bundleDocumentLauncher.launch("application/octet-stream")
+            // Bundle extensions can have different MIME types across document providers.
+            bundleDocumentLauncher.launch("*/*")
         }
     }
 

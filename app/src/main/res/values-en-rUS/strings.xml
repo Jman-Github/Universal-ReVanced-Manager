@@ -2183,7 +2183,7 @@ Details: %2$s</string>
     <string name="patches_prereleases_description">Use pre-release versions of %s</string>
     <string name="patches_url">Patch bundle URL</string>
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
-    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
+    <string name="patch_bundle_discovery_title">Discovery</string>
     <string name="patch_bundle_discovery_description">Browse patch bundles and supported apps from the Patch Bundle Registry.</string>
     <string name="patch_bundle_discovery_package_label">Search packages</string>
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
