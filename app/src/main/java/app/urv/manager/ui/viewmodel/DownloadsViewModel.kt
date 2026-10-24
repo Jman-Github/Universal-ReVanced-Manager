@@ -35,6 +35,7 @@ import app.urv.manager.domain.installer.root.suspendRootMountForPackageInstall
 import app.urv.manager.domain.installer.ShizukuInstaller
 import app.urv.manager.domain.manager.KeystoreManager
 import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.repository.DownloadedAppFiles
 import app.urv.manager.domain.repository.DownloadedAppRepository
 import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
@@ -64,8 +65,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import ru.solrudev.ackpine.session.Session
 import ru.solrudev.ackpine.uninstaller.UninstallFailure
 import java.nio.file.Files
@@ -150,6 +149,11 @@ class DownloadsViewModel(
         }
     }
 
+    suspend fun exportFileExtensionFor(downloadedApp: DownloadedApp): String =
+        withContext(Dispatchers.IO) {
+            DownloadedAppFiles.extension(downloadedAppRepository.getApkFileForApp(downloadedApp))
+        }
+
     private suspend fun resolveDisplayInfo(
         downloadedApp: DownloadedApp
     ): DownloadedAppDisplayInfo = withContext(Dispatchers.IO) {
@@ -157,9 +161,10 @@ class DownloadsViewModel(
             downloadedAppRepository.getApkFileForApp(downloadedApp)
         }.getOrNull()
 
+        val isSplitApk = source?.takeIf(File::exists)?.let { SplitApkPreparer.isSplitArchive(it) }
         if (source != null && source.exists()) {
             try {
-                if (SplitApkPreparer.isSplitArchive(source)) {
+                if (isSplitApk == true) {
                     SplitArchiveDisplayResolver.resolve(
                         source = source,
                         workspace = displayWorkspaceRoot,
@@ -169,7 +174,8 @@ class DownloadsViewModel(
                         return@withContext DownloadedAppDisplayInfo(
                             packageInfo = resolved.packageInfo,
                             label = resolved.label,
-                            icon = resolved.icon
+                            icon = resolved.icon,
+                            isSplitApk = true
                         )
                     }
                 } else {
@@ -179,7 +185,8 @@ class DownloadsViewModel(
                         return@withContext DownloadedAppDisplayInfo(
                             packageInfo = packageInfo,
                             label = label,
-                            icon = null
+                            icon = null,
+                            isSplitApk = false
                         )
                     }
                 }
@@ -194,7 +201,8 @@ class DownloadsViewModel(
         DownloadedAppDisplayInfo(
             packageInfo = installedInfo,
             label = installedInfo?.let { runCatching { with(pm) { it.label() } }.getOrNull() },
-            icon = null
+            icon = null,
+            isSplitApk = isSplitApk
         )
     }
 
@@ -214,7 +222,8 @@ class DownloadsViewModel(
     data class DownloadedAppDisplayInfo(
         val packageInfo: PackageInfo?,
         val label: String?,
-        val icon: Drawable?
+        val icon: Drawable?,
+        val isSplitApk: Boolean?
     )
 
     private data class DownloadedAppDisplayKey(
@@ -986,24 +995,7 @@ class DownloadsViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     resolver.openOutputStream(uri)?.use { output ->
-                        if (asArchive) {
-                            ZipOutputStream(output).use { zipStream ->
-                                selection.forEach { app ->
-                                    val apkFile = downloadedAppRepository.getPreparedApkFile(app)
-                                    val baseName =
-                                        "${app.packageName}_${app.version}".replace('/', '_')
-                                    val entry = ZipEntry("$baseName.apk")
-                                    zipStream.putNextEntry(entry)
-                                    apkFile.inputStream().use { it.copyTo(zipStream) }
-                                    zipStream.closeEntry()
-                                }
-                            }
-                        } else {
-                            val app = selection.first()
-                            val apkFile =
-                                downloadedAppRepository.getPreparedApkFile(app)
-                            apkFile.inputStream().use { input -> input.copyTo(output) }
-                        }
+                        downloadedAppRepository.exportApps(selection, output, asArchive)
                     } ?: error("Could not open output stream for export")
                 }
             }.onSuccess {
@@ -1036,24 +1028,7 @@ class DownloadsViewModel(
             withContext(Dispatchers.IO) {
                 target.parent?.let { Files.createDirectories(it) }
                 Files.newOutputStream(target).use { output ->
-                    if (asArchive) {
-                        ZipOutputStream(output).use { zipStream ->
-                            selection.forEach { app ->
-                                val apkFile = downloadedAppRepository.getPreparedApkFile(app)
-                                val baseName =
-                                    "${app.packageName}_${app.version}".replace('/', '_')
-                                val entry = ZipEntry("$baseName.apk")
-                                zipStream.putNextEntry(entry)
-                                apkFile.inputStream().use { it.copyTo(zipStream) }
-                                zipStream.closeEntry()
-                            }
-                        }
-                    } else {
-                        val app = selection.first()
-                        val apkFile =
-                            downloadedAppRepository.getPreparedApkFile(app)
-                        apkFile.inputStream().use { input -> input.copyTo(output) }
-                    }
+                    downloadedAppRepository.exportApps(selection, output, asArchive)
                 }
             }
         }.isSuccess

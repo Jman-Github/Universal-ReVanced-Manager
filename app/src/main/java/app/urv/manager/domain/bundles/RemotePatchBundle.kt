@@ -11,9 +11,12 @@ import app.urv.manager.network.dto.GitLabRelease
 import app.urv.manager.network.dto.GitLabReleaseLink
 import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.network.service.HttpService
+import app.urv.manager.network.utils.APIResponse
 import app.urv.manager.network.utils.getOrNull
 import app.urv.manager.network.utils.getOrThrow
 import app.urv.manager.patcher.patch.PatchBundle
+import app.urv.manager.patcher.patch.ReseamBundleFormat
+import app.urv.manager.patcher.reseam.ReseamRuntimeBridge
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpTimeout
@@ -22,6 +25,7 @@ import io.ktor.client.request.prepareGet
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.jvm.javaio.toInputStream
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.Url
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -30,6 +34,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDateTime
@@ -125,7 +131,7 @@ sealed class RemotePatchBundle(
                     builder = { url(info.downloadUrl) },
                     onProgress = onProgress
                 )
-                validateDownloadedPatchBundle(tempFile)
+                validateDownloadedPatchBundle(tempFile, info.downloadUrl)
                 runCatching { patchesFile.setWritable(true, true) }
                 Files.move(
                     tempFile.toPath(),
@@ -301,11 +307,21 @@ sealed class RemotePatchBundle(
         return noBuild.ifBlank { null }
     }
 
-    private fun validateDownloadedPatchBundle(file: File) {
+    private fun validateDownloadedPatchBundle(file: File, fileNameHint: String) {
         val length = runCatching { file.length() }.getOrDefault(0L)
         if (length < 8L) {
             runCatching { file.delete() }
             throw IOException("Downloading patch bundle produced an empty or truncated patch bundle (size=$length)")
+        }
+
+        val isReseamBundle = ReseamBundleFormat.isBundle(file)
+        require(!directory.resolve("reseam-signer").exists() || isReseamBundle) {
+            "A pinned Reseam source must provide a signed Reseam bundle."
+        }
+        if (ReseamBundleFormat.isCandidate(file, fileNameHint)) {
+            // Verify signatures and signer continuity before replacing an installed bundle.
+            ReseamRuntimeBridge.loadMetadata(file.absolutePath)
+            return
         }
 
         val manifestAttributes = runCatching {
@@ -376,24 +392,51 @@ class JsonPatchBundle(
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         val releaseSource = repositoryReleaseSource()
-        if (!supportsPrereleases || releaseSource == null) {
-            return@withContext requestManifest(endpoint)
+        val repositoryUrl = when (releaseSource) {
+            is RepositoryReleaseSource.Forgejo -> releaseSource.repositoryUrl
+            is RepositoryReleaseSource.GitLab -> "${releaseSource.origin}/${releaseSource.repositoryPath}"
+            else -> null
         }
-        if (
-            releaseSource is RepositoryReleaseSource.GitLab &&
-            releaseChannel == RepositoryBundleReleaseChannel.RELEASE
-        ) {
-            return@withContext requestManifest(endpoint)
+        if (repositoryUrl != null && endpoint.trimEnd('/') == repositoryUrl) {
+            return@withContext requestLatestRepositoryRelease(
+                requireNotNull(releaseSource), preferredExtension = null,
+                prerelease = when (releaseChannel) {
+                    RepositoryBundleReleaseChannel.RELEASE -> false
+                    RepositoryBundleReleaseChannel.PRERELEASE -> true
+                    RepositoryBundleReleaseChannel.LATEST -> null
+                }
+            ) ?: throw NoSuchElementException("No compatible repository release asset found")
         }
-
+        val document = try {
+            Result.success(http.request<JsonObject> { url(endpoint) }.getOrThrow())
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Result.failure(error)
+        }
         val prerelease = when (releaseChannel) {
             RepositoryBundleReleaseChannel.RELEASE -> false
             RepositoryBundleReleaseChannel.PRERELEASE -> true
             RepositoryBundleReleaseChannel.LATEST -> null
         }
+        // A Reseam index owns release selection and signer trust even when hosted on GitHub.
+        // Parse and validate it outside the legacy repository fallback so errors cannot bypass it.
+        val reseam = document.getOrNull()?.let { ReseamBundleIndex.parse(it, endpoint, prerelease) }
+        if (reseam != null) return@withContext acceptReseamRelease(reseam)
+
+        suspend fun requestManifest(): ReVancedAsset =
+            http.json.decodeFromJsonElement(document.getOrThrow())
+
+        if (!supportsPrereleases || releaseSource == null ||
+            (releaseSource is RepositoryReleaseSource.GitLab &&
+                releaseSource.origin == "https://gitlab.com" &&
+                releaseChannel == RepositoryBundleReleaseChannel.RELEASE)
+        ) {
+            return@withContext requestManifest()
+        }
 
         resolveRepositoryBundleRelease(
-            requestManifest = { requestManifest(endpoint) },
+            requestManifest = { requestManifest() },
             requestRelease = { manifest ->
                 requestLatestRepositoryRelease(
                     source = releaseSource,
@@ -472,9 +515,20 @@ class JsonPatchBundle(
         channel == RepositoryBundleReleaseChannel.LATEST,
     )
 
-    private suspend fun requestManifest(manifestUrl: String) = http.request<ReVancedAsset> {
-        url(manifestUrl)
-    }.getOrThrow()
+    private fun acceptReseamRelease(reseam: ReseamBundleIndex.Release): ReVancedAsset {
+        reseam.publicKey?.let { key ->
+            val signer = directory.resolve("reseam-signer")
+            if (signer.exists()) {
+                require(signer.readText().trim().equals(key, ignoreCase = true)) {
+                    "Reseam publisher key changed. Remove and import this source again if you trust the new key."
+                }
+            } else {
+                directory.mkdirs()
+                signer.writeText(key)
+            }
+        }
+        return reseam.asset
+    }
 
     private fun repositoryReleaseSource(): RepositoryReleaseSource? =
         RepositoryReleaseSourceParser.parse(endpoint)
@@ -493,18 +547,40 @@ class JsonPatchBundle(
             }
             .maxByOrNull { it.createdAt }
 
+        // Forgejo and Gitea use the same public release/asset fields as GitHub.
+        // https://forgejo.org/docs/latest/user/api/usage/
+        is RepositoryReleaseSource.Forgejo -> {
+            val response = http.request<List<GitHubRelease>> {
+                url("${source.apiUrl}/releases?limit=50")
+            }
+            // A repository root does not identify its server software. Try GitLab only if
+            // the Forgejo endpoint is absent; authentication and network errors stay errors.
+            if (response is APIResponse.Error && response.error.code == HttpStatusCode.NotFound) {
+                requestLatestRepositoryRelease(
+                    RepositoryReleaseSource.GitLab(source.repositoryPath, source.origin),
+                    preferredExtension, prerelease
+                )
+            } else {
+                response.getOrThrow()
+                    .asSequence()
+                    .filter { !it.draft && (prerelease == null || it.prerelease == prerelease) }
+                    .mapNotNull { it.toPatchBundleAsset(source.repositoryUrl, preferredExtension) }
+                    .maxByOrNull { it.createdAt }
+            }
+        }
+
         is RepositoryReleaseSource.GitLab -> {
             val encodedProject = URLEncoder.encode(
                 source.repositoryPath,
                 StandardCharsets.UTF_8.name()
             ).replace("+", "%20")
             http.request<List<GitLabRelease>> {
-                url("https://gitlab.com/api/v4/projects/$encodedProject/releases?per_page=50")
+                url("${source.origin}/api/v4/projects/$encodedProject/releases?per_page=50")
             }.getOrThrow()
                 .asSequence()
                 .filterNot { it.upcomingRelease }
                 .mapNotNull { release ->
-                    release.toPatchBundleAsset(source.repositoryPath, preferredExtension)
+                    release.toPatchBundleAsset(source.repositoryPath, preferredExtension, source.origin)
                 }
                 .maxByOrNull { it.createdAt }
         }
@@ -528,15 +604,16 @@ class JsonPatchBundle(
 
     private fun GitLabRelease.toPatchBundleAsset(
         repositoryPath: String,
-        preferredExtension: String?
+        preferredExtension: String?,
+        origin: String = "https://gitlab.com"
     ): ReVancedAsset? {
         val asset = assets.links.selectGitLabPatchBundleAsset(preferredExtension) ?: return null
         val created = (releasedAt ?: createdAt)?.toUtcLocalDateTime() ?: return null
         return ReVancedAsset(
-            downloadUrl = asset.resolvedGitLabUrl(),
+            downloadUrl = asset.resolvedGitLabUrl(origin),
             createdAt = created,
-            signatureDownloadUrl = assets.links.findGitLabSignatureUrl(asset.name),
-            pageUrl = "https://gitlab.com/$repositoryPath/-/releases/$tagName",
+            signatureDownloadUrl = assets.links.findGitLabSignatureUrl(asset.name, origin),
+            pageUrl = "$origin/$repositoryPath/-/releases/$tagName",
             description = description?.ifBlank { name.orEmpty() } ?: name.orEmpty(),
             version = tagName
         )
@@ -569,9 +646,11 @@ class JsonPatchBundle(
         return firstOrNull { it.name in candidates }?.downloadUrl
     }
 
-    private fun List<GitLabReleaseLink>.findGitLabSignatureUrl(assetName: String): String? {
+    private fun List<GitLabReleaseLink>.findGitLabSignatureUrl(
+        assetName: String, origin: String = "https://gitlab.com"
+    ): String? {
         val candidates = signatureNames(assetName)
-        return firstOrNull { it.name in candidates }?.resolvedGitLabUrl()
+        return firstOrNull { it.name in candidates }?.resolvedGitLabUrl(origin)
     }
 
     private fun signatureNames(assetName: String): Set<String> {
@@ -579,16 +658,16 @@ class JsonPatchBundle(
         return setOf("$assetName.sig", "$assetName.asc", "$base.sig", "$base.asc")
     }
 
-    private fun GitLabReleaseLink.resolvedGitLabUrl(): String {
+    private fun GitLabReleaseLink.resolvedGitLabUrl(origin: String = "https://gitlab.com"): String {
         val raw = directAssetUrl?.takeUnless { it.isBlank() } ?: url
-        return if (raw.startsWith('/')) "https://gitlab.com$raw" else raw
+        return if (raw.startsWith('/')) "$origin$raw" else raw
     }
 
     private fun String.patchBundleExtension(): String? {
         val path = substringBefore('?').substringBefore('#')
         return path.substringAfterLast('.', "")
             .lowercase()
-            .takeIf { it == "rvp" || it == "mpp" }
+            .takeIf { it == "rvp" || it == "mpp" || it == "reseam" }
     }
 
     private fun String.toUtcLocalDateTime(): LocalDateTime? = runCatching {
@@ -796,7 +875,7 @@ class GitHubPullRequestBundle(
                             var entry = zis.nextEntry
                             while (entry != null) {
                                 val entryName = entry.name.lowercase()
-                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp"))) {
+                                if (!entry.isDirectory && (entryName.endsWith(".rvp") || entryName.endsWith(".mpp") || entryName.endsWith(".reseam"))) {
                                     extractedTotal = entry.size.takeIf { it > 0 }
                                     while (true) {
                                         val read = zis.read(buffer)
@@ -817,7 +896,7 @@ class GitHubPullRequestBundle(
                             }
 
                             if (copiedBytes <= 0L) {
-                                throw IOException("No .rvp or .mpp file found in the pull request artifact.")
+                                throw IOException("No .rvp, .mpp or .reseam file found in the pull request artifact.")
                             }
                             onProgress?.invoke(copiedBytes, extractedTotal)
                         }
@@ -1224,7 +1303,7 @@ class ExternalGraphqlPatchBundle(
         apiHost = snapshot.apiHost,
         fileHash = snapshot.fileHash
     ).also {
-        check(!snapshot.isBundleV3 && !snapshot.bundleType.equals("Reseam", true)) {
+        check(!snapshot.isBundleV3) {
             "This bundle format is not supported"
         }
     }

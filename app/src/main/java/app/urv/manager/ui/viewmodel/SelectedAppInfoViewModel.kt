@@ -237,6 +237,7 @@ class SelectedAppInfoViewModel(
                 pickRecommendedVersion(versionCounts.orEmpty())
             }
             PatchBundleType.MORPHE,
+            PatchBundleType.RESEAM,
             PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, activePackageName)
             else -> null
         }
@@ -1925,6 +1926,7 @@ class SelectedAppInfoViewModel(
             }
 
             PatchBundleType.MORPHE,
+            PatchBundleType.RESEAM,
             PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, packageName)
         }
     }

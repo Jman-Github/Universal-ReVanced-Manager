@@ -132,6 +132,7 @@ import app.urv.manager.util.longPressOnly
 import app.urv.manager.util.toast
 import app.urv.manager.util.withHapticFeedback
 import org.koin.compose.koinInject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import java.security.MessageDigest
@@ -237,17 +238,32 @@ fun DownloadsSettingsScreen(
             )
         }
     }
-    fun openExportPicker(state: DownloadedAppsExportState) {
-        if (useCustomFilePicker) {
-            if (fs.hasStoragePermission()) {
-                activeExportState = state
-            } else {
-                pendingExportState = state
-                permissionLauncher.launch(permissionName)
+    fun openExportPicker(apps: Collection<DownloadedApp>) {
+        val selection = apps.toList()
+        if (selection.isEmpty()) return
+        pickerScope.launch {
+            try {
+                val extension = selection.singleOrNull()?.let {
+                    viewModel.exportFileExtensionFor(it)
+                } ?: "apk"
+                val state = selection.toExportState(extension)
+                if (useCustomFilePicker) {
+                    if (fs.hasStoragePermission()) {
+                        activeExportState = state
+                    } else {
+                        pendingExportState = state
+                        permissionLauncher.launch(permissionName)
+                    }
+                } else {
+                    pendingDocumentExportState = state
+                    exportDocumentLauncher.launch(state.defaultFileName)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                android.util.Log.e("DownloadsSettings", "Failed to inspect download for export", error)
+                context.toast(context.getString(R.string.downloaded_apps_export_failed))
             }
-        } else {
-            pendingDocumentExportState = state
-            exportDocumentLauncher.launch(state.defaultFileName)
         }
     }
     LaunchedEffect(useCustomFilePicker) {
@@ -550,7 +566,7 @@ fun DownloadsSettingsScreen(
                 actions = {
                     if (viewModel.appSelection.isNotEmpty()) {
                         IconButton(onClick = {
-                            openExportPicker(viewModel.appSelection.toExportState())
+                            openExportPicker(viewModel.appSelection)
                         }) {
                             Icon(Icons.Outlined.Save, stringResource(R.string.downloaded_apps_export))
                         }
@@ -1138,7 +1154,7 @@ fun DownloadsSettingsScreen(
                         installEnabled = viewModel.installingApp == null,
                         onSelectionChange = { viewModel.toggleApp(app) },
                         onExport = {
-                            openExportPicker(listOf(app).toExportState())
+                            openExportPicker(listOf(app))
                         },
                         onDelete = {
                             appPendingDeletion = app
@@ -1222,9 +1238,26 @@ private fun DownloadedAppCard(
                     style = MaterialTheme.typography.titleMedium,
                     defaultText = app.packageName,
                     modifier = Modifier
-                        .weight(1f, fill = false)
+                        .weight(1f)
                         .consumeHorizontalScroll(titleScrollState)
                 )
+                displayInfo?.isSplitApk?.let { isSplitApk ->
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (isSplitApk) R.string.downloaded_app_format_split_apk
+                                else R.string.downloaded_app_format_apk
+                            ),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
+                }
             }
 
             Column(
@@ -1359,7 +1392,7 @@ private data class DownloadedAppsExportState(
     val fileTypeLabel: String
 )
 
-private fun Collection<DownloadedApp>.toExportState(): DownloadedAppsExportState {
+private fun Collection<DownloadedApp>.toExportState(extension: String): DownloadedAppsExportState {
     val apps = toList()
     require(apps.isNotEmpty())
     return if (apps.size == 1) {
@@ -1367,8 +1400,8 @@ private fun Collection<DownloadedApp>.toExportState(): DownloadedAppsExportState
         DownloadedAppsExportState(
             apps = apps,
             asArchive = false,
-            defaultFileName = "${app.packageName}_${app.version}".replace('/', '_') + ".apk",
-            fileTypeLabel = ".apk"
+            defaultFileName = "${app.packageName}_${app.version}".replace('/', '_') + ".$extension",
+            fileTypeLabel = ".$extension"
         )
     } else {
         DownloadedAppsExportState(

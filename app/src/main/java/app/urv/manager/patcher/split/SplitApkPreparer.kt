@@ -217,38 +217,31 @@ object SplitApkPreparer {
     suspend fun inspect(source: File): SplitArchiveInspection {
         require(isSplitArchive(source)) { "Source is not a supported split archive." }
 
-        val workingDir = withContext(Dispatchers.IO) {
-            Files.createTempDirectory("split-inspect-").toFile()
+        val operationContext = coroutineContext
+        val mergeOrder = runInterruptible(Dispatchers.IO) {
+            val names = splitApkEntryNames(source, checkCancelled = operationContext::ensureActive)
+            ZipFile(source).use { zip ->
+                names.forEach { name -> validateSplitEntry(requireNotNull(zip.getEntry(name))) }
+            }
+            SplitManifestInspector.archiveOrder(source, names, operationContext::ensureActive)
         }
-        val modulesDir = workingDir.resolve("modules").also { it.mkdirs() }
-
-        return try {
-            extractSplitEntries(source, modulesDir)
-            coroutineContext.ensureActive()
-
-            val mergeOrder = withContext(Dispatchers.IO) {
-                Merger.listMergeOrder(modulesDir.toPath())
-            }
-            val inspection = inspectMergeOrder(mergeOrder)
-            val modules = mergeOrder.map { moduleName ->
-                SplitArchiveModule(
-                    name = moduleName,
-                    kind = classifyModule(moduleName),
-                    detail = moduleDetail(moduleName)
-                )
-            }
-            SplitArchiveInspection(
-                modules = modules,
-                baseModuleName = mergeOrder.firstOrNull(),
-                recommendedModules = buildRecommendedModules(modules, inspection),
-                languageTrimmedModules = mergeOrder.toSet() - inspection.unusedLanguageModules,
-                densityTrimmedModules = mergeOrder.toSet() - inspection.unusedDensityModules,
-                abiTrimmedModules = mergeOrder.toSet() - inspection.unusedAbiModules,
-                hasUnusedAbiModules = inspection.unusedAbiModules.isNotEmpty()
+        val inspection = inspectMergeOrder(mergeOrder)
+        val modules = mergeOrder.map { moduleName ->
+            SplitArchiveModule(
+                name = moduleName,
+                kind = classifyModule(moduleName, isBase = moduleName == mergeOrder.first()),
+                detail = moduleDetail(moduleName)
             )
-        } finally {
-            workingDir.deleteRecursively()
         }
+        return SplitArchiveInspection(
+            modules = modules,
+            baseModuleName = mergeOrder.firstOrNull(),
+            recommendedModules = buildRecommendedModules(modules, inspection),
+            languageTrimmedModules = mergeOrder.toSet() - inspection.unusedLanguageModules,
+            densityTrimmedModules = mergeOrder.toSet() - inspection.unusedDensityModules,
+            abiTrimmedModules = mergeOrder.toSet() - inspection.unusedAbiModules,
+            hasUnusedAbiModules = inspection.unusedAbiModules.isNotEmpty()
+        )
     }
 
     private data class MergeOrderInspection(
@@ -334,6 +327,11 @@ object SplitApkPreparer {
             .toList()
         if (candidates.isEmpty()) return emptySet()
 
+        // Host output retains separate APKs. Avoid repeatedly loading all resource tables just
+        // to identify an archive stored under the legacy saved-app .apk filename.
+        if (extension == "apk" && SplitApkFiles.isOutputArchive(zip)) {
+            return candidates.mapTo(LinkedHashSet()) { it.name }
+        }
         if (extension in SUPPORTED_EXTENSIONS) {
             return candidates.mapTo(LinkedHashSet()) { it.name }
         }
@@ -346,6 +344,12 @@ object SplitApkPreparer {
         }
         // Flatten retries re-feed merged APKs that already have a root manifest,
         // so keep verifying those containers instead of rejecting them early.
+        // Downloaders store containers as base.apk. Without a root manifest this
+        // cannot be an installable APK; identify it like a ZIP instead of extracting
+        // and loading every component on each metadata/progress query.
+        if (!hasRootManifest(zip) && resolveZipApkEntryNames(candidates).isNotEmpty()) {
+            return candidates.mapTo(LinkedHashSet()) { it.name }
+        }
         if (!isVerifiedSplitCandidateSet(zip, candidates)) return emptySet()
         return candidates.mapTo(LinkedHashSet()) { it.name }
     }
@@ -872,9 +876,9 @@ object SplitApkPreparer {
         return emptySet()
     }
 
-    private fun classifyModule(moduleName: String): SplitArchiveModuleKind {
+    private fun classifyModule(moduleName: String, isBase: Boolean): SplitArchiveModuleKind {
         val lower = moduleName.lowercase(Locale.ROOT)
-        if (isBaseModuleName(moduleName)) return SplitArchiveModuleKind.BASE
+        if (isBase) return SplitArchiveModuleKind.BASE
         if (isAbiSplit(moduleName)) return SplitArchiveModuleKind.ABI
         val qualifiers = splitConfigQualifiers(moduleName)
         return when {

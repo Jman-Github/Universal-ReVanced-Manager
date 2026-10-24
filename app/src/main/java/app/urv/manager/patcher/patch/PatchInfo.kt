@@ -20,6 +20,8 @@ data class PatchInfo(
     val compatiblePackages: ImmutableList<CompatiblePackage>?,
     val options: ImmutableList<Option<*>>?,
     val availability: ImmutableMap<PatchInstallerType, PatchAvailabilityState>? = null,
+    // Selection and option keys use name; runtimes may supply a separate readable title.
+    val displayName: String = name,
 ) {
 
     // Code adapted from Morphe, see third-party/NOTICE for more information.
@@ -90,7 +92,7 @@ data class PatchInfo(
         }
 
     companion object {
-        fun fromMorpheMetadata(metadata: Map<String, Any?>): PatchInfo {
+        fun fromMorpheMetadata(metadata: Map<String, Any?>, preserveDouble: Boolean = false): PatchInfo {
             val name = (metadata["name"] as? String).orEmpty()
             val description = metadata["description"] as? String
             val include = metadata["use"] as? Boolean ?: true
@@ -115,7 +117,7 @@ data class PatchInfo(
             val options = (metadata["options"] as? List<*>)
                 ?.mapNotNull { entry ->
                     val map = entry as? Map<*, *> ?: return@mapNotNull null
-                    Option.fromMorpheMetadata(map)
+                    Option.fromMorpheMetadata(map, preserveDouble)
                 }
                 ?.toImmutableList()
                 ?.takeIf { it.isNotEmpty() }
@@ -142,7 +144,8 @@ data class PatchInfo(
                 include,
                 compatiblePackages,
                 options,
-                availability
+                availability,
+                displayName = (metadata["displayName"] as? String)?.takeIf { it.isNotBlank() } ?: name
             )
         }
 
@@ -204,15 +207,16 @@ data class Option<T>(
             typeOf<Int>() to typeOf<List<Int>>(),
             typeOf<Long>() to typeOf<List<Long>>(),
             typeOf<Float>() to typeOf<List<Float>>(),
+            typeOf<Double>() to typeOf<List<Double>>(),
             typeOf<String>() to typeOf<List<String>>()
         )
 
-        fun fromMorpheMetadata(metadata: Map<*, *>): Option<Any> {
+        fun fromMorpheMetadata(metadata: Map<*, *>, preserveDouble: Boolean = false): Option<Any> {
             val key = metadata["key"]?.toString().orEmpty()
             val title = metadata["title"]?.toString().orEmpty().ifBlank { key }
             val description = metadata["description"]?.toString().orEmpty()
             val required = metadata["required"] as? Boolean ?: false
-            val type = parseType(metadata["type"])
+            val type = parseType(metadata["type"], preserveDouble)
             val default = coerceValue(type, metadata["default"])
             val presets = (metadata["presets"] as? Map<*, *>)?.mapNotNull { (name, value) ->
                 val presetKey = name?.toString() ?: return@mapNotNull null
@@ -252,14 +256,17 @@ data class Option<T>(
             )
         }
 
-        private fun parseType(raw: Any?): KType {
+        private fun parseType(raw: Any?, preserveDouble: Boolean): KType {
             val normalized = raw?.toString()?.lowercase(Locale.US).orEmpty()
             val elementType = if (normalized.contains("list")) {
                 val elementName = Regex("<(.+)>").find(normalized)?.groupValues?.getOrNull(1)
                 elementName?.lowercase(Locale.US)
             } else null
 
-            val resolvedScalar = resolveScalarType(elementType ?: normalized)
+            val scalarName = elementType ?: normalized
+            val resolvedScalar = if (preserveDouble && scalarName.contains("double")) {
+                typeOf<Double>()
+            } else resolveScalarType(scalarName)
             if (normalized.contains("list")) {
                 return listTypes[resolvedScalar] ?: typeOf<List<String>>()
             }
@@ -307,6 +314,11 @@ data class Option<T>(
                 typeOf<Long>() -> when (value) {
                     is Number -> value.toLong()
                     is String -> value.toLongOrNull()
+                    else -> null
+                }
+                typeOf<Double>() -> when (value) {
+                    is Number -> value.toDouble()
+                    is String -> value.toDoubleOrNull()
                     else -> null
                 }
                 typeOf<Float>() -> when (value) {

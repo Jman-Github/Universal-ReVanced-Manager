@@ -132,6 +132,7 @@ class ManagerApplication : Application() {
         PatchListCatalog.initialize(this)
         MorpheRuntimeBridge.initialize(this)
         Revanced21RuntimeBridge.initialize(this)
+        app.urv.manager.patcher.reseam.ReseamRuntimeBridge.initialize(this)
         Revanced22RuntimeBridge.initialize(this)
         PatcherRuntimePluginRegistry.install {
             patcherRuntimePluginRepository.loadedRuntimeSnapshot

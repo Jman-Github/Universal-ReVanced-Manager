@@ -37,6 +37,7 @@ object PatcherWorkerProgressState {
     private const val PROGRESS_IO_READ_KEY = "patching_progress_io_read"
     private const val PROGRESS_IO_WRITE_KEY = "patching_progress_io_write"
     private const val PROGRESS_IO_BLOCK_KEY = "patching_progress_io_block"
+    private const val PROGRESS_PROCESS_MEMORY_KEY = "patching_progress_process_memory_mb"
 
     fun toWorkData(
         active: Boolean,
@@ -73,6 +74,7 @@ object PatcherWorkerProgressState {
                 memory.ioReadKbPerSec?.let { builder.putInt(PROGRESS_IO_READ_KEY, it) }
                 memory.ioWriteKbPerSec?.let { builder.putInt(PROGRESS_IO_WRITE_KEY, it) }
                 builder.putBoolean(PROGRESS_IO_BLOCK_KEY, memory.ioBlockAccounting)
+                memory.processMemoryMb?.let { builder.putLong(PROGRESS_PROCESS_MEMORY_KEY, it) }
             }
             if (snapshot.failedPatchIndexes.isNotEmpty()) {
                 builder.putIntArray(
@@ -120,7 +122,8 @@ object PatcherWorkerProgressState {
                 cpuSystemWide = data.getBoolean(PROGRESS_CPU_SYSTEM_KEY, false),
                 ioReadKbPerSec = data.getInt(PROGRESS_IO_READ_KEY, -1).takeIf { it >= 0 },
                 ioWriteKbPerSec = data.getInt(PROGRESS_IO_WRITE_KEY, -1).takeIf { it >= 0 },
-                ioBlockAccounting = data.getBoolean(PROGRESS_IO_BLOCK_KEY, true)
+                ioBlockAccounting = data.getBoolean(PROGRESS_IO_BLOCK_KEY, true),
+                processMemoryMb = data.getLong(PROGRESS_PROCESS_MEMORY_KEY, -1L).takeIf { it >= 0L }
             )
         } else {
             null

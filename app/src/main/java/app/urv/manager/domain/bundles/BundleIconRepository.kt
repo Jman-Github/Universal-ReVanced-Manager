@@ -94,33 +94,37 @@ class BundleIconRepository(
             if (url?.host == "gitlab.com") RepositoryReleaseSource.GitLab(
                 url.encodedPath.trim('/').removeSuffix(".git")
             ) else null
-        }
+        } ?: return null
         val repoUrl = when (parsed) {
             is RepositoryReleaseSource.GitHub -> parsed.repositoryUrl
-            is RepositoryReleaseSource.GitLab -> "https://gitlab.com/${parsed.repositoryPath}"
-            null -> return null
+            is RepositoryReleaseSource.GitLab -> "${parsed.origin}/${parsed.repositoryPath}"
+            is RepositoryReleaseSource.Forgejo -> parsed.repositoryUrl
         }
         val repositoryPath = Url(repoUrl).encodedPath.trim('/')
-        val metadataUrl = if (parsed is RepositoryReleaseSource.GitHub) {
-            "https://api.github.com/repos/$repositoryPath"
-        } else {
-            "https://gitlab.com/api/v4/projects/" + URLEncoder.encode(repositoryPath, "UTF-8")
+        val metadataUrl = when (parsed) {
+            is RepositoryReleaseSource.GitHub -> "https://api.github.com/repos/$repositoryPath"
+            is RepositoryReleaseSource.GitLab ->
+                "${parsed.origin}/api/v4/projects/" + URLEncoder.encode(repositoryPath, "UTF-8")
+            is RepositoryReleaseSource.Forgejo -> parsed.apiUrl
         }
         val response = http.http.get(metadataUrl)
         check(response.status.isSuccess()) { "Repository metadata unavailable" }
         val data = http.json.parseToJsonElement(response.bodyAsText()).jsonObject
         val branch = data["default_branch"]?.jsonPrimitive?.contentOrNull ?: return null
-        val avatar = if (parsed is RepositoryReleaseSource.GitHub) {
-            data["owner"]?.jsonObject?.get("avatar_url")?.jsonPrimitive?.contentOrNull
-        } else {
+        val avatar = if (parsed is RepositoryReleaseSource.GitLab) {
             data["namespace"]?.jsonObject?.get("avatar_url")?.jsonPrimitive?.contentOrNull
                 ?: data["avatar_url"]?.jsonPrimitive?.contentOrNull
+        } else {
+            data["owner"]?.jsonObject?.get("avatar_url")?.jsonPrimitive?.contentOrNull
         }
         onAvatar(avatar)
         val encodedBranch = URLEncoder.encode(branch, "UTF-8").replace("+", "%20")
-        val rootImage = if (parsed is RepositoryReleaseSource.GitHub) {
-            "https://raw.githubusercontent.com/$repositoryPath/$encodedBranch/patches-bundle.png"
-        } else "$repoUrl/-/raw/$encodedBranch/patches-bundle.png"
+        val rootImage = when (parsed) {
+            is RepositoryReleaseSource.GitHub ->
+                "https://raw.githubusercontent.com/$repositoryPath/$encodedBranch/patches-bundle.png"
+            is RepositoryReleaseSource.GitLab -> "$repoUrl/-/raw/$encodedBranch/patches-bundle.png"
+            is RepositoryReleaseSource.Forgejo -> "$repoUrl/raw/branch/$encodedBranch/patches-bundle.png"
+        }
         val imageResponse = http.http.head(rootImage)
         if (!imageResponse.status.isSuccess() && imageResponse.status != HttpStatusCode.NotFound) {
             throw IllegalStateException("Repository image temporarily unavailable")

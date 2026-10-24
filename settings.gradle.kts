@@ -99,6 +99,9 @@ dependencyResolutionManagement {
                 password = gprKey.orEmpty()
             }
         }
+        maven("https://git.reseam.app/api/packages/reseam/maven") {
+            content { includeGroup("app.reseam") }
+        }
         maven("https://jitpack.io") {
             metadataSources {
                 mavenPom()

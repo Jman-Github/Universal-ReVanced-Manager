@@ -1,5 +1,6 @@
 package app.urv.manager.util
 
+import app.urv.manager.patcher.split.SplitApkFiles
 import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
@@ -37,6 +38,43 @@ class ApkAbiLabelTest {
         assertEquals(setOf("armeabi-v7a"), apk.savedApkAbisOrNull())
         assertTrue(apk.delete())
         assertNull(apk.savedApkAbisOrNull())
+    }
+
+    @Test
+    fun splitArchiveReadsAllComponentsAndCleansTemporaryFiles() = withApk { archive ->
+        val directory = requireNotNull(archive.parentFile)
+        val base = directory.resolve("base.apk")
+        val split = directory.resolve("config.arm64_v8a.apk")
+        val otherSplit = directory.resolve("config.x86.apk")
+        writeApk(base, "classes.dex")
+        writeApk(split, "lib/arm64-v8a/libsample.so")
+        writeApk(otherSplit, "lib/x86/libsample.so")
+        SplitApkFiles.pack(listOf(base, split, otherSplit), archive)
+        val abis = archive.savedApkAbisOrNull()
+        assertEquals(setOf("arm64-v8a", "x86"), abis)
+        assertSame(abis, archive.savedApkAbisOrNull())
+        assertFalse(directory.listFiles().orEmpty().any { it.name.startsWith("split-abis-") })
+
+        val stamp = archive.lastModified()
+        writeApk(split, "classes.dex")
+        SplitApkFiles.pack(listOf(base, split), archive)
+        assertTrue(archive.setLastModified(stamp + 5_000))
+        assertEquals(emptySet<String>(), archive.savedApkAbisOrNull())
+    }
+
+    @Test
+    fun invalidSplitComponentIsRetriedAndTemporaryFilesAreRemoved() = withApk { archive ->
+        val directory = requireNotNull(archive.parentFile)
+        val base = directory.resolve("base.apk")
+        val split = directory.resolve("config.en.apk")
+        writeApk(base, "classes.dex")
+        split.writeText("not an APK")
+        SplitApkFiles.pack(listOf(base, split), archive)
+        assertNull(archive.savedApkAbisOrNull())
+        assertFalse(directory.listFiles().orEmpty().any { it.name.startsWith("split-abis-") })
+        writeApk(split, "lib/arm64-v8a/libsample.so")
+        SplitApkFiles.pack(listOf(base, split), archive)
+        assertEquals(setOf("arm64-v8a"), archive.savedApkAbisOrNull())
     }
 
     private fun withApk(block: (File) -> Unit) {

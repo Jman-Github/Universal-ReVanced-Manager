@@ -343,7 +343,10 @@ class PatcherWorker(
     private fun notificationStepTitle(step: StepId, totalPatchCount: Int): String = when (step) {
         StepId.DownloadAPK -> applicationContext.getString(R.string.download_apk)
         StepId.LoadPatches -> applicationContext.getString(R.string.patcher_step_load_patches)
-        StepId.PrepareSplitApk -> applicationContext.getString(R.string.patcher_step_prepare_split_apk)
+        StepId.PrepareSplitApk -> applicationContext.getString(
+            if (activePatchBundleType == PatchBundleType.RESEAM) R.string.patcher_step_prepare_separate_apks
+            else R.string.patcher_step_prepare_split_apk
+        )
         StepId.ReadAPK -> applicationContext.getString(R.string.patcher_step_unpack)
         StepId.ExecutePatches -> applicationContext.getString(R.string.execute_patches)
         is StepId.ExecutePatch -> {
@@ -367,11 +370,20 @@ class PatcherWorker(
     )
 
 
+    private var reseamSplitSubSteps: List<String> = emptyList()
+
     private fun notificationProgress(
         event: ProgressEvent?,
         totalPatchCount: Int
     ): NotificationProgress? {
         if (event == null) return NotificationProgress(max = 0, current = 0, indeterminate = true)
+        if (event.stepId == StepId.PrepareSplitApk) {
+            when (event) {
+                is ProgressEvent.Started -> reseamSplitSubSteps = event.subSteps.orEmpty()
+                is ProgressEvent.Progress -> event.subSteps?.let { reseamSplitSubSteps = it }
+                else -> Unit
+            }
+        }
         return when (event) {
             is ProgressEvent.Started -> if (event.stepId == StepId.DownloadAPK) {
                 NotificationProgress(max = 0, current = 0, indeterminate = true)
@@ -393,7 +405,12 @@ class PatcherWorker(
                     notificationStageProgress(
                         stepId = event.stepId,
                         totalPatchCount = totalPatchCount,
-                        fraction = when {
+                        fraction = if (activePatchBundleType == PatchBundleType.RESEAM) {
+                            reseamStageFraction(event, reseamSplitSubSteps)
+                                ?: if (total != null && current != null) {
+                                    (current.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+                                } else 0f
+                        } else when {
                             total != null && current != null ->
                                 (current.toFloat() / total.toFloat()).coerceIn(0f, 1f)
                             event.stepId == StepId.WriteAPK -> notificationWriteApkFraction(event)
@@ -676,6 +693,7 @@ class PatcherWorker(
 
     private fun resetNotificationProgressTrackingLocked() {
         lastNotificationProgressCurrent = 0
+        reseamSplitSubSteps = emptyList()
         notificationSplitPreparationSeen = false
         lastForegroundNotificationSequence = Long.MIN_VALUE
         resetWriteApkNotificationPhase()
@@ -690,6 +708,8 @@ class PatcherWorker(
     }
 
     private fun writeApkNotificationPhaseIndex(detail: String): Int = when {
+        activePatchBundleType == PatchBundleType.RESEAM && detail == "Writing patched APKs" -> 0
+        activePatchBundleType == PatchBundleType.RESEAM && detail == "Preparing unsigned APKs" -> 1
         detail.equals("Preparing output APK", ignoreCase = true) -> 0
         detail.equals("Copying base APK", ignoreCase = true) ||
             detail.equals("Copy base APK", ignoreCase = true) -> 1
@@ -1423,11 +1443,11 @@ class PatcherWorker(
         var downloadCleanup: (() -> Unit)? = null
         val signatureMetadataOutput = args.signatureMetadataOutput?.let(::File)
         var retainSignatureMetadata = false
-        patchNotificationSteps = args.selectedPatches.values
-            .asSequence()
-            .flatten()
-            .sorted()
-            .toList()
+        val notificationBundleInfo = patchBundleRepository.allBundlesInfoFlow.first()
+        patchNotificationSteps = args.selectedPatches.flatMap { (uid, selected) ->
+            val titles = notificationBundleInfo[uid]?.patches?.associate { it.name to it.displayName }.orEmpty()
+            selected.map { it to (titles[it] ?: it) }
+        }.sortedBy { it.first }.map { it.second }
         val patcherLogMode = prefs.patcherLogMode.get()
         val reportedSplitPreparationLogs = ConcurrentHashMap.newKeySet<String>()
         val workerLogger = object : Logger() {
@@ -1620,7 +1640,8 @@ class PatcherWorker(
                 }
             }
             val sourceInfo = try {
-                SplitArchiveDisplayResolver.resolvePackageInfo(
+                // The download already validated this exact file; avoid extracting its base again.
+                downloadResult.packageInfo ?: SplitArchiveDisplayResolver.resolvePackageInfo(
                     source = inputFile,
                     workspace = fs.tempDir.resolve("patch-input-metadata"),
                     pm = pm,
@@ -1745,7 +1766,7 @@ class PatcherWorker(
 
             var runtimeInputFile = inputFile
             var manualSplitSelectionApplied = false
-            if (inputIsSplitArchive && args.splitSelection != null) {
+            if (inputIsSplitArchive && args.splitSelection != null && bundleType != PatchBundleType.RESEAM) {
                 val selection = args.splitSelection
                 val mergeWorkspace = fs.tempDir.resolve("split-patcher-selection-${id}").apply {
                     deleteRecursively()
@@ -1797,10 +1818,14 @@ class PatcherWorker(
                 )
                 eventDispatcher(ProgressEvent.Completed(StepId.PrepareSplitApk))
             }
-            val effectiveStripNativeLibs =
-                if (manualSplitSelectionApplied) false else stripNativeLibs
+            val effectiveStripNativeLibs = when {
+                manualSplitSelectionApplied -> false
+                bundleType == PatchBundleType.RESEAM -> args.splitSelection?.stripNativeLibs ?: stripNativeLibs
+                else -> stripNativeLibs
+            }
+            // Manual selection owns the split set, including Reseam's unmerged inputs.
             val effectiveSkipUnneededSplits =
-                if (manualSplitSelectionApplied) false else skipUnneededSplits
+                if (manualSplitSelectionRequested) false else skipUnneededSplits
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/worker/PatcherWorker.kt
             val runtimeMemoryUsageDispatcher: (Long, Long) -> Unit = { usedMb, maxMb ->
@@ -1835,6 +1860,17 @@ class PatcherWorker(
                         runtimeMemoryUsageDispatcher,
                         effectiveStripNativeLibs,
                         effectiveSkipUnneededSplits
+                    )
+                }
+                PatchBundleType.RESEAM -> {
+                    val runtime = app.urv.manager.patcher.runtime.ReseamBoundRuntime(
+                        applicationContext, args.splitSelection?.includedModules)
+                    activeRuntime = runtime
+                    runtime.execute(
+                        runtimeInputFile.absolutePath, patchedApk.absolutePath,
+                        args.packageName, args.selectedPatches, args.options,
+                        attemptLogger, eventDispatcher, runtimeMemoryUsageDispatcher,
+                        effectiveStripNativeLibs, effectiveSkipUnneededSplits
                     )
                 }
                 PatchBundleType.AMPLE -> throw IllegalStateException("Ample runtime is no longer supported.")
@@ -2234,7 +2270,8 @@ class PatcherWorker(
         fs.tempDir.listFiles()?.forEach { child ->
             val shouldDelete = child.name == "patched.apk" ||
                 child.name.startsWith("split-") ||
-                child.name.startsWith("installed-splits-")
+                child.name.startsWith("installed-splits-") ||
+                child.name.startsWith("reseam-")
             if (!shouldDelete) return@forEach
             runCatching {
                 if (child.isDirectory) {

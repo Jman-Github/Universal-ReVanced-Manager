@@ -188,7 +188,7 @@ fun PatchItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = patch.name,
+                    text = patch.displayName,
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold

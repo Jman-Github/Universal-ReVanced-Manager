@@ -1,6 +1,7 @@
 package app.urv.manager.patcher.patch
 
 import app.universal.revanced.manager.BuildConfig
+import app.urv.manager.patcher.reseam.ReseamRuntimeBridge
 
 fun patcherEngineDisplayName(
     bundleType: PatchBundleType?,
@@ -12,6 +13,8 @@ fun patcherEngineDisplayName(
     } else {
         "ReVanced ${BuildConfig.REVANCED_PATCHER_V21_VERSION}"
     }
+    PatchBundleType.RESEAM -> runCatching { ReseamRuntimeBridge.engineVersion() }.getOrNull()
+        ?.let { "Reseam $it" } ?: "Reseam"
     PatchBundleType.AMPLE -> "Ample"
     null -> null
 }

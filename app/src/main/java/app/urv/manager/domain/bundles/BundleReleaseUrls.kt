@@ -33,7 +33,8 @@ internal fun bundleRepositoryUrl(vararg candidates: String?): String? {
             github.groupValues[2].removeSuffix(".git")
         when (val source = RepositoryReleaseSourceParser.parse(raw)) {
             is RepositoryReleaseSource.GitHub -> return source.repositoryUrl
-            is RepositoryReleaseSource.GitLab -> return "https://gitlab.com/${source.repositoryPath}"
+            is RepositoryReleaseSource.GitLab -> return "${source.origin}/${source.repositoryPath}"
+            is RepositoryReleaseSource.Forgejo -> return source.repositoryUrl
             null -> {
                 // Plain GitLab repository roots have no /-/ separator.
                 val uri = runCatching { URI(raw) }.getOrNull()
@@ -46,11 +47,12 @@ internal fun bundleRepositoryUrl(vararg candidates: String?): String? {
 }
 
 internal fun repositoryReleasePage(repository: String, tag: String? = null): String {
-    val prefix = repository.trimEnd('/') + if (URI(repository).host.equals("gitlab.com", true))
-        "/-/releases" else "/releases"
+    val gitlab = URI(repository).host.equals("gitlab.com", true) ||
+        RepositoryReleaseSourceParser.parse(repository) is RepositoryReleaseSource.GitLab
+    val prefix = repository.trimEnd('/') + if (gitlab) "/-/releases" else "/releases"
     if (tag.isNullOrBlank()) return prefix
     val encoded = URLEncoder.encode(tag, "UTF-8").replace("+", "%20")
-    return prefix + if (URI(repository).host.equals("gitlab.com", true)) "/$encoded" else "/tag/$encoded"
+    return prefix + if (gitlab) "/$encoded" else "/tag/$encoded"
 }
 
 internal fun String?.safeReleasePage(): String? =

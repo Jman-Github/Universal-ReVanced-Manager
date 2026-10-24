@@ -12,7 +12,8 @@ data class PatcherMemoryUsage(
     val cpuSystemWide: Boolean = false,
     val ioReadKbPerSec: Int? = null,
     val ioWriteKbPerSec: Int? = null,
-    val ioBlockAccounting: Boolean = true
+    val ioBlockAccounting: Boolean = true,
+    val processMemoryMb: Long? = null
 )
 
 /**
@@ -51,6 +52,7 @@ internal fun parsePatcherResourceUsage(message: String): PatcherMemoryUsage? {
         cpuSystemWide = fields["cpuSystem"] == "true",
         ioReadKbPerSec = read.takeIf { write != null },
         ioWriteKbPerSec = write.takeIf { read != null },
-        ioBlockAccounting = fields["ioBlock"] != "false"
+        ioBlockAccounting = fields["ioBlock"] != "false",
+        processMemoryMb = fields["processMemory"]?.toLongOrNull()?.takeIf { it >= 0L }
     )
 }

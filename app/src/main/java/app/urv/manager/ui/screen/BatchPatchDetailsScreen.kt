@@ -275,6 +275,9 @@ fun BatchPatchDetailsScreen(
                     isMorphe = item.patcherSessionInfo.bundleType
                         ?.let { it == PatchBundleType.MORPHE.name }
                         ?: item.patcherEngine?.contains("Morphe", ignoreCase = true) == true,
+                    preserveSplitApks = item.patcherSessionInfo.bundleType
+                        ?.let { it == PatchBundleType.RESEAM.name }
+                        ?: item.patcherEngine?.contains("Reseam", ignoreCase = true) == true,
                     morpheBytecodeMode = item.patcherSessionInfo.morpheBytecodeMode,
                     cancelled = item.state == BatchItemState.CANCELLED,
                     cancelledMessage = context.getString(R.string.batch_patch_state_cancelled),
@@ -479,6 +482,7 @@ private fun buildBatchProgressUiState(
     failed: Boolean,
     failureMessage: String?,
     isMorphe: Boolean,
+    preserveSplitApks: Boolean,
     morpheBytecodeMode: String?,
     cancelled: Boolean,
     cancelledMessage: String,
@@ -491,7 +495,8 @@ private fun buildBatchProgressUiState(
         selectedPatches = selectedPatches,
         splitStepActive = splitStepActive,
         skipApkSigning = skipApkSigning,
-        injectSignatureMetadata = signatureInjectionEnabled
+        injectSignatureMetadata = signatureInjectionEnabled,
+        preserveSplitApks = preserveSplitApks
     )).toMutableStateList()
     val subSteps = snapshot?.subStepsById
         ?.mapValues { it.value.toMutableStateList() }

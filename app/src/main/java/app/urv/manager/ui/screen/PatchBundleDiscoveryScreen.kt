@@ -1152,7 +1152,7 @@ private fun BundleDiscoveryItem(
     val description = bundle.repoDescription?.takeIf { it.isNotBlank() }
     val remotePatchCount = if (bundle.patches.isNotEmpty()) bundle.patches.size else bundle.patchCount
     val patchCount = localPatchCount(bundle) ?: remotePatchCount
-    val isSupported = !bundle.isBundleV3 && !bundle.bundleType.equals("Reseam", true)
+    val isSupported = !bundle.isBundleV3
     val lastUpdatedLabel = remember(bundle.repoPushedAt) {
         formatRepoUpdatedLabel(context, bundle.repoPushedAt)
     }

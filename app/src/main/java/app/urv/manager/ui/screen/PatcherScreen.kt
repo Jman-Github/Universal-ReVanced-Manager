@@ -281,7 +281,8 @@ fun PatcherScreen(
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+        contract = RememberedCreateDocument(if (exportMetadata?.fileExtension == "apks") "application/zip"
+            else "application/vnd.android.package-archive") {
             patchedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
         }
     ) { uri ->

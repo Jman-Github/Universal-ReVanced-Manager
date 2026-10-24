@@ -168,3 +168,11 @@ fun FloatInputDialog(
     validator: (Float) -> Boolean = { true },
     onSubmit: (Float?) -> Unit
 ) = NumberInputDialog(current, name, onSubmit, validator, String::toFloatOrNull)
+
+@Composable
+fun DoubleInputDialog(
+    current: Double?,
+    name: String,
+    validator: (Double) -> Boolean = { true },
+    onSubmit: (Double?) -> Unit
+) = NumberInputDialog(current, name, onSubmit, validator, String::toDoubleOrNull)

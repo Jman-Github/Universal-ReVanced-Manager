@@ -3,6 +3,7 @@ package app.urv.manager.domain.bundles
 import androidx.compose.runtime.Stable
 import app.urv.manager.data.redux.ActionContext
 import app.urv.manager.patcher.patch.PatchBundle
+import app.urv.manager.patcher.patch.ReseamBundleFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -40,6 +41,7 @@ sealed class PatchBundleSource(
 
     val patchBundle get() = (state as? State.Available)?.bundle
     val version get() = patchBundle?.manifestAttributes?.version
+        ?: if (ReseamBundleFormat.isBundle(patchesFile)) (this as? RemotePatchBundle)?.installedVersionSignature else null
     val isNameOutOfDate get() = patchBundle?.manifestAttributes?.name?.let { it != name } == true
     val error get() = (state as? State.Failed)?.throwable
     val displayTitle get() = displayName?.takeUnless { it.isBlank() } ?: name

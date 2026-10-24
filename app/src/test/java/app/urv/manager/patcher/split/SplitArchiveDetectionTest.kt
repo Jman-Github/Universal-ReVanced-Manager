@@ -40,6 +40,26 @@ class SplitArchiveDetectionTest {
         )
     }
 
+    @Test
+    fun downloadedContainerNamedApkDoesNotParseComponentPayloads() = withDirectory { directory ->
+        val archive = directory.resolve("base.apk")
+        // Invalid payloads are intentional: identification must only inspect the outer
+        // ZIP directory. Package validation and extraction still validate actual APKs.
+        writeArchive(archive, "base.apk", "split_config.en.apk", "feature_chat.apk", "assets/extra.apk")
+        assertTrue(SplitApkPreparer.isSplitArchive(archive))
+        assertEquals(
+            setOf("base.apk", "split_config.en.apk", "feature_chat.apk"),
+            SplitApkPreparer.splitApkEntryNames(archive)
+        )
+    }
+
+    @Test
+    fun installableApkDoesNotUseContainerFastPath() = withDirectory { directory ->
+        val archive = directory.resolve("app.apk")
+        writeArchive(archive, "AndroidManifest.xml", "base.apk", "split_config.en.apk")
+        assertFalse(SplitApkPreparer.isSplitArchive(archive))
+    }
+
     private fun withDirectory(block: (File) -> Unit) {
         val directory = createTempDirectory("split-detection").toFile()
         try {
