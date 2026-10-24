@@ -2945,18 +2945,10 @@ class PatchBundleRepository(
             }
             return@withRemoteUpdatesIdleLock null
         }
-        val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-        val manifestSignature = normalizeVersionForCompare(bundle.version)
         val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
             ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
             ?: false
-        if (
-            !artifactChanged &&
-            (
-                (installedSignature != null && installedSignature == latestSignature) ||
-                    (manifestSignature != null && manifestSignature == latestSignature)
-                )
-        ) {
+        if (!artifactChanged && !bundle.isUpdateAvailable(info)) {
             if (!bundle.autoUpdate) {
                 manualUpdateInfoFlow.update { current -> current - bundle.uid }
             }
@@ -3111,15 +3103,10 @@ class PatchBundleRepository(
                         next.remove(bundle.uid)
                         return@forEach
                     }
-                    val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                    val manifestSignature = normalizeVersionForCompare(bundle.version)
                     val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
                         ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
                         ?: false
-                    val hasMatchingInstalledSignature =
-                        (installedSignature != null && installedSignature == latestSignature) ||
-                            (manifestSignature != null && manifestSignature == latestSignature)
-                    if (hasMatchingInstalledSignature && !artifactChanged) {
+                    if (!artifactChanged && !bundle.isUpdateAvailable(info)) {
                         next.remove(bundle.uid)
                     } else {
                         val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)

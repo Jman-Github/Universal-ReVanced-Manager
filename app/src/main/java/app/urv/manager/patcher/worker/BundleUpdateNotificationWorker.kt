@@ -31,6 +31,8 @@ class BundleUpdateNotificationWorker(
     parameters: WorkerParameters
 ) : Worker<BundleUpdateNotificationWorker.Args>(context, parameters), KoinComponent {
     private val patchBundleRepository: PatchBundleRepository by inject()
+    // Periodic and immediate workers may overlap, including during cancellation cleanup.
+    private val progressNotificationTag = "bundle-update-progress:$id"
 
     class Args
 
@@ -57,6 +59,8 @@ class BundleUpdateNotificationWorker(
             val notificationManager =
                 applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.createNotificationChannel(bundleNotificationChannel)
+            // Remove notifications left by versions that used a shared, untagged ID.
+            notificationManager.cancel(BUNDLE_PROGRESS_NOTIFICATION_ID)
 
             // The application reloads patch bundles asynchronously on process start.
             // Do not snapshot the repository's initial empty state on a cold worker run.
@@ -69,6 +73,9 @@ class BundleUpdateNotificationWorker(
             ): PendingIntent {
                 val intent = Intent(applicationContext, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    if (requestCode == BUNDLE_PROGRESS_NOTIFICATION_ID) {
+                        action = progressNotificationTag
+                    }
                     BundleDeepLinkIntent.addBundleUid(this, bundleUid)
                     if (dismissalMarkers.isNotEmpty()) {
                         putExtra(
@@ -97,21 +104,15 @@ class BundleUpdateNotificationWorker(
             val totalAutoUpdates = autoUpdateTargets.size
             val seenUids = LinkedHashSet<Int>()
             val updatedBundles = LinkedHashMap<Int, BundleUpdateNotificationEntry>()
-            var progressNotified = false
-            var downloadStarted = false
-
             val updatedAny = if (totalAutoUpdates > 0) {
                 patchBundleRepository.updateNow(
                     allowUnsafeNetwork = false,
                     onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
                         val shouldNotify = bytesRead > 0L || (bytesTotal ?: 0L) > 0L
                         if (!shouldNotify) return@updateNow
-                        downloadStarted = true
                         if (!canNotify) return@updateNow
 
-                        if (seenUids.add(bundle.uid)) {
-                            progressNotified = true
-                        }
+                        seenUids.add(bundle.uid)
                         val currentIndex = seenUids.size.coerceAtMost(totalAutoUpdates)
                         val progressText = applicationContext.getString(
                             R.string.bundle_updates_notification_progress,
@@ -130,7 +131,7 @@ class BundleUpdateNotificationWorker(
                             ongoing = true,
                             progress = ProgressInfo(bytesRead, bytesTotal)
                         )
-                        notificationManager.notify(BUNDLE_PROGRESS_NOTIFICATION_ID, notification)
+                        notificationManager.notify(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID, notification)
                     },
                     onBundleUpdated = { bundle, updatedName, updatedVersion ->
                         val resolvedName = bundle.displayName
@@ -153,6 +154,9 @@ class BundleUpdateNotificationWorker(
             } else {
                 false
             }
+
+            // Downloads are finished; unrelated manual checks may still wait on the network.
+            notificationManager.cancel(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID)
 
             val manualUpdates = LinkedHashMap<Int, BundleUpdateNotificationEntry>()
             patchBundleRepository.fetchUpdatesAndNotify(
@@ -255,44 +259,31 @@ class BundleUpdateNotificationWorker(
                             progress = null,
                             sections = sections
                         )
-                        notificationManager.cancel(BUNDLE_PROGRESS_NOTIFICATION_ID)
+                        notificationManager.cancel(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID)
                         notificationManager.notify(BUNDLE_AUTO_RESULT_NOTIFICATION_ID, notification)
                     }
-                    progressNotified -> {
-                        val description = if (downloadStarted) {
-                            applicationContext.getString(R.string.bundle_updates_notification_failed)
-                        } else {
-                            applicationContext.getString(R.string.bundle_updates_notification_completed)
-                        }
-                        val notification = buildNotification(
-                            channelId = bundleNotificationChannel.id,
-                            title = bundleNotificationTitle(seenUids.size.coerceAtLeast(1)),
-                            description = description,
-                            pendingIntent = buildPendingIntent(
-                                BUNDLE_PROGRESS_NOTIFICATION_ID,
-                                seenUids.firstOrNull()
-                            ),
-                            ongoing = false,
-                            progress = null,
-                            sections = emptyList()
-                        )
-                        notificationManager.notify(BUNDLE_PROGRESS_NOTIFICATION_ID, notification)
-                    }
                     else -> {
-                        notificationManager.cancel(BUNDLE_PROGRESS_NOTIFICATION_ID)
+                        notificationManager.cancel(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID)
                     }
                 }
             } else {
-                notificationManager.cancel(BUNDLE_PROGRESS_NOTIFICATION_ID)
+                notificationManager.cancel(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID)
                 notificationManager.cancel(BUNDLE_AUTO_RESULT_NOTIFICATION_ID)
                 notificationManager.cancel(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID)
             }
 
             Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.d("BundleAutoUpdateWorker", "Error during work: ${e.message}")
             Result.failure()
         } finally {
+            runCatching {
+                val notificationManager =
+                    applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                notificationManager.cancel(progressNotificationTag, BUNDLE_PROGRESS_NOTIFICATION_ID)
+            }
             runCatching {
                 if (wakeLock?.isHeld == true) wakeLock.release()
             }
@@ -358,6 +349,8 @@ class BundleUpdateNotificationWorker(
         buildDismissPendingIntent(dismissalMarkers)?.let(builder::setDeleteIntent)
 
         if (progress != null) {
+            // Bound orphaned notifications if the process dies before finally runs.
+            builder.setTimeoutAfter(WAKE_LOCK_TIMEOUT_MS)
             val total = progress.bytesTotal?.takeIf { it > 0L }
             if (total == null) {
                 builder.applyProgressNotification(

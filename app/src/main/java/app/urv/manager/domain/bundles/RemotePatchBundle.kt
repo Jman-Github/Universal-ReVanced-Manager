@@ -162,23 +162,18 @@ sealed class RemotePatchBundle(
 
     open suspend fun update(onProgress: PatchBundleDownloadProgress? = null): PatchBundleDownloadResult? =
         withContext(Dispatchers.IO) {
-        val info = fetchLatestReleaseInfo()
-        val latestSignature = normalizeVersionForCompare(info.version)
-            ?: return@withContext null
-        val installedSignature = normalizeVersionForCompare(installedVersionSignatureInternal)
-        val manifestSignature = normalizeVersionForCompare(version)
-        if (
-            hasInstalled() &&
-            (
-                (installedSignature != null && latestSignature == installedSignature) ||
-                    (manifestSignature != null && latestSignature == manifestSignature)
-                )
-        ) {
-            return@withContext null
+            val info = fetchLatestReleaseInfo()
+            if (!isUpdateAvailable(info)) return@withContext null
+            download(info, onProgress)
         }
 
-        download(info, onProgress)
-    }
+    fun isUpdateAvailable(info: ReVancedAsset): Boolean =
+        isRemoteBundleVersionUpdate(
+            latestVersion = info.version,
+            installedVersion = installedVersionSignatureInternal.takeIf { hasInstalled() },
+            manifestVersion = version.takeIf { hasInstalled() },
+            preventDowngrade = this is JsonPatchBundle && useLatest,
+        )
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
         val key = "$uid|${latestInfoCacheIdentity()}"
@@ -445,7 +440,7 @@ class JsonPatchBundle(
                 )
             },
             fallbackToManifestWhenReleaseMissing =
-                releaseChannel != RepositoryBundleReleaseChannel.PRERELEASE,
+                releaseChannel == RepositoryBundleReleaseChannel.RELEASE,
         )
     }
 

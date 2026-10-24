@@ -25,28 +25,8 @@ class DownloadProgressNotifier(private val app: Application) {
             manager.activeNotifications
                 .filter { it.notification.channelId == CHANNEL_ID }
                 .forEach { notification ->
-                    if (!app.hasNotificationPermission()) {
-                        if (notification.tag == null) manager.cancel(notification.id)
-                        else manager.cancel(notification.tag, notification.id)
-                        return@forEach
-                    }
-
-                    val title = notification.notification.extras
-                        ?.getCharSequence(Notification.EXTRA_TITLE)
-                        ?.toString()
-                        ?.takeIf(String::isNotBlank)
-                        ?: app.getString(R.string.app_name)
-                    val replacement = createNotification(
-                        notificationId = notification.id,
-                        title = title,
-                        progress = 0,
-                        indeterminate = false,
-                        ongoing = false,
-                        contentText = null,
-                        timeoutAfter = DISMISS_VISIBILITY_MS
-                    )
-                    if (notification.tag == null) manager.notify(notification.id, replacement)
-                    else manager.notify(notification.tag, notification.id, replacement)
+                    if (notification.tag == null) manager.cancel(notification.id)
+                    else manager.cancel(notification.tag, notification.id)
                 }
         }
     }
@@ -101,31 +81,14 @@ class DownloadProgressNotifier(private val app: Application) {
             )
         }
 
-        @Synchronized
-        fun fail() {
-            if (!closed.compareAndSet(false, true) || !enabled) return
-            val failureProgress = lastProgress
-                .coerceAtLeast(ERROR_TRIGGER_PROGRESS)
-                .coerceAtMost(PROGRESS_MAX - 1)
-            notify(
-                progress = failureProgress,
-                indeterminate = false,
-                ongoing = false,
-                contentText = app.getString(R.string.downloader_source_state_failed),
-                timeoutAfter = FAILURE_VISIBILITY_MS
-            )
-        }
+        fun fail() = cancel()
 
         @Synchronized
         fun cancel() {
-            if (!closed.compareAndSet(false, true) || !enabled) return
-            notify(
-                progress = 0,
-                indeterminate = false,
-                ongoing = false,
-                contentText = null,
-                timeoutAfter = DISMISS_VISIBILITY_MS
-            )
+            if (!closed.compareAndSet(false, true)) return
+            // A replacement progress notification can be throttled or kept as a live
+            // update by the system. Explicitly remove failed/cancelled downloads.
+            runCatching { manager.cancel(notificationId) }
         }
 
         private fun notify(
@@ -216,11 +179,8 @@ class DownloadProgressNotifier(private val app: Application) {
         private const val CHANNEL_ID = "download_progress"
         private const val NOTIFICATION_ID_START = 31_000
         private const val PROGRESS_MAX = 1_000
-        private const val ERROR_TRIGGER_PROGRESS = PROGRESS_MAX * 5 / 100
         private const val MIN_UPDATE_INTERVAL_MS = 200L
         private const val ACTIVE_NOTIFICATION_TIMEOUT_MS = 30L * 60L * 1_000L
         private const val COMPLETION_VISIBILITY_MS = 750L
-        private const val FAILURE_VISIBILITY_MS = 1_000L
-        private const val DISMISS_VISIBILITY_MS = 250L
     }
 }
