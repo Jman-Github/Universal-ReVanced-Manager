@@ -11,6 +11,9 @@ import app.urv.manager.domain.repository.*
 import app.urv.manager.domain.storage.RepatchSourceCleanup
 import app.urv.manager.domain.worker.BundleUpdateWebSocketCoordinator
 import app.urv.manager.domain.worker.WorkerRepository
+import app.urv.manager.domain.manager.PreferencesManager
+import app.urv.manager.domain.bundles.BundleDiscoveryState
+import app.urv.manager.domain.bundles.BundleDiscoveryStateStore
 import app.urv.manager.domain.bundles.BundleIconRepository
 import app.urv.manager.domain.bundles.BundleReleasePageRepository
 import app.urv.manager.network.api.ExternalBundlesApi
@@ -22,6 +25,14 @@ import org.koin.dsl.module
 
 val repositoryModule = module {
     singleOf(::ExternalBundlesApi)
+    single {
+        val preference = get<PreferencesManager>().patchBundleDiscoveryState
+        BundleDiscoveryStateStore(
+            initial = BundleDiscoveryState.decode(preference.getBlocking()),
+            persist = { preference.update(it.encode()) },
+            onWriteError = { android.util.Log.w("BundleDiscovery", "Could not save browsing preferences", it) }
+        )
+    }
     singleOf(::BundleIconRepository)
     singleOf(::BundleReleasePageRepository)
     singleOf(::ReVancedAPI)

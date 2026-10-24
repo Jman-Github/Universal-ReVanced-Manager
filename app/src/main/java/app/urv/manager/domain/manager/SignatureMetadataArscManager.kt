@@ -2,9 +2,8 @@ package app.urv.manager.domain.manager
 
 import android.app.Application
 import android.os.Build
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.SplitApkPreparer
-import app.urv.manager.patcher.split.SplitMergeProcessRuntime
+import app.urv.manager.patcher.split.SplitMergeRuntime
 import com.android.apksig.ApkVerifier
 import java.io.File
 import java.io.IOException
@@ -26,61 +25,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 
-enum class SignatureMetadataInjectionMode {
-    REPLACE_EXISTING,
-    ADD_ALONGSIDE
-}
-
-enum class SignatureMetadataSigningMode {
-    DONT_SIGN,
-    SIGN,
-    APPLY_SUPPLIED_SIGNATURE
-}
-
-enum class SignatureMetadataExecutionMode {
-    REMOTE_PROCESS,
-    IN_PROCESS
-}
-
-enum class SignatureMetadataSplitOutputMode {
-    MERGED_APK,
-    SPLIT_APK_CONTAINER
-}
-
-enum class SignatureMetadataOutputType {
-    APK,
-    SPLIT_APK_CONTAINER
-}
-
-enum class SignatureMetadataInjectorStage {
-    ANALYZING,
-    PREPARING_TARGET,
-    LOADING,
-    INJECTING,
-    WRITING,
-    SIGNING,
-    VALIDATING,
-    COMPLETE
-}
-
-data class SignatureMetadataInjectorProgress(
-    val stage: SignatureMetadataInjectorStage
-)
-
-data class SignatureMetadataInjectorResult(
-    val outputFile: File,
-    val packageName: String,
-    val injectedEntries: List<String>,
-    val skippedEntries: List<String>,
-    val removedSignatureEntryCount: Int,
-    val executionMode: SignatureMetadataExecutionMode,
-    val signingMode: SignatureMetadataSigningMode,
-    val suppliedSigningBlockApplied: Boolean,
-    val sourceType: SignatureMetadataSourceType,
-    val outputType: SignatureMetadataOutputType = SignatureMetadataOutputType.APK,
-    val processedApkCount: Int = 1
-)
-
 private sealed interface SignatureBlockExpectation {
     data object Absent : SignatureBlockExpectation
     data object Present : SignatureBlockExpectation
@@ -94,14 +38,9 @@ class SignatureMetadataInjectorManager(
     private val preferencesManager: PreferencesManager
 ) {
     private val analyzer = SignatureMetadataInputAnalyzer(archiveMetadataReader)
-    private val processRuntime = SignatureMetadataInjectorProcessRuntime(app)
-    private val splitMergeRuntime = SplitMergeProcessRuntime(app)
+    private val processRuntime = SignatureMetadataInjectorRuntime(app)
+    private val splitMergeRuntime = SplitMergeRuntime(app)
 
-    private fun configuredProcessMemoryLimitMb(): Int =
-        MemoryLimitConfig.resolveMemoryLimitMb(
-            app,
-            preferencesManager.processMemoryLimit.getBlocking()
-        )
 
     suspend fun analyzeSignatureSource(file: File): SignatureMetadataSourceInfo =
         analyzer.analyzeSignatureSource(file)
@@ -228,11 +167,7 @@ class SignatureMetadataInjectorManager(
                             "(${sourceInfo.apkEntryCount} APKs)"
                 }
             )
-            val executionMode = if (Build.VERSION.SDK_INT > Build.VERSION_CODES.R) {
-                SignatureMetadataExecutionMode.REMOTE_PROCESS
-            } else {
-                SignatureMetadataExecutionMode.IN_PROCESS
-            }
+            val executionMode = SignatureMetadataExecutionMode.REMOTE_PROCESS
             val selectedTargetInfo = trustedSplitTargetInfo?.let { targetInfo ->
                 SignatureMetadataTargetInfo(
                     targetType = SignatureMetadataTargetType.APK,
@@ -317,42 +252,24 @@ class SignatureMetadataInjectorManager(
                                 "into one APK with APKEditor"
                         }
                     )
-                    when (executionMode) {
-                        SignatureMetadataExecutionMode.REMOTE_PROCESS ->
-                            splitMergeRuntime.execute(
-                                inputFile = targetApk,
-                                workspace = operationWorkspace.resolve("target-split-merge"),
-                                stripNativeLibs = false,
-                                skipUnneededSplits = false,
-                                includedModules = includedSplitModules,
-                                memoryLimitMb = configuredProcessMemoryLimitMb(),
-                                onProgress = { message ->
-                                    onLog("[split merge] $message")
-                                },
-                                onSubSteps = { steps ->
-                                    steps.lastOrNull()?.let { step ->
-                                        onLog("[split merge] $step")
-                                    }
-                                },
-                                onLog = { message ->
-                                    onLog("[split merge] $message")
-                                }
-                            )
-                        SignatureMetadataExecutionMode.IN_PROCESS ->
-                            SplitApkPreparer.prepareIfNeeded(
-                                source = targetApk,
-                                workspace = operationWorkspace.resolve("target-split-merge"),
-                                stripNativeLibs = false,
-                                skipUnneededSplits = false,
-                                includedModules = includedSplitModules,
-                                onProgress = { message ->
-                                    onLog("[split merge] $message")
-                                },
-                                onLog = { message ->
-                                    onLog("[split merge] $message")
-                                }
-                            ).file
-                    }
+                    splitMergeRuntime.execute(
+                        inputFile = targetApk,
+                        workspace = operationWorkspace.resolve("target-split-merge"),
+                        stripNativeLibs = false,
+                        skipUnneededSplits = false,
+                        includedModules = includedSplitModules,
+                        onProgress = { message ->
+                            onLog("[split merge] $message")
+                        },
+                        onSubSteps = { steps ->
+                            steps.lastOrNull()?.let { step ->
+                                onLog("[split merge] $step")
+                            }
+                        },
+                        onLog = { message ->
+                            onLog("[split merge] $message")
+                        }
+                    )
                 }
             } else {
                 onLog(
@@ -405,13 +322,6 @@ class SignatureMetadataInjectorManager(
             val targetPayloadMethods = compressionSnapshot(targetInspection)
             val targetPayloadOrder = payloadEntryOrder(targetInspection)
             onLog("Archive engine: APKEditor / ARSCLib")
-            onLog(
-                if (executionMode == SignatureMetadataExecutionMode.REMOTE_PROCESS) {
-                    "Runtime mode: isolated app_process"
-                } else {
-                    "Runtime mode: in-process fallback for Android 10/11 or older"
-                }
-            )
 
             val suppliedSigningBlockSnapshot = if (
                 effectiveSigningMode == SignatureMetadataSigningMode.APPLY_SUPPLIED_SIGNATURE &&
@@ -438,41 +348,16 @@ class SignatureMetadataInjectorManager(
                 null
             }
 
-            val engineResult = when (executionMode) {
-                SignatureMetadataExecutionMode.REMOTE_PROCESS ->
-                    processRuntime.execute(
-                        metadataArchive = metadataArchive,
-                        targetApk = preparedTargetApk,
-                        outputApk = partialOutput,
-                        workspace = operationWorkspace,
-                        mode = mode,
-                        memoryLimitMb = configuredProcessMemoryLimitMb(),
-                        onProgress = onProgress,
-                        onLog = onLog
-                    )
-                SignatureMetadataExecutionMode.IN_PROCESS -> {
-                    val operationContext = coroutineContext
-                    runInterruptible {
-                        SignatureMetadataInjectorArscEngine.execute(
-                            metadataArchive = metadataArchive,
-                            targetApk = preparedTargetApk,
-                            outputApk = partialOutput,
-                            mode = mode,
-                            onProgress = onProgress,
-                            onLog = onLog,
-                            checkCancelled = {
-                                operationContext.ensureActive()
-                                if (Thread.currentThread().isInterrupted) {
-                                    throw CancellationException(
-                                        "Signature metadata injection cancelled."
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
-            }
+            val engineResult = processRuntime.execute(
+                metadataArchive = metadataArchive,
+                targetApk = preparedTargetApk,
+                outputApk = partialOutput,
+                workspace = operationWorkspace,
+                mode = mode,
 
+                onProgress = onProgress,
+                onLog = onLog
+            )
             coroutineContext.ensureActive()
             if (effectiveSigningMode == SignatureMetadataSigningMode.DONT_SIGN) {
                 onProgress(

@@ -35,6 +35,8 @@ URV supports both ReVanced and Morphe patch ecosystems, rooted and non-rooted wo
 
 URV covers the full patching lifecycle, from choosing an APK source and patch bundle to patching, installing, saving, repatching, automating updates, and managing the files and tools around those workflows.
 
+For runtime behavior, memory limits, and troubleshooting, see the [patching runtime guide](urv-patcher-core/README.md).
+
 <details>
 <summary><strong>Patch Bundles & Patcher Runtimes</strong></summary>
 <ul>

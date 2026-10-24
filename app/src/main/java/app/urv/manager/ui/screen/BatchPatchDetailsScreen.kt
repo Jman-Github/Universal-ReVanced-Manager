@@ -57,7 +57,6 @@ import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
-import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
@@ -438,7 +437,6 @@ fun BatchPatchDetailsScreen(
 
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
                     item(key = "legacy-memory-warning") {
-                        LegacyAndroidMemoryWarning()
                     }
                 }
             }

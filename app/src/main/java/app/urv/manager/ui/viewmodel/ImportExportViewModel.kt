@@ -654,7 +654,10 @@ class ImportExportViewModel(
     private suspend fun patchBundlesForExport(): PatchBundleExportResult? {
         val result = preparedPatchBundles ?: buildPatchBundleExportResult()
         preparedPatchBundles = null
-        // The official bundle's presence, order and options are useful even without extras.
+        if (result.exportedCount == 0) {
+            app.toast(app.getString(R.string.export_patch_bundles_empty))
+            return null
+        }
         return result
     }
 

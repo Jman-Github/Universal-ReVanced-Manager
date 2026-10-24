@@ -5,8 +5,6 @@
 
 package app.urv.manager.patcher.runtime.usage
 
-import android.os.Process
-import android.os.SystemClock
 import java.util.concurrent.atomic.AtomicBoolean
 
 // Code adapted from Morphe, see third-party/NOTICE for more information.
@@ -22,12 +20,12 @@ object PatcherResourceMonitor {
     fun start(includeProcessMemory: Boolean = false, onSample: (String) -> Unit): Session {
         val running = AtomicBoolean(true)
         val thread = Thread {
-            runCatching { Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND) }
+            runCatching { UsagePlatform.lowerPriority() }
             val runtime = Runtime.getRuntime()
             val cpuSampler = CpuUsageSampler()
             val ioSampler = IoUsageSampler()
             while (running.get()) {
-                val now = SystemClock.elapsedRealtime()
+                val now = UsagePlatform.elapsedMillis()
                 val cpu = runCatching { cpuSampler.sample() }.getOrDefault(emptyList())
                 val io = runCatching { ioSampler.sample() }.getOrNull()
                 val usedMb = ((runtime.totalMemory() - runtime.freeMemory()) / BYTES_PER_MB)

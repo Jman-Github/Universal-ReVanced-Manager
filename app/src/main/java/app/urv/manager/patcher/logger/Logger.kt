@@ -1,7 +1,5 @@
 package app.urv.manager.patcher.logger
 
-import androidx.annotation.StringRes
-import app.universal.revanced.manager.R
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -58,12 +56,11 @@ fun isVerbosePatcherExportLog(line: String): Boolean {
 }
 
 enum class PatcherLogMode(
-    @get:StringRes val displayName: Int,
     val minLogLevel: LogLevel,
     val javaLogLevel: Level
 ) {
-    DEFAULT(R.string.patcher_log_mode_default, LogLevel.INFO, Level.INFO),
-    VERBOSE(R.string.patcher_log_mode_verbose, LogLevel.TRACE, Level.ALL),
+    DEFAULT(LogLevel.INFO, Level.INFO),
+    VERBOSE(LogLevel.TRACE, Level.ALL),
 }
 
 fun PatcherLogMode.allows(level: LogLevel): Boolean = level.ordinal >= minLogLevel.ordinal

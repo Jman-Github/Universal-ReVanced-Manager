@@ -7,6 +7,7 @@ data class SplitMergeSessionInfo(
     val startedAtElapsedRealtimeMs: Long? = null,
     val elapsedMs: Long? = null,
     val memoryLimitMb: Int? = null,
+    val runtimeName: String? = null,
     val includedSplitCount: Int? = null,
     val totalSplitCount: Int? = null,
     val appName: String? = null,

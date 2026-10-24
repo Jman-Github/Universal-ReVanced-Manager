@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import kotlin.math.floor
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
+import app.urv.manager.patcher.worker.latestResourceUsage
 import kotlinx.coroutines.launch
 
 /** Natural section heights align history plots across all metrics. */
@@ -376,7 +377,7 @@ private fun CpuUsageCard(
         return
     }
     val latest = readings.last()
-    val currentAvailable = samples.last().cpuCoreLoads.isNotEmpty()
+    val currentAvailable = samples.latestResourceUsage()?.cpuCoreLoads?.isNotEmpty() == true
     val current = latest.cpuCoreLoads.average().toInt()
     val peak = readings.maxOf { it.cpuCoreLoads.average().toInt() }
     val scope = stringResource(
@@ -438,9 +439,9 @@ private fun IoUsageCard(
         return
     }
     val latest = readings.last()
-    val currentAvailable = samples.last().let {
+    val currentAvailable = samples.latestResourceUsage()?.let {
         it.ioReadKbPerSec != null && it.ioWriteKbPerSec != null
-    }
+    } == true
     val peak = readings.maxOf { it.ioTotalKbPerSec }
     val scale = peak.coerceAtLeast(1L).toFloat()
     val read = formatIoRate(latest.ioReadKbPerSec!!.toLong())

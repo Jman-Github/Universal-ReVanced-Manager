@@ -1,6 +1,6 @@
 package app.urv.manager.patcher.split
 
-import android.util.Log
+import app.urv.manager.patcher.runtime.RuntimeLog as Log
 import com.reandroid.apk.ApkModule
 import com.reandroid.app.AndroidManifest
 import com.reandroid.archive.ZipEntryMap

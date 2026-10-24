@@ -16,6 +16,15 @@ data class PatcherMemoryUsage(
     val processMemoryMb: Long? = null
 )
 
+/**
+ * Heap heartbeats do not poll CPU or I/O, so they cannot change those metrics' availability.
+ * A resource poll still counts when it reports no readable metrics.
+ */
+internal fun List<PatcherMemoryUsage>.latestResourceUsage(): PatcherMemoryUsage? = lastOrNull {
+    it.resourceSampleTimeMs != null || it.cpuCoreLoads.isNotEmpty() ||
+        it.ioReadKbPerSec != null || it.ioWriteKbPerSec != null
+}
+
 /** Decodes telemetry before log filtering so raw polls never enter the user's log. */
 internal fun parsePatcherResourceUsage(message: String): PatcherMemoryUsage? {
     val prefix = PatcherResourceMonitor.LOG_PREFIX

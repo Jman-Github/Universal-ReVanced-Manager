@@ -69,6 +69,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.dp
 import app.universal.revanced.manager.R
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
+import app.urv.manager.patcher.worker.latestResourceUsage
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
@@ -86,7 +87,7 @@ fun PatcherMemoryUsageCard(
     if (samples.isEmpty()) return
     val latest = samples.last()
     val requestedMaxMb = latest.requestedMaxMb.coerceAtLeast(1L)
-    val processMemory = latest.processMemoryMb
+    val processMemory = samples.latestResourceUsage()?.processMemoryMb
     val reportsProcessMemory = samples.any { it.processMemoryMb != null }
     val displaySamples = if (reportsProcessMemory) samples.mapNotNull { sample ->
         sample.processMemoryMb?.let { sample.copy(usedMb = it) }

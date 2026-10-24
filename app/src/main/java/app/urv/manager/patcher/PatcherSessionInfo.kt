@@ -12,6 +12,7 @@ data class PatcherSessionInfo(
     val patchCount: Int? = null,
     val selectedPatchLines: List<String>? = null,
     val runtimeProcess: Boolean? = null,
+    val runtimeName: String? = null,
     val memoryLimitMb: Int? = null,
     val nativeLibsStripped: Boolean? = null,
     val skipUnusedSplits: Boolean? = null,
@@ -41,6 +42,7 @@ fun PatcherSessionInfo.withFallback(fallback: PatcherSessionInfo): PatcherSessio
         patchCount = patchCount ?: fallback.patchCount,
         selectedPatchLines = selectedPatchLines ?: fallback.selectedPatchLines,
         runtimeProcess = runtimeProcess ?: fallback.runtimeProcess,
+        runtimeName = runtimeName ?: fallback.runtimeName,
         memoryLimitMb = memoryLimitMb ?: fallback.memoryLimitMb,
         nativeLibsStripped = nativeLibsStripped ?: fallback.nativeLibsStripped,
         skipUnusedSplits = skipUnusedSplits ?: fallback.skipUnusedSplits,
@@ -205,10 +207,19 @@ fun PatcherSessionInfo.updatedFromLog(message: String): PatcherSessionInfo {
     }
     if (message.startsWith("Runtime mode:")) {
         return copy(
+            runtimeName = when {
+                message.contains("JVM") -> "JVM"
+                message.contains("ART") -> "ART"
+                else -> runtimeName
+            },
             runtimeProcess = when (message.removePrefix("Runtime mode:").trim()) {
                 "process" -> true
                 "in-process" -> false
-                else -> runtimeProcess
+                else -> when {
+                    message.removePrefix("Runtime mode:").trim().startsWith("bound ") -> true
+                    message.removePrefix("Runtime mode:").trim().startsWith("in-app ") -> false
+                    else -> runtimeProcess
+                }
             }
         )
     }
@@ -222,7 +233,7 @@ private val PATCH_START_SPLIT = Regex("\\bsplit=(true|false)\\b")
 private val PATCH_START_SPLIT_COUNT = Regex("\\bsplits=(\\d+)\\b")
 private val PATCH_START_COUNT = Regex("\\bpatches=(\\d+)\\b")
 private val PATCH_START_NATIVE_LIBS = Regex("\\bnativeLibsStripped=(true|false)\\b")
-private val BUNDLE_TYPE = Regex("\\bbundle=([^\\s]+)")
+private val BUNDLE_TYPE = Regex("\\bbundle=([^\\s;]+)")
 private val MEMORY_LIMIT = Regex("\\bmemoryLimit=(\\d+)MB\\b")
 
 private fun String.logValue(prefix: String): String? =

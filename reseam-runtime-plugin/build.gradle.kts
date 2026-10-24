@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
 }
 
-val reseamSdkVersion = "0.27.0"
+val reseamSdkVersion = "0.29.0"
 val apkEditorLib by configurations.creating
 
 val strippedApkEditorLib by tasks.registering(Jar::class) {

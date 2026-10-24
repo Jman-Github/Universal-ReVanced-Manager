@@ -88,8 +88,17 @@ object ReseamRuntimeEntry {
             val cache = File(params["cacheDir"] as String).also { it.mkdirs() }
             val stripNativeLibs = params["stripNativeLibs"] == true
             val configurations = (params["configurations"] as List<*>).map { it as Map<*, *> }
+            // Loading diagnostics follow Morphe; see third-party/NOTICE.txt.
+            // https://github.com/MorpheApp/morphe-manager/pull/1246
             val loaded = runStep(StepId.LoadPatches, ::event, ::checkCancelled) {
-                configurations.map { LoadedBundle(it, inspectBundle(it["bundlePath"] as String)) }
+                configurations.map { config ->
+                    val path = config["bundlePath"] as String
+                    logger.info("Loading patches from ${File(path).name}")
+                    val startedAt = System.nanoTime()
+                    LoadedBundle(config, inspectBundle(path)).also {
+                        logger.info("Loaded ${it.response.patches.size} patches of ${File(path).name} in ${(System.nanoTime() - startedAt) / 1_000_000}ms")
+                    }
+                }
             }
             val selectedSources = loaded.indices.filter { index ->
                 (loaded[index].config["patches"] as Collection<*>).isNotEmpty()

@@ -9,6 +9,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.revanced.manager.R
+import app.urv.manager.domain.bundles.BundleDiscoveryStateStore
+import app.urv.manager.domain.bundles.DiscoveryScrollPosition
 import app.urv.manager.domain.bundles.RemotePatchBundle
 import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.network.api.CatalogFilters
@@ -48,7 +50,22 @@ class BundleDiscoveryViewModel(
     private val http: HttpService,
     private val json: Json,
     private val downloadProgressNotifier: DownloadProgressNotifier,
+    private val discoveryStateStore: BundleDiscoveryStateStore,
 ) : ViewModel() {
+    val browsingState = discoveryStateStore.state
+
+    fun setDiscoveryTab(appsTab: Boolean) = discoveryStateStore.update { it.copy(appsTab = appsTab) }
+    fun setDiscoveryFilters(appsTab: Boolean, filters: CatalogFilters) =
+        discoveryStateStore.update { it.withFilters(appsTab, filters) }
+    fun updateDiscoveryFilters(appsTab: Boolean, update: (CatalogFilters) -> CatalogFilters) =
+        discoveryStateStore.update { it.withFilters(appsTab, update(it.filtersFor(appsTab))) }
+    fun toggleDiscoveryFiltersExpanded() =
+        discoveryStateStore.update { it.copy(filtersExpanded = !it.filtersExpanded) }
+    fun saveDiscoveryScroll(appsTab: Boolean, filters: CatalogFilters, index: Int, offset: Int) =
+        discoveryStateStore.update { it.withScroll(appsTab, filters, DiscoveryScrollPosition(index, offset)) }
+    fun showBundlesForPackage(packageName: String) =
+        discoveryStateStore.update { it.showBundlesForPackage(packageName) }
+
     var bundles: List<ExternalBundleSnapshot>? by mutableStateOf(null)
         private set
 

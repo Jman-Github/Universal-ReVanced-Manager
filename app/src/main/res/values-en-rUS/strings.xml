@@ -177,7 +177,7 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">No patches selected</string>
     <string name="mixed_patch_bundles_title">Mixed patch bundles</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use multiple, you will have to patch a second time using the other patches you want.</string>
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp), Morphe (.mpp), and Reseam (.reseam) patches cannot be combined in the same patching run. Select patches from one bundle type at a time. To use patches from another type, patch the resulting app again.</string>
     <string name="mixed_revanced_patcher_versions_title">Mixed ReVanced patcher versions</string>
     <string name="mixed_revanced_patcher_versions_description">ReVanced patches built for different patcher versions cannot be combined. ReVanced v21 and v22 use different patcher versions, so select patches from only one ReVanced patcher version.</string>
     <string name="network_unavailable_warning">Your device is not connected to the internet. Downloading will fail later.</string>
@@ -1068,6 +1068,7 @@ Patch profiles are not affected.</string>
     <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
     <string name="language_settings">Language</string>
     <string name="app_language">App language</string>
+    <string name="app_language_description">Choose the language used by the manager</string>
     <string name="language_dialog_title">Choose app language</string>
     <string name="language_restart_title">Restart required</string>
     <string name="language_restart_message">Restart the app now to apply the new language. If you choose later, the change will apply the next time the app is opened.</string>
@@ -1075,6 +1076,10 @@ Patch profiles are not affected.</string>
     <string name="language_restart_later">Later</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
+    <string name="language_option_arabic">Arabic</string>
+    <string name="language_option_greek">Greek</string>
+    <string name="language_option_filipino">Filipino</string>
+    <string name="language_option_italian">Italian</string>
     <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>

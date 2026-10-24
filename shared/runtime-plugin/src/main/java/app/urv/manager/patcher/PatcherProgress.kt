@@ -157,5 +157,9 @@ suspend fun <T> runCancellableBlockingIo(
     } finally {
         future.cancel(true)
         executor.shutdownNow()
+        // A canceled Future can be done while its task still writes files. Wait for the task itself.
+        withContext(kotlinx.coroutines.NonCancellable) {
+            while (!executor.awaitTermination(100, TimeUnit.MILLISECONDS)) { /* wait for cleanup */ }
+        }
     }
 }

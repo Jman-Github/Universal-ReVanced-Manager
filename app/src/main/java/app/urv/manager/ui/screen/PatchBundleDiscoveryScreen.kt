@@ -21,10 +21,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.outlined.FilterAltOff
-import androidx.compose.runtime.saveable.Saver
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -50,7 +46,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,6 +82,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -159,7 +156,9 @@ fun PatchBundleDiscoveryScreen(
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
-    var filtersExpanded by rememberSaveable { mutableStateOf(true) }
+    val browsingState by viewModel.browsingState.collectAsStateWithLifecycle()
+    val appsTab = browsingState.appsTab
+    val filtersExpanded = browsingState.filtersExpanded
     var historyBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
     var historicalPatchesBundle by remember { mutableStateOf<ExternalBundleSnapshot?>(null) }
     historyBundle?.let { selected ->
@@ -200,22 +199,18 @@ fun PatchBundleDiscoveryScreen(
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
     val isSearchingMore = viewModel.isSearchingMore
-    val listState = rememberLazyListState()
+    val bundlesListState = rememberSaveable(browsingState.bundlesFilters, saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    val appsListState = rememberSaveable(browsingState.appsFilters, saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    val listState = if (appsTab) appsListState else bundlesListState
     val useCustomFilePicker by prefs.useCustomFilePicker.getAsState()
     val patchBundleDiscoveryExportDirectory by
         prefs.patchBundleDiscoveryExportLastDirectory.getAsState()
     val pickerScope = rememberCoroutineScope()
-    var appsTab by rememberSaveable { mutableStateOf(false) }
-    val filterSaver = remember {
-        Saver<CatalogFilters, String>(
-            save = { Json.encodeToString(it) },
-            restore = { Json.decodeFromString<CatalogFilters>(it) })
-    }
-    val bundlesFilters = rememberSaveable(stateSaver = filterSaver) { mutableStateOf(CatalogFilters()) }
-    val appsFilters = rememberSaveable(stateSaver = filterSaver) {
-        mutableStateOf(CatalogFilters(release = "all"))
-    }
-    var currentFilters by if (appsTab) appsFilters else bundlesFilters
+    val currentFilters = browsingState.filtersFor(appsTab)
     val defaultFilters = CatalogFilters(release = if (appsTab) "all" else "latest")
     val query = currentFilters.query
     val packageQuery = currentFilters.packageName
@@ -235,9 +230,9 @@ fun PatchBundleDiscoveryScreen(
     val filterChipColors = FilterChipDefaults.filterChipColors(
         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer
     )
-    LaunchedEffect(currentFilters, appsTab) {
-        listState.scrollToItem(0)
-        viewModel.configure(currentFilters.copy(query = query.trim(), packageName = packageQuery.trim()), appsTab)
+    val requestedFilters = currentFilters.copy(query = query.trim(), packageName = packageQuery.trim())
+    LaunchedEffect(requestedFilters, appsTab) {
+        viewModel.configure(requestedFilters, appsTab)
     }
     LaunchedEffect(selectedSource) { viewModel.clearVersions() }
     val groupedBundles by remember(
@@ -280,6 +275,26 @@ fun PatchBundleDiscoveryScreen(
                     filtered.sortedByDescending { groupUpdatedSortKey(it) }
                 }
             }
+        }
+    }
+
+    val listReady = viewModel.isAppsTab == appsTab && viewModel.filters == requestedFilters &&
+        (if (appsTab) viewModel.apps != null else groupedBundles != null)
+    LaunchedEffect(listState, currentFilters, appsTab, listReady) {
+        if (!listReady) return@LaunchedEffect
+        // Wait for this query's results, so loading placeholders cannot erase the saved position.
+        val saved = browsingState.scrollFor(appsTab)
+        listState.scrollToItem(saved.index, saved.offset)
+        snapshotFlow {
+            Triple(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, listState.isScrollInProgress)
+        }.collect { (index, offset, scrolling) ->
+            if (!scrolling) viewModel.saveDiscoveryScroll(appsTab, currentFilters, index, offset)
+        }
+    }
+    DisposableEffect(listState, currentFilters, appsTab, listReady) {
+        onDispose {
+            if (listReady) viewModel.saveDiscoveryScroll(appsTab, currentFilters,
+                listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset)
         }
     }
 
@@ -590,7 +605,7 @@ fun PatchBundleDiscoveryScreen(
                                 DropdownMenuItem(
                                     text = { Text(stringResource(mode.labelRes)) },
                                     onClick = {
-                                        currentFilters = currentFilters.copy(sort = mode.storageValue)
+                                        viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(sort = mode.storageValue) }
                                         showSortMenu = false
                                     },
                                     leadingIcon = {
@@ -720,7 +735,7 @@ fun PatchBundleDiscoveryScreen(
                                                 )
                                                 Surface(
                                                     selected = selected,
-                                                    onClick = { appsTab = isApps },
+                                                    onClick = { viewModel.setDiscoveryTab(isApps) },
                                                     shape = RoundedCornerShape(16.dp),
                                                     color = Color.Transparent,
                                                     contentColor = labelColor,
@@ -736,15 +751,15 @@ fun PatchBundleDiscoveryScreen(
                                 }
                             }
                             IconButton(onClick = {
-                                currentFilters = defaultFilters
+                                viewModel.setDiscoveryFilters(appsTab, defaultFilters)
                                 focusManager.clearFocus()
                             }, enabled = currentFilters != defaultFilters) {
                                 Icon(Icons.Outlined.FilterAltOff,
                                     contentDescription = stringResource(R.string.catalog_clear_filters))
                             }
                             IconButton(onClick = {
-                                filtersExpanded = !filtersExpanded
-                                if (!filtersExpanded) focusManager.clearFocus()
+                                viewModel.toggleDiscoveryFiltersExpanded()
+                                if (filtersExpanded) focusManager.clearFocus()
                             }) {
                                 Icon(Icons.Outlined.ExpandMore, modifier = Modifier.rotate(toggleRotation),
                                     contentDescription = stringResource(if (filtersExpanded) R.string.catalog_hide_filters
@@ -773,14 +788,14 @@ fun PatchBundleDiscoveryScreen(
                                         loading = viewModel.isSourcesLoading,
                                         error = viewModel.sourcesError,
                                         onRetry = { viewModel.loadSources(force = true) },
-                                        onSelect = { currentFilters = currentFilters.copy(sourceUrl = it, version = "") }
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(sourceUrl = it, version = "") } }
                                     )
                                     CatalogFilterMenu(
                                         label = stringResource(R.string.catalog_bundle_type),
                                         selected = selectedType,
                                         options = listOf("Morphe:V1" to "Morphe", "ReVanced:v21" to "ReVanced v21",
                                             "ReVanced:v22" to "ReVanced v22", "Reseam" to "Reseam"),
-                                        onSelect = { currentFilters = currentFilters.copy(bundleType = it) }
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(bundleType = it) } }
                                     )
                                     CatalogFilterMenu(
                                         label = stringResource(R.string.catalog_bundle_version),
@@ -788,14 +803,14 @@ fun PatchBundleDiscoveryScreen(
                                         options = viewModel.versions.map { it to it },
                                         enabled = selectedSource.isNotBlank(),
                                         onOpen = { viewModel.loadVersions(selectedSource) },
-                                        onSelect = { currentFilters = currentFilters.copy(version = it,
-                                            release = if (it.isNotBlank()) "all" else releaseSelection) }
+                                        onSelect = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(version = it,
+                                            release = if (it.isNotBlank()) "all" else filters.release) } }
                                     )
                                 }
                                 OutlinedTextField(
                                     value = packageQuery,
                                     onValueChange = {
-                                        currentFilters = currentFilters.copy(packageName = it, exactPackage = false)
+                                        viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(packageName = it, exactPackage = false) }
                                     },
                                     label = { Text(stringResource(R.string.patch_bundle_discovery_package_label)) },
                                     singleLine = true,
@@ -809,7 +824,7 @@ fun PatchBundleDiscoveryScreen(
                                     trailingIcon = {
                                         if (packageQuery.isNotBlank()) {
                                             IconButton(onClick = {
-                                                currentFilters = currentFilters.copy(packageName = "", exactPackage = false)
+                                                viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(packageName = "", exactPackage = false) }
                                             }) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.Close,
@@ -822,7 +837,7 @@ fun PatchBundleDiscoveryScreen(
                                 )
                                 OutlinedTextField(
                                     value = query,
-                                    onValueChange = { currentFilters = currentFilters.copy(query = it) },
+                                    onValueChange = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(query = it) } },
                                     label = { Text(stringResource(if (appsTab) R.string.catalog_search_apps
                                         else R.string.patch_bundle_discovery_search_label)) },
                                     singleLine = true,
@@ -835,7 +850,7 @@ fun PatchBundleDiscoveryScreen(
                                     },
                                     trailingIcon = {
                                         if (query.isNotBlank()) {
-                                            IconButton(onClick = { currentFilters = currentFilters.copy(query = "") }) {
+                                            IconButton(onClick = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(query = "") } }) {
                                                 Icon(
                                                     imageVector = Icons.Outlined.Close,
                                                     contentDescription = null
@@ -854,7 +869,7 @@ fun PatchBundleDiscoveryScreen(
                                         "prerelease" to R.string.patch_bundle_discovery_prerelease).forEach { (value, label) ->
                                         CheckedFilterChip(
                                             selected = releaseSelection == value,
-                                            onClick = { currentFilters = currentFilters.copy(release = value) },
+                                            onClick = { viewModel.updateDiscoveryFilters(appsTab) { filters -> filters.copy(release = value) } },
                                             colors = filterChipColors,
                                             label = { Text(stringResource(label)) }
                                         )
@@ -886,10 +901,7 @@ fun PatchBundleDiscoveryScreen(
                     } else {
                         items(applications, key = { "app|${it.name}" }) { application ->
                             CatalogAppItem(application) {
-                                bundlesFilters.value = currentFilters.copy(
-                                    packageName = application.name.orEmpty(), query = "", exactPackage = true,
-                                    sort = bundlesFilters.value.sort)
-                                appsTab = false
+                                viewModel.showBundlesForPackage(application.name.orEmpty())
                             }
                         }
                         if (viewModel.isLoadingMore) item { BundleDiscoveryPlaceholderItem() }

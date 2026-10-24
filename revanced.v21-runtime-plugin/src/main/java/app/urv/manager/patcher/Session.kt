@@ -1,6 +1,9 @@
 package app.urv.manager.patcher
 
-import android.os.Build
+import app.urv.manager.revanced.runtime.acceptSelectedPatches
+import app.urv.manager.revanced.runtime.patchResults
+import app.urv.manager.revanced.runtime.shouldDeleteResource
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.urv.manager.patcher.Session.Companion.component1
 import app.urv.manager.patcher.Session.Companion.component2
 import app.urv.manager.patcher.logger.Logger
@@ -136,7 +139,7 @@ class Session private constructor(
         }
 
         startPatch(0)
-        this().collect { (patch, exception) ->
+        patchResults(this).collect { (patch, exception) ->
             checkCancelled()
             val index = indexByPatch[patch] ?: return@collect
             if (exception != null) {
@@ -198,7 +201,7 @@ class Session private constructor(
         checkCancelled()
         with(requirePatcher()) {
             logger.info("Merging integrations")
-            this += LinkedHashSet(orderedPatches)
+            acceptSelectedPatches(this, LinkedHashSet(orderedPatches))
 
             logger.info("Applying patches...")
             applyPatchesVerbose(orderedPatches)
@@ -360,7 +363,7 @@ class Session private constructor(
             }
         }
 
-        logger.warn("No bundled Android framework resource was found for SDK ${Build.VERSION.SDK_INT} or lower")
+        logger.warn("No bundled Android framework resource was found for SDK ${RuntimeDevice.sdk} or lower")
         return false
     }
 
@@ -369,7 +372,7 @@ class Session private constructor(
             javaClass.classLoader?.getResource("prebuilt/android-framework.jar") != null
 
     private fun bundledFrameworkSdkCandidates(): IntProgression {
-        val maxSdk = Build.VERSION.SDK_INT.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
+        val maxSdk = RuntimeDevice.sdk.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
         return maxSdk downTo MIN_BUNDLED_FRAMEWORK_SDK
     }
 
@@ -838,9 +841,12 @@ class Session private constructor(
                 }
 
                 if (resources.deleteResources.isNotEmpty()) {
-                    val deleteResources = resources.deleteResources
                     apk.entries()
-                        .filter { it.centralDirectoryHeader.name in deleteResources }
+                        .filter {
+                            shouldDeleteResource(
+                                resources, it.centralDirectoryHeader.name
+                            )
+                        }
                         .toList()
                         .forEach { it.delete() }
                 }
