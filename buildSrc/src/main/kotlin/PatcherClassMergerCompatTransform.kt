@@ -20,7 +20,7 @@ abstract class PatcherClassMergerCompatTransform : TransformAction<TransformPara
     override fun transform(outputs: TransformOutputs) {
         val input = inputArtifact.get().asFile
         val affected = setOf(
-            "morphe-patcher-2.0.0.jar",
+            "morphe-patcher-2.0.1.jar",
             "revanced-patcher-19.3.1.jar",
             "revanced-patcher-21.0.0.jar",
             "patcher-jvm-22.0.2-dev.1.jar"

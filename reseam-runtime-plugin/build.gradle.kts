@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
 }
 
-val reseamSdkVersion = "0.30.0"
+val reseamSdkVersion = "0.30.2"
 val apkEditorLib by configurations.creating
 
 val strippedApkEditorLib by tasks.registering(Jar::class) {
@@ -38,8 +38,8 @@ android {
         applicationId = "app.universal.revanced.manager.reseam.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
         buildConfigField("String", "RESEAM_SDK_VERSION", "\"$reseamSdkVersion\"")
     }
 
