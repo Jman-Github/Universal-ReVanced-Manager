@@ -13,6 +13,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -31,7 +32,8 @@ fun AppIcon(
     packageInfo: PackageInfo?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    iconOverride: Drawable? = null
+    iconOverride: Drawable? = null,
+    cacheKey: String? = null
 ) {
     if (iconOverride != null) {
         Image(
@@ -56,25 +58,28 @@ fun AppIcon(
 
     val context = LocalContext.current
     val appContext = context.applicationContext ?: context
-    val iconKey = remember(packageInfo, appContext) {
-        runCatching { AppIconLoader.getIconKey(packageInfo, appContext) }
+    val iconKey = remember(packageInfo, appContext, cacheKey) {
+        cacheKey ?: runCatching { AppIconLoader.getIconKey(packageInfo, appContext) }
             .getOrDefault("${packageInfo.packageName}:${packageInfo.versionName.orEmpty()}")
     }
     val cachedBitmap = remember(iconKey) { AppIconStore.get(iconKey) }
-    val iconState by produceState(
-        initialValue = AppIconState(
-            bitmap = cachedBitmap,
-            loaded = cachedBitmap != null
-        ),
-        key1 = iconKey
-    ) {
-        if (value.bitmap == null) {
-            val bitmap = withContext(Dispatchers.IO) {
-                AppIconStore.get(iconKey) ?: runCatching {
-                    AppIconStore.load(appContext, iconKey, packageInfo)
-                }.getOrNull()
+    // A different key owns a different load state; do not retain the previous bitmap.
+    val iconState by key(iconKey) {
+        produceState(
+            initialValue = AppIconState(
+                bitmap = cachedBitmap,
+                loaded = cachedBitmap != null
+            ),
+            key1 = iconKey
+        ) {
+            if (value.bitmap == null) {
+                val bitmap = withContext(Dispatchers.IO) {
+                    AppIconStore.get(iconKey) ?: runCatching {
+                        AppIconStore.load(appContext, iconKey, packageInfo)
+                    }.getOrNull()
+                }
+                value = AppIconState(bitmap = bitmap, loaded = true)
             }
-            value = AppIconState(bitmap = bitmap, loaded = true)
         }
     }
 
