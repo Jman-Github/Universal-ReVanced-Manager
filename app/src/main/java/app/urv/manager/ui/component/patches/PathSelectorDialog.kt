@@ -1,7 +1,6 @@
 package app.urv.manager.ui.component.patches
 
 import app.urv.manager.ui.component.persistentControls
-import android.os.SystemClock
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -104,8 +103,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import app.urv.manager.ui.component.CenteredDialogTitle
 
-private const val PATH_SELECTOR_LOADING_SHIMMER_MIN_MS = 500L
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PathSelectorDialog(
@@ -172,7 +169,6 @@ fun PathSelectorDialog(
     // https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23
     val directoryResult by key(currentDirectory, permissionGranted, refreshNonce) {
         produceState<Result<List<Path>>?>(initialValue = null) {
-            val loadingStartedAt = SystemClock.elapsedRealtime()
             val result: Result<List<Path>> = if (!permissionGranted) {
                 Result.failure(SecurityException("Storage permission required"))
             } else {
@@ -187,12 +183,6 @@ fun PathSelectorDialog(
                 }
                 contents?.let { Result.success(it) }
                     ?: Result.failure(SecurityException("Cannot read directory"))
-            }
-            // Count reads and retries toward the minimum shimmer time.
-            val remainingShimmerTime = PATH_SELECTOR_LOADING_SHIMMER_MIN_MS -
-                (SystemClock.elapsedRealtime() - loadingStartedAt)
-            if (remainingShimmerTime > 0L) {
-                delay(remainingShimmerTime)
             }
             value = result
         }
