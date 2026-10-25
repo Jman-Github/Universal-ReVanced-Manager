@@ -46,7 +46,7 @@ class BoundRuntimeClient(private val context: Context) {
             withContext(Dispatchers.IO) {
                 request.writeText(RuntimeProtocol.encode(params + ("device" to deviceFacts())).toString())
             }
-            if (engine.host != null) {
+            if (engine.host != null && PatcherJvm.get(context).isEnabled()) {
                 try {
                     PatcherJvm.get(context).run(engine, runtimeClassPath, request, cancelled, cancelJvm, onMessage)
                     return
@@ -97,7 +97,11 @@ class BoundRuntimeClient(private val context: Context) {
         var started = false
         var memoryReported = false
         try {
-            for (event in channel) {
+            val first = withTimeoutOrNull(30_000L) { channel.receiveCatching().getOrNull() }
+            checkCancelled()
+            var event = first
+                ?: throw JvmUnavailableException("The ART worker did not start reporting within 30 seconds")
+            while (true) {
                 checkCancelled()
                 val type = event.getValue("type") as String
                 if (type == "started") started = true
@@ -110,6 +114,7 @@ class BoundRuntimeClient(private val context: Context) {
                     onMessage("log", mapOf("level" to "INFO", "message" to "Memory limit: ${event["max"]}MB"))
                 }
                 onMessage(type, event)
+                event = channel.receiveCatching().getOrNull() ?: break
             }
         } finally { channel.cancel(); events.close() }
         checkCancelled()

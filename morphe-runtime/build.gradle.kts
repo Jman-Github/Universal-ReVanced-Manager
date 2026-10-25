@@ -82,6 +82,8 @@ kotlin {
     }
 }
 
+usePatcherClassMergerCompatibility()
+
 dependencies {
     implementation(libs.arsclib)
     implementation(libs.morphe.patcher) {

@@ -1358,6 +1358,7 @@ fun AdvancedSettingsScreen(
             var showPatcherLogModeDialog by rememberSaveable { mutableStateOf(false) }
             val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
             val patcherLogMode by viewModel.prefs.patcherLogMode.getAsState()
+            val useJvmRuntime by viewModel.prefs.useJvmRuntime.getAsState()
             if (showMorpheBytecodeModeDialog) {
                 MorpheBytecodeModeDialog(
                     current = morpheBytecodeMode,
@@ -1386,6 +1387,22 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_jvm_enable,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = useJvmRuntime && viewModel.jvmRuntimeAvailable,
+                        onValueChange = { viewModel.setJvmRuntime(it) },
+                        headline = R.string.patcher_jvm_enable,
+                        description = if (viewModel.jvmRuntimeAvailable) R.string.patcher_jvm_description
+                            else R.string.patcher_jvm_unavailable,
+                        enabled = viewModel.jvmRuntimeAvailable
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.strip_unused_libs,
                     activeKey = highlightTarget,

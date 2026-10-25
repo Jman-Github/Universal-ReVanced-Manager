@@ -25,6 +25,8 @@ kotlin {
         )
     }
 }
+usePatcherClassMergerCompatibility()
+
 dependencies {
     implementation(project(":jvm-host"))
     implementation("com.google.guava:guava:32.1.2-jre")

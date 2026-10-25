@@ -313,7 +313,7 @@ object SplitApkPreparer {
     }
 
     private fun validatePreparedApk(file: File): PreparedApkValidation =
-        runCatching {
+        try {
             ZipFile(file).use { zip ->
                 val embeddedSplitEntries = zip.entries().asSequence()
                     .filterNot { it.isDirectory }
@@ -327,11 +327,12 @@ object SplitApkPreparer {
                     embeddedSplitEntries = embeddedSplitEntries
                 )
             }
-        }.getOrElse {
-            PreparedApkValidation(
-                hasRootManifest = false,
-                hasRootResources = false,
-                embeddedSplitEntries = linkedSetOf()
+        } catch (error: IOException) {
+            throw IOException(
+                "Could not read merged APK ${file.name} (${file.length()} bytes, " +
+                    "${file.parentFile?.usableSpace?.div(1024 * 1024)}MB free): " +
+                    "${error.message ?: error.javaClass.simpleName}",
+                error
             )
         }
 

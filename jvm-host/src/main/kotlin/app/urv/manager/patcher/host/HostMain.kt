@@ -15,8 +15,27 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** One embedded JVM serves every engine; each run gets a fresh, isolated patcher class loader. */
+/** Disposable worker entry point, plus the command-pipe protocol for older managers. */
 fun main(args: Array<String>) {
+    if (args.size == 3) {
+        // A disposable worker owns the VM, so ending an exhausted run leaves the manager alive.
+        try {
+            // JNI-created threads need the SDK loader for lazy resources and service discovery.
+            Thread.currentThread().contextClassLoader = RuntimeProtocol::class.java.classLoader
+            val collectors = java.lang.management.ManagementFactory.getGarbageCollectorMXBeans()
+            RuntimeProtocol.runWithGc(args[0], args[1],
+                gcMillis = { collectors.map { it.collectionTime }.filter { it >= 0 }.sum() },
+                abort = { kotlin.system.exitProcess(0) }
+            ) { params, send ->
+                val entry = Class.forName(args[2])
+                val device = entry.classLoader.loadClass("app.urv.manager.patcher.runtime.RuntimeDevice")
+                device.getMethod("configure", Map::class.java)
+                    .invoke(device.getField("INSTANCE").get(null), params["device"])
+                RuntimeProtocol.invoke(entry, params, send)
+            }
+        } finally { kotlin.system.exitProcess(0) }
+    }
+    // Keep the command-pipe entry point compatible with older managers loading plugin hosts.
     PersistentHost().use { host ->
         File(args.single()).bufferedReader().useLines { lines ->
             lines.forEach { line ->

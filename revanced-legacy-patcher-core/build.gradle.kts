@@ -31,6 +31,8 @@ kotlin {
         )
     }
 }
+usePatcherClassMergerCompatibility()
+
 dependencies {
     testImplementation(kotlin("test-junit"))
     implementation(project(":jvm-host"))

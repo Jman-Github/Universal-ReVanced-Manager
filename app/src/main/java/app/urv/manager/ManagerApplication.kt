@@ -107,7 +107,7 @@ class ManagerApplication : Application() {
         super.onCreate()
         // Code adapted from Morphe, see third-party/NOTICE for more information.
         // https://github.com/MorpheApp/morphe-manager/pull/1202
-        // A bound ART service must not start workers, open databases or initialize the UI.
+        // A bound patcher service must not start workers, open databases or initialize the UI.
         if (isPatcherProcess) return
 
         startKoin {
@@ -357,7 +357,7 @@ class ManagerApplication : Application() {
     override fun attachBaseContext(base: Context?) {
         val storageBase = base?.let { app.urv.manager.util.BuildProfileContext.wrap(it) }
         super.attachBaseContext(storageBase)
-        // The ART service must not open the main process's single-process DataStore.
+        // The patcher service must not open the main process's single-process DataStore.
         if (isPatcherProcess) return
 
         // Apply stored app language as early as possible using DataStore, but never crash startup.

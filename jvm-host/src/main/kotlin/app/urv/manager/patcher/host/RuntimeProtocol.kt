@@ -71,13 +71,19 @@ object RuntimeProtocol {
         catch (error: InvocationTargetException) { throw error.targetException }
     }
 
-    fun run(requestPath: String, eventPath: String, execute: (Map<String, Any?>, (String, Map<String, Any?>) -> Unit) -> String?) {
+    fun run(requestPath: String, eventPath: String, execute: (Map<String, Any?>, (String, Map<String, Any?>) -> Unit) -> String?) =
+        runWithGc(requestPath, eventPath, null, {}, execute)
+
+    fun runWithGc(requestPath: String, eventPath: String, gcMillis: (() -> Long)?, abort: () -> Unit,
+        execute: (Map<String, Any?>, (String, Map<String, Any?>) -> Unit) -> String?) {
         File(eventPath).bufferedWriter().use { writer ->
             var stallWatch: StallWatch? = null
+            var terminal = false
             val send: (String, Map<String, Any?>) -> Unit = { type, values ->
                 stallWatch?.onEvent(type)
                 synchronized(writer) {
-                    try {
+                    if (!terminal) try {
+                        if (type == "finished") terminal = true
                         writer.write(encode(values + ("type" to type)).toString())
                         writer.newLine()
                         writer.flush()
@@ -93,7 +99,14 @@ object RuntimeProtocol {
                 Thread(task, "RuntimeMemory").apply { isDaemon = true }
             }
             var resources: PatcherResourceMonitor.Session? = null
+            var gcWatch: GcOverheadWatch? = null
             val failure = try {
+                gcWatch = gcMillis?.let { counter ->
+                    GcOverheadWatch(counter, { message ->
+                        send("finished", mapOf("error" to message))
+                        abort()
+                    })
+                }
                 stallWatch = StallWatch({ message ->
                     send("log", mapOf("level" to "WARN", "message" to message))
                 }).start()
@@ -110,6 +123,7 @@ object RuntimeProtocol {
                 if (error is OutOfMemoryError) "java.lang.OutOfMemoryError: runtime heap exhausted"
                     else error.stackTraceToString()
             } finally {
+                gcWatch?.close()
                 stallWatch?.close()
                 resources?.stop()
                 monitor.shutdownNow()

@@ -1,6 +1,7 @@
 package app.urv.manager.ui.viewmodel
 
 import android.app.Application
+import app.urv.manager.patcher.runtime.jvm.JvmInstallation
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.net.Uri
@@ -57,6 +58,12 @@ class AdvancedSettingsViewModel(
     private val installerManager: InstallerManager,
     private val rootInstaller: RootInstaller
 ) : ViewModel() {
+    val jvmRuntimeAvailable = JvmInstallation(app).isAvailable
+
+    fun setJvmRuntime(enabled: Boolean) = viewModelScope.launch {
+        prefs.useJvmRuntime.update(enabled)
+    }
+
     val hasOfficialBundle = patchBundleRepository.sources
         .map { sources -> sources.any { it.isDefault } }
 

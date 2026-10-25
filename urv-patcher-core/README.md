@@ -18,11 +18,13 @@ process ABI, including when a 64-bit device runs the manager as a 32-bit app.
 | Morphe | Embedded JVM, with ART fallback when JVM startup is unavailable |
 | ReVanced v22 | Isolated engine in the embedded JVM, with ART fallback |
 | ReVanced v21 | Versioned host from the installed v21 runtime plugin |
-| Legacy ReVanced class-based bundles | Isolated SDK 19.3.1 host carried by the v21 runtime plugin (current version: 1.7.0) |
+| Legacy ReVanced class-based bundles | Isolated SDK 19.3.1 host carried by the v21 runtime plugin (current version: 1.7.1) |
 | Split merging, installer preparation, signature metadata injection | ReVanced v22 tools host |
 | ReSeam, in builds with ReSeam integration | Disposable ART worker for its Android JNI SDK |
 
-Runtime selection is automatic. Unsupported JVM ABIs, insufficient address space,
+**Settings > Patcher > Use JVM for patching** enables the embedded JVM by default.
+Turn it off to use ART for compatible engines; ReSeam always uses ART. The switch
+is disabled on unsupported devices. Unsupported JVM ABIs, insufficient address space,
 and JVM startup failures use bound ART workers. Trusted plugins that do not carry
 a JVM host also use ART. An engine failure after patching starts is reported to
 the user without automatically repeating the operation.
@@ -34,30 +36,25 @@ class-based patches and newer DSL patches cannot be combined in one run.
 
 ## Process and engine isolation
 
-One JVM starts on demand in the manager's main process and remains available for
-later operations. Each run loads its engine through a fresh class loader with a
-platform parent. This keeps incompatible SDKs, Kotlin singletons, patch instances,
-and option values separate. Bundle class loaders use their engine as the parent,
-so patch classes and lazy extension resources resolve against the matching SDK.
-Runs are serialized.
+Each JVM run starts in a disposable bound worker process with only its selected
+engine host on the classpath. SDKs, Kotlin singletons, patch instances, and option
+values cannot leak between runs. Bundle class loaders use their engine as the
+parent, so lazy extension resources resolve against the matching SDK. JVM runs
+remain serialized.
 
-Opening patch setup can preload enabled Morphe bundles. A preload is consumed by
-one matching run or released after five minutes. Switching engines discards an
-unused preload.
+Cancellation ends the worker process, including native operations that cannot
+cooperate with a cancellation callback. Completing or exhausting a run also ends
+its worker, releasing its heap without closing the manager.
 
-JVM cancellation is cooperative: the manager waits for file operations and
-cleanup before returning or starting the next run. ReSeam cancellation ends its
-ART worker because throwing from a synchronous JNI callback is unsafe.
-
-A JVM startup failure is remembered until the app restarts, since HotSpot cannot
-be created twice in the same process. A fatal JVM crash or `System.exit` can end
-the manager process. When available, the JVM crash report is included in the next
-patching log.
+Only JVM startup failures fall back to ART. An engine failure after patching
+starts is reported without repeating the operation. Older plugins without the
+disposable-worker protocol use ART until updated. When available, a JVM crash
+report is included in the next patching log.
 
 ## Memory and JVM options
 
 Heap size is automatic. A 64-bit process uses one third of physical RAM, bounded
-between 1 and 3 GiB. A 32-bit process is capped at 1 GiB and may receive a smaller
+between 1.5 and 3 GiB. A 32-bit process requests 1 GiB and may receive a smaller
 heap after URV checks contiguous address space and reserves non-heap headroom.
 If less than 512 MiB is available for that heap, URV falls back to ART.
 
@@ -66,8 +63,10 @@ cap. The 64-bit runtimes use the server VM with C1 compilation. Debug options,
 when enabled, are applied after these defaults.
 
 There is no manual memory slider or ART heap-property override. ART workers use
-the heap limit Android assigns to them. The JVM requests a full collection after
-a run or an expired preload; it can retain memory for reuse.
+the heap limit Android assigns to them. A JVM run that spends at least 60% of a
+two-minute window collecting garbage fails with an out-of-memory error instead
+of continuing to crawl. GC monitoring ends with its run; terminating the worker
+releases all of its memory.
 
 ## Runtime packaging
 
@@ -93,8 +92,7 @@ The patching log includes:
 - `Host VM:`: the actual VM name, version, architecture, and available processors.
 - `Patcher process:`: the process ID, engine, bitness, ABIs, and memory budget.
 - `Patcher JVM:`: the selected VM library and device-specific JVM options.
-- Bundle loading times, including time spent waiting for a Morphe preload and
-  whether loading had to be retried.
+- Bundle loading times and patch progress.
 
 After 60 seconds without a patching progress event, the host logs a warning and
 collects its Java thread stacks and heap usage. It can repeat this up to five
@@ -107,8 +105,7 @@ cannot be appended to a later run's log.
 
 Debug APKs accept one JVM option per line in `jvm-options.txt` in the manager's
 private files directory. Blank lines and lines beginning with `#` are ignored.
-Release APKs do not read this file. Options take effect when the JVM starts, so
-restart the app after changing the file.
+Release APKs do not read this file. Options take effect on the next JVM run.
 
 ## Building
 
@@ -144,7 +141,9 @@ The runtime architecture and diagnostics adapt Morphe Manager
 [PR #1212](https://github.com/MorpheApp/morphe-manager/pull/1212),
 [PR #1215](https://github.com/MorpheApp/morphe-manager/pull/1215),
 [PR #1223](https://github.com/MorpheApp/morphe-manager/pull/1223), and
-[PR #1246](https://github.com/MorpheApp/morphe-manager/pull/1246).
+[PR #1246](https://github.com/MorpheApp/morphe-manager/pull/1246), plus the
+[heap-budget fix](https://github.com/MorpheApp/morphe-manager/commit/77af30c2e2711d6b745ffa435a5a7fa534277449)
+and [GC-overhead guard](https://github.com/MorpheApp/morphe-manager/commit/76b5477eca7a97b393a95cc5880d90d1ab47354a).
 Original copyright headers and source attribution are retained. The required
 Morphe notice is available in the app and in [NOTICE.txt](../third-party/NOTICE.txt).
 

@@ -47,7 +47,7 @@ For runtime behavior, memory limits, and troubleshooting, see the [patching runt
   <li><strong>Full changelog history:</strong> View cached patch bundle changelog history with configurable loading and storage limits, plus release links when available.</li>
   <li><strong>Bundle organization:</strong> Rename imported bundles, reorder them, preserve metadata and timestamps, and export/import bundle configurations.</li>
   <li><strong>Official bundle recovery:</strong> Remove the pre-installed Official ReVanced bundle and restore it later from Advanced settings.</li>
-  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with URV.</li>
+  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with URV. Choose JVM or ART execution with the JVM switch in Settings &gt; Patcher.</li>
   <li><strong>ReVanced v21 runtime plugin:</strong> Add the supported ReVanced v21 runtime plugin from a local APK or GitHub source and manage its trust, update channel, installed version, and stored plugin files.</li>
   <li><strong>Reseam runtime plugin:</strong> Patch <code>.reseam</code> bundles with the supported Reseam runtime plugin.</li>
 </ul>

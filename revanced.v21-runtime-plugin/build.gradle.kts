@@ -55,8 +55,8 @@ android {
         applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.7.0"
+        versionCode = 6
+        versionName = "1.7.1"
     }
 
     val keystoreFile = rootProject.file("app/keystore.jks")
@@ -121,6 +121,8 @@ androidComponents {
         }
     }
 }
+
+usePatcherClassMergerCompatibility()
 
 dependencies {
     jvmHost(project(":revanced21-patcher-core", "hostJar"))

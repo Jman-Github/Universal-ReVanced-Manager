@@ -13,7 +13,7 @@ import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
 
 /**
- * Launch data for the in-app JVM or a disposable ART worker in [PatcherService].
+ * Launch data for a disposable embedded JVM or ART worker in [PatcherService].
  *
  * @param preload Libraries of the runtime that others of it link against, dependencies first.
  * @param mainClass The class whose main runs, in JNI form such as `a/b/MainKt`.

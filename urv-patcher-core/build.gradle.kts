@@ -28,6 +28,8 @@ kotlin {
         )
     }
 }
+usePatcherClassMergerCompatibility()
+
 dependencies {
     implementation(project(":jvm-host"))
     implementation(libs.morphe.patcher) {

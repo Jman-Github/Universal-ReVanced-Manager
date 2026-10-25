@@ -968,6 +968,9 @@ Patch profiles are not affected.</string>
     <string name="patcher_log_mode_default_description">Keeps the progress logs needed by the patcher UI while dropping extra noise. This can reduce logging overhead and help lower the chance of slowdowns or log-driven memory pressure</string>
     <string name="patcher_log_mode_verbose">Verbose</string>
     <string name="patcher_log_mode_verbose_description">Keeps the full logging behavior, including trace-heavy output. Useful for debugging patch failures, but it can make patching slower and increase memory pressure</string>
+    <string name="patcher_jvm_enable">Use JVM for patching</string>
+    <string name="patcher_jvm_description">Use a separate Java VM for Morphe and ReVanced patching and supported tools, including split APK merging and signature metadata injection. Disable to use the Android runtime (ART) for these operations. ReSeam always uses ART</string>
+    <string name="patcher_jvm_unavailable">No embedded JVM is available for this device. Patching and supported tools use the Android runtime (ART)</string>
     <string name="morphe_bytecode_mode">Morphe bytecode processing mode</string>
     <string name="morphe_bytecode_mode_description">Controls how the Morphe runtime processes bytecode during patching. Only applies to the Morphe runtime</string>
     <string name="morphe_bytecode_mode_dialog_description">Choose how Morphe processes DEX files when applying Morphe patches. This only affects the Morphe runtime</string>

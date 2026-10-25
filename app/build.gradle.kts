@@ -41,7 +41,9 @@ val embeddedJvms = mapOf(
  * beyond that, so a patch that runs inside the app also runs in the JVM.
  */
 val embeddedJvmModules = listOf(
-    "java.base", "java.logging", "java.xml", "java.sql", "jdk.unsupported", "jdk.charsets", "jdk.crypto.ec"
+    "java.base", "java.logging", "java.xml", "java.sql", "jdk.unsupported", "jdk.charsets", "jdk.crypto.ec",
+    // GC collection time used to fail runs whose heap is too small.
+    "java.management"
 )
 
 /**
@@ -51,7 +53,7 @@ val embeddedJvmModules = listOf(
 val embeddedJvmFiles = listOf(
     "lib/*/libjvm.so",
     "lib/libjava.so", "lib/libjimage.so", "lib/libzip.so", "lib/libnet.so", "lib/libnio.so",
-    "lib/libverify.so",
+    "lib/libverify.so", "lib/libmanagement.so",
     "lib/jvm.cfg", "lib/tzdb.dat", "lib/security", "conf"
 )
 
@@ -190,6 +192,8 @@ val androidArscLib by tasks.registering(Jar::class) {
         "baksmali.properties"
     )
 }
+
+usePatcherClassMergerCompatibility()
 
 dependencies {
     // Bundle format detection inspects DEX superclasses before loading a patcher SDK.
