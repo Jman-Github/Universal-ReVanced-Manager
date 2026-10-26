@@ -1020,16 +1020,19 @@ internal class PatcherProgressTracker(
         }
     }
 
-    private fun promoteNextSectionStepIfNeeded(completedIndex: Int) {
+    private fun promoteNextStepIfNeeded(completedIndex: Int) {
         val completedStep = steps.getOrNull(completedIndex) ?: return
         if (completedStep.hide) return
-        if (!isLastVisibleStepInSection(completedIndex)) return
+        // Preparation can include worker startup and input inspection between events.
+        // Keep its next row active during that handoff, just like section transitions.
+        val preparing = completedStep.category == StepCategory.PREPARING
+        if (!preparing && !isLastVisibleStepInSection(completedIndex)) return
 
         val nextVisibleIndex = ((completedIndex + 1) until steps.size)
             .firstOrNull { !steps[it].hide }
             ?: return
         val nextStep = steps[nextVisibleIndex]
-        if (nextStep.category == completedStep.category) return
+        if (!preparing && nextStep.category == completedStep.category) return
         if (nextStep.state != State.WAITING) return
 
         val anotherVisibleRunning = steps.indices.any { index ->
@@ -1292,7 +1295,7 @@ internal class PatcherProgressTracker(
                 steps[stepIndex] = updatedStep
                 if (event is ProgressEvent.Completed && updatedStep.state == State.COMPLETED) {
                     promoteImmediateSignStepIfNeeded(stepIndex)
-                    promoteNextSectionStepIfNeeded(stepIndex)
+                    promoteNextStepIfNeeded(stepIndex)
                 }
             }
         }

@@ -55,8 +55,8 @@ android {
         applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.7.1"
+        versionCode = 7
+        versionName = "1.8.0"
     }
 
     val keystoreFile = rootProject.file("app/keystore.jks")

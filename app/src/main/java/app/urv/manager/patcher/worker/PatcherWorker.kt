@@ -507,6 +507,7 @@ class PatcherWorker(
         val detail = normalizeNotificationDetail(event.stepId, event.message)?.trim()
         return when {
             detail == null -> 0.5f
+            detail.equals("Validating resources", ignoreCase = true) -> 0.02f
             detail.equals("Preparing output APK", ignoreCase = true) -> 0.05f
             detail.equals("Copying base APK", ignoreCase = true) -> 0.15f
             detail.equals("Copy base APK", ignoreCase = true) -> 0.15f
@@ -515,6 +516,7 @@ class PatcherWorker(
             detail.equals(currentWriteApkNotificationDexGroupTitle(), ignoreCase = true) -> 0.4f
             detail.startsWith("${currentWriteApkNotificationDexGroupTitle()}:", ignoreCase = true) -> 0.4f
             detail.equals("Compiling modified resources", ignoreCase = true) -> 0.65f
+            detail.equals("Writing patched APK", ignoreCase = true) -> 0.75f
             isWriteApkDexNotificationTitle(detail) -> 0.4f
             detail.startsWith("Compiling ", ignoreCase = true) -> 0.4f
             detail.startsWith("Compiled ", ignoreCase = true) -> 0.4f
@@ -710,6 +712,7 @@ class PatcherWorker(
     private fun writeApkNotificationPhaseIndex(detail: String): Int = when {
         activePatchBundleType == PatchBundleType.RESEAM && detail == "Writing patched APKs" -> 0
         activePatchBundleType == PatchBundleType.RESEAM && detail == "Preparing unsigned APKs" -> 1
+        detail.equals("Validating resources", ignoreCase = true) -> 0
         detail.equals("Preparing output APK", ignoreCase = true) -> 0
         detail.equals("Copying base APK", ignoreCase = true) ||
             detail.equals("Copy base APK", ignoreCase = true) -> 1
@@ -717,7 +720,8 @@ class PatcherWorker(
         detail.equals("Compiling patched dex files", ignoreCase = true) ||
             detail.equals(currentWriteApkNotificationDexGroupTitle(), ignoreCase = true) ||
             detail.startsWith("${currentWriteApkNotificationDexGroupTitle()}:", ignoreCase = true) -> 3
-        detail.equals("Compiling modified resources", ignoreCase = true) -> 4
+        detail.equals("Compiling modified resources", ignoreCase = true) ||
+            detail.equals("Writing patched APK", ignoreCase = true) -> 4
         isWriteApkDexNotificationTitle(detail) -> 3
         detail.startsWith("Compiling ", ignoreCase = true) -> 3
         detail.startsWith("Compiled ", ignoreCase = true) -> 3
@@ -739,6 +743,9 @@ class PatcherWorker(
     private fun shouldRetainWriteApkNotificationDetail(detail: String, phaseIndex: Int): Boolean {
         val lastDetail = lastWriteApkNotificationDetail ?: return false
         if (phaseIndex != lastWriteApkNotificationPhaseIndex) return false
+        if (phaseIndex == 4 && lastDetail.equals("Writing patched APK", ignoreCase = true)) {
+            return detail.equals("Compiling modified resources", ignoreCase = true)
+        }
         if (phaseIndex != 3) return false
 
         val lastIsDexChild = isWriteApkDexNotificationTitle(lastDetail)
@@ -1254,10 +1261,12 @@ class PatcherWorker(
             )
         } else {
             listOf(
+                "Validating resources",
                 "Copying base APK",
                 "Applying patched changes",
                 "Compiling patched dex files",
                 "Compiling modified resources",
+                "Writing patched APK",
                 "Writing output APK",
                 "Finalizing output",
                 "Stripping native libraries"

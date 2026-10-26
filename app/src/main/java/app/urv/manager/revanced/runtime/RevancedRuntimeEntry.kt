@@ -252,10 +252,6 @@ object RevancedRuntimeEntry {
                         }.getOrThrow().also { cachedSelectedPatches = it }
                     }
 
-                    runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
-                        loadSelectedPatches().size
-                    }
-
                 val input = File(inputFile)
                 suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
                     input,
@@ -291,6 +287,10 @@ object RevancedRuntimeEntry {
 
                 var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
+                    runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
+                        loadSelectedPatches().size
+                    }
+
                     lateinit var preparedInput: SplitApkPreparer.PreparationResult
                     lateinit var patcherInput: File
                     fun openSessionWithAapt(

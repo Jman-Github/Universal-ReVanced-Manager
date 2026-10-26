@@ -43,7 +43,9 @@ val embeddedJvms = mapOf(
 val embeddedJvmModules = listOf(
     "java.base", "java.logging", "java.xml", "java.sql", "jdk.unsupported", "jdk.charsets", "jdk.crypto.ec",
     // GC collection time used to fail runs whose heap is too small.
-    "java.management"
+    "java.management",
+    // Apktool decodes nine-patch PNGs using Raster, BufferedImage and ImageIO.
+    "java.desktop"
 )
 
 /**
@@ -53,7 +55,11 @@ val embeddedJvmModules = listOf(
 val embeddedJvmFiles = listOf(
     "lib/*/libjvm.so",
     "lib/libjava.so", "lib/libjimage.so", "lib/libzip.so", "lib/libnet.so", "lib/libnio.so",
-    "lib/libverify.so", "lib/libmanagement.so",
+    "lib/libverify.so", "lib/libmanagement.so", "lib/libprefs.so",
+    // Headless AWT and ImageIO still need native image and font support on Android.
+    "lib/libawt.so", "lib/libawt_headless.so", "lib/libjavajpeg.so",
+    "lib/libfontmanager.so", "lib/libfreetype.so", "lib/liblcms.so", "lib/libmlib_image.so",
+    "lib/fontconfig*", "lib/psfont*",
     "lib/jvm.cfg", "lib/tzdb.dat", "lib/security", "conf"
 )
 

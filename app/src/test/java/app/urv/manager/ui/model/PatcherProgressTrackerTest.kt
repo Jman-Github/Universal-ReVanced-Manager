@@ -121,6 +121,58 @@ class PatcherProgressTrackerTest {
         assertEquals(State.FAILED, tracker.stepSubSteps[id]!!.single().state)
     }
 
+    @Test fun downloadHandoffKeepsPreparationActiveUntilTheWorkerReports() {
+        val tracker = PatcherProgressTracker(
+            steps = mutableStateListOf(
+                Step(StepId.DownloadAPK, "Download", StepCategory.PREPARING, State.RUNNING),
+                Step(StepId.LoadPatches, "Load", StepCategory.PREPARING),
+                Step(StepId.ReadAPK, "Read", StepCategory.PREPARING)
+            ),
+            stepSubSteps = mutableMapOf(),
+            isMorpheSelection = { false },
+            morpheBytecodeMode = { null }
+        )
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.DownloadAPK))
+        assertEquals(State.RUNNING, tracker.steps.single { it.id == StepId.LoadPatches }.state)
+        assertNull(tracker.steps.single { it.id == StepId.LoadPatches }.progress)
+        assertEquals(State.WAITING, tracker.steps.single { it.id == StepId.ReadAPK }.state)
+
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.LoadPatches))
+        assertEquals(State.COMPLETED, tracker.steps.single { it.id == StepId.LoadPatches }.state)
+        assertEquals(State.RUNNING, tracker.steps.single { it.id == StepId.ReadAPK }.state)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ReadAPK))
+        assertEquals(1, tracker.steps.count { it.state == State.RUNNING })
+    }
+
+    @Test fun splitHandoffKeepsTheNextPreparationActiveAndPreservesFailureAttribution() {
+        val tracker = PatcherProgressTracker(
+            steps = mutableStateListOf(
+                Step(StepId.DownloadAPK, "Download", StepCategory.PREPARING, State.RUNNING),
+                Step(StepId.PrepareSplitApk, "Prepare splits", StepCategory.PREPARING),
+                Step(StepId.LoadPatches, "Load", StepCategory.PREPARING),
+                Step(StepId.ReadAPK, "Read", StepCategory.PREPARING)
+            ),
+            stepSubSteps = mutableMapOf(),
+            isMorpheSelection = { false },
+            morpheBytecodeMode = { null }
+        )
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.DownloadAPK))
+        assertEquals(State.RUNNING, tracker.steps.single { it.id == StepId.PrepareSplitApk }.state)
+        assertEquals(State.WAITING, tracker.steps.single { it.id == StepId.LoadPatches }.state)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.PrepareSplitApk))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.PrepareSplitApk))
+        assertEquals(State.RUNNING, tracker.steps.single { it.id == StepId.LoadPatches }.state)
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.LoadPatches))
+        tracker.processProgressEventLocked(ProgressEvent.Failed(
+            StepId.LoadPatches, RemoteError("IOException", "Invalid bundle", "Invalid bundle")
+        ))
+        assertEquals(State.FAILED, tracker.steps.single { it.id == StepId.LoadPatches }.state)
+        assertEquals(State.COMPLETED, tracker.steps.single { it.id == StepId.PrepareSplitApk }.state)
+        assertEquals(State.WAITING, tracker.steps.single { it.id == StepId.ReadAPK }.state)
+        assertTrue(tracker.steps.none { it.state == State.RUNNING })
+    }
+
     @Test fun downloadCountersStayInBytesAndZeroTotalsAreSafe() {
         val tracker = tracker(StepId.WriteAPK)
         val index = tracker.steps.indexOfFirst { it.id == StepId.DownloadAPK }
@@ -145,5 +197,43 @@ class PatcherProgressTrackerTest {
         assertTrue(isComponentCountProgress("Preparing config.en.apk"))
         assertFalse(isComponentCountProgress("Extracting split APKs"))
         assertFalse(isComponentCountProgress("Finalizing output"))
+    }
+
+    private fun v21WriteStages() = listOf("Validating resources", "Copying base APK", "Applying patched changes",
+        "Compiling DEX files", "Compiling modified resources", "Writing patched APK", "Writing output APK", "Finalizing output")
+
+    @Test fun v21ValidationFailureIsAttachedToValidationRatherThanCopying() {
+        val id = StepId.WriteAPK
+        val tracker = tracker(id)
+        tracker.processProgressEventLocked(ProgressEvent.Started(id, v21WriteStages()))
+        tracker.report(id, "Validating resources")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(id,
+            RemoteError("IllegalStateException", "Missing resource references detected.", "")))
+        val rows = tracker.stepSubSteps.getValue(id)
+        assertEquals("Validating resources", rows.single { it.state == State.FAILED }.title)
+        assertEquals(State.WAITING, rows.single { it.title == "Copying base APK" }.state)
+    }
+
+    @Test fun v21CompilationAndPackagingProgressDoNotMoveBackwards() {
+        val id = StepId.WriteAPK
+        val tracker = tracker(id)
+        tracker.processProgressEventLocked(ProgressEvent.Started(id, v21WriteStages()))
+        tracker.report(id, "Validating resources")
+        tracker.report(id, "Copying base APK")
+        tracker.report(id, "Applying patched changes")
+        tracker.handleDexCompileLine("Writing patched files...")
+        tracker.report(id, "Compiling patched dex files")
+        tracker.handleDexCompileLine("Compiled classes.dex")
+        tracker.handleDexCompileLine("Compiling modified resources")
+        tracker.report(id, "Writing patched APK")
+        val before = tracker.progress
+        tracker.handleDexCompileLine("Compiled classes2.dex")
+        val rows = tracker.stepSubSteps.getValue(id)
+        assertEquals("Writing patched APK", rows.single { it.state == State.RUNNING }.title)
+        assertTrue(tracker.progress >= before)
+        tracker.report(id, "Writing output APK")
+        tracker.report(id, "Finalizing output")
+        tracker.processProgressEventLocked(ProgressEvent.Completed(id))
+        assertTrue(tracker.stepSubSteps.getValue(id).all { it.state == State.COMPLETED })
     }
 }

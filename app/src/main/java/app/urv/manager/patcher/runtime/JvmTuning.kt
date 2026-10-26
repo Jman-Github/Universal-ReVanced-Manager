@@ -9,7 +9,7 @@ package app.urv.manager.patcher.runtime
 
 /** Options supported by the JDK 17 server and 32-bit client VM ports. */
 internal object JvmTuning {
-    fun options(is64Bit: Boolean): List<String> = if (is64Bit) {
+    fun options(is64Bit: Boolean): List<String> = listOf("-Djava.awt.headless=true") + if (is64Bit) {
         listOf("-XX:TieredStopAtLevel=1")
     } else {
         listOf("-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=64m")

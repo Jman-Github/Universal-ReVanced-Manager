@@ -184,6 +184,10 @@ class JvmInstallation(private val app: Application) {
 
         // The app's linker namespace does not search the runtime's directory, so a library naming
         // one of these would not find it unless it is already loaded
-        val PRELOAD = listOf("libjava.so", "libnet.so", "libnio.so", "libzip.so")
+        val PRELOAD = listOf(
+            "libjava.so", "libnet.so", "libnio.so", "libzip.so",
+            // Headless AWT libraries name these dependencies without their extracted path.
+            "libawt.so", "libawt_headless.so", "libfreetype.so"
+        )
     }
 }
