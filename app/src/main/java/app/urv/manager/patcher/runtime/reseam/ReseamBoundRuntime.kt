@@ -26,8 +26,7 @@ class ReseamBoundRuntime(private val context: Context,
         require((selected.keys - available.keys).isEmpty()) {
             "Selected ReSeam patch sources are unavailable. Re-open patch selection and select patches again."
         }
-        val runtime = ReseamRuntimeAssets.ensureRuntimeClassPath(context)
-        val nativeDir = ReseamRuntimeAssets.ensureNativeLibraryDir(context, runtime)
+        val runtime = ReseamRuntimeAssets.prepareRuntime(context, ReseamRuntimeAssets.ensureRuntimeClassPath(context))
         val params = mapOf(
             "cacheDir" to cacheDir, "packageName" to packageName,
             "inputFile" to inputFile, "outputFile" to outputFile,
@@ -40,8 +39,8 @@ class ReseamBoundRuntime(private val context: Context,
                     "options" to options[uid].orEmpty())
             }
         )
-        client.execute(RuntimeEngine.RESEAM, params, runtimeClassPath = runtime.path,
-            nativeLibraryDir = nativeDir.path) { type, event ->
+        client.execute(RuntimeEngine.RESEAM, params, runtimeClassPath = runtime.apkFile.path,
+            nativeLibraryDir = runtime.nativeLibraryDirectory.path) { type, event ->
             when (type) {
                 "log" -> runtimeLogger.log(LogLevel.valueOf(event["level"] as String), event["message"] as String)
                 "event" -> onEvent(MorpheRuntimeBridge.mapToProgressEvent(event["event"] as Map<*, *>))

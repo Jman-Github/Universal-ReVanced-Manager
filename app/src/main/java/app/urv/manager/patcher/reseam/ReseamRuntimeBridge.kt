@@ -39,10 +39,7 @@ object ReseamRuntimeBridge {
     private var loadMetadataMethod: Method? = null
     @Volatile
     private var loadMetadataForBundleMethod: Method? = null
-    @Volatile
-    private var runPatcherMethod: Method? = null
-    @Volatile
-    private var callbackClass: Class<*>? = null
+    private val nativeLoaders = ReseamRuntimeLoaderCache<DexClassLoader>()
 
     private val lock = Any()
 
@@ -58,41 +55,40 @@ object ReseamRuntimeBridge {
                     entryClass = null
                     loadMetadataMethod = null
                     loadMetadataForBundleMethod = null
-                    runPatcherMethod = null
-                    callbackClass = null
                 }
             }
         }
     }
 
-    fun engineVersion(): String? {
+    fun engineVersion(): String? = reseamRuntimeCall {
         val entry = ensureEntryClass()
         // Earlier plugin builds do not expose their SDK version.
         val method = try {
             entry.getMethod("engineVersion")
         } catch (_: NoSuchMethodException) {
-            return null
+            return@reseamRuntimeCall null
         }
-        return (method.invokeReseamRuntime() as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        (method.invokeReseamRuntime() as? String)?.trim()?.takeIf { it.isNotEmpty() }
     }
 
-    fun loadBundleName(bundlePath: String): String? =
+    fun loadBundleName(bundlePath: String): String? = reseamRuntimeCall {
         (ensureEntryClass().getMethod("loadBundleName", String::class.java)
             .invokeReseamRuntime(bundlePath) as? String)?.trim()?.takeIf { it.isNotEmpty() }
+    }
 
-    fun loadMetadata(bundlePath: String): List<PatchInfo> {
+    fun loadMetadata(bundlePath: String): List<PatchInfo> = reseamRuntimeCall {
         val method = ensureLoadMetadataForBundleMethod()
         val raw = method.invokeReseamRuntime(bundlePath) as? List<*> ?: emptyList<Any?>()
-        return raw.mapNotNull { entry ->
+        raw.mapNotNull { entry ->
             val map = entry as? Map<*, *> ?: return@mapNotNull null
             PatchInfo.fromMorpheMetadata(map as Map<String, Any?>, preserveDouble = true)
         }
     }
 
-    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> {
+    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> = reseamRuntimeCall {
         val method = ensureLoadMetadataMethod()
         val raw = method.invokeReseamRuntime(bundlePaths) as? Map<*, *> ?: emptyMap<String, List<PatchInfo>>()
-        return raw.mapNotNull { (key, value) ->
+        raw.mapNotNull { (key, value) ->
             val path = key as? String ?: return@mapNotNull null
             val metadata = value as? List<*> ?: return@mapNotNull path to emptyList()
             val patches = metadata.mapNotNull { entry ->
@@ -108,11 +104,13 @@ object ReseamRuntimeBridge {
         logger: Logger,
         onEvent: (ProgressEvent) -> Unit,
         isCancelled: () -> Boolean = { false }
-    ): String? {
+    ): String? = reseamRuntimeCall {
         val entry = ensureEntryClass()
-        val callback = ensureCallbackClass()
+        // Pin every reflected type to this invocation's loader, even if the active plugin changes.
+        val loader = requireNotNull(entry.classLoader) { "Reseam runtime has no plugin class loader" }
+        val callback = loader.loadClass(CALLBACK_CLASS_NAME)
         val proxy = Proxy.newProxyInstance(
-            entry.classLoader,
+            loader,
             arrayOf(callback)
         ) { _, method, args ->
             when (method.name) {
@@ -133,12 +131,12 @@ object ReseamRuntimeBridge {
                 else -> null
             }
         }
-        val method = ensureRunPatcherMethod()
+        val method = entry.getMethod(RUN_PATCHER_METHOD, Map::class.java, callback)
         val result = method.invokeReseamRuntime(params, proxy) as? String
         if (result == CANCELLATION_SENTINEL) {
             throw CancellationException("Patching cancelled")
         }
-        return result
+        result
     }
 
     private fun ensureLoadMetadataMethod(): Method = synchronized(lock) {
@@ -159,40 +157,15 @@ object ReseamRuntimeBridge {
         }
     }
 
-    private fun ensureRunPatcherMethod(): Method = synchronized(lock) {
-        val entry = ensureEntryClass()
-        runPatcherMethod ?: run {
-            val method = entry.getMethod(
-                RUN_PATCHER_METHOD,
-                Map::class.java,
-                ensureCallbackClass()
-            )
-            runPatcherMethod = method
-            method
+    private fun ensureEntryClass(): Class<*> = reseamRuntimeCall {
+        synchronized(lock) {
+            // Recheck authorization even when returning classes from a retained JNI loader.
+            val loader = ensureClassLoader()
+            entryClass ?: loader.loadClass(ENTRY_CLASS_NAME).also { entryClass = it }
         }
     }
 
-    private fun ensureCallbackClass(): Class<*> = synchronized(lock) {
-        val loader = ensureClassLoader()
-        callbackClass ?: run {
-            val loaded = loader.loadClass(CALLBACK_CLASS_NAME)
-            callbackClass = loaded
-            loaded
-        }
-    }
-
-    private fun ensureEntryClass(): Class<*> = synchronized(lock) {
-        // Validate the active plugin before using cached classes or reflection methods.
-        // Updates replace the loader; removing trust must prevent subsequent SDK calls.
-        val loader = ensureClassLoader()
-        entryClass ?: run {
-            val loaded = loader.loadClass(ENTRY_CLASS_NAME)
-            entryClass = loaded
-            loaded
-        }
-    }
-
-    private fun ensureClassLoader(): DexClassLoader {
+    private fun ensureClassLoader(): DexClassLoader = synchronized(lock) {
         val context = appContext ?: error("ReseamRuntimeBridge is not initialized.")
         val runtimeClassPathFile = runtimeClassPathOverride
             ?.takeIf { it.isNotBlank() }
@@ -201,35 +174,29 @@ object ReseamRuntimeBridge {
                     ?: throw IOException("Reseam runtime classpath does not exist: $path")
             }
             ?: ReseamRuntimeAssets.ensureRuntimeClassPath(context)
-        val path = runtimeClassPathFile.absolutePath
-        val cacheKey = "$path:${runtimeClassPathFile.lastModified()}:${runtimeClassPathFile.length()}"
+        // Authorization is checked above on every call, including when a retained loader exists.
+        val runtime = ReseamRuntimeAssets.prepareRuntime(context, runtimeClassPathFile)
+        val cacheKey = runtime.nativeLibraryDirectory.canonicalPath
         val existing = classLoader
-        if (existing != null && runtimeClassPath == cacheKey) return existing
+        if (existing != null && runtimeClassPath == cacheKey) return@synchronized existing
 
-        synchronized(lock) {
-            val current = classLoader
-            if (current != null && runtimeClassPath == cacheKey) return current
-
-            if (runtimeClassPathOverride == null) {
-                // Catalog inspection also creates native scratch files. Keep them separate
-                // from worker-owned files which may be pruned while metadata is loading.
-                val metadataScratch = File(context.managerStorageContext.cacheDir, "reseam-metadata")
-                check(metadataScratch.mkdirs() || metadataScratch.isDirectory)
-                android.system.Os.setenv("TMPDIR", metadataScratch.absolutePath, true)
-            }
-            val optimizedDir = File(context.managerStorageContext.codeCacheDir, "reseam-runtime-dex").apply { mkdirs() }
-            val parent = context.classLoader.parent ?: context.classLoader
-            val nativeDir = ReseamRuntimeAssets.ensureNativeLibraryDir(context, runtimeClassPathFile)
-            val loader = DexClassLoader(path, optimizedDir.absolutePath, nativeDir.absolutePath, parent)
-            classLoader = loader
-            runtimeClassPath = cacheKey
-            entryClass = null
-            loadMetadataMethod = null
-            loadMetadataForBundleMethod = null
-            runPatcherMethod = null
-            callbackClass = null
-            return loader
+        if (runtimeClassPathOverride == null) {
+            val metadataScratch = File(context.managerStorageContext.cacheDir, "reseam-metadata")
+            check(metadataScratch.mkdirs() || metadataScratch.isDirectory)
+            android.system.Os.setenv("TMPDIR", metadataScratch.absolutePath, true)
         }
+        val optimizedDir = File(context.managerStorageContext.codeCacheDir, "reseam-runtime-dex").apply { mkdirs() }
+        val parent = context.classLoader.parent ?: context.classLoader
+        val loader = nativeLoaders.getOrCreate(runtime.nativeLibraryDirectory) {
+            DexClassLoader(runtime.apkFile.absolutePath, optimizedDir.absolutePath,
+                runtime.nativeLibraryDirectory.absolutePath, parent)
+        }
+        classLoader = loader
+        runtimeClassPath = cacheKey
+        entryClass = null
+        loadMetadataMethod = null
+        loadMetadataForBundleMethod = null
+        loader
     }
 
     private fun mapToProgressEvent(map: Map<*, *>): ProgressEvent {

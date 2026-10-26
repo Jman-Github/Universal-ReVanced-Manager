@@ -27,6 +27,26 @@ class ReseamRuntimeReflectionTest {
         assertEquals("0.20.1", Entry::class.java.getMethod("version").invokeReseamRuntime())
     }
 
+    @Test fun nativeOwnershipFailuresBecomeRecoverableImportErrors() {
+        val failure = UnsatisfiedLinkError("already opened by ClassLoader")
+        val method = Entry::class.java.getMethod("fail", Throwable::class.java)
+        val error = assertThrows(java.io.IOException::class.java) { method.invokeReseamRuntime(failure) }
+        assertSame(failure, error.cause)
+    }
+
+    @Test fun poisonedInitializersBecomeRecoverableImportErrors() {
+        val failure = NoClassDefFoundError("Could not initialize ReseamAndroidHost")
+        val error = assertThrows(java.io.IOException::class.java) { reseamRuntimeCall { throw failure } }
+        assertSame(failure, error.cause)
+    }
+
+    @Test fun initializationFailuresPreserveTheirNativeCause() {
+        val failure = ExceptionInInitializerError(UnsatisfiedLinkError("native initialization failed"))
+        val method = Entry::class.java.getMethod("fail", Throwable::class.java)
+        val error = assertThrows(java.io.IOException::class.java) { method.invokeReseamRuntime(failure) }
+        assertSame(failure, error.cause)
+    }
+
     object Entry {
         @JvmStatic fun fail(error: Throwable): Nothing = throw error
         @JvmStatic fun version(): String = "0.20.1"
