@@ -113,7 +113,7 @@ class RootPackageInstaller(
                 check(size > 0) { "Empty rollback APK" }
                 totalSize = Math.addExact(totalSize, size)
                 val write = runBounded(
-                    "${created.backend} install-write -S $size ${created.id} $index.apk < ${shellQuote(path)}",
+                    rootInstallWriteCommand(created.backend, created.id, "$index.apk", path, size),
                     installTimeoutSeconds(size),
                     "rollback install session write"
                 )

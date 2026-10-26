@@ -3,6 +3,7 @@ package app.urv.manager.domain.installer
 import android.app.Application
 import android.os.SystemClock
 import app.urv.manager.util.PM
+import app.urv.manager.domain.installer.root.rootInstallWriteCommand
 import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CompletableDeferred
@@ -410,9 +411,9 @@ class RootInstaller(
                 apkFiles.forEachIndexed { index, file ->
                     kotlin.coroutines.coroutineContext.ensureActive()
                     val splitName = "$index.apk"
-                    val command =
-                        "${created.backend} install-write -S ${file.length()} ${created.id} " +
-                            "${shellQuote(splitName)} < ${shellQuote(file.absolutePath)}"
+                    val command = rootInstallWriteCommand(
+                        created.backend, created.id, splitName, file.absolutePath, file.length()
+                    )
                     val result = runInterruptible {
                         executeWithTimeout(
                             installShell,
