@@ -118,7 +118,10 @@ class PatcherRuntimePluginRepository(
         val entries = readSourceEntries().toMutableList()
         val index = entries.indexOfFirst { it.id == id }
         if (index == -1) return@withContext
-        entries[index] = updateEntry(entries[index], force = true)
+        // A manual check should reuse the current release, while still allowing repair
+        // of an archive that failed to load. Missing files are retried by updateEntry.
+        val needsRepair = _sourceStates.value[id]?.state is PatcherRuntimePluginSourceState.State.Failed
+        entries[index] = updateEntry(entries[index], force = needsRepair)
         writeSourceEntries(entries)
         reload()
     }

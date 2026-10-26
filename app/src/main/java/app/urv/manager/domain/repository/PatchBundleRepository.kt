@@ -55,6 +55,7 @@ import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.util.DownloadProgressNotifier
+import app.urv.manager.util.removeUpdatedBundleNotifications
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.Options
 import app.urv.manager.util.simpleMessage
@@ -3535,6 +3536,9 @@ class PatchBundleRepository(
 
                 val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
                 manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
+                runCatching {
+                    removeUpdatedBundleNotifications(app, updatedUids)
+                }.onFailure { error -> Log.w(tag, "Failed to refresh bundle update notification", error) }
                 if (showToast) toast(R.string.patches_update_success)
             }
             true

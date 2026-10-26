@@ -81,7 +81,10 @@ internal fun LazyListScrollbar(
     val label = stringResource(R.string.scroll_position)
     val color = MaterialTheme.colorScheme.onSurface
 
-    Canvas(modifier.width(24.dp).fillMaxHeight()
+    // Invisible, non-scrollable tracks must not intercept controls underneath them.
+    if (!geometry.scrollable) return
+
+    Canvas(modifier.width(LAZY_SCROLLBAR_TOUCH_WIDTH).fillMaxHeight()
         .semantics {
             if (geometry.scrollable) {
                 contentDescription = label

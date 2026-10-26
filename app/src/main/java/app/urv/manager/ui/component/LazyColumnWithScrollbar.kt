@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 
 internal val DASHBOARD_SCROLLBAR_THUMB_LENGTH = 64.dp
+internal val LAZY_SCROLLBAR_TOUCH_WIDTH = 24.dp
 
 @Composable
 fun LazyColumnWithScrollbar(
@@ -30,11 +32,13 @@ fun LazyColumnWithScrollbar(
     flingBehavior: FlingBehavior = ScrollableDefaults.flingBehavior(),
     userScrollEnabled: Boolean = true,
     thumbLength: Dp? = null,
+    reserveScrollbarSpace: Boolean = false,
     content: LazyListScope.() -> Unit
 ) {
     Box(modifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .padding(end = if (reserveScrollbarSpace) LAZY_SCROLLBAR_TOUCH_WIDTH else 0.dp),
             state = state,
             contentPadding = contentPadding,
             reverseLayout = reverseLayout,

@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.drawable.Icon
+import android.os.Bundle
 import android.os.PowerManager
 import android.util.Log
 import androidx.work.WorkerParameters
@@ -19,6 +20,8 @@ import app.urv.manager.domain.repository.PatchBundleRepository
 import app.urv.manager.domain.worker.Worker
 import app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver
 import app.urv.manager.util.BundleDeepLinkIntent
+import app.urv.manager.util.EXTRA_MANUAL_BUNDLE_UIDS
+import app.urv.manager.util.MANUAL_BUNDLE_UPDATE_NOTIFICATION_ID
 import app.urv.manager.util.applyProgressNotification
 import app.urv.manager.util.permission.hasNotificationPermission
 import kotlinx.coroutines.flow.first
@@ -223,7 +226,8 @@ class BundleUpdateNotificationWorker(
                             ongoing = false,
                             progress = null,
                             sections = sections,
-                            dismissalMarkers = dismissalMarkers
+                            dismissalMarkers = dismissalMarkers,
+                            manualBundleUids = orderedManualUpdates.map { it.uid }.toIntArray()
                         )
                         notificationManager.notify(BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID, notification)
                     } else {
@@ -293,7 +297,7 @@ class BundleUpdateNotificationWorker(
     private companion object {
         private const val BUNDLE_PROGRESS_NOTIFICATION_ID = 9001
         private const val BUNDLE_AUTO_RESULT_NOTIFICATION_ID = 9100
-        private const val BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID = 9101
+        private const val BUNDLE_MANUAL_UPDATE_NOTIFICATION_ID = MANUAL_BUNDLE_UPDATE_NOTIFICATION_ID
         private const val WAKE_LOCK_TAG = "urv:bundle_update_worker"
         private const val WAKE_LOCK_TIMEOUT_MS = 20L * 60L * 1000L
     }
@@ -334,7 +338,8 @@ class BundleUpdateNotificationWorker(
         ongoing: Boolean,
         progress: ProgressInfo?,
         sections: List<BundleNotificationSection> = emptyList(),
-        dismissalMarkers: Array<String> = emptyArray()
+        dismissalMarkers: Array<String> = emptyArray(),
+        manualBundleUids: IntArray? = null
     ): Notification {
         val builder = Notification.Builder(applicationContext, channelId)
             .setContentTitle(title)
@@ -346,6 +351,12 @@ class BundleUpdateNotificationWorker(
             .setOngoing(ongoing)
             .setAutoCancel(!ongoing)
 
+        manualBundleUids?.let { uids ->
+            builder.addExtras(Bundle().apply {
+                putIntArray(EXTRA_MANUAL_BUNDLE_UIDS, uids)
+                putStringArray(BundleUpdateNotificationDismissReceiver.EXTRA_DISMISSAL_MARKERS, dismissalMarkers)
+            })
+        }
         buildDismissPendingIntent(dismissalMarkers)?.let(builder::setDeleteIntent)
 
         if (progress != null) {

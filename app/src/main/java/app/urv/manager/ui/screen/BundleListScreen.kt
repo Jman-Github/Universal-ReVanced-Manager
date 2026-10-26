@@ -271,6 +271,7 @@ private fun BundleOrderDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(workingOrder, key = { _, bundle -> bundle.uid }) { index, bundle ->

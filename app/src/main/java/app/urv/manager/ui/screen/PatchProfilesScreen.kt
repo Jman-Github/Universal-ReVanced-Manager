@@ -1764,6 +1764,7 @@ private fun PatchProfilesOrderDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(workingOrder, key = { _, profile -> profile.id }) { index, profile ->

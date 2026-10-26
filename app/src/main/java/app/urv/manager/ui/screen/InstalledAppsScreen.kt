@@ -774,6 +774,7 @@ private fun AppsOrderDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(workingOrder, key = { _, app -> app.currentPackageName }) { index, app ->
