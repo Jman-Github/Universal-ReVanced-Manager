@@ -356,7 +356,8 @@ fun BundleItem(
                     var bundleIcon by remember(src.uid, (src as? RemotePatchBundle)?.endpoint) {
                         mutableStateOf(BundleIcon())
                     }
-                    LaunchedEffect(src.uid, (src as? RemotePatchBundle)?.endpoint) {
+                    // Update checks can hydrate metadata without changing the endpoint or artifact.
+                    LaunchedEffect(src) {
                         bundleIcon = iconRepository.resolve(src)
                     }
                     if (src is RemotePatchBundle) {

@@ -37,9 +37,16 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.RepositoryBundleReleaseChannel
 import app.urv.manager.domain.bundles.RepositoryBundleSettings
 import app.urv.manager.domain.bundles.RepositoryBundleSettingsStore
+import app.urv.manager.domain.bundles.legacyDiscoveryEndpoint
+import app.urv.manager.domain.bundles.discoveryRegistryMigration
+import app.urv.manager.domain.bundles.DiscoveryRegistryMigration
+import app.urv.manager.domain.bundles.registryBundleIconSource
+import app.urv.manager.domain.bundles.toExternalBundleMetadata
+import app.urv.manager.network.api.ExternalBundlesApi
 import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.network.dto.ReVancedAsset
+import app.urv.manager.network.utils.getOrNull
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
@@ -119,6 +126,7 @@ class PatchBundleRepository(
     private val networkInfo: NetworkInfo,
     private val prefs: PreferencesManager,
     private val downloadProgressNotifier: DownloadProgressNotifier,
+    private val externalBundlesApi: ExternalBundlesApi,
     filesystem: Filesystem,
     db: AppDatabase,
 ) {
@@ -261,6 +269,7 @@ class PatchBundleRepository(
     private val discoveryImportQueuedFlow = MutableStateFlow<Set<String>>(emptySet())
     val discoveryImportQueued: StateFlow<Set<String>> = discoveryImportQueuedFlow.asStateFlow()
 
+    private val discoveryMigrationMutex = Mutex()
     private val updateJobMutex = Mutex()
     private var updateJob: Job? = null
     private val updateStateMutex = Mutex()
@@ -2347,21 +2356,8 @@ class PatchBundleRepository(
             return
         }
 
-        val metadata = ExternalBundleMetadata(
-            bundleId = bundle.bundleId,
-            downloadUrl = downloadUrl,
-            signatureDownloadUrl = bundle.signatureDownloadUrl,
-            version = bundle.version.ifBlank { "unknown" },
-            createdAt = bundle.createdAt.takeUnless { it.isBlank() },
-            description = bundle.description,
-            ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
-            repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease,
-            iconUrl = bundle.iconUrl,
-            ownerAvatarUrl = bundle.ownerAvatarUrl,
-            sourceUrl = bundle.sourceUrl,
-            apiHost = bundle.apiHost,
-            fileHash = bundle.fileHash
+        val metadata = bundle.toExternalBundleMetadata(
+            prerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
         )
 
         val entity = createEntity(
@@ -2924,6 +2920,7 @@ class PatchBundleRepository(
             return@coroutineScope false
         }
 
+        migrateLegacyDiscoveryEndpoints()
         var notifiedAny = false
         sources.first()
             .filterIsInstance<RemotePatchBundle>()
@@ -3083,7 +3080,98 @@ class PatchBundleRepository(
         )
     }
 
+    /**
+     * Retarget only recognized legacy discovery API entries. Keep the installed
+     * bundle, selections, ordering and update preferences; catalog IDs are not portable.
+     */
+    private suspend fun migrateLegacyDiscoveryEndpoints(allowUnsafeNetwork: Boolean = false) = discoveryMigrationMutex.withLock {
+        val candidates = store.state.value.sources.values.filterIsInstance<RemotePatchBundle>()
+        for (bundle in candidates) {
+            val legacy = legacyDiscoveryEndpoint(bundle.endpoint)
+            try {
+                val directory = directoryOf(bundle.uid)
+                val metadata = ExternalBundleMetadataStore.read(directory)
+                val registrySource = registryBundleIconSource(
+                    bundle.endpoint, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
+                    metadata?.downloadUrl
+                )
+                if (legacy == null && (registrySource == null ||
+                    (bundle is ExternalGraphqlPatchBundle &&
+                        metadata?.apiHost == ExternalBundlesEndpoints.REGISTRY_HOST &&
+                        (!metadata.iconUrl.isNullOrBlank() || !metadata.ownerAvatarUrl.isNullOrBlank())))) continue
+                val canLookup = allowUnsafeNetwork || prefs.allowMeteredUpdates.get() || networkInfo.isConnected()
+                var migration = if (legacy != null) discoveryRegistryMigration(
+                    legacy, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
+                    metadata?.downloadUrl
+                ) else registrySource?.let {
+                    DiscoveryRegistryMigration(bundle.endpoint, it.sourceUrl, it.prerelease)
+                }
+                if (migration == null && legacy?.bundleId != null && canLookup) {
+                    val snapshot = externalBundlesApi.getBundleById(legacy.bundleId, legacy.host).getOrNull()
+                    migration = snapshot?.let {
+                        discoveryRegistryMigration(
+                            legacy, it.sourceUrl, it.ownerName, it.repoName,
+                            if (metadata != null) metadata.isPrerelease else it.isPrerelease,
+                            it.downloadUrl
+                        )
+                    }
+                }
+                val resolved = migration ?: continue
+                val requestedVersion = legacy?.version
+                    ?: runCatching { Url(resolved.endpoint).parameters["version"] }.getOrNull() ?: "latest"
+                var snapshot = if (canLookup) externalBundlesApi.getBundleForSource(
+                    resolved.sourceUrl, resolved.prerelease, requestedVersion
+                ).getOrNull()?.takeIf { !it.isBundleV3 && !it.downloadUrl.isNullOrBlank() } else null
+                val fallbackSnapshot = if (canLookup && (snapshot == null ||
+                    (snapshot.iconUrl.isNullOrBlank() && snapshot.ownerAvatarUrl.isNullOrBlank()))) {
+                    externalBundlesApi.getLatestBundleForSource(resolved.sourceUrl, null).getOrNull()
+                } else null
+                if (snapshot == null && fallbackSnapshot != null &&
+                    requestedVersion.equals("latest", ignoreCase = true) &&
+                    !fallbackSnapshot.isBundleV3 && !fallbackSnapshot.downloadUrl.isNullOrBlank()) {
+                    snapshot = fallbackSnapshot
+                }
+                // Repair entries converted by earlier versions too. On failure, preserve the
+                // installed bundle and retry hydration at the next check.
+                if (legacy == null && snapshot == null && fallbackSnapshot == null) continue
+                val hydrated = snapshot?.toExternalBundleMetadata(resolved.prerelease)
+                dispatchAction("Migrate discovery source metadata (${bundle.uid})") { state ->
+                    val current = state.sources[bundle.uid] as? RemotePatchBundle
+                        ?: return@dispatchAction state
+                    if (current.endpoint != bundle.endpoint) return@dispatchAction state
+                    val entity = dao.all().firstOrNull { it.uid == bundle.uid } ?: return@dispatchAction state
+                    val latest = ExternalBundleMetadataStore.read(directory)
+                    if (hydrated == null && latest == null && fallbackSnapshot == null) return@dispatchAction state
+                    val updatedMetadata = hydrated?.copy(
+                        iconUrl = hydrated.iconUrl ?: latest?.iconUrl ?: fallbackSnapshot?.iconUrl,
+                        ownerAvatarUrl = hydrated.ownerAvatarUrl ?: latest?.ownerAvatarUrl ?: fallbackSnapshot?.ownerAvatarUrl
+                    ) ?: latest?.copy(
+                        bundleId = 0,
+                        sourceUrl = resolved.sourceUrl,
+                        apiHost = ExternalBundlesEndpoints.REGISTRY_HOST,
+                        isPrerelease = resolved.prerelease,
+                        iconUrl = latest.iconUrl ?: fallbackSnapshot?.iconUrl,
+                        ownerAvatarUrl = latest.ownerAvatarUrl ?: fallbackSnapshot?.ownerAvatarUrl
+                    ) ?: fallbackSnapshot?.takeIf { !it.downloadUrl.isNullOrBlank() || !latest?.downloadUrl.isNullOrBlank() }?.toExternalBundleMetadata(
+                        resolved.prerelease,
+                        fallbackDownloadUrl = latest?.downloadUrl
+                    )
+                    updatedMetadata?.let { ExternalBundleMetadataStore.write(directory, it) }
+                    val updated = entity.copy(source = SourceInfo.from(resolved.endpoint))
+                    dao.upsert(updated)
+                    manualUpdateInfoFlow.update { it - bundle.uid }
+                    state.copy(sources = state.sources.put(bundle.uid, updated.load()))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(tag, "Could not hydrate discovery source ${bundle.uid}; will retry next check", error)
+            }
+        }
+    }
+
     suspend fun checkManualUpdates(vararg bundleUids: Int) = coroutineScope {
+        migrateLegacyDiscoveryEndpoints()
         val targetUids = bundleUids.toSet().takeIf { it.isNotEmpty() }
         val snapshot = store.state.value
         val manualBundles = snapshot.sources.values
@@ -3299,6 +3387,7 @@ class PatchBundleRepository(
                 return@coroutineScope false
             }
 
+            migrateLegacyDiscoveryEndpoints(allowUnsafeNetwork)
             val targets = store.state.value.sources.values
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { predicate(it) }

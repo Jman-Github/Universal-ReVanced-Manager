@@ -101,6 +101,32 @@ private fun comparison(value: String, operator: String = "_eq", wildcard: Boolea
 
 private fun comparison(value: Boolean) = buildJsonObject { put("_eq", value) }
 
+private fun sourceUrlComparison(url: String): JsonObject {
+    val clean = url.trim().removeSuffix("/")
+    val base = clean.removeSuffix(".git").removeSuffix("/")
+    val altSchemeClean = when {
+        clean.startsWith("https://", ignoreCase = true) -> "http://" + clean.substring(8)
+        clean.startsWith("http://", ignoreCase = true) -> "https://" + clean.substring(7)
+        else -> null
+    }
+    val altSchemeBase = altSchemeClean?.removeSuffix(".git")?.removeSuffix("/")
+    val variants = linkedSetOf<String>().apply {
+        listOfNotNull(
+            clean, "$clean/", base, "$base/", "$base.git", "$base.git/",
+            altSchemeClean, altSchemeClean?.let { "$it/" },
+            altSchemeBase, altSchemeBase?.let { "$it/" }, altSchemeBase?.let { "$it.git" }, altSchemeBase?.let { "$it.git/" }
+        ).forEach {
+            add(it)
+            add(it.lowercase())
+        }
+    }.filter(String::isNotBlank)
+    return buildJsonObject {
+        put("_in", buildJsonArray {
+            variants.forEach { add(JsonPrimitive(it)) }
+        })
+    }
+}
+
 /** Read-only registry queries. Pages and details share a bounded, persistent cache. */
 class ExternalBundlesApi(private val client: HttpService, app: Application) {
     private val cacheDir = File(app.cacheDir, "registry_graphql").also { it.mkdirs() }
@@ -306,16 +332,21 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
     suspend fun getLatestBundleAny(owner: String, repo: String) = latest(owner, repo, null)
 
     suspend fun getLatestBundleForSource(sourceUrl: String, prerelease: Boolean?) =
+        getBundleForSource(sourceUrl, prerelease)
+
+    suspend fun getBundleForSource(sourceUrl: String, prerelease: Boolean?, version: String = "latest") =
         queryBundles(buildJsonObject {
-            put("source", buildJsonObject { put("url", comparison(sourceUrl.trim().removeSuffix("/"))) })
-            put("is_latest", comparison(true))
+            put("source", buildJsonObject { put("url", sourceUrlComparison(sourceUrl)) })
+            if (version.equals("latest", true)) {
+                if (prerelease == null) put("is_latest", comparison(true))
+            } else put("version", comparison(version))
             prerelease?.let { put("is_prerelease", comparison(it)) }
         }, 1).transform { it.bundle.firstOrNull()?.toSnapshot() }
 
     private suspend fun latest(owner: String, repo: String, prerelease: Boolean?) =
         queryBundles(buildJsonObject {
             put("source", sourceIdentity(owner, repo))
-            put("is_latest", comparison(true))
+            if (prerelease == null) put("is_latest", comparison(true))
             prerelease?.let { put("is_prerelease", comparison(it)) }
         }, 1).transform { it.bundle.firstOrNull()?.toSnapshot() }
 
@@ -327,7 +358,7 @@ class ExternalBundlesApi(private val client: HttpService, app: Application) {
         val history = mutableListOf<ExternalBundleSnapshot>()
         val where = buildJsonObject {
             put("source", if (sourceUrl.isNullOrBlank()) sourceIdentity(owner, repo)
-                else buildJsonObject { put("url", comparison(sourceUrl)) })
+                else buildJsonObject { put("url", sourceUrlComparison(sourceUrl)) })
             prerelease?.let { put("is_prerelease", comparison(it)) }
         }
         while (history.size < limit) {

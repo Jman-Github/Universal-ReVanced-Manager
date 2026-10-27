@@ -1115,8 +1115,28 @@ class ExternalGraphqlPatchBundle(
     )
 
     override suspend fun getLatestInfo(): ReVancedAsset = withContext(Dispatchers.IO) {
+        val registryEndpoint = externalBundlesHost() == ExternalBundlesEndpoints.REGISTRY_HOST
+        val requestedVersion = runCatching { Url(endpoint).parameters["version"] }.getOrNull()
+        // An exact legacy tag stays pinned when its endpoint moves to the registry.
+        if (registryEndpoint && !requestedVersion.isNullOrBlank() &&
+            !requestedVersion.equals("latest", ignoreCase = true)) {
+            val asset = http.request<ReVancedAsset> { url(endpoint) }.getOrThrow()
+            if (metadata.downloadUrl != asset.downloadUrl || metadata.version != asset.version) {
+                metadata = metadata.copy(
+                    downloadUrl = safeArtifactUrl(asset.downloadUrl) ?: metadata.downloadUrl,
+                    signatureDownloadUrl = asset.signatureDownloadUrl ?: metadata.signatureDownloadUrl,
+                    version = asset.version.ifBlank { metadata.version },
+                    fileHash = asset.fileHash ?: metadata.fileHash,
+                    createdAt = asset.createdAt.toString(),
+                    description = asset.description.ifBlank { metadata.description }
+                )
+                ExternalBundleMetadataStore.write(directory, metadata)
+            }
+            return@withContext asset
+        }
         // Discovery already supplied the selected artifact, including historical releases.
-        if (externalBundlesHost() == ExternalBundlesEndpoints.REGISTRY_HOST && !hasInstalled()) {
+        // A migrated source has no registry ID yet and must resolve its source/channel first.
+        if (registryEndpoint && metadata.bundleId > 0 && !hasInstalled()) {
             return@withContext snapshotToAsset(null)
         }
         val endpointMetadata = parseEndpointMetadata()
@@ -1234,7 +1254,9 @@ class ExternalGraphqlPatchBundle(
             }
         }
         val latest = latestFromServices
-            ?: api.getBundleById(metadata.bundleId, metadata.apiHost ?: externalBundlesHost()).getOrNull()
+            ?: metadata.bundleId.takeIf { it > 0 }?.let {
+                api.getBundleById(it, metadata.apiHost ?: externalBundlesHost()).getOrNull()
+            }
         if (latest != null) {
             metadata = metadataFromSnapshot(
                 snapshot = latest,

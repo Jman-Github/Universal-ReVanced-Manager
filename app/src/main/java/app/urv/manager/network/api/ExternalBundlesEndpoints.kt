@@ -57,9 +57,9 @@ object ExternalBundlesEndpoints {
     fun siteUrl(host: String?): String {
         if (host == null || host.equals(REGISTRY_HOST, true)) return REGISTRY_SITE
         val normalizedHost = host
-            ?.trim()
-            ?.lowercase(Locale.US)
-            ?.takeIf(::isExternalBundlesHost)
+            .trim()
+            .lowercase(Locale.US)
+            .takeIf(::isExternalBundlesHost)
             ?: STABLE_HOST
         return "https://$normalizedHost/"
     }

@@ -41,12 +41,23 @@ class BundleIconRepository(
         val remote = source as? RemotePatchBundle ?: return@withContext BundleIcon()
         mutex.withLock {
             val external = ExternalBundleMetadataStore.read(source.bundleDirectory)
-            if (bundleRepositoryUrl(external?.sourceUrl, remote.endpoint)
+            val registrySource = registryBundleIconSource(
+                remote.endpoint,
+                external?.sourceUrl,
+                external?.ownerName,
+                external?.repoName,
+                external?.isPrerelease,
+                external?.downloadUrl
+            )
+            if (bundleRepositoryUrl(registrySource?.sourceUrl, external?.sourceUrl, remote.endpoint, external?.downloadUrl)
                     .equals(OFFICIAL_PATCH_REPOSITORY, true)) return@withLock BundleIcon(OFFICIAL_ICON_URL)
-            if (external?.iconUrl != null || external?.ownerAvatarUrl != null) {
-                return@withLock BundleIcon(external.iconUrl, external.ownerAvatarUrl)
+            val externalIcon = external?.iconUrl?.trim()?.takeIf(String::isNotBlank)
+            val externalAvatar = external?.ownerAvatarUrl?.trim()?.takeIf(String::isNotBlank)
+            if (externalIcon != null || externalAvatar != null) {
+                return@withLock BundleIcon(externalIcon, externalAvatar)
             }
-            val key = remote.endpoint
+            // Older versions cached an empty repository lookup for migrated API URLs.
+            val key = if (registrySource != null) "registry-icons-v3|${remote.endpoint}" else remote.endpoint
             val file = File(cacheDir, MessageDigest.getInstance("SHA-256").digest(key.toByteArray())
                 .joinToString("") { "%02x".format(it) } + ".json")
             val cached = memory[key] ?: runCatching {
@@ -56,17 +67,31 @@ class BundleIconRepository(
             if (cached != null && now - cached.checkedAt in 0 until CACHE_TTL_MS) return@withLock cached
             var fallback = cached
             val icon = try {
-                if (source is ExternalGraphqlPatchBundle) {
-                    val sourceUrl = external?.sourceUrl ?: Url(remote.endpoint).parameters["source_url"]
-                        ?: external?.let { "https://github.com/${it.ownerName}/${it.repoName}" }
-                    val bundle = sourceUrl?.let { api.getLatestBundleForSource(it, external?.isPrerelease).getOrNull() }
-                    if (bundle == null) cached?.copy(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
-                        ?: BundleIcon(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
-                    else BundleIcon(bundle.iconUrl, bundle.ownerAvatarUrl, now)
+                if (registrySource != null || source is ExternalGraphqlPatchBundle) {
+                    val sourceUrl = registrySource?.sourceUrl ?: external?.sourceUrl
+                        ?: runCatching { Url(remote.endpoint).parameters["source_url"] }.getOrNull()
+                        ?: bundleRepositoryUrl(external?.downloadUrl)
+                        ?: external?.takeIf { !it.ownerName.isNullOrBlank() && !it.repoName.isNullOrBlank() }
+                            ?.let { "https://github.com/${it.ownerName!!.trim()}/${it.repoName!!.trim()}" }
+                    val prerelease = if (registrySource != null) registrySource.prerelease else external?.isPrerelease
+                    val bundle = sourceUrl?.let {
+                        api.getLatestBundleForSource(it, prerelease).getOrNull()
+                            ?: (if (prerelease != null) api.getLatestBundleForSource(it, null).getOrNull() else null)
+                    }
+                    if (bundle != null) {
+                        val newIcon = bundle.iconUrl?.trim()?.takeIf(String::isNotBlank)
+                        val newAvatar = bundle.ownerAvatarUrl?.trim()?.takeIf(String::isNotBlank)
+                        BundleIcon(newIcon, newAvatar, now)
+                    } else {
+                        cached?.copy(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
+                            ?: BundleIcon(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
+                    }
                 } else {
                     withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
                         fromRepository(if (source is APIPatchBundle)
-                            "https://github.com/ReVanced/revanced-patches" else remote.endpoint, now) { avatar ->
+                            "https://github.com/ReVanced/revanced-patches"
+                            else bundleRepositoryUrl(remote.endpoint, external?.sourceUrl, external?.downloadUrl) ?: remote.endpoint,
+                            now) { avatar ->
                             // Keep the fetched avatar if the root-image probe fails or times out.
                             fallback = BundleIcon(cached?.url, avatar ?: cached?.avatar)
                         } ?: BundleIcon(checkedAt = now)
@@ -77,6 +102,15 @@ class BundleIconRepository(
             } catch (_: Exception) {
                 fallback?.copy(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
                     ?: BundleIcon(checkedAt = now - CACHE_TTL_MS + FAILURE_TTL_MS)
+            }
+            if (icon.url != null || icon.avatar != null) {
+                if (external != null && (external.iconUrl.isNullOrBlank() || external.ownerAvatarUrl.isNullOrBlank())) {
+                    val updated = external.copy(
+                        iconUrl = icon.url?.trim()?.takeIf(String::isNotBlank) ?: external.iconUrl?.trim()?.takeIf(String::isNotBlank),
+                        ownerAvatarUrl = icon.avatar?.trim()?.takeIf(String::isNotBlank) ?: external.ownerAvatarUrl?.trim()?.takeIf(String::isNotBlank)
+                    )
+                    ExternalBundleMetadataStore.write(source.bundleDirectory, updated)
+                }
             }
             memory[key] = icon
             runCatching { file.writeText(http.json.encodeToString(icon)) }

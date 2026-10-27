@@ -35,7 +35,7 @@ class ReseamMetadataTest {
 
     @Test fun unrestrictedPackageAndPathMetadataMatchHostContract() {
         val spec = PatchSpec("b", "a", "Name", false, "", true, emptyList(),
-            Compatibility.Packages(listOf(CompatiblePackage("app.example", emptyList()))),
+            Compatibility.Packages(listOf(CompatiblePackage("app.example", emptyList(), intArrayOf()))),
             listOf(option(OptionType.PATH)))
         val map = ReseamMetadata.toMap(spec)
         val compatible = (map["compatiblePackages"] as List<*>).single() as Map<*, *>
