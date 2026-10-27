@@ -98,7 +98,7 @@ class BundleUpdateNotificationWorker(
             val autoUpdateTargets = patchBundleRepository.sources.first()
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { bundle ->
-                    bundle.autoUpdate &&
+                    bundle.updatesAutomatically &&
                         bundle.searchUpdate &&
                         bundle.enabled &&
                         bundle.state is PatchBundleSource.State.Available
@@ -148,7 +148,7 @@ class BundleUpdateNotificationWorker(
                         )
                     },
                     predicate = { bundle ->
-                        bundle.autoUpdate &&
+                        bundle.updatesAutomatically &&
                             bundle.searchUpdate &&
                             bundle.enabled &&
                             bundle.state is PatchBundleSource.State.Available
@@ -164,7 +164,7 @@ class BundleUpdateNotificationWorker(
             val manualUpdates = LinkedHashMap<Int, BundleUpdateNotificationEntry>()
             patchBundleRepository.fetchUpdatesAndNotify(
                 applicationContext,
-                predicate = { bundle -> !bundle.autoUpdate },
+                predicate = { bundle -> !bundle.updatesAutomatically },
                 onAlreadyNotified = { bundle, bundleVersion, notificationIdentity ->
                     if (canNotify && !isManualUpdateDismissed(bundle.uid, notificationIdentity)) {
                         manualUpdates[bundle.uid] = BundleUpdateNotificationEntry(

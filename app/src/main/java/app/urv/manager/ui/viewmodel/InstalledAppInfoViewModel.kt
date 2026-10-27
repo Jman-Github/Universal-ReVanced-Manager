@@ -158,6 +158,8 @@ class InstalledAppInfoViewModel(
         private set
     var appInfo: PackageInfo? by mutableStateOf(null)
         private set
+    var hasLoadedAppInfo by mutableStateOf(false)
+        private set
     var appLabel: String? by mutableStateOf(null)
         private set
     var customInstallerLabel: String? by mutableStateOf(null)
@@ -203,10 +205,14 @@ class InstalledAppInfoViewModel(
         viewModelScope.launch {
             val app = installedAppRepository.get(packageName)
             installedApp = app
-            if (app != null) {
-                isMounted = rootInstaller.isAppMounted(resolveDevicePackageName(app))
-                refreshAppState(app)
-                appliedPatches = resolveAppliedSelection(app)
+            try {
+                if (app != null) {
+                    isMounted = rootInstaller.isAppMounted(resolveDevicePackageName(app))
+                    refreshAppState(app)
+                    appliedPatches = resolveAppliedSelection(app)
+                }
+            } finally {
+                hasLoadedAppInfo = true
             }
         }
     }

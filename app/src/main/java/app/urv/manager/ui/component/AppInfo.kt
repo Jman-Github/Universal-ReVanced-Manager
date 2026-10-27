@@ -2,6 +2,7 @@ package app.urv.manager.ui.component
 
 import android.content.pm.PackageInfo
 import android.graphics.drawable.Drawable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -9,6 +10,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,6 +31,7 @@ fun AppInfo(
     placeholderLabel: String? = null,
     placeholderMetaLines: Int = 1,
     showExtraContentWhenLoading: Boolean = false,
+    isLoading: Boolean = appInfo == null,
     extraContent: @Composable () -> Unit = {}
 ) {
     Column(
@@ -35,7 +40,17 @@ fun AppInfo(
             .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (appInfo == null) {
+        if (appInfo == null && !isLoading) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = stringResource(R.string.app_info_unavailable),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(100.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                    .padding(20.dp)
+            )
+        } else if (appInfo == null) {
             ShimmerBox(
                 modifier = Modifier
                     .size(100.dp)

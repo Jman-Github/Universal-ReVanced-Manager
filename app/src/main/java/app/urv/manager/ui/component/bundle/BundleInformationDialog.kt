@@ -82,7 +82,7 @@ import app.urv.manager.ui.component.ExceptionViewerDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.TextInputDialog
 import app.urv.manager.domain.bundles.BundleReleasePageRepository
-import app.urv.manager.ui.component.haptics.HapticSwitch
+import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
 import kotlinx.coroutines.launch
@@ -457,7 +457,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(auto_update),
                         supportingText = stringResource(auto_update_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = autoUpdate,
                                 onCheckedChange = ::onAutoUpdateChange
                             )
@@ -472,7 +472,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.bundle_search_update),
                         supportingText = stringResource(R.string.bundle_search_update_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = searchUpdate,
                                 onCheckedChange = ::onSearchUpdateChange
                             )
@@ -490,7 +490,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.patches_prereleases),
                         supportingText = stringResource(R.string.patches_prereleases_description, src.name),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = useBundlePrerelease,
                                 onCheckedChange = {
                                     composableScope.launch {
@@ -516,7 +516,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.repository_bundle_prereleases),
                         supportingText = stringResource(R.string.repository_bundle_prereleases_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = repositoryBundle.usePrereleases,
                                 enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
                                 onCheckedChange = ::onRepositoryPrereleasesChange
@@ -533,7 +533,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.repository_bundle_latest),
                         supportingText = stringResource(R.string.repository_bundle_latest_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = repositoryBundle.useLatest,
                                 enabled = !repositoryBundle.useSpecificVersion,
                                 onCheckedChange = ::onRepositoryLatestChange
@@ -550,7 +550,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.bundle_use_specific_version),
                         supportingText = stringResource(R.string.bundle_use_specific_version_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = repositoryBundle.useSpecificVersion,
                                 onCheckedChange = ::onVersionSelectionChange
                             )

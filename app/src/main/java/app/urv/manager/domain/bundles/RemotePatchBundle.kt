@@ -167,13 +167,22 @@ sealed class RemotePatchBundle(
             download(info, onProgress)
         }
 
-    fun isUpdateAvailable(info: ReVancedAsset): Boolean =
+    val isVersionPinned: Boolean get() = this is JsonPatchBundle && useSpecificVersion
+    val updatesAutomatically: Boolean get() = autoUpdate && !isVersionPinned
+
+    // Notification discovery must not change the artifact selected for download.
+    open suspend fun fetchAvailableUpdateInfo(): ReVancedAsset = fetchLatestReleaseInfo()
+
+    fun isUpdateAvailable(info: ReVancedAsset, forNotification: Boolean = false): Boolean =
         isRemoteBundleVersionUpdate(
             latestVersion = info.version,
             installedVersion = installedVersionSignatureInternal.takeIf { hasInstalled() },
-            manifestVersion = version.takeIf { hasInstalled() },
-            preventDowngrade = this is JsonPatchBundle && useLatest && !useSpecificVersion,
-            pinnedVersion = this is JsonPatchBundle && useSpecificVersion,
+            manifestVersion = if (forNotification && isVersionPinned &&
+                !installedVersionSignatureInternal.isNullOrBlank()
+            ) null else version.takeIf { hasInstalled() },
+            preventDowngrade = (this is JsonPatchBundle && useLatest && !useSpecificVersion) ||
+                (forNotification && isVersionPinned),
+            pinnedVersion = isVersionPinned && !forNotification,
         )
 
     suspend fun fetchLatestReleaseInfo(): ReVancedAsset {
@@ -392,6 +401,14 @@ class JsonPatchBundle(
         if (useSpecificVersion && selectedVersion == null) return null
         return super.update(onProgress)
     }
+
+    override suspend fun fetchAvailableUpdateInfo(): ReVancedAsset =
+        if (useSpecificVersion) {
+            withRepositorySettings(repositorySettings.copy(useSpecificVersion = false))
+                .fetchLatestReleaseInfo()
+        } else {
+            fetchLatestReleaseInfo()
+        }
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         if (useSpecificVersion) {

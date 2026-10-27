@@ -38,7 +38,7 @@ class DownloadProgressNotifier(private val app: Application) {
 
     inner class Session internal constructor(
         private val notificationId: Int,
-        private val title: String
+        private var title: String
     ) {
         private val closed = AtomicBoolean(false)
         private val enabled = app.hasNotificationPermission()
@@ -68,6 +68,14 @@ class DownloadProgressNotifier(private val app: Application) {
             lastProgress = progress ?: -1
             lastUpdateAt = now
             notify(progress ?: 0, progress == null)
+        }
+
+        @Synchronized
+        fun updateTitle(value: String) {
+            if (closed.get() || value == title) return
+            // The next progress/completion update publishes the resolved title. Avoid
+            // two back-to-back notifications being throttled at the end of a download.
+            title = value
         }
 
         @Synchronized

@@ -2561,4 +2561,7 @@ Details: %2$s</string>
     <string name="bundle_select_version">Select version</string>
     <string name="bundle_versions_load_error">Could not load bundle versions.</string>
     <string name="bundle_versions_empty">No bundle versions are available.</string>
+    <string name="app_info_unavailable">App information unavailable</string>
+    <string name="downloader_download_title">%1$s downloader</string>
+    <string name="runtime_download_title">%1$s runtime</string>
 </resources>

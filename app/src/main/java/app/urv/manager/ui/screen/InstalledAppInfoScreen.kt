@@ -1186,7 +1186,8 @@ fun InstalledAppInfoScreen(
             AppInfo(
                 appInfo = viewModel.appInfo,
                 labelOverride = viewModel.appLabel,
-                placeholderLabel = displayPackageName
+                placeholderLabel = displayPackageName,
+                isLoading = !viewModel.hasLoadedAppInfo
             ) {
                 val copyAppVersion = {
                     clipboard?.setPrimaryClip(

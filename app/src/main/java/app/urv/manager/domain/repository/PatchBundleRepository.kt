@@ -400,7 +400,7 @@ class PatchBundleRepository(
     private fun isRemoteUpdateCancelled(uid: Int): Boolean = cancelledUpdateUids.contains(uid)
 
     private fun RemotePatchBundle.isManualUpdateEligible(): Boolean =
-        !autoUpdate &&
+        !updatesAutomatically &&
             searchUpdate &&
             enabled &&
             state is PatchBundleSource.State.Available
@@ -2900,7 +2900,7 @@ class PatchBundleRepository(
      */
     suspend fun updateCheck() {
         awaitReady()
-        store.dispatch(Update { it.autoUpdate })
+        store.dispatch(Update { it.updatesAutomatically })
         checkManualUpdates()
     }
 
@@ -2933,7 +2933,7 @@ class PatchBundleRepository(
                 if (bundle.state !is PatchBundleSource.State.Available) return@forEach
 
                 val info = try {
-                    bundle.fetchLatestReleaseInfo()
+                    bundle.fetchAvailableUpdateInfo()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -3002,7 +3002,7 @@ class PatchBundleRepository(
 
         val latestSignature = normalizeVersionForCompare(info.version)
         if (latestSignature == null) {
-            if (!bundle.autoUpdate) {
+            if (!bundle.updatesAutomatically) {
                 manualUpdateInfoFlow.update { current -> current - bundle.uid }
             }
             return@withRemoteUpdatesIdleLock null
@@ -3010,8 +3010,8 @@ class PatchBundleRepository(
         val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
             ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
             ?: false
-        if (!artifactChanged && !bundle.isUpdateAvailable(info)) {
-            if (!bundle.autoUpdate) {
+        if (!artifactChanged && !bundle.isUpdateAvailable(info, forNotification = true)) {
+            if (!bundle.updatesAutomatically) {
                 manualUpdateInfoFlow.update { current -> current - bundle.uid }
             }
             return@withRemoteUpdatesIdleLock null
@@ -3023,7 +3023,7 @@ class PatchBundleRepository(
         val notificationIdentity = artifactIdentity?.let {
             "$versionLabel|$it"
         } ?: versionLabel
-        if (!bundle.autoUpdate) {
+        if (!bundle.updatesAutomatically) {
             manualUpdateInfoFlow.update { current ->
                 current + (
                     bundle.uid to ManualBundleUpdateInfo(
@@ -3115,7 +3115,7 @@ class PatchBundleRepository(
         val fetched = manualBundles.map { bundle ->
             async {
                 val info = try {
-                    bundle.fetchLatestReleaseInfo()
+                    bundle.fetchAvailableUpdateInfo()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -3168,7 +3168,7 @@ class PatchBundleRepository(
                     val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
                         ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
                         ?: false
-                    if (!artifactChanged && !bundle.isUpdateAvailable(info)) {
+                    if (!artifactChanged && !bundle.isUpdateAvailable(info, forNotification = true)) {
                         next.remove(bundle.uid)
                     } else {
                         val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)

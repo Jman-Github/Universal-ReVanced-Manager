@@ -60,6 +60,53 @@ class ReseamRemoteBundleTest {
         client.close()
     }
 
+    @Test fun versionPinKeepsDownloadSelectionButDiscoversNewReleases() = runBlocking {
+        manifest = index()
+        val base = source(temporary.newFolder(), useLatest = true)
+        val selected = base.fetchAvailableVersions().first { it.version == "1" }
+        requests.clear()
+        val pinned = base.withRepositorySettings(base.repositorySettings.withVersionSelection(true, selected))
+            .copy(autoUpdate = true)
+
+        assertFalse(pinned.updatesAutomatically)
+        assertEquals(selected, pinned.fetchLatestReleaseInfo())
+        assertTrue(requests.isEmpty())
+        assertEquals("2-dev", pinned.fetchAvailableUpdateInfo().version)
+        assertEquals(selected, pinned.fetchLatestReleaseInfo())
+        assertEquals(selected, pinned.selectedVersion)
+        assertTrue(pinned.useSpecificVersion)
+        assertTrue(pinned.autoUpdate)
+        assertEquals(listOf(endpoint), requests.toList())
+        assertEquals(listOf("2-dev", "1"), pinned.fetchAvailableVersions().map { it.version })
+        assertTrue(pinned.withRepositorySettings(pinned.repositorySettings.withVersionSelection(false))
+            .updatesAutomatically)
+    }
+
+    @Test fun pinnedNotificationsKeepThePreferredReleaseChannel() = runBlocking {
+        manifest = index()
+        val base = source(temporary.newFolder())
+        val selected = base.fetchAvailableVersions().first { it.version == "2-dev" }
+        val pinned = base.withRepositorySettings(base.repositorySettings.withVersionSelection(true, selected))
+        assertEquals("1", pinned.fetchAvailableUpdateInfo().version)
+        assertEquals(selected, pinned.fetchLatestReleaseInfo())
+        assertFalse(pinned.usePrereleases)
+        assertFalse(pinned.useLatest)
+    }
+
+    @Test fun pinnedNotificationsCompareTheInstalledTagAndRejectOlderReleases() = runBlocking {
+        manifest = index()
+        val directory = temporary.newFolder()
+        val base = source(directory, installedVersionSignature = "v4.4.0-dev.2")
+        val selected = base.fetchAvailableVersions().first().copy(version = "v4.4.0-dev.2")
+        val pinned = base.withRepositorySettings(base.repositorySettings.withVersionSelection(true, selected))
+        // A persisted release tag is authoritative even if the archive cannot be read.
+        directory.resolve("patches.jar").writeText("unreadable archive")
+        assertTrue(pinned.isUpdateAvailable(selected.copy(version = "v4.4.0"), forNotification = true))
+        assertFalse(pinned.isUpdateAvailable(selected.copy(version = "v4.3.0"), forNotification = true))
+        assertFalse(pinned.isUpdateAvailable(selected, forNotification = true))
+        assertFalse(pinned.isUpdateAvailable(selected))
+    }
+
     @Test fun githubIndexOwnsReleaseSelectionAndPinsPublisher() = runBlocking {
         manifest = index()
         val directory = temporary.newFolder()
@@ -197,9 +244,9 @@ class ReseamRemoteBundleTest {
     }
 
     private fun source(directory: File, usePrereleases: Boolean = false, sourceEndpoint: String = endpoint,
-        useLatest: Boolean = false) = JsonPatchBundle(
+        useLatest: Boolean = false, installedVersionSignature: String? = null) = JsonPatchBundle(
         name = "Test", uid = nextUid.incrementAndGet(), displayName = null,
-        createdAt = null, updatedAt = null, installedVersionSignature = null, error = null,
+        createdAt = null, updatedAt = null, installedVersionSignature = installedVersionSignature, error = null,
         directory = directory, endpoint = sourceEndpoint, autoUpdate = false, searchUpdate = false,
         lastNotifiedVersion = null, enabled = true, usePrereleases = usePrereleases, useLatest = useLatest
     )

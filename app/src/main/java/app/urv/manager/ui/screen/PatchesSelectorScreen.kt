@@ -2787,10 +2787,11 @@ private fun PatchProfileNameDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    LazyColumn(
+                    LazyColumnWithScrollbar(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 240.dp)
+                            .heightIn(max = 240.dp),
+                        reserveScrollbarSpace = true
                     ) {
                         items(
                             items = profiles,

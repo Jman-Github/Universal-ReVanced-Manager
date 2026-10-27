@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.network.api.ReVancedAPI
@@ -592,7 +593,11 @@ class PatcherRuntimePluginRepository(
         val target = sourceFile(entry)
         val tempFile = directory.resolve("patcher-runtime.tmp")
         if (tempFile.exists()) tempFile.delete()
-        val progressNotification = downloadProgressNotifier.begin(asset.name)
+        val progressNotification = downloadProgressNotifier.begin(
+            _sourceStates.value[entry.id]?.name?.let {
+                app.getString(R.string.runtime_download_title, it)
+            } ?: asset.name
+        )
 
         runCatching {
             httpService.downloadToFile(
@@ -601,7 +606,8 @@ class PatcherRuntimePluginRepository(
                 onProgress = progressNotification::update
             )
             val packageInfo = readArchivePackageInfo(tempFile)
-            resolvePlugin(packageInfo, sourceId = entry.id)
+            val plugin = resolvePlugin(packageInfo, sourceId = entry.id)
+            progressNotification.updateTitle(app.getString(R.string.runtime_download_title, plugin.name))
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {
                     ArchiveTrust.Trusted -> Unit
