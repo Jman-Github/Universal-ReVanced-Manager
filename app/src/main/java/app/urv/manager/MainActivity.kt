@@ -800,7 +800,9 @@ private fun ReVancedManager(
                             isPrerelease = bundle.isPrerelease,
                             patchCount = bundle.patchCount,
                             ownerName = bundle.ownerName,
-                            repoName = bundle.repoName
+                            repoName = bundle.repoName,
+                            bundleType = bundle.bundleType,
+                            downloadUrl = bundle.downloadUrl
                         )
                     )
                 }
@@ -819,6 +821,8 @@ private fun ReVancedManager(
                 patchCount = data.patchCount,
                 ownerName = data.ownerName,
                 repoName = data.repoName,
+                bundleType = data.bundleType,
+                downloadUrl = data.downloadUrl,
                 onBackClick = navController::popBackStack
             )
         }

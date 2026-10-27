@@ -20,6 +20,85 @@ plugins {
     signing
 }
 
+// Code adapted from Morphe, see third-party/NOTICE for more information.
+// https://github.com/MorpheApp/morphe-manager/pull/1202
+// https://github.com/MorpheApp/morphe-manager/pull/1212
+// https://github.com/MorpheApp/morphe-manager/pull/1215
+// https://github.com/MorpheApp/morphe-manager/pull/1246
+val patcherHost: Configuration = configurations.create("patcherHost") {
+    isCanBeConsumed = false
+}
+val embeddedJvmFeature = 17
+val embeddedJvmRelease = "https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre$embeddedJvmFeature"
+val embeddedJvms = mapOf(
+    "arm64-v8a" to Triple("jre17-android-arm64.tar.xz", "e162c860fe05ee4a4e4af7606437419879f6c748386a7b09fa77d10db6a64091", "linux-aarch64"),
+    "armeabi-v7a" to Triple("jre17-android-arm.tar.xz", "4a9134f1ebf6340dd855805d351712462cddab6f3c2684da7e7da10ccf06648d", "linux-arm"),
+    "x86_64" to Triple("jre17-android-x86_64.tar.xz", "893e27d2aed8b40407f29fe939e2a0f193e5d55f72892a303db634b0808a2b61", "linux-amd64")
+)
+
+/**
+ * The modules patching can reach: what the patcher and its libraries use, plus what ART offers patches
+ * beyond that, so a patch that runs inside the app also runs in the JVM.
+ */
+val embeddedJvmModules = listOf(
+    "java.base", "java.logging", "java.xml", "java.sql", "jdk.unsupported", "jdk.charsets", "jdk.crypto.ec",
+    // GC collection time used to fail runs whose heap is too small.
+    "java.management",
+    // Apktool decodes nine-patch PNGs using Raster, BufferedImage and ImageIO.
+    "java.desktop"
+)
+
+/**
+ * What of the build the linked modules need, its native libraries above all. The 64 bit builds
+ * ship the server VM, the 32-bit ARM one only the client VM.
+ */
+val embeddedJvmFiles = listOf(
+    "lib/*/libjvm.so",
+    "lib/libjava.so", "lib/libjimage.so", "lib/libzip.so", "lib/libnet.so", "lib/libnio.so",
+    "lib/libverify.so", "lib/libmanagement.so", "lib/libprefs.so",
+    // Headless AWT and ImageIO still need native image and font support on Android.
+    "lib/libawt.so", "lib/libawt_headless.so", "lib/libjavajpeg.so",
+    "lib/libfontmanager.so", "lib/libfreetype.so", "lib/liblcms.so", "lib/libmlib_image.so",
+    "lib/fontconfig*", "lib/psfont*",
+    "lib/jvm.cfg", "lib/tzdb.dat", "lib/security", "conf"
+)
+
+val embeddedJvmTasks = embeddedJvms.map { (abi, build) ->
+    val (file, sha256, platform) = build
+    tasks.register<PrepareEmbeddedJvmTask>("prepareEmbeddedJvm${abi.replace("-", "").replace("_", "").replaceFirstChar(Char::uppercase)}") {
+        group = "build"
+        description = "Links the embedded JVM for $abi."
+        url.set("$embeddedJvmRelease/$file")
+        this.sha256.set(sha256)
+        targetPlatform.set(platform)
+        modules.set(embeddedJvmModules)
+        runtimeFiles.set(embeddedJvmFiles)
+        jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(embeddedJvmFeature)) })
+        downloadCache.set(File(gradle.gradleUserHomeDir, "caches/urv-embedded-jvm"))
+        outputArchive.set(layout.buildDirectory.file("intermediates/embeddedJvm/$abi.zip.xz"))
+        outputImage.set(layout.buildDirectory.file("intermediates/embeddedJvm/$abi.modules"))
+    }
+}
+
+/** The ABIs of [embeddedJvms] as a Java array literal for BuildConfig. */
+val embeddedJvmAbis = embeddedJvms.keys.joinToString(prefix = "{", postfix = "}") { abi -> "\"$abi\"" }
+
+/** Changes with whatever goes into the runtime, which the app then unpacks again. */
+val embeddedJvmId = (listOf("shared-image-v1") + embeddedJvms.values.map { build -> build.second } + embeddedJvmModules + embeddedJvmFiles)
+    .hashCode().toUInt().toString(16)
+
+/** Assets the embedded JVM runs from, read by JvmInstallation. */
+val embeddedJvmAssets = tasks.register<EmbeddedJvmAssetsTask>("embeddedJvmAssets") {
+    group = "build"
+    description = "Lays out the embedded JVM runtimes and the patcher host as assets."
+    runtimes.from(embeddedJvmTasks.map { it.flatMap { task -> task.outputArchive } })
+    images.from(embeddedJvmTasks.map { it.flatMap { task -> task.outputImage } })
+    baseAbi.set("arm64-v8a")
+    hostJar.from(patcherHost)
+    outputDirectory.set(layout.buildDirectory.dir("generated/embeddedJvm"))
+}
+
+
 val resolvedProjectVersion = if (version == "unspecified") "1.8.1" else version.toString()
 fun artifactVersionName(versionName: String): String =
     "v${versionName.removePrefix("v")}"
@@ -63,7 +142,6 @@ fun androidVersionCode(versionName: String, developmentBuild: Boolean = false): 
 
 val outputApkFileName = "universal-revanced-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
-val revanced22RuntimeAssetsDir = layout.buildDirectory.dir("generated/revanced-runtime-v22")
 val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
     .orNull
@@ -121,18 +199,14 @@ val androidArscLib by tasks.registering(Jar::class) {
     )
 }
 
-val apkEditorMergeJar by tasks.registering(Jar::class) {
-    archiveFileName.set("apkeditor-merge.jar")
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    dependsOn("compileReleaseJavaWithJavac")
-    from({
-        tasks.named<JavaCompile>("compileReleaseJavaWithJavac").get().destinationDirectory.get().asFile
-    }) {
-        include("app/urv/manager/patcher/split/ApkEditorMergeProcess*.class")
-    }
-}
+usePatcherClassMergerCompatibility()
 
 dependencies {
+    // Bundle format detection inspects DEX superclasses before loading a patcher SDK.
+    implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
+    patcherHost(project(":urv-patcher-core", "hostJar"))
+    patcherHost(project(":revanced22-patcher-core", "hostJar"))
+    implementation("org.tukaani:xz:1.11")
     constraints {
         implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
         implementation("com.android.tools.smali:smali-util:3.0.9")
@@ -288,6 +362,10 @@ android {
     ndkVersion = "25.2.9519653"
 
     defaultConfig {
+        buildConfigField("String[]", "EMBEDDED_JVM_ABIS", embeddedJvmAbis)
+        buildConfigField("int", "EMBEDDED_JVM_FEATURE", embeddedJvmFeature.toString())
+        buildConfigField("String", "EMBEDDED_JVM_ID", "\"$embeddedJvmId\"")
+        externalNativeBuild.cmake.arguments += "-DANDROID_STL=c++_shared"
         applicationId = "app.universal.revanced.manager"
         buildConfigField("boolean", "IS_PR_TEST_BUILD", prTestBuild.toString())
         buildConfigField("long", "PR_BUILD_TIMESTAMP", "${if (prTestBuild) System.currentTimeMillis() else 0L}L")
@@ -427,13 +505,13 @@ android {
     android {
         androidResources {
             generateLocaleConfig = true
+            noCompress += "xz"
         }
     }
 
     sourceSets {
         getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
         getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
-        getByName("main").assets.directories.add(revanced22RuntimeAssetsDir.get().asFile.path)
         getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)
         getByName("androidTest").assets.directories.add(file("$projectDir/schemas").path)
     }
@@ -448,6 +526,7 @@ android {
 
 androidComponents {
     onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(embeddedJvmAssets, EmbeddedJvmAssetsTask::outputDirectory)
         val developmentBuild = variant.buildType == "debug" || variant.buildType == "dev"
         variant.outputs.forEach { output ->
             if (prReleaseVersionCode != null) {
@@ -530,18 +609,6 @@ tasks {
         }
     }
 
-    val copyRevanced22RuntimeAssets by registering(Sync::class) {
-        dependsOn(apkEditorMergeJar)
-        into(revanced22RuntimeAssetsDir)
-        from(arscLib) {
-            into("apkeditor")
-            rename { "ARSCLib.jar" }
-        }
-        from(apkEditorMergeJar) {
-            into("apkeditor")
-        }
-    }
-
     val copyNoticeFile by registering(Copy::class) {
         from(rootProject.file("third-party/NOTICE.txt"))
         into(legalResourcesDir.map { it.dir("raw") })
@@ -560,13 +627,7 @@ tasks {
         dependsOn(copyMorpheRuntimeApk)
     }
 
-    matching { it.name.endsWith("Assets") && it.name.startsWith("merge") }.configureEach {
-        dependsOn(copyRevanced22RuntimeAssets)
-    }
 
-    matching { it.name.contains("lintVital", ignoreCase = true) }.configureEach {
-        dependsOn(copyRevanced22RuntimeAssets)
-    }
 
 }
 

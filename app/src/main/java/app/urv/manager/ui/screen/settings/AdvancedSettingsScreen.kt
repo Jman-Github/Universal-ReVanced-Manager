@@ -196,18 +196,21 @@ import app.urv.manager.ui.component.settings.ExpressiveSettingsCard
 import app.urv.manager.ui.component.settings.ExpressiveSettingsConfigurableItem
 import app.urv.manager.ui.component.settings.ExpressiveSettingsDivider
 import app.urv.manager.ui.component.settings.ExpressiveSettingsItem
-import app.urv.manager.ui.component.settings.ProcessMemoryLimitDialog
 import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
 import app.urv.manager.ui.component.patcher.ShizukuConfigurationDialog
 import app.urv.manager.domain.installer.InstallerManager
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
+import app.urv.manager.patcher.logger.displayName
 import app.urv.manager.patcher.logger.PatcherLogMode
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.viewmodel.AdvancedSettingsViewModel
+import app.urv.manager.util.AppLanguageOption
 import app.urv.manager.util.ExportNameFormatter
+import app.urv.manager.util.appLanguageOptions
 import app.urv.manager.util.applyAppLanguage
+import app.urv.manager.util.isAppLanguageApplied
 import app.urv.manager.util.consumeHorizontalScroll
 import app.urv.manager.util.openUrl
 import app.urv.manager.util.permission.hasNotificationPermission
@@ -350,26 +353,7 @@ fun AdvancedSettingsScreen(
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
-    val languageOptions = remember {
-        listOf(
-            LanguageOption("system", R.string.language_option_system),
-            LanguageOption("en", R.string.language_option_english),
-            LanguageOption("de", R.string.language_option_german),
-            LanguageOption("es", R.string.language_option_spanish),
-            LanguageOption("fr", R.string.language_option_french),
-            LanguageOption("zh-CN", R.string.language_option_chinese_simplified),
-            LanguageOption("in", R.string.language_option_indonesian),
-            LanguageOption("hi", R.string.language_option_hindi),
-            LanguageOption("gu", R.string.language_option_gujarati),
-            LanguageOption("pt-BR", R.string.language_option_portuguese_brazil),
-            LanguageOption("vi", R.string.language_option_vietnamese),
-            LanguageOption("ko", R.string.language_option_korean),
-            LanguageOption("ja", R.string.language_option_japanese),
-            LanguageOption("ru", R.string.language_option_russian),
-            LanguageOption("tr", R.string.language_option_turkish),
-            LanguageOption("uk", R.string.language_option_ukrainian)
-        )
-    }
+    val languageOptions = appLanguageOptions
     val memoryLimit = remember {
         val activityManager = context.getSystemService<ActivityManager>()!!
         context.getString(
@@ -433,22 +417,22 @@ fun AdvancedSettingsScreen(
             SettingsSearchState.clear()
         }
     }
-    val commitLanguageChange: (String, Boolean) -> Unit = { code, recreate ->
+    val commitLanguageChange: (String, Boolean) -> Unit = { code, applyNow ->
+        pendingLanguageRestart = null
         viewModel.viewModelScope.launch {
             viewModel.prefs.appLanguage.update(code)
+            if (applyNow) {
+                // AppCompat recreates the activity when the locale changes.
+                applyAppLanguage(code)
+            }
         }
-        applyAppLanguage(code)
-        if (recreate) {
-            (context as? android.app.Activity)?.recreate()
-        }
-        pendingLanguageRestart = null
     }
     if (showLanguageDialog) {
         LanguageDialog(
             options = languageOptions,
             selectedCode = appLanguage,
             onSelect = { code ->
-                if (code == appLanguage) {
+                if (code == appLanguage && isAppLanguageApplied(code)) {
                     showLanguageDialog = false
                 } else {
                     pendingLanguageRestart = code
@@ -481,6 +465,8 @@ fun AdvancedSettingsScreen(
             }
         )
     }
+    val canResetLanguage = appLanguage != viewModel.prefs.appLanguage.default ||
+        !isAppLanguageApplied(viewModel.prefs.appLanguage.default)
     val selectedLanguageLabel = when (appLanguage) {
         "system" -> R.string.language_option_system
         else -> languageOptions.firstOrNull { it.code == appLanguage }?.labelRes
@@ -528,11 +514,11 @@ fun AdvancedSettingsScreen(
                         supportingContent = stringResource(selectedLanguageLabel),
                         secondaryActionLabel = stringResource(R.string.reset),
                         onSecondaryAction = {
-                            if (appLanguage != viewModel.prefs.appLanguage.default) {
+                            if (canResetLanguage) {
                                 pendingLanguageRestart = viewModel.prefs.appLanguage.default
                             }
                         },
-                        secondaryActionEnabled = appLanguage != viewModel.prefs.appLanguage.default,
+                        secondaryActionEnabled = canResetLanguage,
                         primaryActionLabel = stringResource(R.string.edit),
                         onPrimaryAction = { showLanguageDialog = true }
                     )
@@ -1218,41 +1204,6 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-            var showProcessMemoryLimitDialog by rememberSaveable { mutableStateOf(false) }
-            val processMemoryLimit by viewModel.prefs.processMemoryLimit.getAsState()
-            if (showProcessMemoryLimitDialog) {
-                ProcessMemoryLimitDialog(
-                    currentLimit = processMemoryLimit,
-                    onDismiss = { showProcessMemoryLimitDialog = false },
-                    onLimitChange = viewModel::setProcessMemoryLimit
-                )
-            }
-            GroupHeader(
-                stringResource(R.string.separate_processes_section),
-                icon = SettingsSectionIcons.SeparateProcesses
-            )
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                // Code adapted from Morphe, see third-party/NOTICE for more information
-                // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/screen/settings/system/PerformanceSection.kt
-                SettingsSearchHighlight(
-                    targetKey = R.string.process_memory_limit,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.process_memory_limit),
-                        supportingContent = stringResource(
-                            R.string.process_memory_limit_value,
-                            processMemoryLimit
-                        ),
-                        onClick = { showProcessMemoryLimitDialog = true }
-                    )
-                }
-            }
             GroupHeader(
                 stringResource(R.string.safeguards_compatibility_section),
                 icon = SettingsSectionIcons.SafeguardsCompatibility
@@ -1407,6 +1358,7 @@ fun AdvancedSettingsScreen(
             var showPatcherLogModeDialog by rememberSaveable { mutableStateOf(false) }
             val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
             val patcherLogMode by viewModel.prefs.patcherLogMode.getAsState()
+            val useJvmRuntime by viewModel.prefs.useJvmRuntime.getAsState()
             if (showMorpheBytecodeModeDialog) {
                 MorpheBytecodeModeDialog(
                     current = morpheBytecodeMode,
@@ -1435,6 +1387,22 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.patcher_jvm_enable,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    BooleanItem(
+                        modifier = highlightModifier,
+                        value = useJvmRuntime && viewModel.jvmRuntimeAvailable,
+                        onValueChange = { viewModel.setJvmRuntime(it) },
+                        headline = R.string.patcher_jvm_enable,
+                        description = if (viewModel.jvmRuntimeAvailable) R.string.patcher_jvm_description
+                            else R.string.patcher_jvm_unavailable,
+                        enabled = viewModel.jvmRuntimeAvailable
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.strip_unused_libs,
                     activeKey = highlightTarget,
@@ -2144,15 +2112,22 @@ private enum class InstallerDialogTarget {
     Fallback
 }
 
-private data class LanguageOption(val code: String, @StringRes val labelRes: Int)
-
 @Composable
 private fun LanguageDialog(
-    options: List<LanguageOption>,
+    options: List<AppLanguageOption>,
     selectedCode: String,
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val sortedOptions = remember(options, configuration) {
+        app.urv.manager.util.sortLanguageOptions(
+            options, configuration.locales[0],
+            code = { it.code },
+            label = { context.getString(it.labelRes) }
+        )
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -2165,14 +2140,14 @@ private fun LanguageDialog(
         },
         text = {
             val scrollState = rememberScrollState()
-            Column(
+            ColumnWithScrollbar(
+                state = scrollState,
                 modifier = Modifier
                     .heightIn(max = 360.dp)
-                    .verticalScroll(scrollState)
                     .padding(bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                options.forEach { option ->
+                sortedOptions.forEach { option ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -4126,7 +4101,7 @@ private fun previewIconForBundleAction(key: PatchBundleActionKey): ImageVector =
     when (key) {
         PatchBundleActionKey.EDIT -> Icons.Outlined.Edit
         PatchBundleActionKey.REFRESH -> Icons.Outlined.Update
-        PatchBundleActionKey.LINKS -> Icons.Outlined.Link
+        PatchBundleActionKey.RELEASE_PAGE -> Icons.Outlined.Link
         PatchBundleActionKey.CHANGELOG_LATEST -> Icons.Outlined.Description
         PatchBundleActionKey.CHANGELOG_HISTORY -> Icons.Outlined.History
         PatchBundleActionKey.TOGGLE -> Icons.Outlined.Block

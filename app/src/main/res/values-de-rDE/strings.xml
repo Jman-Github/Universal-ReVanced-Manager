@@ -171,7 +171,6 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Keine Patches ausgewählt</string>
     <string name="mixed_patch_bundles_title">Gemischte Patch Bundles</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) und Morphe (.mpp) Patches können nicht kombiniert werden. Wähle Patches nur aus einem Bundle Typ aus. Wenn du mehrere verwenden möchtest, musst du ein zweites Mal patchen und dabei die anderen gewünschten Patches verwenden.</string>
     <string name="mixed_revanced_patcher_versions_title">Gemischte ReVanced Patcher Versionen</string>
     <string name="mixed_revanced_patcher_versions_description">Für unterschiedliche Patcher Versionen erstellte ReVanced Patches lassen sich nicht kombinieren. Da ReVanced v21 und v22 unterschiedliche Patcher Versionen verwenden, solltest du Patches aus nur einer ReVanced Patcher Version auswählen.</string>
     <string name="network_unavailable_warning">Dein Gerät ist nicht mit dem Internet verbunden. Der Download wird später fehlschlagen.</string>
@@ -1564,7 +1563,6 @@ Aktiviere sie erneut (oder wähle Alternativen) und versuche dann noch einmal zu
     <string name="selected_file_not_supported_keystore">Die ausgewählte Datei ist kein unterstützter Keystore (.jks, .keystore, .p12, .pfx, .bks)</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
     <string name="selected_file_not_supported_keystore_info">Die ausgewählte Datei ist kein unterstützter Keystore (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
-    <string name="patch_bundle_url_invalid_json_or_external">Die Patch-Bundle-URL muss auf eine .json-Datei oder eine unterstützte externe Bundles-API-URL verweisen</string>
     <string name="patch_bundle_url_invalid_external">Die Patch-Bundle-URL muss auf eine unterstützte externe Bundles-API-URL verweisen</string>
     <string name="selected_file_not_supported_image">Die ausgewählte Datei ist kein unterstützter Bildtyp</string>
     <string name="loading">Wird geladen…</string>
@@ -1648,6 +1646,8 @@ Aktiviere sie erneut (oder wähle Alternativen) und versuche dann noch einmal zu
     <string name="string_option_menu_description">Weitere Optionen</string>
     <string name="option_preset_custom_value">Benutzerdefinierter Wert</string>
     <string name="path_selector">Aus dem Speicher auswählen</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Vorheriges Verzeichnis</string>
     <string name="path_selector_dirs">Verzeichnisse</string>
     <string name="path_selector_files">Dateien</string>
@@ -2028,7 +2028,6 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Möchtest du \"%s\" wirklich löschen?</string>
     <string name="patches_delete_multiple_dialog_description">Möchtest du die ausgewählten Patch-Bundles wirklich löschen?</string>
     <string name="about_revanced_manager">Über Universal ReVanced Manager</string>
-    <string name="revanced_manager_description">Der Universal ReVanced Manager (URV Manager) ist ein Fork des offiziellen ReVanced Managers. Beide Anwendungen verwenden den ReVanced Patcher, mit dem du Apps mit benutzerdefinierten Patches herunterladen und patchen sowie den Patch-Vorgang verwalten kannst. Zu den einzigartigen Funktionen des Universal ReVanced Managers gehören Anzeigenamen für Patch-Bundles, Unterstützung für den Import beliebiger Patch-Bundles von Drittanbietern und vieles mehr. Sieh dir die vollständige Liste der einzigartigen Funktionen des Universal ReVanced Managers an</string>
     <string name="here">hier.</string>
     <string name="update_available">Ein Update ist verfügbar</string>
     <string name="ready_to_install_update">Bereit zur Installation des Updates</string>
@@ -2140,8 +2139,6 @@ Details: %2$s</string>
     <string name="patches_prereleases_description">Vorabversionen von %s verwenden</string>
     <string name="patches_url">Patch-Bundle-URL</string>
     <string name="patch_bundle_urls_link">Patch-Bundle-URLs hier abrufen</string>
-    <string name="patch_bundle_discovery_title">Patch-Bundles entdecken</string>
-    <string name="patch_bundle_discovery_description">Durchsuche externe Patch-Bundles und füge sie zum URV Manager hinzu.</string>
     <string name="patch_bundle_discovery_package_label">Nach Paketname suchen</string>
     <string name="patch_bundle_discovery_search_label">Bundles durchsuchen</string>
     <string name="patch_bundle_discovery_empty">Keine Patch-Bundles gefunden.</string>
@@ -2372,4 +2369,6 @@ Details: %2$s</string>
     <string name="batch_patch_edit_apk">APK bearbeiten</string>
     <string name="batch_patch_metadata_save_failed">Installiert, aber URV Manager konnte die App-Metadaten nicht speichern: %1$s</string>
     <string name="manager_update_incompatible_pr">Dieses Release ist mit diesem PR-Build nicht kompatibel. Bitte warte auf ein neueres Manager-Release. Deine Daten wurden nicht verändert.</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

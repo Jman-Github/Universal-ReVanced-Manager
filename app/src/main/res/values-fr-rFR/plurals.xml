@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <plurals name="patch_count">
-        <item quantity="one">%d correctif</item>
-        <item quantity="other">%d correctifs</item>
+        <item quantity="one">%d patch</item>
+        <item quantity="other">%d patchs</item>
     </plurals>
     <plurals name="selected_count">
         <item quantity="one">%d sélectionné</item>
         <item quantity="other">%d sélectionnés</item>
+    </plurals>
+    <plurals name="selected_apps_count">
+        <item quantity="one">%d application sélectionnée</item>
+        <item quantity="other">%d applications sélectionnées</item>
+    </plurals>
+    <plurals name="patcher_cpu_core_count">
+        <item quantity="one">%d cœur</item>
+        <item quantity="other">%d cœurs</item>
     </plurals>
 </resources>

@@ -15,9 +15,9 @@
 
 # 💊 Universal ReVanced Manager
 
-Universal ReVanced Manager (URV) is an Android manager for patching apps with ReVanced and Morphe in one place. Built from ReVanced Manager, URV expands the full patching workflow with third-party patch bundles, multiple patcher runtimes, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and standalone APK utilities.
+Universal ReVanced Manager (URV) is an Android manager for patching apps with ReVanced, Morphe, and Reseam in one place. Built from ReVanced Manager, URV expands the full patching workflow with third-party patch bundles, multiple patcher runtimes, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and standalone APK utilities.
 
-URV supports both ReVanced and Morphe patch ecosystems, rooted and non-rooted workflows, local and remote patch bundle sources, split APK handling, downloader integrations, signature and keystore tools, detailed patching diagnostics, backups, storage controls, and extensive UI customization.
+URV supports the ReVanced, Morphe, and Reseam patch ecosystems, rooted and non-rooted workflows, local and remote patch bundle sources, split APK handling, downloader integrations, signature and keystore tools, detailed patching diagnostics, backups, storage controls, and extensive UI customization.
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%20v3-yellow.svg" alt="GPLv3 License" />
@@ -35,18 +35,21 @@ URV supports both ReVanced and Morphe patch ecosystems, rooted and non-rooted wo
 
 URV covers the full patching lifecycle, from choosing an APK source and patch bundle to patching, installing, saving, repatching, automating updates, and managing the files and tools around those workflows.
 
+For runtime behavior, memory limits, and troubleshooting, see the [patching runtime guide](urv-patcher-core/README.md).
+
 <details>
 <summary><strong>Patch Bundles & Patcher Runtimes</strong></summary>
 <ul>
-  <li><strong>ReVanced and Morphe in one manager:</strong> Use ReVanced <code>.rvp</code> and Morphe <code>.mpp</code> patch bundles from the same app.</li>
+  <li><strong>ReVanced, Morphe, and Reseam in one manager:</strong> Use ReVanced <code>.rvp</code>, Morphe <code>.mpp</code>, and Reseam <code>.reseam</code> patch bundles from the same app.</li>
   <li><strong>Third-party patch bundles:</strong> Add compatible local or remote patch bundles, including repository and release-based sources, instead of being limited to the pre-installed bundle.</li>
-  <li><strong>Bundle discovery:</strong> Browse the external patch bundle catalog, search it, inspect supported apps and patches, and import bundles directly.</li>
+  <li><strong>Bundle discovery:</strong> Browse the <a href="https://github.com/Jman-Github/Patch-Bundle-Registry">Patch Bundle Registry</a> catalog in URV, search it, inspect supported apps and patches, and import bundles directly.</li>
   <li><strong>Remote updates:</strong> Check, download, and background-update remote bundles with progress, stable/pre-release channel handling, per-bundle update controls, and force-redownload support.</li>
   <li><strong>Full changelog history:</strong> View cached patch bundle changelog history with configurable loading and storage limits, plus release links when available.</li>
   <li><strong>Bundle organization:</strong> Rename imported bundles, reorder them, preserve metadata and timestamps, and export/import bundle configurations.</li>
   <li><strong>Official bundle recovery:</strong> Remove the pre-installed Official ReVanced bundle and restore it later from Advanced settings.</li>
-  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with URV.</li>
+  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with URV. Choose JVM or ART execution with the JVM switch in Settings &gt; Patcher.</li>
   <li><strong>ReVanced v21 runtime plugin:</strong> Add the supported ReVanced v21 runtime plugin from a local APK or GitHub source and manage its trust, update channel, installed version, and stored plugin files.</li>
+  <li><strong>Reseam runtime plugin:</strong> Patch <code>.reseam</code> bundles with the supported Reseam runtime plugin.</li>
 </ul>
 </details>
 
@@ -155,9 +158,11 @@ You can download the most recent version of Universal ReVanced Manager from [Git
 
 ## 📋 Patch Bundles
 
-URV can add compatible ReVanced (<code>.rvp</code>) and Morphe (<code>.mpp</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog.
+URV can add compatible ReVanced (<code>.rvp</code>), Morphe (<code>.mpp</code>), and Reseam (<code>.reseam</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog. ReVanced v21 and Reseam bundles require their respective runtime plugins.
 
-For a maintained third-party bundle catalog, use the [ReVanced Patch Bundles](https://github.com/Jman-Github/ReVanced-Patch-Bundles) repository. It includes a detailed [patch catalog](https://github.com/Jman-Github/ReVanced-Patch-Bundles/blob/bundles/patch-bundles/PATCH-LIST-CATALOG.md) and [bundle URLs](https://github.com/Jman-Github/ReVanced-Patch-Bundles#-patch-bundles-urls) that can be imported into URV. For bundles from the discovery/catalog flow, use entries marked <strong>API v4</strong> or <strong>Morphe</strong>; API v3 discovery entries are unsupported.
+The [Patch Bundle Registry](https://github.com/Jman-Github/Patch-Bundle-Registry) maintains a searchable catalog of community patch sources. Visit its [patch browsing site](https://patch-bundles.jmancentral.com/) to explore bundles, patch lists, supported apps, release versions, and changelogs, and copy remote bundle URLs for import into URV.
+
+The same registry powers URV's in-app patch bundle discovery, where you can search the catalog, inspect compatible apps and patches, and import supported bundles directly.
 
 ## 🔌 Supported Downloader Plugins
 

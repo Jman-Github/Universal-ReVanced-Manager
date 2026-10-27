@@ -2009,7 +2009,7 @@ private fun PatchItem(
                     Text(stringResource(R.string.close))
                 }
             },
-            title = { CenteredDialogTitle(stringResource(R.string.patch_option_preview_title, patch.name)) },
+            title = { CenteredDialogTitle(stringResource(R.string.patch_option_preview_title, patch.displayName)) },
             text = {
                 val optionPreviewScrollState = rememberScrollState()
                 Column(
@@ -2067,7 +2067,7 @@ private fun PatchItem(
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = patch.name,
+                        text = patch.displayName,
                         style = MaterialTheme.typography.titleMedium
                     )
                     patch.description?.let { description ->
@@ -2130,7 +2130,7 @@ private fun PatchItem(
                             onClick = {
                                 onShowVersionsDialog(
                                     PatchVersionsDialogState(
-                                        patchName = patch.name,
+                                        patchName = patch.displayName,
                                         versions = dialogVersions,
                                         suggestedVersion = suggestedVersionInfo
                                     )
@@ -2787,10 +2787,11 @@ private fun PatchProfileNameDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    LazyColumn(
+                    LazyColumnWithScrollbar(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 240.dp)
+                            .heightIn(max = 240.dp),
+                        reserveScrollbarSpace = true
                     ) {
                         items(
                             items = profiles,
@@ -3250,7 +3251,7 @@ private fun OptionsDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             AppTopBar(
-                title = patch.name,
+                title = patch.displayName,
                 onBackClick = onDismissRequest,
                 applyContainerColor = true,
                 actions = {
@@ -3286,7 +3287,7 @@ private fun OptionsDialog(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = patch.name,
+                            text = patch.displayName,
                             style = MaterialTheme.typography.titleMedium
                         )
                         patch.description?.let { description ->

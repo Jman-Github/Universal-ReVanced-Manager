@@ -35,6 +35,7 @@ import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.viewmodel.BatchPatcherViewModel
 import app.urv.manager.util.ExportNameFormatter
 import app.urv.manager.util.FilenameUtils
+import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.util.PatchedAppExportData
 import app.urv.manager.util.isAllowedApkFile
 import app.urv.manager.util.toast
@@ -77,7 +78,8 @@ internal fun rememberBatchResultActions(
             PatchedAppExportData(
                 appName = it.appName,
                 packageName = it.packageName,
-                appVersion = it.version ?: "unspecified"
+                appVersion = it.version ?: "unspecified",
+                fileExtension = if (SplitApkPreparer.isSplitArchive(it.patchedFile)) "apks" else "apk"
             )
         }
     }
@@ -117,7 +119,8 @@ internal fun rememberBatchResultActions(
         pendingPermissionPicker = null
     }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+        contract = RememberedCreateDocument(if (exportData?.fileExtension == "apks") "application/zip"
+            else "application/vnd.android.package-archive") {
             patchedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
         }
     ) { uri ->

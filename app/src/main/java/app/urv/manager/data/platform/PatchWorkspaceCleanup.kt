@@ -24,6 +24,7 @@ internal class PatchWorkspaceCleanup(
                 file.name.startsWith(DisposableFileCleanup.PREFIX) ||
                 file.name.startsWith("split-patcher-selection-") ||
                 file.name.startsWith("split-revanced22-") ||
+                file.name.startsWith("reseam-") ||
                 file.name.startsWith("installed-splits-")
             disposable && file.canonicalFile.parentFile == root
         }

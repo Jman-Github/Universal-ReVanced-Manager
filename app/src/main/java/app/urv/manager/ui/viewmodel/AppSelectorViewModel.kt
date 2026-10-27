@@ -84,7 +84,7 @@ class AppSelectorViewModel(
                                     false
                                 )
                             }
-                        if (info.bundleType == PatchBundleType.MORPHE) {
+                        if (info.bundleType == PatchBundleType.MORPHE || info.bundleType == PatchBundleType.RESEAM) {
                             compatible.versionCodes.orEmpty().forEach { (version, codes) ->
                                 accumulator.versionCodes.getOrPut(version) { mutableSetOf() } += codes
                             }

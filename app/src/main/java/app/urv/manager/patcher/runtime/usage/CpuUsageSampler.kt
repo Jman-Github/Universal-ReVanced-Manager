@@ -5,9 +5,6 @@
 
 package app.urv.manager.patcher.runtime.usage
 
-import android.os.SystemClock
-import android.system.Os
-import android.system.OsConstants
 import java.io.File
 
 // Code adapted from Morphe, see third-party/NOTICE for more information.
@@ -24,11 +21,11 @@ import java.io.File
  */
 internal class CpuUsageSampler(
     private val procStatFile: File = File(PROC_STAT),
-    private val coreCount: Int = runCatching { Os.sysconf(OsConstants._SC_NPROCESSORS_CONF).toInt() }
+    private val coreCount: Int = runCatching { UsagePlatform.coreCount }
         .getOrDefault(Runtime.getRuntime().availableProcessors()).coerceIn(1, 256)
 ) {
     private val clockTicksPerSecond =
-        runCatching { Os.sysconf(OsConstants._SC_CLK_TCK) }.getOrDefault(DEFAULT_CLOCK_TICKS)
+        runCatching { UsagePlatform.clockTicks }.getOrDefault(DEFAULT_CLOCK_TICKS)
             .takeIf { it > 0L } ?: DEFAULT_CLOCK_TICKS
 
     var systemWide: Boolean = true
@@ -143,7 +140,7 @@ internal class CpuUsageSampler(
             ?: findIdleStateFiles()?.also { idleStateFiles = it }
             ?: return null
 
-        val uptimeMs = SystemClock.uptimeMillis()
+        val uptimeMs = UsagePlatform.uptimeMillis()
         // Both clocks stand still while the device sleeps, so an interval never counts time no
         // core was there to spend
         val elapsedMicros = (uptimeMs - previousIdleUptimeMs) * MICROS_PER_MILLISECOND
@@ -235,7 +232,7 @@ internal class CpuUsageSampler(
     private fun sampleOwnThreads(): List<Int> {
         val tasks = File(PROC_SELF_TASK).listFiles() ?: return emptyList()
 
-        val uptimeMs = SystemClock.uptimeMillis()
+        val uptimeMs = UsagePlatform.uptimeMillis()
         val elapsed = uptimeMs - previousUptimeMs
         val previous = previousThreadTicks
         val current = HashMap<Int, Long>(tasks.size)

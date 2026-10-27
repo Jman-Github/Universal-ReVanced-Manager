@@ -44,6 +44,7 @@
     <string name="bundle_type_label">Bundle type</string>
     <string name="bundle_type_revanced">ReVanced</string>
     <string name="bundle_type_morphe">Morphe</string>
+    <string name="bundle_type_reseam">Reseam</string>
     <string name="bundle_type_ample">Ample</string>
     <string name="android_11_bug_dialog_title">Android 11 bug</string>
     <string name="android_11_bug_dialog_description">The app installation permission must be granted ahead of time to avoid a bug in the Android 11 system that will negatively affect the user experience.</string>
@@ -177,7 +178,7 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">No patches selected</string>
     <string name="mixed_patch_bundles_title">Mixed patch bundles</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) and Morphe (.mpp) patches cannot be combined. Select patches from only one bundle type. If you want to use multiple, you will have to patch a second time using the other patches you want.</string>
+    <string name="mixed_patch_bundles_description">ReVanced (.rvp), Morphe (.mpp), and Reseam (.reseam) patches cannot be combined in the same patching run. Select patches from one bundle type at a time. To use patches from another type, patch the resulting app again.</string>
     <string name="mixed_revanced_patcher_versions_title">Mixed ReVanced patcher versions</string>
     <string name="mixed_revanced_patcher_versions_description">ReVanced patches built for different patcher versions cannot be combined. ReVanced v21 and v22 use different patcher versions, so select patches from only one ReVanced patcher version.</string>
     <string name="network_unavailable_warning">Your device is not connected to the internet. Downloading will fail later.</string>
@@ -968,6 +969,9 @@ Patch profiles are not affected.</string>
     <string name="patcher_log_mode_default_description">Keeps the progress logs needed by the patcher UI while dropping extra noise. This can reduce logging overhead and help lower the chance of slowdowns or log-driven memory pressure</string>
     <string name="patcher_log_mode_verbose">Verbose</string>
     <string name="patcher_log_mode_verbose_description">Keeps the full logging behavior, including trace-heavy output. Useful for debugging patch failures, but it can make patching slower and increase memory pressure</string>
+    <string name="patcher_jvm_enable">Use JVM for patching</string>
+    <string name="patcher_jvm_description">Use a separate Java VM for Morphe and ReVanced patching and supported tools, including split APK merging and signature metadata injection. Disable to use the Android runtime (ART) for these operations. ReSeam always uses ART</string>
+    <string name="patcher_jvm_unavailable">No embedded JVM is available for this device. Patching and supported tools use the Android runtime (ART)</string>
     <string name="morphe_bytecode_mode">Morphe bytecode processing mode</string>
     <string name="morphe_bytecode_mode_description">Controls how the Morphe runtime processes bytecode during patching. Only applies to the Morphe runtime</string>
     <string name="morphe_bytecode_mode_dialog_description">Choose how Morphe processes DEX files when applying Morphe patches. This only affects the Morphe runtime</string>
@@ -1068,6 +1072,7 @@ Patch profiles are not affected.</string>
     <string name="include_github_pat_in_exports_warning">Do not share your PAT. If you include it in a settings export, keep that file private because it contains the token.</string>
     <string name="language_settings">Language</string>
     <string name="app_language">App language</string>
+    <string name="app_language_description">Choose the language used by the manager</string>
     <string name="language_dialog_title">Choose app language</string>
     <string name="language_restart_title">Restart required</string>
     <string name="language_restart_message">Restart the app now to apply the new language. If you choose later, the change will apply the next time the app is opened.</string>
@@ -1075,6 +1080,12 @@ Patch profiles are not affected.</string>
     <string name="language_restart_later">Later</string>
     <string name="language_option_system">Use device language</string>
     <string name="language_option_english">English</string>
+    <string name="language_option_arabic">Arabic</string>
+    <string name="language_option_greek">Greek</string>
+    <string name="language_option_filipino">Filipino</string>
+    <string name="language_option_italian">Italian</string>
+    <string name="language_option_german">German</string>
+    <string name="language_option_spanish">Spanish</string>
     <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>
@@ -1085,6 +1096,7 @@ Patch profiles are not affected.</string>
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
     <string name="language_option_russian">Russian</string>
+    <string name="language_option_turkish">Turkish</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
@@ -1592,7 +1604,7 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="selected_file_not_supported_keystore">Selected file is not a supported keystore (.jks, .keystore, .p12, .pfx, .bks)</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
     <string name="selected_file_not_supported_keystore_info">Selected file is not a supported keystore (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
-    <string name="patch_bundle_url_invalid_json_or_external">Patch bundle URL must point to a .json file or a supported external bundles API URL</string>
+    <string name="patch_bundle_url_invalid_json_or_external">Enter a patch repository URL, a .json bundle index, or a supported external bundles API URL</string>
     <string name="patch_bundle_url_invalid_external">Patch bundle URL must point to a supported external bundles API URL</string>
     <string name="selected_file_not_supported_image">Selected file is not a supported image type</string>
     <string name="loading">Loading…</string>
@@ -1649,6 +1661,8 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="downloaded_apps_export">Export selected apps</string>
     <string name="downloaded_apps_export_success">Exported %1$d app(s)</string>
     <string name="downloaded_apps_export_failed">Failed to export downloaded apps</string>
+    <string name="downloaded_app_format_apk">APK</string>
+    <string name="downloaded_app_format_split_apk">Split APK</string>
     <string name="downloaded_app_install_success">Downloaded app installed</string>
     <string name="downloaded_app_install_permission_required">Allow app installs in Android settings, then tap Install again.</string>
     <string name="downloaded_app_install_merging">Merging split APK…</string>
@@ -1676,6 +1690,12 @@ Enable them again (or pick alternatives) and then try patching once more.</strin
     <string name="string_option_menu_description">More options</string>
     <string name="option_preset_custom_value">Custom value</string>
     <string name="path_selector">Select from storage</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
+    <plurals name="path_selector_item_count">
+        <item quantity="one">%1$d item</item>
+        <item quantity="other">%1$d items</item>
+    </plurals>
     <string name="path_selector_parent_dir">Previous directory</string>
     <string name="path_selector_dirs">Directories</string>
     <string name="path_selector_files">Files</string>
@@ -1840,6 +1860,8 @@ Details: %2$s</string>
     <string name="install_app_fail">Failed to install app: %s</string>
     <string name="install_app_fail_missing_stock">Missing original APK for mount.</string>
     <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
+    <string name="root_mount_automatic_success">%1$s was remounted automatically</string>
+    <string name="root_mount_automatic_failure">%1$s could not be remounted. Export root diagnostics.</string>
     <string name="root_mount_notification_channel">Root mount safety</string>
     <string name="root_mount_repatch_title">Root mount needs repatching</string>
     <string name="root_mount_repair_notification_title">Root mount needs repair</string>
@@ -1859,6 +1881,9 @@ Details: %2$s</string>
     <string name="root_mount_downgrade_confirmation">Android rejected the in-place downgrade. Continuing briefly unregisters the app for this user, keeps app data, and immediately installs verified stock. App data created by a newer version may still be incompatible.</string>
     <string name="root_mount_downgrade_title">Confirm safe downgrade fallback</string>
     <string name="root_mount_repair">Repair root mount</string>
+    <string name="root_mount_repair_progress">Repairing root mount…</string>
+    <string name="root_mount_repair_success">Root mount repaired successfully</string>
+    <string name="root_mount_repair_failed">Failed to repair root mount: %1$s</string>
     <string name="root_mount_tools">Root mount tools</string>
     <string name="root_mount_use_stock">Use stock app</string>
     <string name="root_mount_export_diagnostics">Export mount diagnostics</string>
@@ -1984,6 +2009,7 @@ Details: %2$s</string>
     <string name="patcher_step_group_preparing">Preparing</string>
     <string name="patcher_step_load_patches">Load patches</string>
     <string name="patcher_step_prepare_split_apk">Merge split APK</string>
+    <string name="patcher_step_prepare_separate_apks">Prepare split APKs</string>
     <string name="patcher_step_unpack">Read APK file</string>
     <string name="patcher_step_group_patching">Patching</string>
     <string name="patcher_step_group_saving">Saving</string>
@@ -2062,7 +2088,7 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Are you sure you want to delete \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
     <string name="about_revanced_manager">About URV Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is a fork of ReVanced Manager. Both applications use the ReVanced Patcher, which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features URV Manager has to offer</string>
+    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is an Android manager for ReVanced and Morphe. It expands the patching workflow with third-party patch bundles, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and built-in APK tools. See the full feature list</string>
     <string name="here">here.</string>
     <string name="update_available">An update is available</string>
     <string name="ready_to_install_update">Ready to install update</string>
@@ -2175,8 +2201,8 @@ Details: %2$s</string>
     <string name="patches_prereleases_description">Use pre-release versions of %s</string>
     <string name="patches_url">Patch bundle URL</string>
     <string name="patch_bundle_urls_link">Get patch bundle URLs here</string>
-    <string name="patch_bundle_discovery_title">Discover patch bundles</string>
-    <string name="patch_bundle_discovery_description">Browse external patch bundles and add them to URV Manager.</string>
+    <string name="patch_bundle_discovery_title">Discovery</string>
+    <string name="patch_bundle_discovery_description">Browse patch bundles and supported apps from the Patch Bundle Registry.</string>
     <string name="patch_bundle_discovery_package_label">Search packages</string>
     <string name="patch_bundle_discovery_search_label">Search bundles</string>
     <string name="patch_bundle_discovery_empty">No bundles found</string>
@@ -2492,4 +2518,52 @@ Details: %2$s</string>
     <string name="merger_resource_graph_options_title">Show extra information (standard merger graphs)</string>
     <string name="merger_compact_resource_graph_options_title">Show extra information (compact merger graphs)</string>
     <string name="resource_graph_current_accessibility">%1$s. %2$s. %3$s.</string>
+    <string name="patcher_process_memory_usage">Patcher process memory</string>
+    <string name="patcher_process_memory_format">%1$d MB</string>
+    <string name="patcher_process_memory_detail">Includes native memory. Java heap: %1$d / %2$d MB.</string>
+    <string name="patcher_process_memory_accessibility">Process memory %1$d MB, peak %2$d MB, %3$s, %4$s.</string>
+    <string name="catalog_bundles">Bundles</string>
+    <string name="catalog_apps">Apps</string>
+    <string name="catalog_all">All</string>
+    <string name="catalog_source">Source</string>
+    <string name="catalog_bundle_type">Bundle type</string>
+    <string name="catalog_bundle_version">Bundle version</string>
+    <string name="catalog_view_bundles">View compatible bundles</string>
+    <string name="catalog_refresh">Refresh catalog</string>
+    <string name="catalog_search">Search</string>
+    <string name="catalog_unsupported_format">This bundle format requires a runtime that URV does not currently support.</string>
+    <string name="catalog_clear_filters">Clear filters</string>
+    <string name="catalog_hide_filters">Hide filters</string>
+    <string name="catalog_show_filters">Show filters</string>
+    <string name="catalog_sources_error">Could not load sources. Try again.</string>
+    <string name="catalog_retry">Retry</string>
+    <string name="catalog_search_apps">Search apps</string>
+    <string name="catalog_apps_empty">No apps found</string>
+    <string name="catalog_release_history">Release history</string>
+    <string name="catalog_history_empty">No release history found.</string>
+    <string name="catalog_history_more">Load older releases</string>
+    <string name="catalog_history_unavailable">The upstream release or download is no longer available.</string>
+    <string name="catalog_hide_changelog">Hide changelog</string>
+    <string name="catalog_history_no_changelog">No changelog was recorded for this release.</string>
+    <string name="catalog_history_no_bundle">No indexed patch bundle is available for this release.</string>
+    <string name="catalog_history_open_release">Open release</string>
+    <string name="catalog_requires_v21">Requires the ReVanced v21 runtime plugin to be used in URV.</string>
+    <string name="catalog_requires_reseam">Requires the Reseam runtime plugin to be used in URV.</string>
+    <string name="scroll_position">Scroll position</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
+    <string name="bundle_setting_change_queued">This setting will change after the ongoing bundle update finishes.</string>
+    <string name="bundle_use_specific_version">Use specific version</string>
+    <string name="bundle_use_specific_version_description">Keep this bundle on a selected version. Previous release preferences are restored when disabled.</string>
+    <string name="bundle_select_version">Select version</string>
+    <string name="bundle_versions_load_error">Could not load bundle versions.</string>
+    <string name="bundle_versions_empty">No bundle versions are available.</string>
+    <string name="app_info_unavailable">App information unavailable</string>
+    <string name="downloader_download_title">%1$s downloader</string>
+    <string name="runtime_download_title">%1$s runtime</string>
+    <string name="manager_rebrand_app_name">Universal Patch Manager</string>
+    <string name="manager_rebrand_notice_title">URV has been rebranded to UPM</string>
+    <string name="manager_rebrand_notice_description">URV has been rebranded in this update to UPM (Universal Patch Manager).\n\nUPM installs as a second app because its package name is different. It will not replace URV, and your data will not move automatically.\n\nIn URV, open %1$s &gt; %2$s &gt; %3$s and save the backup. In UPM, open %1$s &gt; %2$s &gt; %4$s and select that backup.\n\nExport everything does not include your signing keystore. Use %5$s in URV and %6$s in UPM on the same settings page if you want to keep signing APKs with the same key.\n\nKeep URV installed until you have checked that your data and signing key were imported successfully.</string>
+    <string name="manager_rebrand_continue_countdown">Continue (%1$d)</string>
+    <string name="manager_update_unexpected_package">The downloaded APK is not a supported manager update.</string>
 </resources>

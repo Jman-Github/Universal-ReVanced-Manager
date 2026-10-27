@@ -24,6 +24,9 @@
     <string name="app_filter_installed_only">Тільки встановлено</string>
     <string name="app_filter_patches_available">Доступні патчі</string>
     <string name="app_filter_no_results">Додатки не знайдені</string>
+    <string name="app_selector_sort_title">Сортувати додатки</string>
+    <string name="app_selector_sort_name_asc">Назва (від А до Я)</string>
+    <string name="app_selector_sort_name_desc">Назва (від Я до А)</string>
     <string name="new_downloader_plugins_notification">Нові плагіни доступні для завантаження. Натисніть тут, щоб налаштувати їх.</string>
     <string name="new_patcher_runtime_plugins_notification">Доступні нові плагіни runtime. Натисніть тут, щоб налаштувати їх.</string>
     <string name="unsupported_architecture_warning">Патчі для цієї архітектури пристрою не підтримуються та, ймовірно, не вдасться.</string>
@@ -130,13 +133,16 @@
     <string name="bundle_updates_notification_failed">Не вдалося оновити</string>
     <string name="bundle_search_update">Пошук оновлень</string>
     <string name="repository_bundle_prereleases">Використовувати попередні версії</string>
+    <string name="repository_bundle_prereleases_description">Використовувати попередні версії (pre-release) під час перевірки цього репозиторію на наявність оновлень</string>
+    <string name="repository_bundle_latest">Використовувати останні</string>
+    <string name="repository_bundle_latest_description">Використовувати найновіший реліз або попередню версію під час перевірки цього репозиторію на наявність оновлень</string>
     <string name="bundle_search_update_description">Перевіряйте цей пакет на наявність оновлень у фоновому режимі.</string>
     <string name="bundle_reorder">Упорядкувати пакети</string>
     <string name="bundle_reorder_title">Упорядкувати пакети патчів</string>
     <string name="bundle_reorder_description">Перетягніть маркер, щоб змінити порядок пакетів у списку та меню вибору патчів.</string>
     <string name="bundle_reorder_empty_toast">Додайте пакет патчів для його впорядкування.</string>
     <string name="apps_search_hint">Пошук додатків</string>
-    <string name="bundles_search_hint">Пошук пакетів</string>
+    <string name="bundles_search_hint">Пошук бандлів</string>
     <string name="profiles_search_hint">Пошук профілів</string>
     <string name="search_no_results">Результатів не знайдено</string>
     <string name="bundle_search_no_results">Пакетів не знайдено</string>
@@ -187,7 +193,6 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Патчі не вибрано</string>
     <string name="mixed_patch_bundles_title">Змішані пакети патчів</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) та Morphe (.mpp) патчі не можуть бути скомбіновані. Вибирайте патчі лише з одного типу пакета. Якщо ви хочете використовувати кілька, вам доведеться пропатчити вдруге, використовуючи інші потрібні патчі.</string>
     <string name="mixed_revanced_patcher_versions_title">Змішані версії патчерів ReVanced</string>
     <string name="mixed_revanced_patcher_versions_description">Патчі ReVanced, які створені для різних версій патчера, не можна комбінувати. ReVanced v21 та v22 використовують різні версії патчера, тому вибирайте патчі лише з однієї версії патчера ReVanced.</string>
     <string name="network_unavailable_warning">Ваш пристрій не підключений до інтернету. Завантаження пізніше не вдасться.</string>
@@ -293,6 +298,9 @@
     <string name="advanced_system_description">Безпека, налагодження та системні елементи управління</string>
     <string name="theme_section">Тема</string>
     <string name="background_section">Фон</string>
+    <string name="navigation_tabs_section">Навігація &amp; та вкладки</string>
+    <string name="action_buttons_section">Кнопки дій</string>
+    <string name="patch_list_display_section">Відображення списку патчів</string>
     <string name="app_behavior_section">Поведінка програми</string>
     <string name="network_integrations_section">Мережа та інтеграції</string>
     <string name="installer_section">Інсталятор</string>
@@ -353,6 +361,10 @@
     <string name="theme_reset">Скинути всі налаштування теми</string>
     <string name="hide_main_tab_labels">Приховати підписи головної вкладки</string>
     <string name="hide_main_tab_labels_description">Приховати текстові підписи під значками вкладок \"Програми\", \"Пакети виправлень\", \"Профілі виправлень\" та \"Інструменти\" на головному екрані</string>
+    <string name="show_apps_tab_update_count">Показувати кількість оновлень на вкладці «Додатки»</string>
+    <string name="show_apps_tab_update_count_description">Показувати кількість додатків з оновленнями бандлів патчів на вкладці «Додатки»</string>
+    <string name="show_bundles_tab_update_count">Показувати кількість оновлень на вкладці «Бандли патчів»</string>
+    <string name="show_bundles_tab_update_count_description">Показувати кількість бандлів патчів з оновленнями на вкладці «Бандли патчів»</string>
     <string name="disable_main_tab_swipe">Вимкнути жест гортання вкладки головного екрана</string>
     <string name="disable_main_tab_swipe_description">Вимкнути гортання між вкладками на головному екрані. Використовуйте кнопки вкладок для перемикання між ними</string>
     <string name="disable_patch_selection_tab_swipe">Вимкнути жест пальцем по вкладці для вибору патча</string>
@@ -617,9 +629,12 @@
     <string name="import_patch_profiles_skipped">Пропущено %d повторюваних профілів патчів</string>
     <string name="import_patch_profiles_none">Профілі патчів не імпортовано</string>
     <string name="import_manager_settings">Імпорт налаштування менеджера</string>
+    <string name="import_manager_settings_description">Відновити збережені налаштування менеджера з файлу JSON. Додаток перезапуститься після імпорту та будь-яких запитів на дозволи</string>
     <string name="import_manager_settings_fail">Не вдалося імпортувати налаштування менеджера: %s</string>
     <string name="import_manager_settings_success">Імпортовані налаштування менеджера</string>
+    <string name="import_settings_in_progress">Імпортування налаштувань…</string>
     <string name="import_everything">Імпортувати все</string>
+    <string name="import_everything_description">Імпортувати вибір патчів і параметри, бандли патчів, профілі патчів і налаштування менеджера з одного файлу JSON. Додаток перезапуститься після завершення імпорту</string>
     <string name="import_everything_fail">Не вдалося імпортувати файл резервної копії: %s</string>
     <string name="export_patch_selection">Експортуйте вибрані патчі та параметри</string>
     <string name="export_patch_selection_description">Експорт вибраних патчів та параметрів у JSON файл</string>
@@ -632,6 +647,7 @@
     <string name="export_patch_bundles">Експорт пакетів патча</string>
     <string name="export_patch_bundles_description">Зберегти імпортовані віддалені пакети патчів у файл JSON</string>
     <string name="export_patch_bundles_fail">Не вдалося експортувати пакети патча: %s</string>
+    <string name="export_patch_bundles_empty">Немає бандлів патчів для експорту</string>
     <plurals name="export_patch_bundles_success_quantity">
         <item quantity="one">Експортовано %d пакет патча</item>
         <item quantity="few">Експортовано %d пакети патча</item>
@@ -980,6 +996,12 @@
     <string name="patcher_launch_failed">Не вдалося розпочати патчинг</string>
     <string name="continue_on_patch_error">Продовжити після помилок в патчі</string>
     <string name="continue_on_patch_error_description">Спробуйте патч при невдалій відправці патчу через деякий час. Можливо, цей патч втрачено через невдале патч</string>
+    <string name="skip_split_merge_signing">Пропустити підписування об\'єднаного APK</string>
+    <string name="skip_split_merge_signing_description">Залишати APKs створені інструментом об\'єднання split APK Об\'єднання непідписаними. Ви все ще можете зберегти або надіслати їх до вибраного установника, але Android зазвичай відхиляє непідписані APKs</string>
+    <string name="merge_split_apk_signing_skipped">Підписування APK пропущено; результат залишено непідписаним</string>
+    <string name="disable_apk_signature_checks">Вимкнути перевірку підпису APK</string>
+    <string name="disable_apk_signature_checks_description">Пропустити перевірки підпису URV та попередження про невідповідність для установників APK. Монтування з root-правами зберігає свої обов\'язкові перевірки</string>
+    <string name="disable_apk_signature_checks_confirmation">Це налаштування призначене для пристроїв, які використовують Core Patch або іншу модифікацію, що обходить примусову перевірку підпису Android. Для встановлення APK, URV пропустить свої перевірки підпису та попередження про невідповідність. Монтування з root-правами зберігає всі свої обов\'язкові перевірки. Android зазвичай відхиляє непідписані APK, недійсні підписи та оновлення, чиї підписи не збігаються зі встановленим додатком. Це налаштування не обходить перевірки Android, і лише наявність root-доступу не вимикає їх. Встановлення все одно може завершитися помилкою без сумісної системної модифікації.</string>
     <string name="skip_apk_signing">Пропустити підпис APK</string>
     <string name="skip_apk_signing_description">Залишати пропатчені APKs без підпису. Ви зможете зберегти їх або надіслати у вибраний інсталятор, проте зазвичай Android блокує встановлення непідписаних APKs</string>
     <string name="patcher_log_mode">Журнал патчера</string>
@@ -998,12 +1020,16 @@
     <string name="morphe_bytecode_mode_full_description">Використовує застарілий повний конвеєр байт-коду. Повільніше та споживає більше пам’яті, але корисно, якщо швидкий режим спричиняє проблеми</string>
     <string name="reset_to_recommended">Скинути</string>
     <string name="reset_to_default">Скинути за замовчуванням</string>
+    <string name="patcher_memory_usage_graph_title">Показувати графіки ресурсів патчера</string>
+    <string name="patcher_memory_usage_graph_description">Показувати використання пам\'яті, процесора (CPU) та вводу/виводу накопичувача в реальному часі над кроками виконання патчера</string>
     <string name="patcher_auto_collapse_steps">Автоматично згортати виконані кроки патчера</string>
     <string name="patcher_auto_collapse_steps_description">Автоматично згортати кожен віджет прогресу патча після завершення всіх його кроків</string>
     <string name="patcher_auto_expand_steps">Автоматично розгортати кроки виконання</string>
     <string name="patcher_auto_expand_steps_description">Автоматично розгортати віджет прогресу патчера під час його запуску</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Тільки автоматично розгортати активну основну категорію</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">Коли автоматичне розгортання ввімкнено, залишати розгорнутою лише поточну головну категорію патчера, а під кроки не розгортати автоматично</string>
+    <string name="merge_split_memory_usage_graph_title">Показувати графіки ресурсів об\'єднувача (Merger)</string>
+    <string name="merge_split_memory_usage_graph_description">Показувати використання пам\'яті, процесора та вводу/виводу накопичувача в реальному часі над кроками виконання об\'єднання спліт-APK</string>
     <string name="merge_split_auto_collapse_steps">Автозгортання завершених кроків об\'єднання</string>
     <string name="merge_split_auto_collapse_steps_description">Автозгортання кожного віджету виконання об\'єднання після завершення всіх його кроків</string>
     <string name="merge_split_auto_expand_steps">Авторозгортання під час виконання кроків об\'єднання</string>
@@ -1206,6 +1232,7 @@
     <string name="tools_signature_metadata_injector_title">Впроваджувач та клонувальник метаданих підпису &amp;</string>
     <string name="tools_signature_metadata_injector_info">Виберіть метадані підпису із ZIP, APK або контейнера розділених APK, після чого виберіть ціль. Розділені цілі можна об’єднати в один APK або залишити як розділений контейнер.</string>
     <string name="tools_signature_metadata_injector_select_zip">Вибрати джерело підпису</string>
+    <string name="tools_signature_metadata_injector_select_apk">Вибрати цільове джерело</string>
     <string name="tools_signature_metadata_injector_zip_label">Джерело підпису</string>
     <string name="tools_signature_metadata_injector_apk_label">Цільовий APK або розділений контейнер</string>
     <string name="tools_signature_metadata_injector_invalid_zip">Виберіть джерело підпису .apk, .apks, .xapk, .apkm або .zip.</string>
@@ -1639,7 +1666,6 @@
     <string name="selected_file_not_supported_keystore">Вибраний файл не є підтримуваним сховищем ключів (.jks;.keystore;.p12;.pfx;.bks)</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
     <string name="selected_file_not_supported_keystore_info">Вибраний файл не є підтримуваним сховищем ключів (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
-    <string name="patch_bundle_url_invalid_json_or_external">URL пакета патчів має вказувати на файл .json або підтримувану URL API зовнішніх пакетів</string>
     <string name="patch_bundle_url_invalid_external">URL пакета патчів має вказувати на підтримуваний URL API зовнішніх пакетів</string>
     <string name="selected_file_not_supported_image">Вибраний файл не є підтримуваним типом зображення</string>
     <string name="loading">Завантаження…</string>
@@ -1723,6 +1749,8 @@
     <string name="string_option_menu_description">Більше можливостей</string>
     <string name="option_preset_custom_value">Значення користувача</string>
     <string name="path_selector">Виберіть зі сховища</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Попередній каталог</string>
     <string name="path_selector_dirs">Каталоги</string>
     <string name="path_selector_files">Файли</string>
@@ -1730,6 +1758,9 @@
     <string name="path_selector_search">Пошук у поточному каталозі</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
+    <string name="path_selector_read_error">Неможливо прочитати цю директорію</string>
+    <string name="path_selector_no_files">У цій директорії немає файлів</string>
+    <string name="path_selector_no_matches">Немає відповідних файлів або директорій</string>
     <string name="path_selector_favorite_added">Додано до обраних</string>
     <string name="path_selector_favorite_removed">Видалено з обраного</string>
     <string name="path_selector_favorite_add_title">Додати до обраного?</string>
@@ -1739,6 +1770,7 @@
     <string name="path_selector_sort_title">Сортувати за</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information
          https://github.com/MorpheApp/morphe-manager/commit/205956fa9c9bdf6b4ab13cc2d1880077936bc436 -->
+    <string name="path_selector_show_hidden_files">Показувати приховані файли</string>
     <string name="path_selector_sort_name_asc">Ім\'я файлу (від А до Я)</string>
     <string name="path_selector_sort_name_desc">Ім\'я файлу (від А до Я)</string>
     <string name="path_selector_sort_modified_desc">Модифіковано (спочатку новіші)</string>
@@ -2072,6 +2104,7 @@
     <string name="more">Більше</string>
     <string name="less">Менше</string>
     <string name="continue_">Продовжити</string>
+    <string name="continue_with_count">Продовжити (%1$d)</string>
     <string name="dismiss">Відхилити</string>
     <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
@@ -2101,7 +2134,6 @@
     <string name="patches_delete_single_dialog_description">Ви впевнені, що хочете видалити \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Ви впевнені, що бажаєте видалити вибрані пакети патча?</string>
     <string name="about_revanced_manager">Про URV менеджера</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager є форком ReVanced Manager. Обидві програми використовують ReVanced Patcher, що дозволяє завантажувати та встановлювати власні патчі для програм та керувати процесом встановлення патчів. Унікальні функції URV Manager включають відображення назв пакетів патчів, підтримку імпорту будь-яких пакетів патчів сторонніх розробників та багато іншого. Перегляньте повний список унікальних функцій, які пропонує URV Manager</string>
     <string name="here">тут.</string>
     <string name="update_available">Доступне оновлення</string>
     <string name="ready_to_install_update">Готовий до встановлення оновлення</string>
@@ -2129,6 +2161,7 @@
     <string name="downloading_manager_update">Завантаження оновлення…</string>
     <string name="download_progress_notification_channel">Завантаження</string>
     <string name="download_progress_indeterminate">Завантаження…</string>
+    <string name="manager_update_banner_title">Оновлення URV Manager</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Не вдалося завантажити оновлення: %s</string>
     <string name="cancel">Скасувати</string>
@@ -2215,12 +2248,10 @@
     <string name="patches_prereleases_description">Використовувати пред реліз версію %s</string>
     <string name="patches_url">URL пакета патчів</string>
     <string name="patch_bundle_urls_link">Отримайте URL пакетів патчів тут</string>
-    <string name="patch_bundle_discovery_title">Відкрийте для себе пакети патчів</string>
-    <string name="patch_bundle_discovery_description">Перегляньте зовнішні пакети патчів і додайте їх до URV Manager.</string>
     <string name="patch_bundle_discovery_package_label">Пошук пакетів</string>
-    <string name="patch_bundle_discovery_search_label">Пошук пакетів</string>
+    <string name="patch_bundle_discovery_search_label">Пошук бандлів</string>
     <string name="patch_bundle_discovery_empty">Пакетів не знайдено</string>
-    <string name="patch_bundle_discovery_searching">Пошук пакетів патчів…</string>
+    <string name="patch_bundle_discovery_searching">Пошук бандлів патчів…</string>
     <string name="patch_bundle_discovery_loading_more">Завантаження додаткових пакетів патчів…</string>
     <string name="patch_bundle_discovery_error">Не вдалося завантажити пакети патча.</string>
     <string name="patch_bundle_discovery_imported">Додано</string>
@@ -2413,6 +2444,29 @@
     <string name="batch_patch_external_disabled">Зовнішні пакетні дії вимкнено</string>
     <string name="batch_patch_no_updates">Жоден пропатчений додаток не потребує оновлення</string>
     <string name="batch_patch_notification_channel">Пакетний патчинг</string>
+    <string name="auto_patch_notification_title">Автоматичний Repatch (або Автоматичне перепатчування)</string>
+    <string name="auto_patch_notification_finished_title">Автоматичний Repatch успішно завершено</string>
+    <string name="auto_patch_notification_failed_title">Автоматичний Repatch потребує уваги</string>
+    <string name="auto_patch_notification_failed">Помилка автоматичного Repatch для одного або кількох додатків. Торкніться, щоб переглянути результати пакетної обробки.</string>
+    <string name="auto_patch_save_failed">Деякі перепатчені додатки не вдалося зберегти. Торкніться, щоб переглянути результати пакетної обробки.</string>
+    <plurals name="auto_patch_notification_running">
+        <item quantity="one">Автоматичний Repatch %d додатка</item>
+        <item quantity="few">Автоматичний Repatch %d додатків</item>
+        <item quantity="many">Автоматичний Repatch %d додатків</item>
+        <item quantity="other">Автоматичний Repatch %d додатків</item>
+    </plurals>
+    <plurals name="auto_patch_notification_finished">
+        <item quantity="one">Автоматично перепатчено та збережено %d додаток</item>
+        <item quantity="few">Автоматично перепатчено та збережено %d додатки</item>
+        <item quantity="many">Автоматично перепатчено та збережено %d додатків</item>
+        <item quantity="other">Автоматично перепатчено та збережено %d додатка</item>
+    </plurals>
+    <plurals name="auto_patch_notification_finished_installed">
+        <item quantity="one">Автоматично перепатчено %1$d додаток, встановлено %2$d</item>
+        <item quantity="few">Автоматично перепатчено %1$d додатки, встановлено %2$d</item>
+        <item quantity="many">Автоматично перепатчено %1$d додатків, встановлено %2$d</item>
+        <item quantity="other">Автоматично перепатчено %1$d додатка, встановлено %2$d</item>
+    </plurals>
     <plurals name="batch_patch_notification_running">
         <item quantity="one">Патчинг %1$d додатка</item>
         <item quantity="few">Патчинг %1$d додатків</item>
@@ -2465,6 +2519,58 @@
     <string name="batch_patch_edit_apk">Редагувати APK</string>
     <string name="batch_patch_metadata_save_failed">Встановлено, але URV Manager не вдалося зберегти метадані додатка: %1$s</string>
     <string name="manager_update_incompatible_pr">Цей реліз несумісний із цією збіркою PR. Будь ласка, дочекайтеся новішої версії менеджера. Ваші дані не було змінено.</string>
+    <string name="patcher_resource_graphs_compact_title">Компактні графіки патчера</string>
+    <string name="patcher_resource_graphs_compact_description">Показувати графіки пам\'яті, процесора та вводу/виводу накопичувача поруч, у тому числі на екранах телефонів</string>
+    <string name="patcher_cpu_usage">Використання процесора</string>
+    <string name="patcher_storage_io_usage">Ввід/вивід накопичувача</string>
+    <string name="patcher_resource_unavailable">Немає доступних показників із пристрою</string>
+    <string name="patcher_resource_unavailable_short">Недоступно</string>
+    <string name="patcher_resource_unavailable_accessibility">Історія %1$s. Поточні показники недоступні. %2$s.</string>
+    <string name="patcher_resource_latest_compact">Останні</string>
+    <string name="patcher_cpu_system">Навантаження на процесор пристрою</string>
+    <string name="patcher_cpu_process">Орієнтовне навантаження патчера на процесор</string>
+    <string name="patcher_cpu_percent">%1$d%%</string>
+    <string name="patcher_cpu_peak">Пік %1$d%%</string>
+    <string name="patcher_cpu_accessibility">Історія процесора. Поточне середнє значення %1$d відсотків. Пікове середнє значення %2$d відсотків. %3$s.</string>
+    <string name="patcher_cpu_core_accessibility">Ядро %1$d: %2$d відсотків</string>
+    <string name="patcher_io_storage">Пропускна здатність накопичувача для патчера</string>
+    <string name="patcher_io_cached">Ввід/вивід патчера, включаючи кеш</string>
+    <string name="patcher_io_rates">Читання %1$s \n Запис %2$s</string>
+    <string name="patcher_io_peak">Пік %1$s</string>
+    <string name="patcher_io_rate_kb">%1$d КБ/с</string>
+    <string name="patcher_io_rate_mb">%1$.1f МБ/с</string>
+    <string name="patcher_io_accessibility">Історія вводу/виводу накопичувача. Читання %1$s. Запис %2$s. Пік загалом %3$s. %4$s.</string>
+    <string name="tools_signature_input_downloaded_description">Виберіть APK, завантажений менеджером.</string>
+    <string name="tools_signature_input_installed">Встановлені додатки</string>
+    <string name="tools_signature_input_installed_description">Використати APK-файли з додатка, встановленого на цьому пристрої.</string>
+    <string name="tools_signature_input_storage">Вибрати зі сховища</string>
+    <string name="tools_signature_input_storage_description">Виберіть APK або архів зі спліт-APK через засіб вибору файлів.</string>
+    <string name="tools_signature_input_no_apps">Не знайдено відповідних додатків.</string>
+    <string name="tools_signature_input_unavailable">Завантажений APK більше недоступний.</string>
+    <string name="tools_signature_input_split_apks">Спліт-APKs</string>
+    <string name="patch_profile_signature_workflow_title">Робочий процес метаданих підпису</string>
+    <string name="patch_profile_signature_workflow_enable">Інтегрувати після патчування</string>
+    <string name="patch_profile_signature_workflow_enable_description">Клонувати метадані з оригінального APK у пропатчений APK після того, як цей профіль завершить патчування.</string>
+    <string name="patcher_signature_workflow_title">Інтегрувати метадані підпису джерела</string>
+    <string name="patcher_signature_workflow_description">Використати оригінальний APK як джерело підпису, а цей пропатчений APK — як ціль.</string>
+    <string name="patcher_signature_workflow_running">Інтеграція метаданих підпису…</string>
+    <string name="patcher_signature_workflow_failed">Помилка інтеграції метаданих підпису</string>
+    <string name="patcher_signature_workflow_source_missing">Оригінальний APK більше недоступний. Виконайте патчування знову, щоб використати цей робочий процес.</string>
+    <string name="patcher_signature_workflow_output_missing">Пропатчений APK більше недоступний.</string>
+    <string name="inject_signature_metadata_after_patching">Інтегрувати метадані підпису після патчування</string>
+    <string name="inject_signature_metadata_after_patching_description">Клонувати метадані підпису з оригінального підписаного вхідного файлу в кінцевий пропатчений APK. Запам\'ятати цей вибір, коли додаток буде збережено для майбутніх виконань Repatch. Непідписані об\'єднані APK не можна використовувати як джерела підпису</string>
+    <string name="saved_app_signature_workflow_description">Використовувати збережені оригінальні метадані підпису під час виконання Repatch для цього додатка, включаючи автоматичний та пакетний Repatch. Цей вибір має пріоритет над глобальним налаштуванням.</string>
+    <string name="patcher_signature_workflow_unsigned_source">Цей вхідний файл не має оригінальних метаданих підпису. Виберіть оригінальний підписаний APK або архів зі спліт-APK замість непідписаного об\'єднаного APK.</string>
+    <string name="tools_signature_input_plugin_description">Використати плагін-завантажувач для вибору APK або архіву зі спліт-APK.</string>
+    <string name="tools_signature_input_preparing">Підготовка вибраного вхідного файлу…</string>
+    <string name="saved_app_signature_workflow_applied">Метадані підпису були інтегровані в цей збережений APK.</string>
+    <string name="saved_app_signature_workflow_not_applied">Метадані підпису не були інтегровані в цей збережений APK.</string>
+    <string name="patcher_step_inject_signature_metadata">Інтеграція метаданих підпису</string>
+    <string name="merger_resource_graphs_compact_title">Компактні графіки ресурсів об\'єднувача (Merger)</string>
+    <string name="merger_resource_graphs_compact_description">Показувати графіки пам\'яті, процесора та вводу/виводу накопичувача поруч, у тому числі на екранах телефонів</string>
+    <string name="merger_information">Інформація об\'єднувача</string>
+    <string name="merger_information_expand">Розгорнути інформацію об\'єднувача</string>
+    <string name="merger_information_collapse">Згорнути інформацію об\'єднувача</string>
     <string name="merger_information_app">Ім\'я застосунку</string>
     <string name="merger_information_input_size">Вхідний розмір APK</string>
     <string name="merger_information_output_size">Вихідний розмір APK</string>
@@ -2474,4 +2580,13 @@
     <string name="merger_cpu_process">Очікуване об\'єднання завантаження CPU</string>
     <string name="merger_io_storage">Пропускна здатність об\'єднання сховища</string>
     <string name="merger_io_cached">Об\'єднання I/O (включає кешовані дані)</string>
+    <string name="resource_graph_extra_info_title">Показувати додаткову інформацію</string>
+    <string name="resource_graph_extra_info_description">Показувати мітки історії сесії, пікові значення, графік історії процесора, швидкості читання/запису накопичувача та деталі пропускної здатності</string>
+    <string name="patcher_resource_graph_options_title">Показувати додаткову інформацію (стандартні графіки патчера)</string>
+    <string name="patcher_compact_resource_graph_options_title">Показувати додаткову інформацію (компактні графіки патчера)</string>
+    <string name="merger_resource_graph_options_title">Показувати додаткову інформацію (стандартні графіки об\'єднувача)</string>
+    <string name="merger_compact_resource_graph_options_title">Показувати додаткову інформацію (компактні графіки об\'єднувача)</string>
+    <string name="resource_graph_current_accessibility">%1$s. %2$s. %3$s.</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

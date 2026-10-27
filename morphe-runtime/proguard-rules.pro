@@ -1,9 +1,6 @@
 # Keep entrypoint invoked via reflection from the app.
 -keep class app.urv.manager.morphe.runtime.** { *; }
 
-# Keep IPC classes used across process boundaries.
--keep class app.urv.manager.patcher.runtime.process.** { *; }
-
 # Keep Morphe patcher API classes that are accessed via reflection.
 -keep class app.morphe.** { *; }
 

@@ -10,6 +10,8 @@ import app.urv.manager.network.utils.APIFailure
 import app.urv.manager.network.utils.getOrNull
 import app.universal.revanced.manager.BuildConfig
 import app.urv.manager.util.isManagerReleaseAfter
+import app.urv.manager.util.managerReleaseRequiresMigration
+import app.urv.manager.util.parseManagerReleaseAssetName
 import io.ktor.client.request.header
 import io.ktor.client.request.url
 import kotlinx.datetime.Instant
@@ -224,31 +226,8 @@ class ReVancedAPI(
     }
 
     private fun parseManagerAsset(asset: GitHubAsset): ManagerAssetInfo? {
-        val fileName = asset.name
-        if (!fileName.endsWith(".apk", ignoreCase = true)) return null
-
-        var stem = fileName.substring(0, fileName.length - 4)
-        val legacyBuildProfile = LEGACY_MANAGER_BUILD_PROFILES.firstOrNull { profile ->
-            stem.startsWith("$profile-", ignoreCase = true)
-        }?.also { profile ->
-            stem = stem.substring(profile.length + 1)
-        }
-        if (!stem.startsWith(MANAGER_ASSET_NAME_PREFIX, ignoreCase = true)) return null
-
-        val versionStem = stem.substring(MANAGER_ASSET_NAME_PREFIX.length)
-        if (versionStem.isBlank()) return null
-
-        val abiSuffix = MANAGER_ASSET_SUFFIXES_DESC.firstOrNull { suffix ->
-            versionStem.endsWith("-$suffix", ignoreCase = true)
-        }
-        val version = abiSuffix?.let { versionStem.removeSuffix("-$it") } ?: versionStem
-        if (!MANAGER_ASSET_VERSION_REGEX.matches(version)) return null
-
-        return ManagerAssetInfo(
-            asset = asset,
-            legacyBuildProfile = legacyBuildProfile?.uppercase(),
-            abiSuffix = abiSuffix
-        )
+        val name = parseManagerReleaseAssetName(asset.name) ?: return null
+        return ManagerAssetInfo(asset, name.legacyBuildProfile, name.abiSuffix)
     }
 
     private fun normalizeManagerAbiSuffix(suffix: String): String {
@@ -276,6 +255,7 @@ class ReVancedAPI(
             .getOrNull()
             ?.takeIf {
                 BuildConfig.IS_PR_TEST_BUILD ||
+                    managerReleaseRequiresMigration(BuildConfig.APPLICATION_ID, it.downloadUrl) ||
                     normalizeManagerVersion(it.version) != normalizeManagerVersion(BuildConfig.VERSION_NAME)
             }
     }
@@ -436,19 +416,4 @@ fun <T> APIResponse<T>.successOrThrow(context: String): T {
 }
 
 private const val MANAGER_REPO_URL = "https://github.com/Jman-Github/Universal-ReVanced-Manager"
-private const val MANAGER_ASSET_NAME_PREFIX = "universal-revanced-manager-"
 private val LEGACY_MANAGER_BUILD_PROFILES = listOf("LITE", "FULL")
-private val MANAGER_ASSET_VERSION_REGEX = Regex(
-    pattern = "^v?\\d+\\.\\d+\\.\\d+(?:[-.][a-z0-9]+)*$",
-    option = RegexOption.IGNORE_CASE
-)
-private val MANAGER_ASSET_SUFFIXES_DESC = listOf(
-    "armeabi_v7a",
-    "armeabi-v7a",
-    "arm64_v8",
-    "arm64-v8a",
-    "universal",
-    "x86_64",
-    "all",
-    "x86"
-).sortedByDescending(String::length)

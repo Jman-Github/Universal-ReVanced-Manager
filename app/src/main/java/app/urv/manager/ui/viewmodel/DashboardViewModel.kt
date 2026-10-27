@@ -49,12 +49,12 @@ import app.urv.manager.domain.storage.CacheCleanupGuard
 import app.urv.manager.network.downloader.LoadedDownloaderPlugin
 import app.urv.manager.network.api.ReVancedAPI
 import app.urv.manager.network.dto.ReVancedAnnouncement
+import app.urv.manager.patcher.patch.ReseamBundleFormat
 import app.urv.manager.network.dto.ReVancedAsset
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.split.InstalledSplitArchiveBuilder
 import app.urv.manager.patcher.split.SplitApkPreparer
 import app.urv.manager.patcher.split.SplitArchiveDisplayResolver
-import app.urv.manager.patcher.split.SplitMergeProcessRuntime
+import app.urv.manager.patcher.split.SplitMergeRuntime
 import app.urv.manager.patcher.split.SplitMergeSessionInfo
 import com.reandroid.arsc.ARSCLib
 import app.urv.manager.patcher.worker.PatcherMemoryUsage
@@ -209,7 +209,7 @@ class DashboardViewModel(
     private val openSplitMergeScreenChannel = Channel<Unit>()
     val openSplitMergeScreenFlow = openSplitMergeScreenChannel.receiveAsFlow()
     private val splitMergeWorkspace = app.cacheDir.resolve("split-merge-tools").apply { mkdirs() }
-    private val splitMergeRuntime = SplitMergeProcessRuntime(app)
+    private val splitMergeRuntime = SplitMergeRuntime(app)
     private val onSplitMergeTaskClosed: () -> Unit = { cancelSplitMerge() }
     private val splitMergeNotificationLock = Any()
     private var cachedMergedApk: File? = null
@@ -476,8 +476,11 @@ class DashboardViewModel(
                                 val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                                 if (index != -1 && cursor.moveToFirst()) cursor.getString(index) else null
                             }
-                    }.getOrNull()
-                    patchBundleRepository.createLocal(size, displayName) {
+                    }.getOrNull() ?: patchBundle.lastPathSegment
+                    val sourceNameHint = if (runCatching { contentResolver.getType(patchBundle) }.getOrNull() ==
+                        ReseamBundleFormat.MIME_TYPE
+                    ) "bundle.reseam" else displayName
+                    patchBundleRepository.createLocal(size, sourceNameHint) {
                         contentResolver.openInputStream(patchBundle)
                             ?: throw FileNotFoundException("Unable to open $patchBundle")
                     }
@@ -1611,10 +1614,6 @@ class DashboardViewModel(
         var keepRunWorkspace = false
         // Code adapted from Morphe, see third-party/NOTICE for more information
         // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/patcher/runtime/ProcessRuntime.kt
-        val processMemoryLimit = MemoryLimitConfig.resolveMemoryLimitMb(
-            app,
-            prefs.processMemoryLimit.getBlocking()
-        )
         activeSplitMergeRunWorkspace = runWorkspace
         invalidateCachedSplitMergeOutput()
         runCatching {
@@ -1666,8 +1665,7 @@ class DashboardViewModel(
                         arscLibVersion = runCatching { ARSCLib.getVersion() }
                             .getOrNull()?.takeIf(String::isNotBlank),
                         startedAtElapsedRealtimeMs = SystemClock.elapsedRealtime(),
-                        memoryLimitMb = processMemoryLimit,
-                        includedSplitCount = current.selection?.modules?.count {
+                            includedSplitCount = current.selection?.modules?.count {
                             includedModules == null || it.name in includedModules
                         },
                         totalSplitCount = current.selection?.modules?.size,
@@ -1693,7 +1691,6 @@ class DashboardViewModel(
                     stripNativeLibs = stripNativeLibs,
                     skipUnneededSplits = false,
                     includedModules = includedModules,
-                    memoryLimitMb = processMemoryLimit,
                     // Standalone APK installs can extract compressed libraries; patcher inputs keep their policy.
                     compressNativeLibraries = true,
                     onProgress = { message ->
@@ -1727,12 +1724,23 @@ class DashboardViewModel(
                             current.copy(mergeSubSteps = subSteps)
                         }
                     },
+                    onLog = { message ->
+                        appendSplitMergeLogIfCurrent(ownerJob, message)
+                        if (message.startsWith("Runtime mode:")) {
+                            val runtime = when {
+                                message.contains("JVM") -> "JVM"
+                                message.contains("ART") -> "ART"
+                                else -> null
+                            }
+                            updateSplitMergeStateIfCurrent(ownerJob) { current ->
+                                current.copy(sessionInfo = current.sessionInfo.copy(runtimeName = runtime))
+                            }
+                        }
+                    },
                     onMemoryUsage = { sample ->
                         recordSplitMergeMemoryUsage(
                             ownerJob = ownerJob,
-                            sample = sample.copy(
-                                requestedMaxMb = processMemoryLimit.toLong().coerceAtLeast(1L)
-                            )
+                            sample = sample
                         )
                     }
                 )
@@ -1824,12 +1832,7 @@ class DashboardViewModel(
             if (error is CancellationException) {
                 return@onFailure
             }
-            val resolvedErrorMessage = when {
-                error is SplitMergeProcessRuntime.ProcessExitException &&
-                    SplitMergeProcessRuntime.isMemoryFailureExitCode(error.exitCode) ->
-                    app.getString(R.string.merge_split_apk_process_killed_low_memory)
-                else -> error.message ?: app.getString(R.string.merge_split_apk_failed)
-            }
+            val resolvedErrorMessage = error.message ?: app.getString(R.string.merge_split_apk_failed)
 
             val failureRecorded = updateSplitMergeStateIfCurrent(ownerJob) { current ->
                 current.copy(

@@ -157,7 +157,6 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Nenhum patch selecionado</string>
     <string name="mixed_patch_bundles_title">Pacotes de patches mistos</string>
-    <string name="mixed_patch_bundles_description">Patches ReVanced (.rvp) e Morphe (.mpp) não podem ser combinados. Selecione patches de apenas uma categoria de pacote. Se você quiser usar ambos, terá que aplicar patches uma segunda vez usando os outros patches que desejar.</string>
     <string name="mixed_revanced_patcher_versions_title">Versões mistas do patcher ReVanced</string>
     <string name="mixed_revanced_patcher_versions_description">Os patches do ReVanced criados para versões diferentes do patcher não podem ser combinados. O ReVanced v21 e o v22 usam versões diferentes do patcher, portanto, selecione patches de apenas uma versão do patcher do ReVanced.</string>
     <string name="network_unavailable_warning">Seu dispositivo não está conectado à internet. O download provavelmente falhará depois.</string>
@@ -1473,7 +1472,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="selected_file_not_supported_json">O arquivo selecionado deve ser um arquivo JSON (.json)</string>
     <string name="selected_file_not_supported_keystore">O arquivo selecionado não é uma keystore suportado (.jks, .keystore, .p12, .pfx, .bks)</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
-    <string name="patch_bundle_url_invalid_json_or_external">A URL do pacote de patches deve apontar para um arquivo .json ou para uma URL de API de pacotes externos compatível</string>
     <string name="patch_bundle_url_invalid_external">O URL do pacote de patches deve apontar para um URL de API de pacotes externos compatível</string>
     <string name="selected_file_not_supported_image">O arquivo selecionado não é um tipo de imagem suportado</string>
     <string name="loading">Carregando…</string>
@@ -1548,6 +1546,8 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="string_option_menu_description">Mais opções</string>
     <string name="option_preset_custom_value">Valor personalizado</string>
     <string name="path_selector">Selecionar do armazenamento</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Diretório anterior</string>
     <string name="path_selector_dirs">Diretórios</string>
     <string name="path_selector_files">Arquivos</string>
@@ -1804,7 +1804,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="patches_delete_single_dialog_description">Tem certeza que deseja excluir \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Tem certeza que deseja excluir os pacotes de patches seleciondos?</string>
     <string name="about_revanced_manager">Sobre o URV Manager</string>
-    <string name="revanced_manager_description">O Universal ReVanced (URV) Manager é uma versão modificada do ReVanced Manager oficial. Ambos os aplicativos utilizam o ReVanced Patcher, que permite baixar e aplicar patches personalizados em outros aplicativos, além de gerenciar o processo de aplicação de patches. Os recursos exclusivos do URV Manager incluem nomes de exibição para pacotes de patches, suporte para importação de pacotes de patches de terceiros e muito mais. Veja a lista completa de recursos exclusivos que o URV Manager oferece</string>
     <string name="here">aqui.</string>
     <string name="update_available">Uma atualização está disponível</string>
     <string name="ready_to_install_update">Pronto para instalar a atualização</string>
@@ -1913,8 +1912,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="patches_prereleases_description">Usar versões de pré-lançamento de %s</string>
     <string name="patches_url">URL do pacote de patches</string>
     <string name="patch_bundle_urls_link">Obter URLs de pacote de patchs aqui</string>
-    <string name="patch_bundle_discovery_title">Descobrir pacotes de patches</string>
-    <string name="patch_bundle_discovery_description">Navegue pelos pacotes de patches externos e adicione-os ao URV Manager.</string>
     <string name="patch_bundle_discovery_package_label">Pesquisar pacotes</string>
     <string name="patch_bundle_discovery_search_label">Buscar pacotes</string>
     <string name="patch_bundle_discovery_empty">Nenhum pacote encontrado</string>
@@ -2031,4 +2028,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="use_latest_release">Usar a última versão</string>
     <string name="use_prereleases">Usar pré-lançamentos</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

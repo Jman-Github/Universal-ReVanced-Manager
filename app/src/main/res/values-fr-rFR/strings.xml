@@ -443,6 +443,8 @@ Les profils de correctifs ne sont pas affectés.</string>
     <string name="patch_selector_sheet_filter_sort_title">Tri</string>
     <string name="string_option_menu_description">Plus d\'options</string>
     <string name="path_selector">Sélectionner à partir du stockage</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Répertoire précédent</string>
     <string name="path_selector_files">Fichiers</string>
     <string name="path_selector_favorites">Favoris</string>
@@ -696,4 +698,6 @@ Détails : %2$s</string>
     <string name="export">Exportation</string>
     <string name="confirm">Confirmer</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

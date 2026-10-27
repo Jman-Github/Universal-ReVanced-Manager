@@ -1,6 +1,7 @@
 package app.urv.manager.domain.bundles
 
 import kotlinx.serialization.Serializable
+import app.urv.manager.network.dto.ReVancedAsset
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -9,6 +10,8 @@ import java.io.File
 data class RepositoryBundleSettings(
     val usePrereleases: Boolean = false,
     val useLatest: Boolean = false,
+    val useSpecificVersion: Boolean = false,
+    val selectedVersion: ReVancedAsset? = null,
 ) {
     val releaseChannel: RepositoryBundleReleaseChannel
         get() = when {
@@ -16,6 +19,26 @@ data class RepositoryBundleSettings(
             usePrereleases -> RepositoryBundleReleaseChannel.PRERELEASE
             else -> RepositoryBundleReleaseChannel.RELEASE
         }
+
+    fun withVersionSelection(enabled: Boolean, asset: ReVancedAsset? = null) = copy(
+        useSpecificVersion = enabled,
+        selectedVersion = asset ?: selectedVersion
+    )
+
+    fun withImportedSelection(
+        prereleases: Boolean?,
+        latest: Boolean?,
+        pinned: Boolean?,
+        selected: ReVancedAsset?
+    ): RepositoryBundleSettings {
+        val channelSpecified = prereleases != null || latest != null
+        return copy(
+            usePrereleases = if (channelSpecified) prereleases == true && latest != true else usePrereleases,
+            useLatest = if (channelSpecified) latest == true else useLatest,
+            useSpecificVersion = pinned ?: useSpecificVersion,
+            selectedVersion = if (pinned != null) selected else selectedVersion
+        )
+    }
 
     companion object {
         fun forReleaseChannel(channel: RepositoryBundleReleaseChannel) = RepositoryBundleSettings(

@@ -33,6 +33,8 @@ import ru.solrudev.ackpine.session.parameters.Confirmation
 import ru.solrudev.ackpine.uninstaller.PackageUninstaller
 import ru.solrudev.ackpine.uninstaller.createSession
 import ru.solrudev.ackpine.uninstaller.parameters.UninstallParametersDsl
+import app.urv.manager.patcher.split.SplitApkFiles
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.security.MessageDigest
 
@@ -232,7 +234,13 @@ class PM(
         }
 
     fun getPackageInfo(file: File, includeSigning: Boolean = false): PackageInfo? {
-        val path = file.absolutePath
+        val path = if (SplitApkPreparer.isSplitArchive(file)) {
+            SplitApkFiles.baseApk(
+                file,
+                app.cacheDir.resolve("split-package-info"),
+                SplitApkPreparer.splitApkEntryNames(file)
+            ).absolutePath
+        } else file.absolutePath
         val baseFlags = (
             PackageManager.GET_META_DATA.toLong() or
                 PackageManager.GET_ACTIVITIES.toLong()
@@ -283,7 +291,7 @@ class PM(
         return try {
             val addAssetPath = AssetManager::class.java
                 .getMethod("addAssetPath", String::class.java)
-            val cookie = addAssetPath.invoke(assetManager, file.absolutePath) as? Int ?: 0
+            val cookie = addAssetPath.invoke(assetManager, applicationInfo.sourceDir ?: file.absolutePath) as? Int ?: 0
             if (cookie == 0) return null
             val resources = Resources(
                 assetManager,

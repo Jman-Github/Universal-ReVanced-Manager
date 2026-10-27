@@ -90,6 +90,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.io.IOException
 import java.nio.charset.StandardCharsets
@@ -157,6 +158,8 @@ class InstalledAppInfoViewModel(
         private set
     var appInfo: PackageInfo? by mutableStateOf(null)
         private set
+    var hasLoadedAppInfo by mutableStateOf(false)
+        private set
     var appLabel: String? by mutableStateOf(null)
         private set
     var customInstallerLabel: String? by mutableStateOf(null)
@@ -169,6 +172,8 @@ class InstalledAppInfoViewModel(
     var isInstalledOnDevice by mutableStateOf(false)
         private set
     var hasSavedCopy by mutableStateOf(false)
+        private set
+    var savedFileExtension by mutableStateOf("apk")
         private set
     var savedApkAbiLabel by mutableStateOf<String?>(null)
         private set
@@ -200,10 +205,14 @@ class InstalledAppInfoViewModel(
         viewModelScope.launch {
             val app = installedAppRepository.get(packageName)
             installedApp = app
-            if (app != null) {
-                isMounted = rootInstaller.isAppMounted(resolveDevicePackageName(app))
-                refreshAppState(app)
-                appliedPatches = resolveAppliedSelection(app)
+            try {
+                if (app != null) {
+                    isMounted = rootInstaller.isAppMounted(resolveDevicePackageName(app))
+                    refreshAppState(app)
+                    appliedPatches = resolveAppliedSelection(app)
+                }
+            } finally {
+                hasLoadedAppInfo = true
             }
         }
     }
@@ -804,7 +813,7 @@ class InstalledAppInfoViewModel(
                     }
                     val packageInfo = pm.getPackageInfo(apk)
                         ?: throw Exception("Failed to load application info")
-                    if (packageInfo.splitNames?.isNotEmpty() == true) {
+                    if (SplitApkPreparer.isSplitArchive(apk) || packageInfo.splitNames?.isNotEmpty() == true) {
                         mountVersionMismatchMessage = context.getString(R.string.mount_split_not_supported)
                         return@launch
                     }
@@ -1098,10 +1107,7 @@ class InstalledAppInfoViewModel(
     }.getOrNull()
 
     private fun readArchiveSignatureBytes(file: File): ByteArray? = runCatching {
-        @Suppress("DEPRECATION")
-        val flags = PackageManager.GET_SIGNING_CERTIFICATES or PackageManager.GET_SIGNATURES
-        @Suppress("DEPRECATION")
-        val pkgInfo = context.packageManager.getPackageArchiveInfo(file.absolutePath, flags) ?: return null
+        val pkgInfo = pm.getPackageInfo(file, includeSigning = true) ?: return null
 
         val signature: Signature? =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -1966,6 +1972,9 @@ class InstalledAppInfoViewModel(
         }
         val savedInfo = withContext(Dispatchers.IO) {
             savedFile?.let(pm::getPackageInfo)
+        }
+        savedFileExtension = withContext(Dispatchers.IO) {
+            if (SplitApkPreparer.isSplitArchive(savedFile)) "apks" else "apk"
         }
         val archiveLabel = withContext(Dispatchers.IO) {
             savedFile?.let { pm.getArchiveLabel(it, savedInfo) }

@@ -57,7 +57,6 @@ import app.urv.manager.ui.component.AppScaffold
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.TransparentLoadingDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
-import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
@@ -276,6 +275,9 @@ fun BatchPatchDetailsScreen(
                     isMorphe = item.patcherSessionInfo.bundleType
                         ?.let { it == PatchBundleType.MORPHE.name }
                         ?: item.patcherEngine?.contains("Morphe", ignoreCase = true) == true,
+                    preserveSplitApks = item.patcherSessionInfo.bundleType
+                        ?.let { it == PatchBundleType.RESEAM.name }
+                        ?: item.patcherEngine?.contains("Reseam", ignoreCase = true) == true,
                     morpheBytecodeMode = item.patcherSessionInfo.morpheBytecodeMode,
                     cancelled = item.state == BatchItemState.CANCELLED,
                     cancelledMessage = context.getString(R.string.batch_patch_state_cancelled),
@@ -435,7 +437,6 @@ fun BatchPatchDetailsScreen(
 
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
                     item(key = "legacy-memory-warning") {
-                        LegacyAndroidMemoryWarning()
                     }
                 }
             }
@@ -481,6 +482,7 @@ private fun buildBatchProgressUiState(
     failed: Boolean,
     failureMessage: String?,
     isMorphe: Boolean,
+    preserveSplitApks: Boolean,
     morpheBytecodeMode: String?,
     cancelled: Boolean,
     cancelledMessage: String,
@@ -493,7 +495,8 @@ private fun buildBatchProgressUiState(
         selectedPatches = selectedPatches,
         splitStepActive = splitStepActive,
         skipApkSigning = skipApkSigning,
-        injectSignatureMetadata = signatureInjectionEnabled
+        injectSignatureMetadata = signatureInjectionEnabled,
+        preserveSplitApks = preserveSplitApks
     )).toMutableStateList()
     val subSteps = snapshot?.subStepsById
         ?.mapValues { it.value.toMutableStateList() }

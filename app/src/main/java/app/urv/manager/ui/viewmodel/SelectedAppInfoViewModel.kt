@@ -1,5 +1,6 @@
 package app.urv.manager.ui.viewmodel
 
+import app.urv.manager.patcher.runtime.PatcherJvm
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -236,6 +237,7 @@ class SelectedAppInfoViewModel(
                 pickRecommendedVersion(versionCounts.orEmpty())
             }
             PatchBundleType.MORPHE,
+            PatchBundleType.RESEAM,
             PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, activePackageName)
             else -> null
         }
@@ -321,6 +323,9 @@ class SelectedAppInfoViewModel(
 
     init {
         if (!hasRoot) usingMountInstall = false
+        // Code adapted from Morphe, see third-party/NOTICE for more information.
+        // https://github.com/MorpheApp/morphe-manager/pull/1212
+        PatcherJvm.get(app).startAhead()
     }
 
     fun selectPatchMode(useMount: Boolean) {
@@ -1921,6 +1926,7 @@ class SelectedAppInfoViewModel(
             }
 
             PatchBundleType.MORPHE,
+            PatchBundleType.RESEAM,
             PatchBundleType.AMPLE -> suggestedVersionForMorphe(patches, packageName)
         }
     }

@@ -1,6 +1,7 @@
 package app.urv.manager.ui.viewmodel
 
 import android.app.Application
+import app.urv.manager.patcher.runtime.jvm.JvmInstallation
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.net.Uri
@@ -21,7 +22,6 @@ import app.urv.manager.data.platform.Filesystem
 import app.urv.manager.data.room.apps.installed.InstallType
 import app.urv.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.urv.manager.patcher.logger.PatcherLogMode
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.patcher.worker.AnnouncementNotificationWorker
 import app.urv.manager.patcher.worker.AutoPatchWorker
@@ -58,6 +58,12 @@ class AdvancedSettingsViewModel(
     private val installerManager: InstallerManager,
     private val rootInstaller: RootInstaller
 ) : ViewModel() {
+    val jvmRuntimeAvailable = JvmInstallation(app).isAvailable
+
+    fun setJvmRuntime(enabled: Boolean) = viewModelScope.launch {
+        prefs.useJvmRuntime.update(enabled)
+    }
+
     val hasOfficialBundle = patchBundleRepository.sources
         .map { sources -> sources.any { it.isDefault } }
 
@@ -268,13 +274,6 @@ class AdvancedSettingsViewModel(
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/ui/screen/settings/system/PerformanceSection.kt
-    fun setProcessMemoryLimit(memoryLimitMb: Int) =
-        viewModelScope.launch(Dispatchers.Default) {
-            prefs.processMemoryLimit.update(
-                MemoryLimitConfig.clampConfiguredMemoryLimitMb(memoryLimitMb)
-            )
-        }
-
     fun resetPatchedAppExportFormat() = viewModelScope.launch(Dispatchers.Default) {
         prefs.patchedAppExportFormat.update(prefs.patchedAppExportFormat.default)
     }

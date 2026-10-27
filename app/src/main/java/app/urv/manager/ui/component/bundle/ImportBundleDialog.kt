@@ -5,23 +5,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Topic
-import androidx.compose.material.icons.outlined.Link
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -34,7 +26,6 @@ import app.urv.manager.ui.component.AlertDialogExtended
 import app.urv.manager.ui.component.TextHorizontalPadding
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.component.haptics.HapticRadioButton
-import app.urv.manager.util.openUrl
 import app.urv.manager.util.transparentListItemColors
 
 private enum class BundleType {
@@ -205,7 +196,6 @@ private fun ImportBundleStep(
     onAutoUpdateChange: (Boolean) -> Unit,
     onSearchUpdateChange: (Boolean) -> Unit
 ) {
-    val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     var remoteUrlFieldValue by rememberSaveable(stateSaver = TextFieldValue.Saver) {
@@ -263,14 +253,6 @@ private fun ImportBundleStep(
                         },
                         label = { Text(stringResource(R.string.patches_url)) }
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    PatchBundleUrlsCard(
-                        onClick = {
-                            context.openUrl(
-                                "https://github.com/Jman-Github/ReVanced-Patch-Bundles/tree/bundles#-patch-bundles-urls"
-                            )
-                        }
-                    )
                 }
                 Column(
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
@@ -314,43 +296,6 @@ private fun ImportBundleStep(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun PatchBundleUrlsCard(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-        border = ButtonDefaults.outlinedButtonBorder,
-        modifier = modifier
-            .padding(top = 12.dp)
-            .clip(MaterialTheme.shapes.medium)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Link,
-                contentDescription = null
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = stringResource(R.string.patch_bundle_urls_link),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = Icons.Outlined.OpenInNew,
-                contentDescription = null
-            )
         }
     }
 }

@@ -1,6 +1,6 @@
 package app.urv.manager.morphe.runtime
 
-import android.os.Build
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.morphe.patcher.dex.BytecodeMode
 import app.morphe.patcher.patch.ColorOption
 import app.morphe.patcher.patch.ApkArchitecture
@@ -46,6 +46,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 
 object MorpheRuntimeEntry {
+    // Code adapted from Morphe, see third-party/NOTICE for more information.
+    // https://github.com/MorpheApp/morphe-manager/pull/1212
+    @JvmStatic
+    fun preload(bundlePath: String) = app.urv.manager.patcher.morphe.MorphePatchBundleLoader.preload(bundlePath)
+
     private const val CANCELLATION_SENTINEL = "__PATCHING_CANCELLED__"
     @JvmStatic
     fun loadMetadata(bundlePaths: List<String>): Map<String, List<Map<String, Any?>>> {
@@ -63,7 +68,10 @@ object MorpheRuntimeEntry {
     @JvmStatic
     fun runPatcher(params: Map<String, Any?>, callback: MorpheRuntimeCallback): String? {
         val processingClassesPattern =
-            Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+            Regex(
+                "Processing\\s+(\\d+)\\s+classes(?:\\s+in\\s+parallel|\\s+\\(single threaded mode\\))",
+                RegexOption.IGNORE_CASE
+            )
         val wroteDexFilesPattern =
             Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
         val strippedDexPattern =
@@ -252,7 +260,8 @@ object MorpheRuntimeEntry {
                         val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                         val allPatches = MorphePatchBundleLoader.patches(
                             activeConfigs.map { it.bundlePath },
-                            packageName
+                            packageName,
+                            logger
                         )
 
                     val selectedPatches = activeConfigs.flatMap { config ->
@@ -362,7 +371,7 @@ object MorpheRuntimeEntry {
         val result = LinkedHashMap<String, Any?>()
         result["name"] = patch.name.orEmpty()
         result["description"] = patch.description
-        result["use"] = patch.use
+        result["use"] = patch.default
         result["compatiblePackages"] = patch.compatibility?.map { compatibility ->
             val versions = compatibility.targets
                 .mapNotNull { it.version }
@@ -394,11 +403,6 @@ object MorpheRuntimeEntry {
                 "versions" to versions,
                 "experimentalVersions" to experimentalVersions,
                 "versionCodes" to versionCodes
-            )
-        } ?: patch.compatiblePackages?.map { (pkg, versions) ->
-            linkedMapOf(
-                "packageName" to pkg,
-                "versions" to versions?.toList()
             )
         }
         val options = patch.options.values.map(::optionToMap)
@@ -473,12 +477,12 @@ object MorpheRuntimeEntry {
     )
 
     private fun morpheFrameworkRuntimeTag(): String {
-        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprint = RuntimeDevice.fingerprint.takeUnless { it.isNullOrBlank() } ?: "unknown"
         val fingerprintHash = MessageDigest.getInstance("SHA-256")
             .digest(fingerprint.toByteArray())
             .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
             .take(12)
-        return "morphe_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+        return "morphe_device${RuntimeDevice.sdk}_$fingerprintHash"
     }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {

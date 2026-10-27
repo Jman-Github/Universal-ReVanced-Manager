@@ -1,6 +1,6 @@
 package app.urv.manager.revanced.runtime
 
-import android.os.Build
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.revanced.patcher.patch.Option
 import app.revanced.patcher.patch.Patch
 import app.urv.manager.patcher.ProgressEvent
@@ -154,12 +154,6 @@ object RevancedRuntimeEntry {
             ?: return "Missing cacheDir parameter."
         val packageName = params["packageName"] as? String
             ?: return "Missing packageName parameter."
-        val apkEditorJarPath = params["apkEditorJarPath"] as? String
-        val apkEditorMergeJarPath = params["apkEditorMergeJarPath"] as? String
-        val runtimeClassPath = params["runtimeClassPath"] as? String
-        val propOverridePath = params["propOverridePath"] as? String
-        val mergeMemoryLimitMb = (params["mergeMemoryLimitMb"] as? Number)?.toInt()
-        val appProcessPath = params["appProcessPath"] as? String
         val inputFile = params["inputFile"] as? String
             ?: return "Missing inputFile parameter."
         val outputFile = params["outputFile"] as? String
@@ -172,22 +166,6 @@ object RevancedRuntimeEntry {
             ?: PatcherLogMode.DEFAULT
         val configurations = params["configurations"] as? List<*> ?: emptyList<Any>()
 
-        logger.info(
-            "Split merge runtime: appProcess=${appProcessPath ?: "auto"} " +
-                "memoryLimit=${mergeMemoryLimitMb?.let { "${it}MB" } ?: "default"} " +
-                "propOverride=${if (propOverridePath.isNullOrBlank()) "disabled" else "enabled"}"
-        )
-
-        val androidDataDir = File(cacheDir, "apkeditor-android-data").absolutePath
-        ApkEditorMergeRuntime.configure(
-            apkEditorJarPath,
-            apkEditorMergeJarPath,
-            propOverridePath = propOverridePath,
-            memoryLimitMb = mergeMemoryLimitMb,
-            appProcessPath = appProcessPath,
-            androidDataDir = androidDataDir,
-            runtimeClassPath = resolveRuntimeClassPath(runtimeClassPath)
-        )
         val aaptLogs = AaptLogCapture(onLine = ::handleWriteProgressLine).apply {
             start(logMode.javaLogLevel)
         }
@@ -234,7 +212,8 @@ object RevancedRuntimeEntry {
                             val activeConfigs = configs.filter { it.patches.isNotEmpty() }
                             val allPatches = RevancedPatchBundleLoader.patches(
                                 activeConfigs.map { it.bundlePath },
-                                packageName
+                                packageName,
+                                logger
                             )
 
                         val selectedPatches = activeConfigs.flatMap { config ->
@@ -273,10 +252,6 @@ object RevancedRuntimeEntry {
                         }.getOrThrow().also { cachedSelectedPatches = it }
                     }
 
-                    runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
-                        loadSelectedPatches().size
-                    }
-
                 val input = File(inputFile)
                 suspend fun prepareInput() = SplitApkPreparer.prepareIfNeeded(
                     input,
@@ -312,6 +287,10 @@ object RevancedRuntimeEntry {
 
                 var sanitizedInput: MislabeledImageResourceSanitizer.Result? = null
                 try {
+                    runStep(StepId.LoadPatches, ::onEvent, ::throwIfCancelled) {
+                        loadSelectedPatches().size
+                    }
+
                     lateinit var preparedInput: SplitApkPreparer.PreparationResult
                     lateinit var patcherInput: File
                     fun openSessionWithAapt(
@@ -537,12 +516,12 @@ object RevancedRuntimeEntry {
     )
 
     private fun revanced22FrameworkRuntimeTag(): String {
-        val fingerprint = Build.FINGERPRINT.takeUnless { it.isNullOrBlank() } ?: "unknown"
+        val fingerprint = RuntimeDevice.fingerprint.takeUnless { it.isNullOrBlank() } ?: "unknown"
         val fingerprintHash = MessageDigest.getInstance("SHA-256")
             .digest(fingerprint.toByteArray())
             .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xff) }
             .take(12)
-        return "revanced22_device${Build.VERSION.SDK_INT}_$fingerprintHash"
+        return "revanced22_device${RuntimeDevice.sdk}_$fingerprintHash"
     }
 
     private fun ProgressEvent.toMap(): Map<String, Any?> = when (this) {

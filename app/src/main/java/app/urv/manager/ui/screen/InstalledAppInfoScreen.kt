@@ -225,7 +225,8 @@ fun InstalledAppInfoScreen(
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+        contract = RememberedCreateDocument(if (viewModel.savedFileExtension == "apks") "application/zip"
+            else "application/vnd.android.package-archive") {
             savedAppExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
         }
     ) { uri ->
@@ -1185,7 +1186,8 @@ fun InstalledAppInfoScreen(
             AppInfo(
                 appInfo = viewModel.appInfo,
                 labelOverride = viewModel.appLabel,
-                placeholderLabel = displayPackageName
+                placeholderLabel = displayPackageName,
+                isLoading = !viewModel.hasLoadedAppInfo
             ) {
                 val copyAppVersion = {
                     clipboard?.setPrimaryClip(
@@ -1239,7 +1241,8 @@ fun InstalledAppInfoScreen(
         installedApp.version,
         appliedBundles,
         viewModel.appInfo,
-        viewModel.appLabel
+        viewModel.appLabel,
+        viewModel.savedFileExtension
     ) {
         val label = viewModel.appLabel ?: displayPackageName
         val patchBundles = appliedBundles.mapNotNull { bundle ->
@@ -1255,7 +1258,8 @@ fun InstalledAppInfoScreen(
             appName = label,
             packageName = viewModel.appInfo?.packageName ?: displayPackageName,
             appVersion = installedApp.version,
-            patchBundles = patchBundles
+            patchBundles = patchBundles,
+            fileExtension = viewModel.savedFileExtension
         )
     }
     val exportFileName = remember(exportMetadata, exportFormat) {

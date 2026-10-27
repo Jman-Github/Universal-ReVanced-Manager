@@ -3,6 +3,7 @@ package app.urv.manager.domain.installer
 import android.app.Application
 import android.os.SystemClock
 import app.urv.manager.util.PM
+import app.urv.manager.domain.installer.root.rootInstallWriteCommand
 import app.urv.manager.util.PLAY_STORE_INSTALLER_PACKAGE
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CompletableDeferred
@@ -256,8 +257,17 @@ class RootInstaller(
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/commit/7e24461c1454b712da4df21440db6f417c94ce58
-    suspend fun installAsPlayStore(apkFile: File, userId: Int) = withContext(Dispatchers.IO) {
-        require(apkFile.isFile) { "APK file is missing" }
+    suspend fun installAsPlayStore(apkFile: File, userId: Int) = withInstallApkFiles(apkFile, app.cacheDir) { apkFiles ->
+        if (apkFiles.size > 1) {
+            installPackageFiles(
+                apkFiles,
+                userId = userId,
+                installerPackageNameOverride = PLAY_STORE_INSTALLER_PACKAGE
+            )
+            return@withInstallApkFiles
+        }
+        val sourceFile = apkFiles.single()
+        require(sourceFile.isFile) { "APK file is missing" }
         val rootProbe = executeBounded(
             command = "id",
             timeoutSeconds = ROOT_PROBE_TIMEOUT_SECONDS,
@@ -266,10 +276,10 @@ class RootInstaller(
         if (!rootProbe.hasRootUid()) throw RootServiceException()
         val command =
             "pm install --user $userId -t -i ${shellQuote(PLAY_STORE_INSTALLER_PACKAGE)} -r " +
-                shellQuote(apkFile.absolutePath)
+                shellQuote(sourceFile.absolutePath)
         val result = executeBounded(
             command = command,
-            timeoutSeconds = installTimeoutSeconds(apkFile.length()),
+            timeoutSeconds = installTimeoutSeconds(sourceFile.length()),
             operation = "Play Store source install"
         )
         val output = result.combinedOutput()
@@ -309,6 +319,7 @@ class RootInstaller(
         userId: Int = 0,
         allowDowngrade: Boolean = false,
         onLog: (String) -> Unit = {},
+        installerPackageNameOverride: String? = null,
         registerCancelCleanup: ((() -> Unit) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
         require(apkFiles.isNotEmpty()) { "No stock APK files were provided" }
@@ -330,16 +341,22 @@ class RootInstaller(
             onLog("Root shell probe: ${rootProbe.render()}")
             if (!rootProbe.hasRootUid()) throw RootServiceException()
 
-            val installerPackage = shellQuote(app.packageName)
+            val installerPackage = shellQuote(installerPackageNameOverride ?: app.packageName)
             val downgradeFlag = if (allowDowngrade) " -d" else ""
+            val testFlag = if (installerPackageNameOverride != null) " -t" else ""
             val createCommands = listOf(
-                "pm" to "pm install-create -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
-                "pm" to "pm install-create -r$downgradeFlag --user $userId -i $installerPackage",
-                "cmd package" to "cmd package install-create -r$downgradeFlag --user $userId --install-location 0 -i $installerPackage",
-                "cmd package" to "cmd package install-create -r$downgradeFlag --user $userId -i $installerPackage",
-                "pm" to "pm install-create -r$downgradeFlag --user $userId",
-                "cmd package" to "cmd package install-create -r$downgradeFlag --user $userId"
-            )
+                "pm" to "pm install-create -r$downgradeFlag$testFlag --user $userId --install-location 0 -i $installerPackage",
+                "pm" to "pm install-create -r$downgradeFlag$testFlag --user $userId -i $installerPackage",
+                "cmd package" to "cmd package install-create -r$downgradeFlag$testFlag --user $userId --install-location 0 -i $installerPackage",
+                "cmd package" to "cmd package install-create -r$downgradeFlag$testFlag --user $userId -i $installerPackage"
+            ) + if (installerPackageNameOverride == null) {
+                // Stock recovery may omit attribution on older systems. An explicitly
+                // selected installer must keep its attribution through every fallback.
+                listOf(
+                    "pm" to "pm install-create -r$downgradeFlag --user $userId",
+                    "cmd package" to "cmd package install-create -r$downgradeFlag --user $userId"
+                )
+            } else emptyList()
             var session: InstallerSession? = null
             var createFailure = "Failed to create root install session"
             createCommands.forEachIndexed { index, (backend, command) ->
@@ -394,9 +411,9 @@ class RootInstaller(
                 apkFiles.forEachIndexed { index, file ->
                     kotlin.coroutines.coroutineContext.ensureActive()
                     val splitName = "$index.apk"
-                    val command =
-                        "${created.backend} install-write -S ${file.length()} ${created.id} " +
-                            "${shellQuote(splitName)} < ${shellQuote(file.absolutePath)}"
+                    val command = rootInstallWriteCommand(
+                        created.backend, created.id, splitName, file.absolutePath, file.length()
+                    )
                     val result = runInterruptible {
                         executeWithTimeout(
                             installShell,

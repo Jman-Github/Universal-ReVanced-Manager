@@ -10,6 +10,7 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.logger.LogLevel
 import app.urv.manager.patcher.logger.Logger
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
+import app.urv.manager.patcher.runtime.revanced.RevancedLegacyFormat
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.io.IOException
@@ -65,28 +66,18 @@ object Revanced21RuntimeBridge {
         }
     }
 
-    fun loadMetadata(bundlePath: String): List<PatchInfo> {
+    fun loadMetadata(bundlePath: String): List<PatchInfo> = synchronized(lock) {
+        ensureClassLoader(RevancedLegacyFormat.isLegacyBundle(File(bundlePath)))
         val method = ensureLoadMetadataForBundleMethod()
         val raw = method.invoke(null, bundlePath) as? List<*> ?: emptyList<Any?>()
-        return raw.mapNotNull { entry ->
+        raw.mapNotNull { entry ->
             val map = entry as? Map<*, *> ?: return@mapNotNull null
             PatchInfo.fromMorpheMetadata(map as Map<String, Any?>)
         }
     }
 
-    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> {
-        val method = ensureLoadMetadataMethod()
-        val raw = method.invoke(null, bundlePaths) as? Map<*, *> ?: emptyMap<String, List<PatchInfo>>()
-        return raw.mapNotNull { (key, value) ->
-            val path = key as? String ?: return@mapNotNull null
-            val metadata = value as? List<*> ?: return@mapNotNull path to emptyList()
-            val patches = metadata.mapNotNull { entry ->
-                val map = entry as? Map<*, *> ?: return@mapNotNull null
-                PatchInfo.fromMorpheMetadata(map as Map<String, Any?>)
-            }
-            path to patches
-        }.toMap()
-    }
+    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> =
+        bundlePaths.associateWith(::loadMetadata)
 
     fun runPatcher(
         params: Map<String, Any?>,
@@ -94,8 +85,13 @@ object Revanced21RuntimeBridge {
         onEvent: (ProgressEvent) -> Unit,
         isCancelled: () -> Boolean = { false }
     ): String? {
-        val entry = ensureEntryClass()
-        val callback = ensureCallbackClass()
+        val (entry, callback, method) = synchronized(lock) {
+            val paths = (params["configurations"] as? List<*>).orEmpty().mapNotNull {
+                (it as? Map<*, *>)?.get("bundlePath") as? String
+            }
+            ensureClassLoader(RevancedLegacyFormat.selectionUsesLegacy(paths))
+            Triple(ensureEntryClass(), ensureCallbackClass(), ensureRunPatcherMethod())
+        }
         val proxy = Proxy.newProxyInstance(
             entry.classLoader,
             arrayOf(callback)
@@ -118,7 +114,6 @@ object Revanced21RuntimeBridge {
                 else -> null
             }
         }
-        val method = ensureRunPatcherMethod()
         val result = method.invoke(null, params, proxy) as? String
         if (result == CANCELLATION_SENTINEL) {
             throw CancellationException("Patching cancelled")
@@ -156,7 +151,7 @@ object Revanced21RuntimeBridge {
 
     private fun ensureCallbackClass(): Class<*> = synchronized(lock) {
         callbackClass ?: run {
-            val loaded = ensureClassLoader().loadClass(CALLBACK_CLASS_NAME)
+            val loaded = checkNotNull(classLoader).loadClass(CALLBACK_CLASS_NAME)
             callbackClass = loaded
             loaded
         }
@@ -164,22 +159,25 @@ object Revanced21RuntimeBridge {
 
     private fun ensureEntryClass(): Class<*> = synchronized(lock) {
         entryClass ?: run {
-            val loader = ensureClassLoader()
+            val loader = checkNotNull(classLoader)
             val loaded = loader.loadClass(ENTRY_CLASS_NAME)
             entryClass = loaded
             loaded
         }
     }
 
-    private fun ensureClassLoader(): DexClassLoader {
+    private fun ensureClassLoader(legacy: Boolean): DexClassLoader {
         val context = appContext ?: error("Revanced21RuntimeBridge is not initialized.")
-        val runtimeClassPathFile = runtimeClassPathOverride
+        val originalClassPathFile = runtimeClassPathOverride
             ?.takeIf { it.isNotBlank() }
             ?.let { path ->
                 File(path).takeIf { it.exists() }
                     ?: throw IOException("ReVanced v21 runtime classpath does not exist: $path")
             }
             ?: Revanced21RuntimeAssets.ensureRuntimeClassPath(context)
+        val runtimeClassPathFile = if (legacy) {
+            Revanced21RuntimeAssets.ensureLegacyRuntimeClassPath(context, originalClassPathFile)
+        } else originalClassPathFile
         val path = runtimeClassPathFile.absolutePath
         val cacheKey = "$path:${runtimeClassPathFile.lastModified()}:${runtimeClassPathFile.length()}"
         val existing = classLoader

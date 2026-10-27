@@ -1,6 +1,6 @@
 package app.urv.manager.patcher.revanced
 
-import android.os.Build
+import app.urv.manager.patcher.runtime.RuntimeDevice
 import app.urv.manager.patcher.ProgressEvent
 import app.urv.manager.patcher.StepId
 import app.urv.manager.patcher.logger.Logger
@@ -385,7 +385,7 @@ class RevancedSession(
             }
         }
 
-        logger.warn("No bundled Android framework resource was found for SDK ${Build.VERSION.SDK_INT} or lower")
+        logger.warn("No bundled Android framework resource was found for SDK ${RuntimeDevice.sdk} or lower")
         return false
     }
 
@@ -394,7 +394,7 @@ class RevancedSession(
             javaClass.classLoader?.getResource("prebuilt/android-framework.jar") != null
 
     private fun bundledFrameworkSdkCandidates(): IntProgression {
-        val maxSdk = Build.VERSION.SDK_INT.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
+        val maxSdk = RuntimeDevice.sdk.coerceAtLeast(MIN_BUNDLED_FRAMEWORK_SDK)
         return maxSdk downTo MIN_BUNDLED_FRAMEWORK_SDK
     }
 

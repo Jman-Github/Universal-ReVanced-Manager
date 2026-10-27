@@ -67,6 +67,7 @@ import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.AppIcon
 import app.urv.manager.ui.component.AppLabel
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.model.InstalledAppAction
@@ -150,6 +151,7 @@ fun InstalledAppsScreen(
     when {
         installedApps == null -> {
             LazyColumnWithScrollbar(
+                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
@@ -187,6 +189,7 @@ fun InstalledAppsScreen(
 
         else -> {
             LazyColumnWithScrollbar(
+                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
@@ -771,6 +774,7 @@ private fun AppsOrderDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(workingOrder, key = { _, app -> app.currentPackageName }) { index, app ->

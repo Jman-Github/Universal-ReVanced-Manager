@@ -257,7 +257,8 @@ fun MergerInformationCard(
     val session = PatcherSessionInfo(
         startedAtElapsedRealtimeMs = information.startedAtElapsedRealtimeMs,
         elapsedMs = information.elapsedMs,
-        runtimeProcess = true,
+        runtimeProcess = information.runtimeName?.let { it == "ART" },
+        runtimeName = information.runtimeName,
         memoryLimitMb = information.memoryLimitMb
     )
     ElevatedCard(modifier = Modifier.fillMaxWidth()) {
@@ -485,6 +486,9 @@ private fun elapsedTimeDisplayValue(session: PatcherSessionInfo): String {
 
 @Composable
 private fun runtimeDisplayValue(session: PatcherSessionInfo): String = when {
+    session.runtimeName != null -> session.runtimeName + (session.memoryLimitMb?.let {
+        " (" + stringResource(R.string.patcher_information_runtime_limit_format, it) + ")"
+    } ?: "")
     session.runtimeProcess == true && session.memoryLimitMb != null -> stringResource(
         R.string.patcher_information_runtime_process_format,
         session.memoryLimitMb

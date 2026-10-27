@@ -60,6 +60,14 @@ jobs:
       - name: Setup keystore
         run: echo "${{ secrets.KEYSTORE }}" | base64 --decode > app/keystore.jks
 
+      - name: Run shell regression tests
+        shell: bash
+        run: |
+          for test_script in app/src/test/scripts/*-test.sh; do
+            echo "Running $test_script"
+            sh "$test_script"
+          done
+
       - name: Run JVM unit tests
         env:
           GITHUB_ACTOR: ${{ github.actor }}
@@ -68,7 +76,26 @@ jobs:
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             -PsignAsDebug \
             -Pversion="${{ needs.prepare.outputs.version }}" \
-            :app:testDebugUnitTest
+            --continue testDebugUnitTest
+
+      - name: Upload JVM test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: urv-debug-test-reports
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            app/build/reports/tests/testDebugUnitTest/
+            api/build/test-results/testDebugUnitTest/
+            api/build/reports/tests/testDebugUnitTest/
+            morphe-runtime/build/test-results/testDebugUnitTest/
+            morphe-runtime/build/reports/tests/testDebugUnitTest/
+            revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
+            revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
+            reseam-runtime-plugin/build/test-results/testDebugUnitTest/
+            reseam-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Build debug artifacts
         env:
@@ -81,7 +108,8 @@ jobs:
           ./gradlew -Dorg.gradle.java.home="${{ steps.setup-java.outputs.path }}" --no-daemon \
             -Pversion="${{ needs.prepare.outputs.version }}" \
             :app:assembleDev \
-            :revanced.v21-runtime-plugin:assembleRelease
+            :revanced.v21-runtime-plugin:assembleRelease \
+            :reseam-runtime-plugin:assembleRelease
 
       - name: Locate debug artifacts
         shell: bash
@@ -96,6 +124,7 @@ jobs:
             "${apk_dir}/universal-revanced-manager-v${VERSION}-x86.apk"
             "${apk_dir}/universal-revanced-manager-v${VERSION}-x86_64.apk"
             "revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
+            "reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk"
           )
           for artifact in "${expected[@]}"; do
             [[ -f "$artifact" ]] || { echo "Missing expected debug artifact: $artifact" >&2; exit 1; }
@@ -110,4 +139,5 @@ jobs:
           path: |
             app/build/outputs/apk/dev/*.apk
             revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
+            reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk
             app/build/outputs/apk/dev/output-metadata.json

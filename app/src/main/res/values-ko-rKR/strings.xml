@@ -144,7 +144,6 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">선택된 패치가 없습니다</string>
     <string name="mixed_patch_bundles_title">혼합된 패치 번들</string>
-    <string name="mixed_patch_bundles_description">Revanced (.rvp) 패치와 Morphe (.mpp) 패치는 함께 사용할 수 없습니다. 한 가지 번들 유형에서만 패치를 선택하세요. 여러 가지를 사용하려면 원하는 다른 패치를 사용하여 두 번째로 패치해야 합니다.</string>
     <string name="mixed_revanced_patcher_versions_title">혼합된 ReVanced 패처 버전</string>
     <string name="mixed_revanced_patcher_versions_description">서로 다른 패처 버전으로 빌드된 ReVanced 패치는 함께 사용할 수 없습니다. Revanced v21과 v22는 서로 다른 패처 버전을 사용하므로, 하나의 Revanced 패처 버전에서만 패치를 선택하세요</string>
     <string name="network_unavailable_warning">기기가 인터넷에 연결되어 있지 않습니다. 나중에 다운로드가 실패할 수 있습니다</string>
@@ -1182,7 +1181,6 @@
     <string name="selected_file_not_supported_json">선택된 파일은 JSON 파일(.json)이어야 합니다</string>
     <string name="selected_file_not_supported_keystore">선택된 파일은 지원되는 키스토어(.jks, .keystore, .p12, .pfx, .bks)가 아닙니다</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
-    <string name="patch_bundle_url_invalid_json_or_external">패치 번들 URL은 JSON 파일 또는 지원되는 외부 번들 API URL을 가리켜야 합니다</string>
     <string name="patch_bundle_url_invalid_external">패치 번들 URL은 지원되는 외부 번들 API URL을 가리켜야 합니다</string>
     <string name="selected_file_not_supported_image">선택한 파일은 지원되지 않는 이미지 형식입니다</string>
     <string name="loading">불러오는 중…</string>
@@ -1249,6 +1247,8 @@
     <string name="string_option_menu_description">옵션 더보기</string>
     <string name="option_preset_custom_value">사용자 정의</string>
     <string name="path_selector">기기 저장소에서 선택</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">이전 디렉터리</string>
     <string name="path_selector_dirs">디렉터리</string>
     <string name="path_selector_files">파일</string>
@@ -1486,7 +1486,6 @@
     <string name="patches_delete_single_dialog_description">\'%s\'를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
     <string name="about_revanced_manager">URV Manager에 대한 정보</string>
-    <string name="revanced_manager_description">URV Manager는 Revanced Manager의 포크 버전입니다. 두 애플리케이션 모두 Revanced 패처를 사용하며, 이를 통하여 사용자 정의 패치로 앱 을 다운로드 및 패치하고 패치 과정을 관리할 수 있습니다. URV Manager에 포함된 고유 기능으로는 패치 번들 표시 이름, 서드파티 패치 번들 가져오기 지원 등이 있습니다. URV Manager가 제공하는 고유 기능의 모든 목록을 보려면</string>
     <string name="here">여기를 탭하세요</string>
     <string name="update_available">업데이트 가능</string>
     <string name="ready_to_install_update">업데이트 설치 준비 완료</string>
@@ -1593,8 +1592,6 @@
     <string name="patches_prereleases_description">\'%s\'의 개발자 버전을 사용합니다</string>
     <string name="patches_url">패치 번들 URL</string>
     <string name="patch_bundle_urls_link">여기에서 패치 번들 URL을 가져오세요</string>
-    <string name="patch_bundle_discovery_title">패치 번들 검색</string>
-    <string name="patch_bundle_discovery_description">외부 패치 번들을 찾아보고 URV Manager에 추가합니다</string>
     <string name="patch_bundle_discovery_package_label">패키지 검색</string>
     <string name="patch_bundle_discovery_search_label">번들 검색</string>
     <string name="patch_bundle_discovery_empty">번들을 찾을 수 없습니다</string>
@@ -1711,4 +1708,6 @@
     <string name="use_latest_release">최신 버전 사용</string>
     <string name="use_prereleases">개발자 버전 사용</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

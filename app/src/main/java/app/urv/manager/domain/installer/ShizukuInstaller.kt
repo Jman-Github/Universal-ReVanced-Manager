@@ -70,8 +70,9 @@ class ShizukuInstaller(private val app: Application) {
         sourceFile: File,
         expectedPackage: String,
         installerPackageNameOverride: String? = null
-    ): OperationResult =
-        installMultiple(listOf(sourceFile), expectedPackage, installerPackageNameOverride)
+    ): OperationResult = withInstallApkFiles(sourceFile, app.cacheDir) { files ->
+        installMultiple(files, expectedPackage, installerPackageNameOverride)
+    }
 
     suspend fun installMultiple(
         sourceFiles: List<File>,

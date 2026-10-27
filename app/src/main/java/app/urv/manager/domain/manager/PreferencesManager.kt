@@ -7,7 +7,6 @@ import app.universal.revanced.manager.R
 import app.urv.manager.domain.manager.base.BasePreferencesManager
 import app.urv.manager.domain.manager.base.EditorContext
 import app.urv.manager.patcher.logger.PatcherLogMode
-import app.urv.manager.patcher.runtime.MemoryLimitConfig
 import app.urv.manager.patcher.runtime.morphe.MorpheBytecodeMode
 import app.urv.manager.ui.theme.Theme
 import app.urv.manager.util.ExportNameFormatter
@@ -117,6 +116,7 @@ class PreferencesManager(
     val skipSplitMergeSigning = booleanPreference("skip_split_merge_signing", false)
     val disableApkSignatureChecks = booleanPreference("disable_apk_signature_checks", false)
     val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
+    val useJvmRuntime = booleanPreference("patcher_jvm", true)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
     val patchAvailabilityEnabled = booleanPreference("patch_availability_enabled", true)
@@ -125,11 +125,6 @@ class PreferencesManager(
 
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/java/app/morphe/manager/domain/manager/PreferencesManager.kt
-    val processMemoryLimit = intPreference(
-        // Keep the legacy key so existing installations retain their configured limit.
-        "patch_memory_limit",
-        MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_NOT_SET
-    )
     val patchedAppExportFormat = stringPreference(
         "patched_app_export_format",
         ExportNameFormatter.DEFAULT_TEMPLATE
@@ -576,6 +571,7 @@ class PreferencesManager(
         booleanPreference("split_merge_auto_expand_running_steps_exclusive", false)
     val useCustomFilePicker = booleanPreference("use_custom_file_picker", true)
     val youtubeAssetsSyncHeaderTransforms = booleanPreference("youtube_assets_sync_header_transforms", false)
+    val patchBundleDiscoveryState = stringPreference("patch_bundle_discovery_state", "")
     val patchBundleDiscoveryShowRelease = booleanPreference("patch_bundle_discovery_show_release", true)
     val patchBundleDiscoveryShowPrerelease = booleanPreference("patch_bundle_discovery_show_prerelease", true)
     val patchBundleDiscoveryLatest = booleanPreference("patch_bundle_discovery_latest", false)
@@ -609,17 +605,7 @@ class PreferencesManager(
                 runCatching { credentialMarker.writeText("1") }
                     .onFailure { Log.w("PreferencesManager", "Could not mark credential initialization", it) }
             }
-            val storedLimit = processMemoryLimit.get()
-            val configuredLimit = if (
-                storedLimit == MemoryLimitConfig.PROCESS_RUNTIME_MEMORY_NOT_SET
-            ) {
-                MemoryLimitConfig.initialMemoryLimitMb(context)
-            } else {
-                MemoryLimitConfig.clampConfiguredMemoryLimitMb(storedLimit)
-            }
-            if (configuredLimit != storedLimit) {
-                processMemoryLimit.update(configuredLimit)
-            }
+
         }
     }
 
@@ -654,12 +640,11 @@ class PreferencesManager(
         val skipSplitMergeSigning: Boolean? = null,
         val disableApkSignatureChecks: Boolean? = null,
         val injectSignatureMetadataAfterPatching: Boolean? = null,
+        val useJvmRuntime: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
         val patchAvailabilityEnabled: Boolean? = null,
         val removeGmsCoreForPrimaryMount: Boolean? = null,
-        val processMemoryLimit: Int? = null,
-        val patcherProcessMemoryLimit: Int? = null,
         val theme: Theme? = null,
         val appLanguage: String? = null,
         val api: String? = null,
@@ -936,11 +921,11 @@ class PreferencesManager(
             skipSplitMergeSigning = skipSplitMergeSigning.value,
             disableApkSignatureChecks = disableApkSignatureChecks.value,
             injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
+            useJvmRuntime = useJvmRuntime.value,
             morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
             patcherLogMode = patcherLogMode.value,
             patchAvailabilityEnabled = patchAvailabilityEnabled.value,
             removeGmsCoreForPrimaryMount = removeGmsCoreForPrimaryMount.value,
-            processMemoryLimit = processMemoryLimit.value,
             autoCollapsePatcherSteps = autoCollapsePatcherSteps.value,
             showPatcherMemoryUsageGraph = showPatcherMemoryUsageGraph.value,
             compactPatcherResourceGraphs = compactPatcherResourceGraphs.value,
@@ -1179,16 +1164,13 @@ class PreferencesManager(
         snapshot.skipSplitMergeSigning?.let { skipSplitMergeSigning.value = it }
         snapshot.disableApkSignatureChecks?.let { disableApkSignatureChecks.value = it }
         snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
+        snapshot.useJvmRuntime?.let { useJvmRuntime.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
         }
         snapshot.patcherLogMode?.let { patcherLogMode.value = it }
         snapshot.patchAvailabilityEnabled?.let { patchAvailabilityEnabled.value = it }
         snapshot.removeGmsCoreForPrimaryMount?.let { removeGmsCoreForPrimaryMount.value = it }
-        (snapshot.processMemoryLimit ?: snapshot.patcherProcessMemoryLimit)?.let {
-            processMemoryLimit.value =
-                MemoryLimitConfig.clampConfiguredMemoryLimitMb(it)
-        }
         snapshot.autoCollapsePatcherSteps?.let { autoCollapsePatcherSteps.value = it }
         snapshot.showPatcherMemoryUsageGraph?.let { showPatcherMemoryUsageGraph.value = it }
         snapshot.compactPatcherResourceGraphs?.let { compactPatcherResourceGraphs.value = it }

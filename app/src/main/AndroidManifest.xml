@@ -46,6 +46,26 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="34">
 
+        <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+        <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
+        <!-- ART-only workers for Android JNI engines and JVM startup fallback. -->
+        <service
+            android:name="app.urv.manager.patcher.runtime.jvm.PatcherService"
+            android:exported="false"
+            android:process=":patcher" />
+        <service
+            android:name="app.urv.manager.patcher.runtime.jvm.PatcherService1"
+            android:exported="false"
+            android:process=":patcher1" />
+        <service
+            android:name="app.urv.manager.patcher.runtime.jvm.PatcherService2"
+            android:exported="false"
+            android:process=":patcher2" />
+        <service
+            android:name="app.urv.manager.patcher.runtime.jvm.PatcherService3"
+            android:exported="false"
+            android:process=":patcher3" />
+
         <meta-data
             android:name="app.urv.manager.DATABASE_VERSION"
             android:value="${databaseVersion}" />
@@ -95,6 +115,7 @@
                 <data android:scheme="file" />
                 <data android:mimeType="application/vnd.ms-project" />
                 <data android:mimeType="application/java-archive" />
+                <data android:mimeType="application/vnd.reseam.bundle" />
                 <data android:mimeType="application/x-java-archive" />
             </intent-filter>
 

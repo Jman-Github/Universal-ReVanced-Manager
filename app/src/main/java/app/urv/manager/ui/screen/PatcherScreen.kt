@@ -91,7 +91,6 @@ import app.urv.manager.ui.component.patches.PathSelectorDialog
 import app.urv.manager.ui.component.RememberedCreateDocument
 import app.urv.manager.ui.component.toPickerDirectoryUri
 import app.urv.manager.ui.component.patcher.InstallerPickerDialog
-import app.urv.manager.ui.component.patcher.LegacyAndroidMemoryWarning
 import app.urv.manager.ui.component.patcher.PatcherInformation
 import app.urv.manager.ui.component.patcher.PatcherInformationCard
 import app.urv.manager.ui.component.patcher.PatcherResourceUsageCards
@@ -264,40 +263,7 @@ fun PatcherScreen(
         }
     }
 
-    viewModel.memoryAdjustmentDialog?.let { state ->
-        AlertDialog(
-            onDismissRequest = viewModel::dismissMemoryAdjustmentDialog,
-            icon = { Icon(Icons.Outlined.WarningAmber, contentDescription = null) },
-            title = {
-                CenteredDialogTitle(
-                    stringResource(R.string.process_memory_limit_oom_title)
-                )
-            },
-            text = {
-                Text(
-                    text = if (state.adjusted) {
-                        stringResource(
-                            R.string.process_memory_limit_adjusted_message,
-                            state.previousLimit,
-                            state.newLimit
-                        )
-                    } else {
-                        stringResource(
-                            R.string.process_memory_limit_minimum_message,
-                            state.newLimit
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = viewModel::dismissMemoryAdjustmentDialog) {
-                    Text(stringResource(R.string.ok))
-                }
-            }
-        )
-    }
+
 
     val permissionLauncher =
         rememberLauncherForActivityResult(permissionContract) { granted ->
@@ -315,7 +281,8 @@ fun PatcherScreen(
             }
         }
     val exportDocumentLauncher = rememberLauncherForActivityResult(
-        contract = RememberedCreateDocument("application/vnd.android.package-archive") {
+        contract = RememberedCreateDocument(if (exportMetadata?.fileExtension == "apks") "application/zip"
+            else "application/vnd.android.package-archive") {
             patchedApkExportDirectory.takeIf(String::isNotBlank)?.let(Uri::parse)
         }
     ) { uri ->
@@ -1605,7 +1572,6 @@ fun PatcherScreen(
                 }
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q) {
                     item(key = "legacy-android-memory-warning") {
-                        LegacyAndroidMemoryWarning()
                     }
                 }
             }

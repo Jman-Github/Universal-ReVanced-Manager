@@ -12,8 +12,18 @@ data class PatcherMemoryUsage(
     val cpuSystemWide: Boolean = false,
     val ioReadKbPerSec: Int? = null,
     val ioWriteKbPerSec: Int? = null,
-    val ioBlockAccounting: Boolean = true
+    val ioBlockAccounting: Boolean = true,
+    val processMemoryMb: Long? = null
 )
+
+/**
+ * Heap heartbeats do not poll CPU or I/O, so they cannot change those metrics' availability.
+ * A resource poll still counts when it reports no readable metrics.
+ */
+internal fun List<PatcherMemoryUsage>.latestResourceUsage(): PatcherMemoryUsage? = lastOrNull {
+    it.resourceSampleTimeMs != null || it.cpuCoreLoads.isNotEmpty() ||
+        it.ioReadKbPerSec != null || it.ioWriteKbPerSec != null
+}
 
 /** Decodes telemetry before log filtering so raw polls never enter the user's log. */
 internal fun parsePatcherResourceUsage(message: String): PatcherMemoryUsage? {
@@ -42,6 +52,7 @@ internal fun parsePatcherResourceUsage(message: String): PatcherMemoryUsage? {
         cpuSystemWide = fields["cpuSystem"] == "true",
         ioReadKbPerSec = read.takeIf { write != null },
         ioWriteKbPerSec = write.takeIf { read != null },
-        ioBlockAccounting = fields["ioBlock"] != "false"
+        ioBlockAccounting = fields["ioBlock"] != "false",
+        processMemoryMb = fields["processMemory"]?.toLongOrNull()?.takeIf { it >= 0L }
     )
 }

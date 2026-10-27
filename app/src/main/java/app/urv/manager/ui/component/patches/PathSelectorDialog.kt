@@ -1,7 +1,31 @@
 package app.urv.manager.ui.component.patches
 
+/*
+ * Portions adapted from Morphe. Copyright 2026 Morphe.
+ * Code adapted from Morphe, see third-party/NOTICE for more information.
+ * https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt
+ */
 import app.urv.manager.ui.component.persistentControls
-import android.os.SystemClock
+import android.text.format.DateFormat
+import android.text.format.Formatter
+import android.util.LruCache
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.FilterChip
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.DataObject
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.VideoFile
+import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.pluralStringResource
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import java.text.SimpleDateFormat
+import java.util.Date
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -17,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.InsertDriveFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Android
@@ -88,6 +113,8 @@ import app.urv.manager.util.APK_FILE_EXTENSIONS
 import app.urv.manager.util.PM
 import app.urv.manager.util.saver.PathSaver
 import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import java.util.UUID
 import org.koin.compose.koinInject
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -97,13 +124,16 @@ import kotlin.io.path.isDirectory
 import kotlin.io.path.isReadable
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.name
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import app.urv.manager.ui.component.CenteredDialogTitle
 
-private const val PATH_SELECTOR_LOADING_SHIMMER_MIN_MS = 500L
+// Limit APK/split extraction even when its helpers switch to their own I/O dispatcher.
+private val pathPreviewPermits = Semaphore(2)
+private val pathDetailsDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,11 +197,19 @@ fun PathSelectorDialog(
         }
     }
     var refreshNonce by remember { mutableStateOf(0) }
+    val detailsCache = remember(refreshNonce) { LruCache<Path, PathEntryDetails>(200) }
+    val previewCache = remember(refreshNonce) { PathPreviewCache() }
+    val configuration = LocalConfiguration.current
+    val is24Hour = DateFormat.is24HourFormat(context)
+    val modificationFormat = remember(configuration, is24Hour) {
+        val locale = configuration.locales[0] ?: Locale.getDefault()
+        val clock = if (is24Hour) "Hm" else "hm"
+        SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "yMMMd" + clock), locale)
+    }
     // Code adapted from Morphe, see third-party/NOTICE for more information
     // https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23
     val directoryResult by key(currentDirectory, permissionGranted, refreshNonce) {
         produceState<Result<List<Path>>?>(initialValue = null) {
-            val loadingStartedAt = SystemClock.elapsedRealtime()
             val result: Result<List<Path>> = if (!permissionGranted) {
                 Result.failure(SecurityException("Storage permission required"))
             } else {
@@ -186,12 +224,6 @@ fun PathSelectorDialog(
                 }
                 contents?.let { Result.success(it) }
                     ?: Result.failure(SecurityException("Cannot read directory"))
-            }
-            // Count reads and retries toward the minimum shimmer time.
-            val remainingShimmerTime = PATH_SELECTOR_LOADING_SHIMMER_MIN_MS -
-                (SystemClock.elapsedRealtime() - loadingStartedAt)
-            if (remainingShimmerTime > 0L) {
-                delay(remainingShimmerTime)
             }
             value = result
         }
@@ -317,77 +349,84 @@ fun PathSelectorDialog(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
-                AppTopBar(
-                    title = stringResource(R.string.path_selector),
-                    onBackClick = { onSelect(null) },
-                    backIcon = {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
-                    },
-                    actions = {
-                        IconButton(onClick = ::refreshDirectory) {
-                            Icon(
-                                Icons.Outlined.Refresh,
-                                contentDescription = stringResource(R.string.refresh)
-                            )
-                        }
-                        Box {
-                            IconButton(onClick = { showSortMenu = true }) {
+                Column {
+                    AppTopBar(
+                        title = stringResource(R.string.path_selector),
+                        onBackClick = { onSelect(null) },
+                        backIcon = {
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.close))
+                        },
+                        actions = {
+                            IconButton(onClick = ::refreshDirectory) {
                                 Icon(
-                                    Icons.Outlined.Sort,
-                                    contentDescription = stringResource(R.string.path_selector_sort_title)
+                                    Icons.Outlined.Refresh,
+                                    contentDescription = stringResource(R.string.refresh)
                                 )
                             }
-                            DropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false },
-                                modifier = Modifier.heightIn(max = 420.dp)
-                            ) {
-                                PathSortMode.entries.forEach { mode ->
-                                    val selected = mode == sortMode
-                                    DropdownMenuItem(
-                                        text = { Text(text = stringResource(mode.labelRes)) },
-                                        leadingIcon = {
-                                            if (selected) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.Check,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary
-                                                )
-                                            } else {
-                                                Spacer(modifier = Modifier.size(24.dp))
+                            Box {
+                                IconButton(onClick = { showSortMenu = true }) {
+                                    Icon(
+                                        Icons.Outlined.Sort,
+                                        contentDescription = stringResource(R.string.path_selector_sort_title)
+                                    )
+                                }
+                                DropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false },
+                                    modifier = Modifier.heightIn(max = 420.dp)
+                                ) {
+                                    PathSortMode.entries.forEach { mode ->
+                                        val selected = mode == sortMode
+                                        DropdownMenuItem(
+                                            text = { Text(text = stringResource(mode.labelRes)) },
+                                            leadingIcon = {
+                                                if (selected) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Check,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                } else {
+                                                    Spacer(modifier = Modifier.size(24.dp))
+                                                }
+                                            },
+                                            onClick = {
+                                                sortMode = mode
+                                                showSortMenu = false
                                             }
+                                        )
+                                    }
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.path_selector_show_hidden_files)) },
+                                        trailingIcon = {
+                                            Checkbox(checked = showHiddenFiles, onCheckedChange = null)
+                                        },
+                                        modifier = Modifier.semantics {
+                                            role = Role.Checkbox
+                                            toggleableState = ToggleableState(showHiddenFiles)
                                         },
                                         onClick = {
-                                            sortMode = mode
-                                            showSortMenu = false
+                                            scope.launch {
+                                                prefs.pathSelectorShowHiddenFiles.update(!showHiddenFiles)
+                                            }
                                         }
                                     )
                                 }
-                                HorizontalDivider()
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.path_selector_show_hidden_files)) },
-                                    trailingIcon = {
-                                        Checkbox(checked = showHiddenFiles, onCheckedChange = null)
-                                    },
-                                    modifier = Modifier.semantics {
-                                        role = Role.Checkbox
-                                        toggleableState = ToggleableState(showHiddenFiles)
-                                    },
-                                    onClick = {
-                                        scope.launch {
-                                            prefs.pathSelectorShowHiddenFiles.update(!showHiddenFiles)
-                                        }
-                                    }
-                                )
+                            }
+                            if (confirmButtonText != null && onConfirm != null) {
+                                TextButton(onClick = { onConfirm(currentDirectory) }) {
+                                    Text(confirmButtonText)
+                                }
                             }
                         }
-                        if (confirmButtonText != null && onConfirm != null) {
-                            TextButton(onClick = { onConfirm(currentDirectory) }) {
-                                Text(confirmButtonText)
-                            }
-                        }
-                    }
-                )
+                    )
+                    PathSelectorFolderTrail(
+                        root = currentRoot,
+                        directory = currentDirectory,
+                        onOpen = { currentDirectory = it }
+                    )
+                }
             },
         ) { paddingValues ->
             InterceptBackHandler(enabled = notAtRootDir) {
@@ -506,11 +545,19 @@ fun PathSelectorDialog(
                                     }
                                 },
                                 onLongClick = { handleFavoritePress(favorite) },
+                                supportingContent = {
+                                    PathEntrySupportingContent(
+                                        path = favorite, isDirectory = isDir,
+                                        cache = detailsCache, modificationFormat = modificationFormat,
+                                        extraText = favorite.absolutePathString()
+                                    )
+                                },
                                 icon = if (isDir) Icons.Outlined.Folder else fileIconForPath(favorite),
                                 leadingContent = if (isDir) null else {
                                     {
                                         FileLeadingIcon(
                                             path = favorite,
+                                            previewCache = previewCache,
                                             pm = pm,
                                             filesystem = filesystem,
                                             onImagePreviewClick = if (isImagePreviewablePath(favorite)) {
@@ -595,10 +642,12 @@ fun PathSelectorDialog(
                             onLongClick = { handleFavoritePress(it) },
                             icon = Icons.Outlined.Folder,
                             name = it.name,
-                            supportingText = if (nameKey in duplicateDirectoryNames) {
-                                it.absolutePathString()
-                            } else {
-                                null
+                            supportingContent = {
+                                PathEntrySupportingContent(
+                                    path = it, isDirectory = true,
+                                    cache = detailsCache, modificationFormat = modificationFormat,
+                                    extraText = it.absolutePathString().takeIf { nameKey in duplicateDirectoryNames }
+                                )
                             }
                         )
                     }
@@ -621,6 +670,7 @@ fun PathSelectorDialog(
                             leadingContent = {
                                 FileLeadingIcon(
                                     path = it,
+                                    previewCache = previewCache,
                                     pm = pm,
                                     filesystem = filesystem,
                                     onImagePreviewClick = if (isImagePreviewablePath(it)) {
@@ -630,7 +680,13 @@ fun PathSelectorDialog(
                                     }
                                 )
                             },
-                            name = it.name
+                            name = it.name,
+                            supportingContent = {
+                                PathEntrySupportingContent(
+                                    path = it, isDirectory = false,
+                                    cache = detailsCache, modificationFormat = modificationFormat
+                                )
+                            }
                         )
                     }
                 }
@@ -677,7 +733,7 @@ fun PathSelectorDialog(
                 title = { CenteredDialogTitle(stringResource(R.string.path_selector_image_preview_title, displayName)) },
                 text = {
                     AsyncImage(
-                        model = target.toFile(),
+                        model = rememberPathPreviewRequest(target, previewCache),
                         contentDescription = stringResource(R.string.path_selector_image_preview_content_description, displayName),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
@@ -692,13 +748,88 @@ fun PathSelectorDialog(
     }
 }
 
-private fun fileIconForPath(path: Path): ImageVector {
-    val lowerName = path.fileName?.toString()?.lowercase().orEmpty()
-    return if (lowerName.endsWith(".apk")) {
-        Icons.Outlined.Android
-    } else {
-        Icons.AutoMirrored.Outlined.InsertDriveFile
+// Code adapted from Morphe's FolderTrail and FileEntryRow; see third-party/NOTICE.
+// https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt
+@Composable
+private fun PathSelectorFolderTrail(
+    root: Filesystem.StorageRoot,
+    directory: Path,
+    onOpen: (Path) -> Unit
+) {
+    val breadcrumbs = remember(root.path, directory) { pathSelectorBreadcrumbs(root.path, directory) }
+    val scroll = rememberScrollState()
+    // maxValue changes after layout, so a new, longer trail reveals its current folder too.
+    LaunchedEffect(directory, scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
+    Row(
+        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll)
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        breadcrumbs.forEachIndexed { index, path ->
+            if (index > 0) {
+                Icon(
+                    Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            FilterChip(
+                selected = path == directory,
+                onClick = { if (path != directory) onOpen(path) },
+                label = { Text(if (path == root.path) root.label else path.name.ifBlank { path.toString() }) },
+                leadingIcon = {
+                    Icon(
+                        if (path == root.path && root.isRemovable) Icons.Outlined.SdCard
+                        else if (path == root.path) Icons.Outlined.Storage else Icons.Outlined.Folder,
+                        contentDescription = null, modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+        }
     }
+}
+
+@Composable
+private fun PathEntrySupportingContent(
+    path: Path,
+    isDirectory: Boolean,
+    cache: LruCache<Path, PathEntryDetails>,
+    modificationFormat: SimpleDateFormat,
+    extraText: String? = null
+) {
+    val context = LocalContext.current
+    val details by key(path, cache, isDirectory) {
+        produceState<PathEntryDetails?>(initialValue = cache.get(path)) {
+            value = cache.get(path) ?: withContext(pathDetailsDispatcher) {
+                readPathEntryDetails(path, isDirectory)?.also { cache.put(path, it) }
+            }
+        }
+    }
+    val detail = if (isDirectory) {
+        details?.itemCount?.let { pluralStringResource(R.plurals.path_selector_item_count, it, it) }
+    } else {
+        val size = details?.size?.let { Formatter.formatFileSize(context, it) }
+        val date = details?.modified?.takeIf { it > 0 }?.let { modificationFormat.format(Date(it)) }
+        listOfNotNull(size, date).takeIf { it.isNotEmpty() }?.joinToString(" · ")
+    }
+    val text = listOfNotNull(extraText, detail).joinToString("\n")
+    if (text.isNotBlank()) Text(text)
+}
+
+private val KEYSTORE_EXTENSIONS = setOf("jks", "keystore", "bks", "p12", "pfx")
+private val AUDIO_EXTENSIONS = setOf("mp3", "wav", "ogg", "flac", "aac", "m4a", "opus", "wma", "mid", "midi")
+private val VIDEO_EXTENSIONS = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "ts", "flv")
+
+private fun fileIconForPath(path: Path): ImageVector = when (extensionOf(path)) {
+    in APK_FILE_EXTENSIONS -> Icons.Outlined.Android
+    in KEYSTORE_EXTENSIONS -> Icons.Outlined.Key
+    in IMAGE_PREVIEW_EXTENSIONS -> Icons.Outlined.Image
+    in AUDIO_EXTENSIONS -> Icons.Outlined.MusicNote
+    in VIDEO_EXTENSIONS -> Icons.Outlined.VideoFile
+    "json" -> Icons.Outlined.DataObject
+    "mpp", "rvp", "jar", "reseam" -> Icons.Outlined.Extension
+    else -> Icons.AutoMirrored.Outlined.InsertDriveFile
 }
 
 private data class PathSortKey(
@@ -835,8 +966,20 @@ private fun PathSelectorGroupHeaderShimmer() {
 }
 
 @Composable
+private fun rememberPathPreviewRequest(path: Path, previewCache: PathPreviewCache): ImageRequest {
+    val context = LocalContext.current
+    return remember(path, previewCache, context) {
+        ImageRequest.Builder(context)
+            .data(path.toFile())
+            .memoryCacheKey(pathPreviewCacheKey(previewCache.generation, path))
+            .build()
+    }
+}
+
+@Composable
 private fun FileLeadingIcon(
     path: Path,
+    previewCache: PathPreviewCache,
     pm: PM,
     filesystem: Filesystem,
     onImagePreviewClick: (() -> Unit)? = null
@@ -847,8 +990,9 @@ private fun FileLeadingIcon(
                 if (onImagePreviewClick != null) Modifier.clickable(onClick = onImagePreviewClick) else Modifier
             )
         ) {
+            val imageRequest = rememberPathPreviewRequest(path, previewCache)
             AsyncImage(
-                model = path.toFile(),
+                model = imageRequest,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -862,16 +1006,19 @@ private fun FileLeadingIcon(
     val fileName = path.fileName?.toString()?.lowercase().orEmpty()
     val extension = fileName.substringAfterLast('.', "")
     if (extension !in APK_FILE_EXTENSIONS) {
-        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+        Icon(fileIconForPath(path), contentDescription = null)
         return
     }
 
-    var iconInfo by remember(path) { mutableStateOf<ApkIconInfo?>(null) }
-    LaunchedEffect(path) {
-        iconInfo?.cleanup?.invoke()
-        iconInfo = loadApkIconInfo(path, pm, filesystem)
+    var iconInfo by remember(path, previewCache) { mutableStateOf<ApkIconInfo?>(previewCache.get(path)) }
+    LaunchedEffect(path, previewCache) {
+        iconInfo = previewCache.get(path) ?: pathPreviewPermits.withPermit {
+            previewCache.get(path) ?: loadApkIconInfo(path, pm, filesystem)?.also {
+                previewCache.put(path, it)
+            }
+        }
     }
-    DisposableEffect(path) {
+    DisposableEffect(path, previewCache) {
         onDispose {
             iconInfo?.cleanup?.invoke()
         }
@@ -882,11 +1029,12 @@ private fun FileLeadingIcon(
         AppIcon(
             packageInfo = packageInfo,
             iconOverride = iconInfo?.iconOverride,
+            cacheKey = pathPreviewCacheKey(previewCache.generation, path),
             contentDescription = null,
             modifier = Modifier.size(24.dp)
         )
     } else {
-        Icon(Icons.AutoMirrored.Outlined.InsertDriveFile, contentDescription = null)
+        Icon(fileIconForPath(path), contentDescription = null)
     }
 }
 
@@ -903,6 +1051,11 @@ private fun isImagePreviewablePath(path: Path): Boolean {
     return extension in IMAGE_PREVIEW_EXTENSIONS
 }
 
+// A refresh invalidates row details and previews, including files replaced at the same path.
+private class PathPreviewCache : LruCache<Path, ApkIconInfo>(100) {
+    val generation: String = UUID.randomUUID().toString()
+}
+
 private data class ApkIconInfo(
     val packageInfo: android.content.pm.PackageInfo?,
     val iconOverride: android.graphics.drawable.Drawable? = null,
@@ -914,30 +1067,37 @@ private suspend fun loadApkIconInfo(
     pm: PM,
     filesystem: Filesystem
 ): ApkIconInfo? = withContext(Dispatchers.IO) {
-    val file = path.toFile()
-    if (!file.exists()) return@withContext null
-    val extension = file.extension.lowercase()
-    val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
-    if (extension != "apk" && !isSplitArchive) return@withContext null
+    try {
+        val file = path.toFile()
+        if (!file.exists()) return@withContext null
+        val extension = file.extension.lowercase(Locale.ROOT)
+        val isSplitArchive = extension != "apk" && SplitApkPreparer.isSplitArchive(file)
+        if (extension != "apk" && !isSplitArchive) return@withContext null
 
-    if (isSplitArchive) {
-        val resolved = SplitArchiveDisplayResolver.resolve(
-            source = file,
-            workspace = filesystem.tempDir,
-            app = pm.application,
-            pm = pm
-        ) ?: return@withContext null
-        ApkIconInfo(
-            packageInfo = resolved.packageInfo,
-            iconOverride = resolved.icon,
-            cleanup = null
-        )
-    } else {
-        ApkIconInfo(
-            packageInfo = pm.getPackageInfo(file),
-            iconOverride = null,
-            cleanup = null
-        )
+        if (isSplitArchive) {
+            val resolved = SplitArchiveDisplayResolver.resolve(
+                source = file,
+                workspace = filesystem.tempDir,
+                app = pm.application,
+                pm = pm
+            ) ?: return@withContext null
+            ApkIconInfo(
+                packageInfo = resolved.packageInfo,
+                iconOverride = resolved.icon,
+                cleanup = null
+            )
+        } else {
+            ApkIconInfo(
+                packageInfo = pm.getPackageInfo(file),
+                iconOverride = null,
+                cleanup = null
+            )
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Exception) {
+        // Previews are optional: unreadable or damaged archives keep the generic file icon.
+        null
     }
 }
 
@@ -949,7 +1109,8 @@ private fun PathItem(
     leadingContent: (@Composable () -> Unit)? = null,
     name: String,
     enabled: Boolean = true,
-    supportingText: String? = null
+    supportingText: String? = null,
+    supportingContent: (@Composable () -> Unit)? = null
 ) {
     val hasLongClick = onLongClick != null
     val clickEnabled = enabled || hasLongClick
@@ -964,7 +1125,7 @@ private fun PathItem(
             Modifier
         },
         headlineContent = { Text(name) },
-        supportingContent = supportingText?.let { { Text(it) } },
+        supportingContent = supportingContent ?: supportingText?.let { { Text(it) } },
         leadingContent = {
             leadingContent?.invoke() ?: Icon(icon, contentDescription = null)
         }

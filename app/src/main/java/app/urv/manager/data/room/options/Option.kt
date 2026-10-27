@@ -15,6 +15,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.float
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -74,6 +75,7 @@ data class Option(
                 typeOf<Int>() -> value.int
                 typeOf<Long>() -> value.long
                 typeOf<Float>() -> value.float
+                typeOf<Double>() -> value.double
                 typeOf<String>() -> value.content.also {
                     if (!value.isString) throw SerializationException(
                         "Expected value to be a string: $value"

@@ -28,4 +28,8 @@
         <item quantity="one">¿Estás seguro de que quieres eliminar el perfil de parches seleccionado?</item>
         <item quantity="other">¿Estás seguro de que quieres eliminar los perfiles de parches seleccionados?</item>
     </plurals>
+    <plurals name="patcher_cpu_core_count">
+        <item quantity="one">%d núcleo</item>
+        <item quantity="other">%d núcleos</item>
+    </plurals>
 </resources>

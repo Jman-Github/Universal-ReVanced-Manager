@@ -34,8 +34,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import app.urv.manager.domain.bundles.BundleIcon
+import app.urv.manager.domain.bundles.BundleIconRepository
+import app.urv.manager.domain.bundles.RemotePatchBundle
+import org.koin.compose.koinInject
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,21 +66,18 @@ import app.urv.manager.domain.repository.PatchBundleRepository.DisplayNameUpdate
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.TextInputDialog
-import app.urv.manager.ui.component.bundle.BundleLinksSheet
-import app.urv.manager.ui.component.bundle.openBundleCatalogPage
+import app.urv.manager.domain.bundles.BundleReleasePageRepository
 import app.urv.manager.ui.component.bundle.openBundleReleasePage
 import app.urv.manager.ui.component.haptics.HapticCheckbox
 import app.urv.manager.ui.component.ShimmerBox
 import app.urv.manager.ui.model.PatchBundleActionKey
 import app.urv.manager.util.consumeHorizontalScroll
-import app.urv.manager.util.PatchListCatalog
 import app.urv.manager.util.relativeTime
 import app.urv.manager.util.toast
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 
 @Composable
 fun BundleItem(
@@ -105,10 +106,8 @@ fun BundleItem(
     val bundleRepo = koinInject<PatchBundleRepository>()
     val prefs = koinInject<PreferencesManager>()
     val coroutineScope = rememberCoroutineScope()
-    val catalogUrl = remember(src) {
-        if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
-    }
-    var showLinkSheet by rememberSaveable { mutableStateOf(false) }
+    val releasePages: BundleReleasePageRepository = koinInject()
+    var releasePageLoading by remember { mutableStateOf(false) }
     var showRenameDialog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelog by rememberSaveable { mutableStateOf(false) }
     var showBundleChangelogHistory by rememberSaveable { mutableStateOf(false) }
@@ -353,6 +352,19 @@ fun BundleItem(
                             onCheckedChange = toggleSelection,
                         )
                     }
+                    val iconRepository: BundleIconRepository = koinInject()
+                    var bundleIcon by remember(src.uid, (src as? RemotePatchBundle)?.endpoint) {
+                        mutableStateOf(BundleIcon())
+                    }
+                    // Update checks can hydrate metadata without changing the endpoint or artifact.
+                    LaunchedEffect(src) {
+                        bundleIcon = iconRepository.resolve(src)
+                    }
+                    if (src is RemotePatchBundle) {
+                        CatalogIcon(bundleIcon.url, bundleIcon.avatar, src.displayTitle,
+                            isOfficial = src.isDefault || src is app.urv.manager.domain.bundles.APIPatchBundle ||
+                                bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL)
+                    }
                     val titleScrollState = rememberScrollState()
                     Text(
                         text = src.displayTitle,
@@ -476,11 +488,21 @@ fun BundleItem(
                             onLongClick = { showForceUpdateDialog = true }
                         )
                     }
-                    PatchBundleActionKey.LINKS -> BundleActionPill(
-                        text = stringResource(R.string.bundle_links),
+                    PatchBundleActionKey.RELEASE_PAGE -> BundleActionPill(
+                        text = stringResource(R.string.bundle_release_page),
                         icon = FontAwesomeIcons.Brands.Github,
-                        enabled = src.enabled,
-                        onClick = { showLinkSheet = true }
+                        enabled = src.enabled && !releasePageLoading,
+                        onClick = {
+                            coroutineScope.launch {
+                                if (releasePageLoading) return@launch
+                                releasePageLoading = true
+                                try {
+                                    openBundleReleasePage(src, releasePages, networkInfo, context, uriHandler)
+                                } finally {
+                                    releasePageLoading = false
+                                }
+                            }
+                        }
                     )
                     PatchBundleActionKey.CHANGELOG_LATEST -> if (remoteSource != null) {
                         BundleActionPill(
@@ -526,24 +548,6 @@ fun BundleItem(
     }
             }
         }
-    }
-
-    if (showLinkSheet) {
-        BundleLinksSheet(
-            bundleTitle = bundleTitle,
-            catalogUrl = catalogUrl,
-            onReleaseClick = {
-                coroutineScope.launch {
-                    openBundleReleasePage(src, networkInfo, context, uriHandler)
-                }
-            },
-            onCatalogClick = {
-                coroutineScope.launch {
-                    openBundleCatalogPage(catalogUrl, context, uriHandler)
-                }
-            },
-            onDismissRequest = { showLinkSheet = false }
-        )
     }
 }
 

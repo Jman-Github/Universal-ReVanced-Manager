@@ -20,8 +20,10 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FilterOutputStream
+import java.io.OutputStream
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.io.path.outputStream
@@ -30,7 +32,8 @@ data class DownloadResult(
     val file: File,
     val needsSplit: Boolean,
     val merged: Boolean = false,
-    val cleanup: (() -> Unit)? = null
+    val cleanup: (() -> Unit)? = null,
+    val packageInfo: PackageInfo? = null
 )
 
 class DownloadedAppRepository(
@@ -42,33 +45,27 @@ class DownloadedAppRepository(
     private val dir = app.getDir("downloaded-apps", Context.MODE_PRIVATE)
     private val tempDir = app.cacheDir.resolve("temp-downloaded-apps").apply { mkdirs() }
     private val dao = db.downloadedAppDao()
-    private val splitWorkspace = app.cacheDir.resolve("downloaded-splits").apply { mkdirs() }
 
     fun getAll() = dao.getAllApps().distinctUntilChanged()
 
     fun getApkFileForApp(app: DownloadedApp): File =
         getApkFileForDir(dir.resolve(app.directory))
 
-    suspend fun getPreparedApkFile(app: DownloadedApp, stripNativeLibs: Boolean = false): File =
-        CacheCleanupGuard.withCacheInUse {
-            val source = getApkFileForApp(app)
-            val preparation = SplitApkPreparer.prepareIfNeeded(
-                source = source,
-                workspace = splitWorkspace,
-                stripNativeLibs = stripNativeLibs
+    suspend fun exportApps(
+        apps: List<DownloadedApp>,
+        output: OutputStream,
+        asArchive: Boolean
+    ) = CacheCleanupGuard.withCacheInUse {
+        withContext(Dispatchers.IO) {
+            DownloadedAppFiles.export(
+                files = apps.map { "${it.packageName}_${it.version}" to getApkFileForApp(it) },
+                output = output,
+                asArchive = asArchive
             )
-            try {
-                if (preparation.merged) {
-                    // Always persist merged split back to the cached download so exports/selections use the intact APK.
-                    preparation.file.copyTo(source, overwrite = true)
-                }
-                source
-            } finally {
-                preparation.cleanup()
-            }
         }
+    }
 
-    private fun getApkFileForDir(directory: File) = directory.listFiles()!!.first()
+    private fun getApkFileForDir(directory: File) = DownloadedAppFiles.source(directory)
 
     suspend fun download(
         plugin: LoadedDownloaderPlugin,
@@ -152,6 +149,9 @@ class DownloadedAppRepository(
                 ) error("The selected app version ($pkgInfo.versionName) doesn't match the suggested version. Please use the suggested version ($expectedVersion), or adjust your settings by disabling \"Require suggested app version\" and enabling \"Disable version compatibility check\".")
             }
 
+            val needsSplit = SplitApkPreparer.isSplitArchive(workingFile)
+            val storedFile = DownloadedAppFiles.finishDownload(workingFile, needsSplit)
+
             if (persistDownload) {
                 val versionName = pkgInfo.versionName!!
                 val shouldKeepLatestOnly = prefs.autoSaveDownloaderLatestOnly.get()
@@ -173,10 +173,7 @@ class DownloadedAppRepository(
                 )
             }
 
-            val needsSplit = SplitApkPreparer.isSplitArchive(workingFile)
-            val storedFile = getApkFileForDir(saveDir)
-
-            // Return the downloaded archive, noting if it will require a split merge later.
+            // Keep split archives intact so the selected runtime can prepare their components.
             val cleanupAction = if (persistDownload) null else {
                 {
                     saveDir.deleteRecursively()
@@ -188,7 +185,8 @@ class DownloadedAppRepository(
                 file = storedFile,
                 needsSplit = needsSplit,
                 merged = false,
-                cleanup = cleanupAction
+                cleanup = cleanupAction,
+                packageInfo = pkgInfo
             )
         } catch (e: Exception) {
             saveDir.deleteRecursively()
@@ -220,9 +218,6 @@ class DownloadedAppRepository(
             }
         }
     }
-
-    private suspend fun resolvePackageInfo(file: File): PackageInfo? =
-        resolvePackageInfoForValidation(file, splitWorkspace)
 
     private suspend fun resolvePackageInfoForValidation(file: File, workspace: File): PackageInfo? {
         if (!file.exists()) return null

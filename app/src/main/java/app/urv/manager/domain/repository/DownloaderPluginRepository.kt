@@ -11,6 +11,7 @@ import android.content.res.Resources
 import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
+import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.data.room.AppDatabase
 import app.urv.manager.data.room.plugins.TrustedDownloaderPlugin
@@ -870,7 +871,11 @@ class DownloaderPluginRepository(
         val target = sourceFile(entry)
         val tempFile = directory.resolve("downloader.tmp")
         if (tempFile.exists()) tempFile.delete()
-        val progressNotification = downloadProgressNotifier.begin(asset.name)
+        val progressNotification = downloadProgressNotifier.begin(
+            _sourceStates.value[entry.id]?.name?.let {
+                app.getString(R.string.downloader_download_title, it)
+            } ?: asset.name
+        )
 
         runCatching {
             httpService.downloadToFile(
@@ -881,6 +886,9 @@ class DownloaderPluginRepository(
                 onProgress = progressNotification::update
             )
             val packageInfo = readArchivePackageInfo(tempFile)
+            pm.getArchiveLabel(tempFile, packageInfo)?.let { name ->
+                progressNotification.updateTitle(app.getString(R.string.downloader_download_title, name))
+            }
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {
                     ArchiveTrust.Trusted -> Unit

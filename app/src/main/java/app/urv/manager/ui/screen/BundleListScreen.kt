@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.urv.manager.ui.component.LazyColumnWithScrollbar
+import app.urv.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH
 import app.urv.manager.ui.component.bundle.BundleItem
 import app.urv.manager.ui.component.bundle.BundleItemPlaceholder
 import app.urv.manager.ui.component.settings.SettingsSearchHighlight
@@ -131,6 +132,7 @@ fun BundleListScreen(
     ) {
         if (sources == null) {
             LazyColumnWithScrollbar(
+                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -163,6 +165,7 @@ fun BundleListScreen(
         } else {
             val currentSources = filteredSources.orEmpty()
             LazyColumnWithScrollbar(
+                thumbLength = DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -268,6 +271,7 @@ private fun BundleOrderDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),
+                    reserveScrollbarSpace = true,
                     state = lazyListState
                 ) {
                     itemsIndexed(workingOrder, key = { _, bundle -> bundle.uid }) { index, bundle ->

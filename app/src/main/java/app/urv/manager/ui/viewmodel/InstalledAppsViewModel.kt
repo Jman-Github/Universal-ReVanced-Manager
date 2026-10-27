@@ -19,6 +19,7 @@ import app.urv.manager.data.room.apps.installed.InstalledApp
 import app.urv.manager.data.room.profile.PatchProfilePayload
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.domain.bundles.PatchBundleSource
+import app.urv.manager.domain.bundles.compareBundleVersions
 import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
 import app.urv.manager.domain.installer.RootInstaller
 import app.urv.manager.domain.installer.RootServiceException
@@ -53,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import app.urv.manager.patcher.split.SplitApkPreparer
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.Path
@@ -428,7 +430,8 @@ class InstalledAppsViewModel(
                 val exportData = buildExportMetadata(app, source)
                 val fileName = ExportNameFormatter.format(exportTemplate, exportData)
                 val targetName = resolveUniqueDocumentName(root, fileName)
-                val target = root.createFile("application/vnd.android.package-archive", targetName)
+                val target = root.createFile(if (exportData.fileExtension == "apks") "application/zip"
+                    else "application/vnd.android.package-archive", targetName)
                 if (target == null) {
                     failed++
                     return@forEach
@@ -659,7 +662,8 @@ class InstalledAppsViewModel(
             appName = label,
             packageName = packageInfo?.packageName ?: displayPackageName,
             appVersion = app.version,
-            patchBundles = patchBundles
+            patchBundles = patchBundles,
+            fileExtension = if (SplitApkPreparer.isSplitArchive(source)) "apks" else "apk"
         )
     }
 
@@ -906,13 +910,8 @@ internal fun isBundleUpdateAvailable(currentVersion: String, appliedVersion: Str
     compareBundleVersionStrings(currentVersion, appliedVersion) > 0
 
 private fun compareBundleVersionStrings(first: String, second: String): Int {
-    val firstVersion = BundleVersion.parse(first)
-    val secondVersion = BundleVersion.parse(second)
-    if (firstVersion != null && secondVersion != null) {
-        return firstVersion.compareTo(secondVersion)
-    }
-
-    return compareLooseBundleVersionStrings(first, second)
+    return compareBundleVersions(first, second)
+        ?: compareLooseBundleVersionStrings(first, second)
 }
 
 private fun compareLooseBundleVersionStrings(first: String, second: String): Int {
@@ -929,57 +928,4 @@ private fun compareLooseBundleVersionStrings(first: String, second: String): Int
         if (a != b) return a.compareTo(b)
     }
     return first.compareTo(second, ignoreCase = true)
-}
-
-private data class BundleVersion(
-    val core: List<Long>,
-    val prerelease: List<String>
-) : Comparable<BundleVersion> {
-    override fun compareTo(other: BundleVersion): Int {
-        val max = maxOf(core.size, other.core.size)
-        for (index in 0 until max) {
-            val first = core.getOrElse(index) { 0 }
-            val second = other.core.getOrElse(index) { 0 }
-            if (first != second) return first.compareTo(second)
-        }
-
-        if (prerelease.isEmpty() && other.prerelease.isEmpty()) return 0
-        if (prerelease.isEmpty()) return 1
-        if (other.prerelease.isEmpty()) return -1
-
-        val prereleaseMax = maxOf(prerelease.size, other.prerelease.size)
-        for (index in 0 until prereleaseMax) {
-            val first = prerelease.getOrNull(index) ?: return -1
-            val second = other.prerelease.getOrNull(index) ?: return 1
-            val firstNumber = first.toLongOrNull()
-            val secondNumber = second.toLongOrNull()
-            val comparison = when {
-                firstNumber != null && secondNumber != null -> firstNumber.compareTo(secondNumber)
-                firstNumber != null -> -1
-                secondNumber != null -> 1
-                else -> first.compareTo(second, ignoreCase = true)
-            }
-            if (comparison != 0) return comparison
-        }
-
-        return 0
-    }
-
-    companion object {
-        private val versionPattern = Regex("^[vV]?(\\d+(?:\\.\\d+)*)(?:[-_]([^+\\s]+))?(?:\\+.*)?$")
-
-        fun parse(value: String): BundleVersion? {
-            val match = versionPattern.matchEntire(value.trim()) ?: return null
-            val core = match.groupValues[1]
-                .split('.')
-                .map { it.toLongOrNull() ?: return null }
-            val prerelease = match.groupValues.getOrNull(2)
-                ?.takeIf { it.isNotBlank() }
-                ?.split(Regex("[.-]"))
-                ?.filter { it.isNotBlank() }
-                .orEmpty()
-
-            return BundleVersion(core, prerelease)
-        }
-    }
 }

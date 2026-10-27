@@ -27,6 +27,7 @@ data class BundlesQueryData(
     val bundle: List<BundleNode> = emptyList(),
     @SerialName("refresh_jobs")
     val refreshJobs: List<RefreshJobNode> = emptyList(),
+    @SerialName("catalog_generation") val catalogGeneration: String? = null,
 )
 
 @Serializable
@@ -34,6 +35,10 @@ data class BundleNode(
     val id: Int,
     @SerialName("bundle_type")
     val bundleType: String? = null,
+    @SerialName("icon_url") val iconUrl: String? = null,
+    @SerialName("owner_avatar_url") val ownerAvatarUrl: String? = null,
+    @SerialName("patch_count") val patchCount: Int? = null,
+    @SerialName("metadata_status") val metadataStatus: String? = null,
     @SerialName("created_at")
     val createdAt: String? = null,
     val description: String? = null,
@@ -56,6 +61,7 @@ data class BundleNode(
     val patches: List<PatchNode>? = null,
     @Transient
     val patchMetadataVerified: Boolean = true,
+    @SerialName("catalog_id") val catalogId: String? = null,
 )
 
 @Serializable
@@ -80,6 +86,7 @@ data class SourceMetadata(
     val ownerName: String? = null,
     @SerialName("owner_avatar_url")
     val ownerAvatarUrl: String? = null,
+    @SerialName("bundle_icon_url") val bundleIconUrl: String? = null,
     @SerialName("repo_name")
     val repoName: String? = null,
     @SerialName("repo_description")
@@ -104,6 +111,7 @@ data class AggregateCount(
 
 @Serializable
 data class PatchNode(
+    val id: Int = 0,
     val name: String? = null,
     val description: String? = null,
     @SerialName("patch_packages")
@@ -118,6 +126,32 @@ data class PatchPackageNode(
 
 @Serializable
 data class PackageNode(
+    @SerialName("app_name") val appName: String? = null,
+    @SerialName("icon_url") val iconUrl: String? = null,
     val name: String? = null,
     val version: String? = null,
 )
+
+@Serializable
+data class PatchBundlesQueryData(val patches: List<PatchBundleNode> = emptyList())
+
+@Serializable
+data class PatchBundleNode(val bundle: BundleNode)
+
+@Serializable
+data class AppsQueryData(val packages: List<PackageNode> = emptyList())
+
+@Serializable
+data class SourcesQueryData(val source: List<SourceNode> = emptyList())
+
+@Serializable
+data class PatchesQueryData(val patch: List<PatchNode> = emptyList())
+
+@Serializable
+data class PatchLinksQueryData(val links: List<PatchPackageNode> = emptyList())
+
+@Serializable
+data class BundleIdsQueryData(val patch: List<BundleIdNode> = emptyList())
+
+@Serializable
+data class BundleIdNode(@SerialName("bundle_fk") val bundleId: Int)

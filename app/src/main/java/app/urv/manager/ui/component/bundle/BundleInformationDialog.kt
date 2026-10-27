@@ -52,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -80,10 +81,8 @@ import app.urv.manager.ui.component.ConfirmDialog
 import app.urv.manager.ui.component.ExceptionViewerDialog
 import app.urv.manager.ui.component.FullscreenDialog
 import app.urv.manager.ui.component.TextInputDialog
-import app.urv.manager.ui.component.bundle.BundleLinksSheet
-import app.urv.manager.ui.component.bundle.openBundleCatalogPage
-import app.urv.manager.ui.component.haptics.HapticSwitch
-import app.urv.manager.util.PatchListCatalog
+import app.urv.manager.domain.bundles.BundleReleasePageRepository
+import app.urv.manager.ui.component.settings.ExpressiveSettingsSwitch
 import app.urv.manager.util.simpleMessage
 import app.urv.manager.util.toast
 import kotlinx.coroutines.launch
@@ -93,7 +92,6 @@ import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Brands
 import compose.icons.fontawesomeicons.brands.Github
 import org.koin.compose.koinInject
-import java.net.URI
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,8 +116,8 @@ fun BundleInformationDialog(
     var viewCurrentBundlePatches by remember { mutableStateOf(false) }
     var viewBundleChangelog by remember { mutableStateOf(false) }
     var viewBundleChangelogHistory by remember { mutableStateOf(false) }
-    var showLinkSheet by rememberSaveable { mutableStateOf(false) }
     var showForceUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var showVersionDialog by rememberSaveable(src.uid) { mutableStateOf(false) }
     var changelogHistory by remember { mutableStateOf<List<PatchBundleChangelogEntry>>(emptyList()) }
     var changelogHistoryFetchedOnce by remember { mutableStateOf(false) }
     var changelogHistoryLoading by remember { mutableStateOf(false) }
@@ -130,9 +128,6 @@ fun BundleInformationDialog(
     val isLocal = src is LocalPatchBundle
     val bundleManifestAttributes = src.patchBundle?.manifestAttributes
     val manifestSource = bundleManifestAttributes?.source
-    val catalogUrl = remember(src) {
-        if (src.isDefault) PatchListCatalog.revancedCatalogUrl() else PatchListCatalog.resolveCatalogUrl(src)
-    }
     val bundleInfo by bundleRepo.allBundlesInfoFlow.collectAsStateWithLifecycle(emptyMap())
     val (autoUpdate, endpoint, searchUpdate) = remoteSource?.let {
         Triple(it.autoUpdate, it.endpoint, it.searchUpdate)
@@ -155,14 +150,7 @@ fun BundleInformationDialog(
         )
     }
     var showDisplayNameDialog by remember { mutableStateOf(false) }
-    var releasePageUrl by remember(src.uid, manifestSource) {
-        mutableStateOf(
-            initialGithubReleaseUrl(
-                src = src,
-                manifestSource = manifestSource
-            )
-        )
-    }
+    val releasePages: BundleReleasePageRepository = koinInject()
     var releasePageLoading by remember { mutableStateOf(false) }
 
     fun onAutoUpdateChange(new: Boolean) = composableScope.launch {
@@ -191,42 +179,36 @@ fun BundleInformationDialog(
         bundleRepo.update(updatedSource, showToast = true)
     }
 
+    fun onVersionSelectionChange(enabled: Boolean) = composableScope.launch {
+        val updated = with(bundleRepo) {
+            (src as? JsonPatchBundle)?.setVersionSelection(enabled)
+        } ?: return@launch
+        if (enabled && updated.selectedVersion == null) {
+            showVersionDialog = true
+        } else {
+            bundleRepo.update(updated, showToast = true)
+        }
+    }
+
+    if (showVersionDialog && src is JsonPatchBundle && src.useSpecificVersion) {
+        BundleVersionDialog(
+            source = src,
+            onDismiss = { showVersionDialog = false },
+            onSelect = { asset ->
+                showVersionDialog = false
+                composableScope.launch {
+                    val updated = with(bundleRepo) { src.setVersionSelection(true, asset) }
+                    bundleRepo.update(updated, showToast = true)
+                }
+            }
+        )
+    }
+
     fun openReleasePage() = composableScope.launch {
-        releasePageUrl?.let {
-            uriHandler.openUri(it)
-            return@launch
-        }
-
-        val remote = remoteSource
-        if (remote == null) {
-            context.toast(context.getString(R.string.bundle_release_page_unavailable))
-            return@launch
-        }
-
-        if (!hasNetwork) {
-            context.toast(context.getString(R.string.bundle_release_page_unavailable))
-            return@launch
-        }
-
+        if (releasePageLoading) return@launch
         releasePageLoading = true
         try {
-            val asset = remote.fetchLatestReleaseInfo()
-            val url = extractGithubReleaseUrlFromDownload(asset.downloadUrl)
-                ?: asset.pageUrl?.takeUnless { it.isBlank() }
-                ?: extractGithubReleaseUrlFromDownload(remote.endpoint)
-            if (url.isNullOrBlank()) {
-                context.toast(context.getString(R.string.bundle_release_page_unavailable))
-            } else {
-                releasePageUrl = url
-                uriHandler.openUri(url)
-            }
-        } catch (t: Throwable) {
-            context.toast(
-                context.getString(
-                    R.string.bundle_release_page_error,
-                    t.simpleMessage().orEmpty()
-                )
-            )
+            openBundleReleasePage(src, releasePages, networkInfo, context, uriHandler)
         } finally {
             releasePageLoading = false
         }
@@ -254,7 +236,7 @@ fun BundleInformationDialog(
 
     LaunchedEffect(autoOpenReleaseRequest) {
         autoOpenReleaseRequest?.let {
-            openReleasePage()
+            openBundleReleasePage(src, releasePages, networkInfo, context, uriHandler)
             onDismissRequest()
         }
     }
@@ -311,16 +293,6 @@ fun BundleInformationDialog(
     FullscreenDialog(
         onDismissRequest = onDismissRequest,
     ) {
-        if (showLinkSheet) {
-            BundleLinksSheet(
-                bundleTitle = src.displayTitle,
-                catalogUrl = catalogUrl,
-                onReleaseClick = { openReleasePage() },
-                onCatalogClick = { openBundleCatalogPage(catalogUrl, context, uriHandler) },
-                onDismissRequest = { showLinkSheet = false }
-            )
-        }
-
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.surface,
@@ -335,10 +307,10 @@ fun BundleInformationDialog(
                         )
                     },
                     actions = {
-                        val releaseAvailable = releasePageUrl != null || (!isLocal && hasNetwork)
-                        val githubButtonEnabled = (releaseAvailable || catalogUrl != null) && !releasePageLoading
+                        val releaseAvailable = !isLocal || !manifestSource.isNullOrBlank()
+                        val githubButtonEnabled = releaseAvailable && !releasePageLoading
                         IconButton(
-                            onClick = { if (githubButtonEnabled) showLinkSheet = true },
+                            onClick = { openReleasePage() },
                             enabled = githubButtonEnabled
                         ) {
                             Icon(
@@ -416,6 +388,7 @@ fun BundleInformationDialog(
                     supportingText = when (bundleInfo[src.uid]?.bundleType) {
                         PatchBundleType.REVANCED -> stringResource(R.string.bundle_type_revanced)
                         PatchBundleType.MORPHE -> stringResource(R.string.bundle_type_morphe)
+                        PatchBundleType.RESEAM -> stringResource(R.string.bundle_type_reseam)
                         PatchBundleType.AMPLE -> stringResource(R.string.bundle_type_ample)
                         null -> stringResource(field_not_set)
                     }
@@ -484,7 +457,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(auto_update),
                         supportingText = stringResource(auto_update_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = autoUpdate,
                                 onCheckedChange = ::onAutoUpdateChange
                             )
@@ -499,7 +472,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.bundle_search_update),
                         supportingText = stringResource(R.string.bundle_search_update_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = searchUpdate,
                                 onCheckedChange = ::onSearchUpdateChange
                             )
@@ -517,7 +490,7 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.patches_prereleases),
                         supportingText = stringResource(R.string.patches_prereleases_description, src.name),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = useBundlePrerelease,
                                 onCheckedChange = {
                                     composableScope.launch {
@@ -543,28 +516,61 @@ fun BundleInformationDialog(
                         headlineText = stringResource(R.string.repository_bundle_prereleases),
                         supportingText = stringResource(R.string.repository_bundle_prereleases_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = repositoryBundle.usePrereleases,
+                                enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
                                 onCheckedChange = ::onRepositoryPrereleasesChange
                             )
                         },
-                        modifier = Modifier.clickable {
-                            onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
-                        }
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion || repositoryBundle.useLatest) 0.38f else 1f)
+                            .clickable(enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest) {
+                                onRepositoryPrereleasesChange(!repositoryBundle.usePrereleases)
+                            }
                     )
 
                     BundleListItem(
                         headlineText = stringResource(R.string.repository_bundle_latest),
                         supportingText = stringResource(R.string.repository_bundle_latest_description),
                         trailingContent = {
-                            HapticSwitch(
+                            ExpressiveSettingsSwitch(
                                 checked = repositoryBundle.useLatest,
+                                enabled = !repositoryBundle.useSpecificVersion,
                                 onCheckedChange = ::onRepositoryLatestChange
                             )
                         },
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion) 0.38f else 1f)
+                            .clickable(enabled = !repositoryBundle.useSpecificVersion) {
+                                onRepositoryLatestChange(!repositoryBundle.useLatest)
+                            }
+                    )
+
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_use_specific_version),
+                        supportingText = stringResource(R.string.bundle_use_specific_version_description),
+                        trailingContent = {
+                            ExpressiveSettingsSwitch(
+                                checked = repositoryBundle.useSpecificVersion,
+                                onCheckedChange = ::onVersionSelectionChange
+                            )
+                        },
                         modifier = Modifier.clickable {
-                            onRepositoryLatestChange(!repositoryBundle.useLatest)
+                            onVersionSelectionChange(!repositoryBundle.useSpecificVersion)
                         }
+                    )
+                    BundleListItem(
+                        headlineText = stringResource(R.string.bundle_select_version),
+                        supportingText = repositoryBundle.selectedVersion?.version
+                            ?: stringResource(R.string.field_not_set),
+                        trailingContent = {
+                            Icon(Icons.AutoMirrored.Outlined.ArrowRight, contentDescription = null)
+                        },
+                        modifier = Modifier
+                            .alpha(if (repositoryBundle.useSpecificVersion) 1f else 0.38f)
+                            .clickable(enabled = repositoryBundle.useSpecificVersion) {
+                                showVersionDialog = true
+                            }
                     )
                 }
 
@@ -797,47 +803,3 @@ private fun ActionIconButton(
         content()
     }
 }
-
-internal const val DEFAULT_PATCH_RELEASES_URL =
-    "https://github.com/ReVanced/revanced-patches/releases"
-internal val GITHUB_SOURCE_REGEX =
-    Regex("^(?:git@|ssh://git@|https?://|git://)?github\\.com[:/](.+)$", RegexOption.IGNORE_CASE)
-
-internal fun initialGithubReleaseUrl(
-    src: PatchBundleSource,
-    manifestSource: String?
-): String? {
-    if (src.isDefault) return DEFAULT_PATCH_RELEASES_URL
-    if (src !is LocalPatchBundle) return null
-    return manifestSource
-        ?.extractGithubRepoPath()
-        ?.let(::buildGithubReleaseUrl)
-}
-
-internal fun extractGithubReleaseUrlFromDownload(downloadUrl: String?): String? {
-    if (downloadUrl.isNullOrBlank()) return null
-    val uri = runCatching { URI(downloadUrl) }.getOrNull() ?: return null
-    val path = uri.path ?: return null
-    val marker = "/releases"
-    val index = path.indexOf(marker, ignoreCase = true)
-    if (index == -1) return null
-    val authority = uri.authority ?: return null
-    val scheme = uri.scheme ?: "https"
-    val releasePath = path.substring(0, index + marker.length)
-    return buildString {
-        append(scheme)
-        append("://")
-        append(authority)
-        append(releasePath)
-    }
-}
-
-internal fun String.extractGithubRepoPath(): String? {
-    val cleaned = trim().removeSuffix(".git")
-    val match = GITHUB_SOURCE_REGEX.find(cleaned) ?: return null
-    val path = match.groupValues[1].trimStart('/', ':')
-    return path.takeIf { it.isNotEmpty() }
-}
-
-internal fun buildGithubReleaseUrl(repoPath: String): String =
-    "https://github.com/${repoPath.trim('/').trim()}/releases"

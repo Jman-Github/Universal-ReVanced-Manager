@@ -46,7 +46,9 @@ data class PatchBundleDiscoveryPatches(
     val isPrerelease: Boolean = false,
     val patchCount: Int = 0,
     val ownerName: String = "",
-    val repoName: String = ""
+    val repoName: String = "",
+    val bundleType: String = "",
+    val downloadUrl: String? = null
 )
 
 @Serializable

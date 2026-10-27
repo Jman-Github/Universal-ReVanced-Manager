@@ -45,7 +45,10 @@ internal class PatcherProgressTracker(
     private val dexWritePattern =
         Regex("Write\\s+\\[[^\\]]+\\]\\s+(classes\\d*\\.dex)", RegexOption.IGNORE_CASE)
     private val morpheProcessingClassesPattern =
-        Regex("Processing\\s+(\\d+)\\s+classes\\s+in\\s+parallel", RegexOption.IGNORE_CASE)
+        Regex(
+            "Processing\\s+(\\d+)\\s+classes(?:\\s+in\\s+parallel|\\s+\\(single threaded mode\\))",
+            RegexOption.IGNORE_CASE
+        )
     private val morpheWroteDexFilesPattern =
         Regex("Wrote\\s+(\\d+)\\s+dex\\s+files\\b", RegexOption.IGNORE_CASE)
     private val morpheStrippedDexPattern =
@@ -422,11 +425,6 @@ internal class PatcherProgressTracker(
         progress = 0f
     }
 
-    private data class VisualProgressUnits(
-        val completed: Double,
-        val total: Int
-    )
-
     private fun refreshVisualProgress() {
         val totalSteps = steps.size
         if (totalSteps <= 0) {
@@ -444,36 +442,20 @@ internal class PatcherProgressTracker(
     private fun calculateProgressFraction(step: Step): Double {
         if (step.state == State.COMPLETED) return 1.0
 
-        val subSteps = stepSubSteps[step.id].orEmpty()
-            .filterNot { it.skipped }
-            .map(::calculateProgressUnits)
-        val subStepTotal = subSteps.sumOf { it.total }
-        if (subStepTotal > 0) {
-            return (subSteps.sumOf { it.completed } / subStepTotal.toDouble())
-                .coerceIn(0.0, 1.0)
-        }
-
-        return step.state.progressFraction(step.progress)
+        return expandableStepProgressFraction(step.id, stepSubSteps[step.id].orEmpty())
+            ?: step.state.progressFraction(step.progress)
     }
 
-    private fun calculateProgressUnits(detail: StepDetail): VisualProgressUnits {
-        val children = detail.children
-            .filterNot { it.skipped }
-            .map(::calculateProgressUnits)
-        val childTotal = children.sumOf { it.total }
-        if (childTotal > 0) {
-            val completed = if (detail.state == State.COMPLETED) {
-                childTotal.toDouble()
-            } else {
-                children.sumOf { it.completed }
-            }
-            return VisualProgressUnits(completed = completed, total = childTotal)
-        }
-
-        return VisualProgressUnits(
-            completed = detail.state.progressFraction(detail.progress),
-            total = 1
-        )
+    private fun updateExpandableStepProgress(stepId: StepId?, previousProgress: Pair<Long, Long?>?) {
+        if (stepId == null || !isExpandableStep(stepId)) return
+        val index = steps.indexOfFirst { it.id == stepId }
+        if (index == -1 || steps[index].state != State.RUNNING) return
+        val step = steps[index]
+        val fraction = expandableStepProgressFraction(stepId, stepSubSteps[stepId].orEmpty()) ?: return
+        val previous = previousProgress?.takeIf { it.second == 1000L }?.first ?: 0L
+        // Late child events and newly discovered work must not restart the parent indicator.
+        val current = maxOf(previous, (fraction * 1000).toLong()).coerceIn(0L, 999L)
+        steps[index] = step.copy(progress = current to 1000L)
     }
 
     private fun State.progressFraction(progress: Pair<Long, Long?>?): Double = when (this) {
@@ -650,8 +632,12 @@ internal class PatcherProgressTracker(
     private fun matchesWriteApkDexGroup(detail: StepDetail): Boolean =
         isDexCompileGroupTitle(detail.title)
 
+    private fun hasLaterWriteApkPhaseStarted(list: List<StepDetail>, phaseIndex: Int): Boolean =
+        list.drop(phaseIndex + 1).any { !it.skipped && it.state != State.WAITING }
+
     private fun activateWriteApkDexGroup(list: SnapshotStateList<StepDetail>) {
         val groupIndex = ensureWriteApkDexGroupIndex(list)
+        if (hasLaterWriteApkPhaseStarted(list, groupIndex)) return
         completeWriteApkApplyChanges(list)
         completeWriteApkPriorSteps(list, groupIndex)
 
@@ -698,12 +684,23 @@ internal class PatcherProgressTracker(
         list: SnapshotStateList<StepDetail>,
         normalizedTitle: String
     ) {
+        val groupIndex = ensureWriteApkDexGroupIndex(list)
+        if (hasLaterWriteApkPhaseStarted(list, groupIndex)) {
+            // A delayed compile report belongs to the finished DEX phase, not the active output chip.
+            val group = list[groupIndex]
+            val children = group.children.toMutableList()
+            val index = children.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
+            if (index == -1) {
+                children.add(StepDetail(title = normalizedTitle, state = State.COMPLETED))
+            }
+            list[groupIndex] = group.copy(children = children)
+            return
+        }
         if (isMorpheSelection() && isMorpheWriteApkDexChildTitle(normalizedTitle)) {
             updateMorpheWriteApkDexChildSubStep(list, normalizedTitle)
             return
         }
 
-        val groupIndex = ensureWriteApkDexGroupIndex(list)
         val group = list[groupIndex]
         val initialChildren = group.children
         val initialRunningChildIndex = initialChildren.indexOfFirst { !it.skipped && it.state == State.RUNNING }
@@ -841,6 +838,7 @@ internal class PatcherProgressTracker(
             list.add(insertIndex, StepDetail(title = "Compiling modified resources", state = State.WAITING))
             insertIndex
         }
+        if (hasLaterWriteApkPhaseStarted(list, resourceIndex)) return
         completeWriteApkPriorSteps(list, resourceIndex)
         completeWriteApkDexGroup(list)
 
@@ -862,6 +860,7 @@ internal class PatcherProgressTracker(
     ) {
         val existingIndex = list.indexOfFirst { it.title.equals(normalizedTitle, ignoreCase = true) }
         if (existingIndex == -1) return
+        if (hasLaterWriteApkPhaseStarted(list, existingIndex)) return
 
         completeWriteApkDexGroup(list)
         completeWriteApkPriorSteps(list, existingIndex)
@@ -1021,16 +1020,19 @@ internal class PatcherProgressTracker(
         }
     }
 
-    private fun promoteNextSectionStepIfNeeded(completedIndex: Int) {
+    private fun promoteNextStepIfNeeded(completedIndex: Int) {
         val completedStep = steps.getOrNull(completedIndex) ?: return
         if (completedStep.hide) return
-        if (!isLastVisibleStepInSection(completedIndex)) return
+        // Preparation can include worker startup and input inspection between events.
+        // Keep its next row active during that handoff, just like section transitions.
+        val preparing = completedStep.category == StepCategory.PREPARING
+        if (!preparing && !isLastVisibleStepInSection(completedIndex)) return
 
         val nextVisibleIndex = ((completedIndex + 1) until steps.size)
             .firstOrNull { !steps[it].hide }
             ?: return
         val nextStep = steps[nextVisibleIndex]
-        if (nextStep.category == completedStep.category) return
+        if (!preparing && nextStep.category == completedStep.category) return
         if (nextStep.state != State.WAITING) return
 
         val anotherVisibleRunning = steps.indices.any { index ->
@@ -1156,6 +1158,7 @@ internal class PatcherProgressTracker(
     }
 
     fun processProgressEventLocked(event: ProgressEvent) {
+        val previousProgress = steps.firstOrNull { it.id == event.stepId }?.progress
         prepareSplitStepForIncomingEvent(event)
         if (bufferLoadPatchesEventDuringSplitPreparation(event)) return
         applyProgressEvent(event)
@@ -1168,6 +1171,7 @@ internal class PatcherProgressTracker(
             }
         }
         enforceSplitPreparationVisualPriority()
+        updateExpandableStepProgress(event.stepId, previousProgress)
         refreshVisualProgress()
     }
 
@@ -1291,7 +1295,7 @@ internal class PatcherProgressTracker(
                 steps[stepIndex] = updatedStep
                 if (event is ProgressEvent.Completed && updatedStep.state == State.COMPLETED) {
                     promoteImmediateSignStepIfNeeded(stepIndex)
-                    promoteNextSectionStepIfNeeded(stepIndex)
+                    promoteNextStepIfNeeded(stepIndex)
                 }
             }
         }
@@ -1324,6 +1328,15 @@ internal class PatcherProgressTracker(
         if (event.stepId != StepId.PrepareSplitApk) return
         if (steps.none { it.id == StepId.PrepareSplitApk }) {
             onSplitStepRequired()
+        }
+        if (event is ProgressEvent.Started && event.subSteps?.contains("Inspecting split APKs") == true) {
+            val index = steps.indexOfFirst { it.id == StepId.PrepareSplitApk }
+            if (index != -1 && (steps[index].state == State.COMPLETED || steps[index].state == State.FAILED)) {
+                // A fresh Reseam attempt prepares its own components again; merged runtimes
+                // keep their already prepared input when the patcher retries.
+                steps[index] = steps[index].copy(state = State.WAITING, message = null, progress = null)
+                stepSubSteps.remove(StepId.PrepareSplitApk)
+            }
         }
         when (event) {
             is ProgressEvent.Started,

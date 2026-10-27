@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import com.gigamole.composescrollbars.Scrollbars
 import com.gigamole.composescrollbars.ScrollbarsState
 import com.gigamole.composescrollbars.config.ScrollbarsConfig
@@ -16,7 +17,6 @@ import com.gigamole.composescrollbars.config.layersType.ScrollbarsLayersType
 import com.gigamole.composescrollbars.config.layersType.thicknessType.ScrollbarsThicknessType
 import com.gigamole.composescrollbars.config.visibilitytype.ScrollbarsVisibilityType
 import com.gigamole.composescrollbars.scrolltype.ScrollbarsScrollType
-import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsDynamicKnobType
 import com.gigamole.composescrollbars.scrolltype.knobtype.ScrollbarsStaticKnobType
 
 @Composable
@@ -39,16 +39,10 @@ fun Scrollbar(
 fun Scrollbar(
     lazyListState: LazyListState,
     modifier: Modifier = Modifier,
-    prominent: Boolean = false
+    prominent: Boolean = false,
+    thumbLength: Dp? = null
 ) {
-    Scrollbar(
-        ScrollbarsScrollType.Lazy.List.Dynamic(
-            knobType = ScrollbarsDynamicKnobType.Auto(),
-            state = lazyListState
-        ),
-        modifier,
-        prominent
-    )
+    LazyListScrollbar(lazyListState, modifier, prominent, thumbLength)
 }
 
 @Composable

@@ -1,20 +1,18 @@
 package app.urv.manager.patcher.patch
 
-import android.os.Parcelable
 import app.revanced.patcher.patch.Patch
 import app.revanced.patcher.patch.loadPatchesFromDex
-import kotlinx.parcelize.IgnoredOnParcel
-import kotlinx.parcelize.Parcelize
+import java.lang.reflect.Modifier
+import java.net.URLClassLoader
+import app.urv.manager.patcher.logger.Logger
 import java.io.File
 import java.io.IOException
 import java.util.jar.JarFile
 
-@Parcelize
-data class PatchBundle(val patchesJar: String) : Parcelable {
+data class PatchBundle(val patchesJar: String) {
     /**
      * The [java.util.jar.Manifest] of [patchesJar].
      */
-    @IgnoredOnParcel
     private val manifest by lazy {
         try {
             JarFile(patchesJar).use { it.manifest }
@@ -23,7 +21,6 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
         }
     }
 
-    @IgnoredOnParcel
     val manifestAttributes by lazy {
         if (manifest != null)
             ManifestAttributes(
@@ -54,27 +51,50 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
     )
 
     object Loader {
-        private fun loadBundle(bundle: PatchBundle): Collection<Patch<*>> {
-            validateDexEntries(bundle.patchesJar)
+        // Code adapted from Morphe, see third-party/NOTICE.txt for more information.
+        // https://github.com/MorpheApp/morphe-manager/pull/1246
+        private fun loadBundle(bundle: PatchBundle, logger: Logger? = null): Collection<Patch<*>> {
+            logger?.info("Loading patches from ${File(bundle.patchesJar).name}")
+            val startedAt = System.nanoTime()
+            val isArt = System.getProperty("java.vm.name") == "Dalvik"
+            if (isArt) validateDexEntries(bundle.patchesJar)
             val optimizedDexDirectory = optimizedDexDirectory(bundle.patchesJar)
-            val patchFiles = runCatching {
-                loadPatchesFromDex(setOf(File(bundle.patchesJar)), optimizedDexDirectory).byPatchesFile
+            val patches = runCatching {
+                val file = File(bundle.patchesJar)
+                if (isArt) {
+                    loadPatchesFromDex(setOf(file), optimizedDexDirectory).byPatchesFile.values.flatten()
+                } else loadJvmPatches(file)
             }.getOrElse { error ->
                 throw IllegalStateException("Patch bundle is corrupted or incomplete", error)
             }
-            if (patchFiles.isEmpty()) {
-                throw IllegalStateException("Unexpected patch bundle load result for ${bundle.patchesJar}")
-            }
-
-            val patches = patchFiles.values
-                .asSequence()
-                .flatten()
-                .toList()
             if (patches.isEmpty()) {
                 throw IllegalStateException("Patch bundle contains no patches: ${bundle.patchesJar}")
             }
 
+            logger?.info("Loaded ${patches.size} patches of ${File(bundle.patchesJar).name} in ${(System.nanoTime() - startedAt) / 1_000_000}ms")
             return patches
+        }
+
+        // ReVanced's JAR loader uses the system parent, which cannot see an isolated JVM SDK.
+        // Keep its public static field/getter discovery with the patcher's class loader as parent.
+        // https://github.com/ReVanced/revanced-patcher/blob/v21.0.0/src/main/kotlin/app/revanced/patcher/patch/Patch.kt
+        private fun loadJvmPatches(file: File): List<Patch<*>> {
+            val loader = URLClassLoader(arrayOf(file.toURI().toURL()), Patch::class.java.classLoader)
+            return JarFile(file).use { jar ->
+                jar.entries().asSequence().filter { it.name.endsWith(".class") }
+                    .map { loader.loadClass(it.name.removeSuffix(".class").replace('/', '.')) }
+                    .flatMap { type ->
+                        val fields = type.fields.asSequence().filter {
+                            Modifier.isStatic(it.modifiers) && Modifier.isPublic(it.modifiers) &&
+                                Patch::class.java.isAssignableFrom(it.type)
+                        }.map { it.get(null) as Patch<*> }
+                        val methods = type.methods.asSequence().filter {
+                            Modifier.isStatic(it.modifiers) && Modifier.isPublic(it.modifiers) &&
+                                it.parameterCount == 0 && Patch::class.java.isAssignableFrom(it.returnType)
+                        }.map { it.invoke(null) as Patch<*> }
+                        fields + methods
+                    }.filter { it.name != null }.distinct().toList()
+            }
         }
 
         private fun metadataFor(bundle: PatchBundle) = loadBundle(bundle)
@@ -84,9 +104,10 @@ data class PatchBundle(val patchesJar: String) : Parcelable {
 
         fun metadata(bundle: PatchBundle) = metadataFor(bundle)
 
-        fun patches(bundles: Iterable<PatchBundle>, packageName: String) =
+        @JvmOverloads
+        fun patches(bundles: Iterable<PatchBundle>, packageName: String, logger: Logger? = null) =
             bundles.associateWith { bundle ->
-                loadBundle(bundle).filter { patch ->
+                loadBundle(bundle, logger).filter { patch ->
                     val compatiblePackages = patch.compatiblePackages
                         ?: return@filter true // Universal patch
 

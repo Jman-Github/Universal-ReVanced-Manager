@@ -37,9 +37,16 @@ import app.urv.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.urv.manager.domain.bundles.RepositoryBundleReleaseChannel
 import app.urv.manager.domain.bundles.RepositoryBundleSettings
 import app.urv.manager.domain.bundles.RepositoryBundleSettingsStore
+import app.urv.manager.domain.bundles.legacyDiscoveryEndpoint
+import app.urv.manager.domain.bundles.discoveryRegistryMigration
+import app.urv.manager.domain.bundles.DiscoveryRegistryMigration
+import app.urv.manager.domain.bundles.registryBundleIconSource
+import app.urv.manager.domain.bundles.toExternalBundleMetadata
+import app.urv.manager.network.api.ExternalBundlesApi
 import app.urv.manager.network.api.ExternalBundlesEndpoints
 import app.urv.manager.network.dto.ExternalBundleSnapshot
 import app.urv.manager.network.dto.ReVancedAsset
+import app.urv.manager.network.utils.getOrNull
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.patcher.morphe.MorpheRuntimeBridge
 import app.urv.manager.patcher.revanced.Revanced21RuntimeBridge
@@ -48,10 +55,14 @@ import app.urv.manager.patcher.patch.PatchInfo
 import app.urv.manager.patcher.patch.PatchBundle
 import app.urv.manager.patcher.patch.PatchBundleInfo
 import app.urv.manager.patcher.patch.PatchBundleType
+import app.urv.manager.patcher.patch.ReseamBundleFormat
+import app.urv.manager.patcher.reseam.ReseamRuntimeBridge
+import app.urv.manager.patcher.runtime.reseam.ReseamRuntimeAssets
 import app.urv.manager.patcher.runtime.morphe.MorpheRuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced21RuntimeAssets
 import app.urv.manager.patcher.runtime.revanced.Revanced22RuntimeAssets
 import app.urv.manager.util.DownloadProgressNotifier
+import app.urv.manager.util.removeUpdatedBundleNotifications
 import app.urv.manager.util.PatchSelection
 import app.urv.manager.util.Options
 import app.urv.manager.util.simpleMessage
@@ -115,6 +126,7 @@ class PatchBundleRepository(
     private val networkInfo: NetworkInfo,
     private val prefs: PreferencesManager,
     private val downloadProgressNotifier: DownloadProgressNotifier,
+    private val externalBundlesApi: ExternalBundlesApi,
     filesystem: Filesystem,
     db: AppDatabase,
 ) {
@@ -215,7 +227,7 @@ class PatchBundleRepository(
             .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
             .toSet()
         val morphePatches = bundleInfos.values
-            .filter { it.bundleType == PatchBundleType.MORPHE }
+            .filter { it.bundleType == PatchBundleType.MORPHE || it.bundleType == PatchBundleType.RESEAM }
             .flatMap { info -> info.patches }
         val morpheSuggested = suggestedVersionsForMorphe(morphePatches)
         val revancedSuggested = suggestedVersionsForRevanced(revancedPatches)
@@ -232,6 +244,7 @@ class PatchBundleRepository(
                 PatchBundleType.MORPHE -> {
                     suggestedVersionsForMorphe(info.patches)
                 }
+                PatchBundleType.RESEAM -> suggestedVersionsForMorphe(info.patches)
                 PatchBundleType.AMPLE -> emptyMap()
             }
         }
@@ -256,6 +269,7 @@ class PatchBundleRepository(
     private val discoveryImportQueuedFlow = MutableStateFlow<Set<String>>(emptySet())
     val discoveryImportQueued: StateFlow<Set<String>> = discoveryImportQueuedFlow.asStateFlow()
 
+    private val discoveryMigrationMutex = Mutex()
     private val updateJobMutex = Mutex()
     private var updateJob: Job? = null
     private val updateStateMutex = Mutex()
@@ -395,7 +409,7 @@ class PatchBundleRepository(
     private fun isRemoteUpdateCancelled(uid: Int): Boolean = cancelledUpdateUids.contains(uid)
 
     private fun RemotePatchBundle.isManualUpdateEligible(): Boolean =
-        !autoUpdate &&
+        !updatesAutomatically &&
             searchUpdate &&
             enabled &&
             state is PatchBundleSource.State.Available
@@ -807,6 +821,20 @@ class PatchBundleRepository(
             State(sources.toPersistentMap(), info.toPersistentMap())
         }
         val info = loadMetadata(sources).toMutableMap()
+        // Reseam stores identity in its signed catalog rather than a Java JAR manifest.
+        // Read it through the runtime so malformed or untrusted catalogs cannot supply names.
+        info.filterValues { it.bundleType == PatchBundleType.RESEAM }.keys.forEach { uid ->
+            val source = sources[uid] ?: return@forEach
+            val bundle = source.patchBundle ?: return@forEach
+            val catalogName = runCatching { ReseamRuntimeBridge.loadBundleName(bundle.patchesJar) }
+                .getOrNull() ?: return@forEach
+            if (catalogName != source.name) {
+                updateDb(uid) { it.copy(name = catalogName) }
+                val renamedSource = source.copy(name = catalogName)
+                sources[uid] = renamedSource
+                info[uid] = info[uid]?.copy(name = renamedSource.displayTitle) ?: return@forEach
+            }
+        }
 
         val officialSource = sources[0]
         val officialDisplayName = "Official ReVanced Patches"
@@ -1050,6 +1078,13 @@ class PatchBundleRepository(
     ): Pair<PatchBundleType, List<PatchInfo>> {
         val bundlePath = bundle.patchesJar
         val declaredType = detectDeclaredBundleType(bundle, source)
+        if (declaredType == PatchBundleType.RESEAM) {
+            if (!ReseamRuntimeAssets.isAvailable(app)) {
+                throw missingRuntimeException("Reseam")
+            }
+            return PatchBundleType.RESEAM to
+                ReseamRuntimeBridge.loadMetadata(bundlePath)
+        }
         if (declaredType == PatchBundleType.MORPHE) {
             return PatchBundleType.MORPHE to MorpheRuntimeBridge.loadMetadata(bundlePath)
         }
@@ -1151,6 +1186,8 @@ class PatchBundleRepository(
         source: PatchBundleSource?
     ): PatchBundleType? {
         val extension = resolveBundleExtension(bundle, source)
+        if (ReseamBundleFormat.isCandidate(java.io.File(bundle.patchesJar))) return PatchBundleType.RESEAM
+        if (extension == "reseam") return PatchBundleType.RESEAM
         if (extension == "mpp") return PatchBundleType.MORPHE
         return if (extension == "rvp") PatchBundleType.REVANCED else null
     }
@@ -1259,7 +1296,7 @@ class PatchBundleRepository(
                 val (bundleType, patches) = loadBundleMetadata(src.uid, bundle, src)
                 metadata[src.uid] = PatchBundleInfo.Global(
                     src.displayTitle,
-                    bundle.manifestAttributes?.version,
+                    src.version,
                     src.uid,
                     bundleType,
                     src.enabled,
@@ -1269,7 +1306,7 @@ class PatchBundleRepository(
                 detectDeclaredBundleType(bundle, src)?.let { declaredType ->
                     metadata[src.uid] = PatchBundleInfo.Global(
                         src.displayTitle,
-                        bundle.manifestAttributes?.version,
+                        src.version,
                         src.uid,
                         declaredType,
                         src.enabled,
@@ -1467,6 +1504,8 @@ class PatchBundleRepository(
                     enabled,
                     repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.PRERELEASE,
                     repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.LATEST,
+                    repositorySettings.useSpecificVersion,
+                    repositorySettings.selectedVersion,
                 ).let { jsonBundle ->
                     val external = ExternalBundleMetadataStore.read(dir)
                     if (external == null) {
@@ -1968,7 +2007,7 @@ class PatchBundleRepository(
         val updatedSource = store.state.value.sources[src.uid] as? RemotePatchBundle ?: return true
         val allowUnsafeDownload = prefs.allowMeteredUpdates.get()
         val progressNotification =
-            downloadProgressNotifier.begin(progressLabelFor(updatedSource))
+            downloadProgressNotifier.begin(bundleImportLabel(updatedSource.endpoint, progressLabelFor(updatedSource)))
         val updated = try {
             updateNow(
                 force = true,
@@ -2107,7 +2146,9 @@ class PatchBundleRepository(
                         uid = uid,
                         displayName = existingProps?.displayName
                     )
-                    writeLocalBundleHint(uid, sourceNameHint)
+                    writeLocalBundleHint(
+                        uid, if (ReseamBundleFormat.isCandidate(tempFile, sourceNameHint)) "bundle.reseam" else sourceNameHint
+                    )
                     val localBundle = entity.load() as LocalPatchBundle
 
                     try {
@@ -2225,6 +2266,8 @@ class PatchBundleRepository(
         showInAppProgress: Boolean = false,
         importLabel: String? = null,
         onProgress: PatchBundleDownloadProgress? = null,
+        useSpecificVersion: Boolean = false,
+        selectedVersion: ReVancedAsset? = null,
     ) {
         val normalizedUrl = try {
             normalizeRemoteBundleUrl(url)
@@ -2243,12 +2286,14 @@ class PatchBundleRepository(
             createdAt = createdAt,
             updatedAt = updatedAt
         )
-        if (usePrereleases || useLatest) {
+        if (usePrereleases || useLatest || useSpecificVersion || selectedVersion != null) {
             RepositoryBundleSettingsStore.write(
                 directoryOf(entity.uid),
                 RepositoryBundleSettings(
                     usePrereleases = usePrereleases && !useLatest,
                     useLatest = useLatest,
+                    useSpecificVersion = useSpecificVersion,
+                    selectedVersion = selectedVersion,
                 )
             )
         }
@@ -2294,11 +2339,12 @@ class PatchBundleRepository(
         onProgress: PatchBundleDownloadProgress? = null,
     ) {
         if (bundle.isBundleV3) {
-            toast(R.string.patch_bundle_discovery_v3_warning)
+            toast(R.string.catalog_unsupported_format)
             return
         }
+        val downloadUrl = bundle.downloadUrl?.trim()?.takeIf { it.isNotBlank() }
         val rawUrl = externalBundleEndpoint(bundle, preferLatestAcrossChannels).trim()
-        if (rawUrl.isBlank()) {
+        if (rawUrl.isBlank() || downloadUrl == null) {
             toast(R.string.patch_bundle_discovery_error)
             return
         }
@@ -2310,24 +2356,13 @@ class PatchBundleRepository(
             return
         }
 
-        val metadata = ExternalBundleMetadata(
-            bundleId = bundle.bundleId,
-            downloadUrl = bundle.downloadUrl
-                ?.trim()
-                ?.takeUnless { it.isBlank() }
-                ?: validatedUrl,
-            signatureDownloadUrl = bundle.signatureDownloadUrl,
-            version = bundle.version.ifBlank { "unknown" },
-            createdAt = bundle.createdAt.takeUnless { it.isBlank() },
-            description = bundle.description,
-            ownerName = bundle.ownerName.takeIf { it.isNotBlank() },
-            repoName = bundle.repoName.takeIf { it.isNotBlank() },
-            isPrerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
+        val metadata = bundle.toExternalBundleMetadata(
+            prerelease = if (preferLatestAcrossChannels) null else bundle.isPrerelease
         )
 
         val entity = createEntity(
             "",
-            SourceInfo.from(externalBundleEndpoint(bundle, preferLatestAcrossChannels)),
+            SourceInfo.from(validatedUrl),
             autoUpdate,
             searchUpdate = searchUpdate
         )
@@ -2375,7 +2410,7 @@ class PatchBundleRepository(
         val sourceUrl = bundle.sourceUrl.trim().takeIf { it.isNotBlank() }
             ?: if (owner.isNotBlank() && repo.isNotBlank()) "https://github.com/$owner/$repo" else ""
         val host = bundle.apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         ExternalBundlesEndpoints.latestBundleUrl(
             host = host,
             sourceUrl = sourceUrl,
@@ -2386,7 +2421,7 @@ class PatchBundleRepository(
 
     private fun externalBundleEndpoint(bundleId: Int, apiHost: String): String {
         val host = apiHost.takeIf(ExternalBundlesEndpoints::isExternalBundlesHost)
-            ?: ExternalBundlesEndpoints.STABLE_HOST
+            ?: ExternalBundlesEndpoints.REGISTRY_HOST
         return "https://$host/bundles/id?id=$bundleId"
     }
 
@@ -2451,6 +2486,7 @@ class PatchBundleRepository(
         repositoryManifestUrl(parsed)?.let { manifestUrl ->
             return manifestUrl
         }
+        customGitRepositoryUrl(trimmed)?.let { return it }
 
         var host = parsed.host
         var pathSegments = parsed.encodedPath.trim('/').split('/').filter { it.isNotBlank() }
@@ -2610,10 +2646,10 @@ class PatchBundleRepository(
         channel: RepositoryBundleReleaseChannel
     ): JsonPatchBundle {
         var updatedSource = this
-        withRemoteUpdateReservation {
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
             dispatchAction("Set repository bundle release channel ($name, $channel)") { state ->
                 val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
-                if (!source.supportsPrereleases) {
+                if (!source.supportsPrereleases || source.useSpecificVersion) {
                     updatedSource = source
                     return@dispatchAction state
                 }
@@ -2623,7 +2659,10 @@ class PatchBundleRepository(
                 }
                 RepositoryBundleSettingsStore.write(
                     directoryOf(uid),
-                    RepositoryBundleSettings.forReleaseChannel(channel)
+                    RepositoryBundleSettingsStore.read(directoryOf(uid)).copy(
+                        usePrereleases = channel == RepositoryBundleReleaseChannel.PRERELEASE,
+                        useLatest = channel == RepositoryBundleReleaseChannel.LATEST
+                    )
                 )
                 updatedSource = source.withReleaseChannel(channel)
                 manualUpdateInfoFlow.update { current -> current - uid }
@@ -2631,6 +2670,47 @@ class PatchBundleRepository(
             }
         }
         return updatedSource
+    }
+
+    suspend fun JsonPatchBundle.restoreRepositorySettings(
+        settings: RepositoryBundleSettings
+    ): JsonPatchBundle {
+        var restored = this
+        withRemoteUpdateReservation {
+            dispatchAction("Restore repository bundle settings ($uid)") { state ->
+                val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                restored = source
+                if (source.repositorySettings == settings) return@dispatchAction state
+                RepositoryBundleSettingsStore.write(directoryOf(uid), settings)
+                restored = source.withRepositorySettings(settings)
+                manualUpdateInfoFlow.update { it - uid }
+                state.copy(sources = state.sources.put(uid, restored))
+            }
+        }
+        return restored
+    }
+
+    suspend fun JsonPatchBundle.setVersionSelection(
+        enabled: Boolean,
+        asset: ReVancedAsset? = null,
+    ): JsonPatchBundle {
+        var updatedSource = this
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
+            dispatchAction("Set repository bundle version ($uid)") { state ->
+                val source = state.sources[uid] as? JsonPatchBundle ?: return@dispatchAction state
+                // Preserve channel preferences while the pin is active.
+                val settings = source.repositorySettings.withVersionSelection(enabled, asset)
+                RepositoryBundleSettingsStore.write(directoryOf(uid), settings)
+                updatedSource = source.withRepositorySettings(settings)
+                manualUpdateInfoFlow.update { it - uid }
+                state.copy(sources = state.sources.put(uid, updatedSource))
+            }
+        }
+        return updatedSource
+    }
+
+    private suspend fun notifyQueuedBundleSetting() = withContext(Dispatchers.Main.immediate) {
+        app.toast(app.getString(R.string.bundle_setting_change_queued))
     }
 
     suspend fun JsonPatchBundle.setUsePrereleases(value: Boolean): JsonPatchBundle =
@@ -2667,7 +2747,7 @@ class PatchBundleRepository(
                 if (
                     src is JsonPatchBundle &&
                     expectedSource is JsonPatchBundle &&
-                    src.releaseChannel != expectedSource.releaseChannel
+                    src.releaseSelectionKey != expectedSource.releaseSelectionKey
                 ) {
                     return@dispatchAction state
                 }
@@ -2748,12 +2828,15 @@ class PatchBundleRepository(
         error("Unreachable")
     }
 
-    private suspend fun <T> withRemoteUpdateReservation(block: suspend () -> T): T = coroutineScope {
+    private suspend fun <T> withRemoteUpdateReservation(
+        onQueued: suspend () -> Unit = {},
+        block: suspend () -> T
+    ): T = coroutineScope {
         val operation = async(start = CoroutineStart.LAZY) {
             // Store actions keep running after their caller is cancelled.
             withContext(NonCancellable) { block() }
         }
-        withRemoteUpdatesIdleLock {
+        withRemoteUpdatesIdleLock(onQueued) {
             updateJob = operation
         }
         try {
@@ -2765,7 +2848,11 @@ class PatchBundleRepository(
         }
     }
 
-    private suspend fun <T> withRemoteUpdatesIdleLock(block: suspend () -> T): T {
+    private suspend fun <T> withRemoteUpdatesIdleLock(
+        onQueued: suspend () -> Unit = {},
+        block: suspend () -> T
+    ): T {
+        var notified = false
         while (true) {
             updateJobMutex.lock()
             val activeJob: Job?
@@ -2787,6 +2874,10 @@ class PatchBundleRepository(
                 }
             }
             updateJobMutex.unlock()
+            if (!notified) {
+                notified = true
+                onQueued()
+            }
             if (activeJob != null) activeJob.join() else yield()
         }
     }
@@ -2805,7 +2896,7 @@ class PatchBundleRepository(
      */
     suspend fun updateCheck() {
         awaitReady()
-        store.dispatch(Update { it.autoUpdate })
+        store.dispatch(Update { it.updatesAutomatically })
         checkManualUpdates()
     }
 
@@ -2829,6 +2920,7 @@ class PatchBundleRepository(
             return@coroutineScope false
         }
 
+        migrateLegacyDiscoveryEndpoints()
         var notifiedAny = false
         sources.first()
             .filterIsInstance<RemotePatchBundle>()
@@ -2838,7 +2930,7 @@ class PatchBundleRepository(
                 if (bundle.state !is PatchBundleSource.State.Available) return@forEach
 
                 val info = try {
-                    bundle.fetchLatestReleaseInfo()
+                    bundle.fetchAvailableUpdateInfo()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -2897,7 +2989,7 @@ class PatchBundleRepository(
         if (
             bundle is JsonPatchBundle &&
             fetchedFrom is JsonPatchBundle &&
-            bundle.releaseChannel != fetchedFrom.releaseChannel
+            bundle.releaseSelectionKey != fetchedFrom.releaseSelectionKey
         ) {
             return@withRemoteUpdatesIdleLock null
         }
@@ -2907,24 +2999,16 @@ class PatchBundleRepository(
 
         val latestSignature = normalizeVersionForCompare(info.version)
         if (latestSignature == null) {
-            if (!bundle.autoUpdate) {
+            if (!bundle.updatesAutomatically) {
                 manualUpdateInfoFlow.update { current -> current - bundle.uid }
             }
             return@withRemoteUpdatesIdleLock null
         }
-        val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-        val manifestSignature = normalizeVersionForCompare(bundle.version)
         val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
             ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
             ?: false
-        if (
-            !artifactChanged &&
-            (
-                (installedSignature != null && installedSignature == latestSignature) ||
-                    (manifestSignature != null && manifestSignature == latestSignature)
-                )
-        ) {
-            if (!bundle.autoUpdate) {
+        if (!artifactChanged && !bundle.isUpdateAvailable(info, forNotification = true)) {
+            if (!bundle.updatesAutomatically) {
                 manualUpdateInfoFlow.update { current -> current - bundle.uid }
             }
             return@withRemoteUpdatesIdleLock null
@@ -2936,7 +3020,7 @@ class PatchBundleRepository(
         val notificationIdentity = artifactIdentity?.let {
             "$versionLabel|$it"
         } ?: versionLabel
-        if (!bundle.autoUpdate) {
+        if (!bundle.updatesAutomatically) {
             manualUpdateInfoFlow.update { current ->
                 current + (
                     bundle.uid to ManualBundleUpdateInfo(
@@ -2996,7 +3080,98 @@ class PatchBundleRepository(
         )
     }
 
+    /**
+     * Retarget only recognized legacy discovery API entries. Keep the installed
+     * bundle, selections, ordering and update preferences; catalog IDs are not portable.
+     */
+    private suspend fun migrateLegacyDiscoveryEndpoints(allowUnsafeNetwork: Boolean = false) = discoveryMigrationMutex.withLock {
+        val candidates = store.state.value.sources.values.filterIsInstance<RemotePatchBundle>()
+        for (bundle in candidates) {
+            val legacy = legacyDiscoveryEndpoint(bundle.endpoint)
+            try {
+                val directory = directoryOf(bundle.uid)
+                val metadata = ExternalBundleMetadataStore.read(directory)
+                val registrySource = registryBundleIconSource(
+                    bundle.endpoint, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
+                    metadata?.downloadUrl
+                )
+                if (legacy == null && (registrySource == null ||
+                    (bundle is ExternalGraphqlPatchBundle &&
+                        metadata?.apiHost == ExternalBundlesEndpoints.REGISTRY_HOST &&
+                        (!metadata.iconUrl.isNullOrBlank() || !metadata.ownerAvatarUrl.isNullOrBlank())))) continue
+                val canLookup = allowUnsafeNetwork || prefs.allowMeteredUpdates.get() || networkInfo.isConnected()
+                var migration = if (legacy != null) discoveryRegistryMigration(
+                    legacy, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
+                    metadata?.downloadUrl
+                ) else registrySource?.let {
+                    DiscoveryRegistryMigration(bundle.endpoint, it.sourceUrl, it.prerelease)
+                }
+                if (migration == null && legacy?.bundleId != null && canLookup) {
+                    val snapshot = externalBundlesApi.getBundleById(legacy.bundleId, legacy.host).getOrNull()
+                    migration = snapshot?.let {
+                        discoveryRegistryMigration(
+                            legacy, it.sourceUrl, it.ownerName, it.repoName,
+                            if (metadata != null) metadata.isPrerelease else it.isPrerelease,
+                            it.downloadUrl
+                        )
+                    }
+                }
+                val resolved = migration ?: continue
+                val requestedVersion = legacy?.version
+                    ?: runCatching { Url(resolved.endpoint).parameters["version"] }.getOrNull() ?: "latest"
+                var snapshot = if (canLookup) externalBundlesApi.getBundleForSource(
+                    resolved.sourceUrl, resolved.prerelease, requestedVersion
+                ).getOrNull()?.takeIf { !it.isBundleV3 && !it.downloadUrl.isNullOrBlank() } else null
+                val fallbackSnapshot = if (canLookup && (snapshot == null ||
+                    (snapshot.iconUrl.isNullOrBlank() && snapshot.ownerAvatarUrl.isNullOrBlank()))) {
+                    externalBundlesApi.getLatestBundleForSource(resolved.sourceUrl, null).getOrNull()
+                } else null
+                if (snapshot == null && fallbackSnapshot != null &&
+                    requestedVersion.equals("latest", ignoreCase = true) &&
+                    !fallbackSnapshot.isBundleV3 && !fallbackSnapshot.downloadUrl.isNullOrBlank()) {
+                    snapshot = fallbackSnapshot
+                }
+                // Repair entries converted by earlier versions too. On failure, preserve the
+                // installed bundle and retry hydration at the next check.
+                if (legacy == null && snapshot == null && fallbackSnapshot == null) continue
+                val hydrated = snapshot?.toExternalBundleMetadata(resolved.prerelease)
+                dispatchAction("Migrate discovery source metadata (${bundle.uid})") { state ->
+                    val current = state.sources[bundle.uid] as? RemotePatchBundle
+                        ?: return@dispatchAction state
+                    if (current.endpoint != bundle.endpoint) return@dispatchAction state
+                    val entity = dao.all().firstOrNull { it.uid == bundle.uid } ?: return@dispatchAction state
+                    val latest = ExternalBundleMetadataStore.read(directory)
+                    if (hydrated == null && latest == null && fallbackSnapshot == null) return@dispatchAction state
+                    val updatedMetadata = hydrated?.copy(
+                        iconUrl = hydrated.iconUrl ?: latest?.iconUrl ?: fallbackSnapshot?.iconUrl,
+                        ownerAvatarUrl = hydrated.ownerAvatarUrl ?: latest?.ownerAvatarUrl ?: fallbackSnapshot?.ownerAvatarUrl
+                    ) ?: latest?.copy(
+                        bundleId = 0,
+                        sourceUrl = resolved.sourceUrl,
+                        apiHost = ExternalBundlesEndpoints.REGISTRY_HOST,
+                        isPrerelease = resolved.prerelease,
+                        iconUrl = latest.iconUrl ?: fallbackSnapshot?.iconUrl,
+                        ownerAvatarUrl = latest.ownerAvatarUrl ?: fallbackSnapshot?.ownerAvatarUrl
+                    ) ?: fallbackSnapshot?.takeIf { !it.downloadUrl.isNullOrBlank() || !latest?.downloadUrl.isNullOrBlank() }?.toExternalBundleMetadata(
+                        resolved.prerelease,
+                        fallbackDownloadUrl = latest?.downloadUrl
+                    )
+                    updatedMetadata?.let { ExternalBundleMetadataStore.write(directory, it) }
+                    val updated = entity.copy(source = SourceInfo.from(resolved.endpoint))
+                    dao.upsert(updated)
+                    manualUpdateInfoFlow.update { it - bundle.uid }
+                    state.copy(sources = state.sources.put(bundle.uid, updated.load()))
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(tag, "Could not hydrate discovery source ${bundle.uid}; will retry next check", error)
+            }
+        }
+    }
+
     suspend fun checkManualUpdates(vararg bundleUids: Int) = coroutineScope {
+        migrateLegacyDiscoveryEndpoints()
         val targetUids = bundleUids.toSet().takeIf { it.isNotEmpty() }
         val snapshot = store.state.value
         val manualBundles = snapshot.sources.values
@@ -3028,7 +3203,7 @@ class PatchBundleRepository(
         val fetched = manualBundles.map { bundle ->
             async {
                 val info = try {
-                    bundle.fetchLatestReleaseInfo()
+                    bundle.fetchAvailableUpdateInfo()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
@@ -3065,7 +3240,7 @@ class PatchBundleRepository(
                     if (
                         bundle is JsonPatchBundle &&
                         fetchedFrom is JsonPatchBundle &&
-                        bundle.releaseChannel != fetchedFrom.releaseChannel
+                        bundle.releaseSelectionKey != fetchedFrom.releaseSelectionKey
                     ) {
                         return@forEach
                     }
@@ -3078,15 +3253,10 @@ class PatchBundleRepository(
                         next.remove(bundle.uid)
                         return@forEach
                     }
-                    val installedSignature = normalizeVersionForCompare(bundle.installedVersionSignature)
-                    val manifestSignature = normalizeVersionForCompare(bundle.version)
                     val artifactChanged = (bundle as? ExternalGraphqlPatchBundle)
                         ?.artifactDiffers(info, installedBundleSha256(bundle.uid))
                         ?: false
-                    val hasMatchingInstalledSignature =
-                        (installedSignature != null && installedSignature == latestSignature) ||
-                            (manifestSignature != null && manifestSignature == latestSignature)
-                    if (hasMatchingInstalledSignature && !artifactChanged) {
+                    if (!artifactChanged && !bundle.isUpdateAvailable(info, forNotification = true)) {
                         next.remove(bundle.uid)
                     } else {
                         val artifactIdentity = (bundle as? ExternalGraphqlPatchBundle)
@@ -3217,6 +3387,7 @@ class PatchBundleRepository(
                 return@coroutineScope false
             }
 
+            migrateLegacyDiscoveryEndpoints(allowUnsafeNetwork)
             val targets = store.state.value.sources.values
                 .filterIsInstance<RemotePatchBundle>()
                 .filter { predicate(it) }
@@ -3303,7 +3474,7 @@ class PatchBundleRepository(
                         }
                         if (showProgress && onPerBundleProgress == null) {
                             val notification = progressNotification
-                                ?: downloadProgressNotifier.begin(progressLabelFor(bundle)).also {
+                                ?: downloadProgressNotifier.begin(bundleImportLabel(bundle.endpoint, progressLabelFor(bundle))).also {
                                     progressNotification = it
                                 }
                             notification.update(bytesRead, bytesTotal)
@@ -3454,6 +3625,9 @@ class PatchBundleRepository(
 
                 val updatedUids = updated.keys.map(RemotePatchBundle::uid).toSet()
                 manualUpdateInfoFlow.update { currentMap -> currentMap - updatedUids }
+                runCatching {
+                    removeUpdatedBundleNotifications(app, updatedUids)
+                }.onFailure { error -> Log.w(tag, "Failed to refresh bundle update notification", error) }
                 if (showToast) toast(R.string.patches_update_success)
             }
             true
@@ -3641,7 +3815,7 @@ class PatchBundleRepository(
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
         const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
-        val supportedBundleExtensions = setOf("rvp", "mpp")
+        val supportedBundleExtensions = setOf("rvp", "mpp", "reseam")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
         fun defaultSource() = PatchBundleEntity(
             uid = DEFAULT_SOURCE_UID,

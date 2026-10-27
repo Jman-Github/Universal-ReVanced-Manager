@@ -1,5 +1,6 @@
 package app.urv.manager.domain.bundles
 
+import app.urv.manager.network.dto.ExternalBundleSnapshot
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -15,7 +16,34 @@ data class ExternalBundleMetadata(
     val description: String? = null,
     val ownerName: String? = null,
     val repoName: String? = null,
-    val isPrerelease: Boolean? = null
+    val isPrerelease: Boolean? = null,
+    val iconUrl: String? = null,
+    val ownerAvatarUrl: String? = null,
+    val sourceUrl: String? = null,
+    val apiHost: String? = null,
+    val fileHash: String? = null
+)
+
+/** Use identical persisted metadata for discovery imports and migrated API entries. */
+internal fun ExternalBundleSnapshot.toExternalBundleMetadata(
+    prerelease: Boolean? = isPrerelease,
+    fallbackDownloadUrl: String? = null
+) = ExternalBundleMetadata(
+    bundleId = bundleId,
+    downloadUrl = requireNotNull(downloadUrl?.trim()?.takeIf(String::isNotBlank)
+        ?: fallbackDownloadUrl?.trim()?.takeIf(String::isNotBlank)) { "External bundle downloadUrl cannot be null or blank" },
+    signatureDownloadUrl = signatureDownloadUrl,
+    version = version.ifBlank { "unknown" },
+    createdAt = createdAt.takeUnless(String::isBlank),
+    description = description,
+    ownerName = ownerName.takeIf(String::isNotBlank),
+    repoName = repoName.takeIf(String::isNotBlank),
+    isPrerelease = prerelease,
+    iconUrl = iconUrl?.takeIf(String::isNotBlank),
+    ownerAvatarUrl = ownerAvatarUrl?.takeIf(String::isNotBlank),
+    sourceUrl = sourceUrl,
+    apiHost = apiHost,
+    fileHash = fileHash
 )
 
 object ExternalBundleMetadataStore {

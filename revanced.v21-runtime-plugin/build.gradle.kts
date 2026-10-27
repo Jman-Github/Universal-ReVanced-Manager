@@ -8,6 +8,24 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
 }
 
+val legacyHost by configurations.creating
+val legacyDexCompiler by configurations.creating { isTransitive = false }
+val legacyRuntimeAssets = tasks.register<LegacyRuntimeAssetsTask>("legacyRuntimeAssets") {
+    hostJars.from(legacyHost)
+    androidJar.set(androidComponents.sdkComponents.bootClasspath.map { files ->
+        files.first { it.asFile.name == "android.jar" }
+    })
+    d8Jar.set(layout.file(legacyDexCompiler.elements.map { it.single().asFile }))
+    jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) })
+    outputDirectory.set(layout.buildDirectory.dir("generated/legacyRuntime"))
+}
+
+val jvmHost by configurations.creating
+val copyJvmHost = tasks.register<PluginJvmHostTask>("copyJvmHost") {
+    hostJars.from(jvmHost)
+    outputDirectory.set(layout.buildDirectory.dir("generated/jvmHost"))
+}
+
 val apkEditorLib by configurations.creating
 
 val strippedApkEditorLib by tasks.registering(Jar::class) {
@@ -37,8 +55,8 @@ android {
         applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.5.0"
+        versionCode = 7
+        versionName = "1.8.0"
     }
 
     val keystoreFile = rootProject.file("app/keystore.jks")
@@ -80,6 +98,7 @@ android {
         }
     }
 
+    sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/runtime-plugin/src/main/java").path)
     sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
 
     compileOptions {
@@ -95,13 +114,21 @@ android {
 
 androidComponents {
     onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(copyJvmHost, PluginJvmHostTask::outputDirectory)
+        variant.sources.assets?.addGeneratedSourceDirectory(legacyRuntimeAssets, LegacyRuntimeAssetsTask::outputDirectory)
         variant.outputs.forEach { output ->
             output.outputFileName.set("revanced.v21-plugin.apk")
         }
     }
 }
 
+usePatcherClassMergerCompatibility()
+
 dependencies {
+    jvmHost(project(":revanced21-patcher-core", "hostJar"))
+    legacyHost(project(":revanced-legacy-patcher-core", "hostJar"))
+    // Kotlin 2.4 metadata requires R8/D8 9.1.29 or newer; Build Tools 36 ships an older compiler.
+    legacyDexCompiler("com.android.tools:r8:9.1.29")
     implementation(libs.revanced.patcher) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")

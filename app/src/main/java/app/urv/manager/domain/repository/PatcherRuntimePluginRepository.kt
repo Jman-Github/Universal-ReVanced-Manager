@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.manager.PreferencesManager
 import app.urv.manager.network.api.ReVancedAPI
@@ -118,7 +119,10 @@ class PatcherRuntimePluginRepository(
         val entries = readSourceEntries().toMutableList()
         val index = entries.indexOfFirst { it.id == id }
         if (index == -1) return@withContext
-        entries[index] = updateEntry(entries[index], force = true)
+        // A manual check should reuse the current release, while still allowing repair
+        // of an archive that failed to load. Missing files are retried by updateEntry.
+        val needsRepair = _sourceStates.value[id]?.state is PatcherRuntimePluginSourceState.State.Failed
+        entries[index] = updateEntry(entries[index], force = needsRepair)
         writeSourceEntries(entries)
         reload()
     }
@@ -427,18 +431,22 @@ class PatcherRuntimePluginRepository(
     private suspend fun importSourceEntries(
         importRequest: ImportRequest
     ): List<PatcherRuntimePluginSourceEntry> {
-        val release = releaseForImport(importRequest)
-        val apkAssets = release.assets.filter(::isSupportedRuntimeAsset)
-        if (apkAssets.isEmpty()) {
-            error("No patcher runtime APK assets found for ${importRequest.repoUrl}")
-        }
-
         val selectedAssets = when (importRequest) {
-            is ImportRequest.Asset -> apkAssets.filter {
-                canonicalAssetSelector(normalizeAssetSelector(it.name)) ==
-                    canonicalAssetSelector(importRequest.assetSelector)
+            is ImportRequest.Asset -> {
+                val release = releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
+                release.assets.filter {
+                    isSupportedRuntimeAsset(it) && it.matchesAssetSelector(importRequest.assetSelector)
+                }.map { release to it }
             }
-            is ImportRequest.Repository -> apkAssets
+            is ImportRequest.Repository -> {
+                val stable = releaseHistoryFor(importRequest.repoUrl, prerelease = false, limit = 100)
+                val prereleases = releaseHistoryFor(importRequest.repoUrl, prerelease = true, limit = 100)
+                selectRuntimePluginAssets(stable + prereleases) { asset ->
+                    if (isSupportedRuntimeAsset(asset)) {
+                        canonicalAssetSelector(normalizeAssetSelector(asset.name))
+                    } else null
+                }
+            }
         }
         if (selectedAssets.isEmpty()) {
             error("No matching patcher runtime APK asset found for ${importRequest.repoUrl}")
@@ -446,7 +454,7 @@ class PatcherRuntimePluginRepository(
 
         val entries = readSourceEntries().toMutableList()
         val importedEntries = mutableListOf<PatcherRuntimePluginSourceEntry>()
-        selectedAssets.forEach { asset ->
+        selectedAssets.forEach { (release, asset) ->
             val selector = canonicalAssetSelector(normalizeAssetSelector(asset.name))
             val versionKey = releaseVersionKey(release, asset)
             val existingIndex = entries.indexOfFirst {
@@ -536,16 +544,6 @@ class PatcherRuntimePluginRepository(
         }
     }
 
-    private suspend fun releaseForImport(importRequest: ImportRequest): GitHubRelease = when (importRequest) {
-        is ImportRequest.Repository -> latestImportReleaseFor(importRequest.repoUrl)
-        is ImportRequest.Asset -> releaseForTag(importRequest.repoUrl, importRequest.releaseTag)
-    }
-
-    private suspend fun latestImportReleaseFor(repoUrl: String): GitHubRelease =
-        findLatestReleaseFor(repoUrl, prerelease = false, assetSelector = null)
-            ?: findLatestReleaseFor(repoUrl, prerelease = true, assetSelector = null)
-            ?: throw Exception("No patcher runtime APK assets found for $repoUrl")
-
     private suspend fun releaseForTag(repoUrl: String, releaseTag: String): GitHubRelease =
         releaseHistoryFor(repoUrl, prerelease = null, limit = 100)
             .firstOrNull { it.tagName == releaseTag }
@@ -595,7 +593,11 @@ class PatcherRuntimePluginRepository(
         val target = sourceFile(entry)
         val tempFile = directory.resolve("patcher-runtime.tmp")
         if (tempFile.exists()) tempFile.delete()
-        val progressNotification = downloadProgressNotifier.begin(asset.name)
+        val progressNotification = downloadProgressNotifier.begin(
+            _sourceStates.value[entry.id]?.name?.let {
+                app.getString(R.string.runtime_download_title, it)
+            } ?: asset.name
+        )
 
         runCatching {
             httpService.downloadToFile(
@@ -604,7 +606,8 @@ class PatcherRuntimePluginRepository(
                 onProgress = progressNotification::update
             )
             val packageInfo = readArchivePackageInfo(tempFile)
-            resolvePlugin(packageInfo, sourceId = entry.id)
+            val plugin = resolvePlugin(packageInfo, sourceId = entry.id)
+            progressNotification.updateTitle(app.getString(R.string.runtime_download_title, plugin.name))
             if (entry.trustedSignatureHex != null) {
                 when (val trust = verifyArchiveTrust(entry, packageInfo)) {
                     ArchiveTrust.Trusted -> Unit

@@ -429,6 +429,8 @@
     <string name="string_option_menu_description">更多选项</string>
     <string name="option_preset_custom_value">自定义值</string>
     <string name="path_selector">从存储中选择</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">上一级目录</string>
     <string name="path_selector_dirs">目录</string>
     <string name="path_selector_files">文件</string>
@@ -635,4 +637,6 @@
     <string name="export">导出</string>
     <string name="confirm">确认</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>
