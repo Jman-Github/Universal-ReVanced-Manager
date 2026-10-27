@@ -4,6 +4,34 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [1.10.0](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.9.0...v1.10.0) (2026-10-27)
+
+
+### Bug Fixes
+
+* **build:** restore classpaths and bump Morphe and Reseam SDKs ([da1b3dc](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/da1b3dcabe235d7267a5987d794fa475f1c39a5a))
+* **bundles:** migrate legacy discovery sources ([2b1cc2f](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/2b1cc2fb551e6c581ae91dd65f80073aa60f57c7))
+* **bundles:** prevent downgrades and clear stuck progress ([3a301d1](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/3a301d1500557ff380ca1658702541bf6e49d2b9)), closes [#780](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/780) [#783](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/783)
+* **file-picker:** remove forced shimmer delay ([a06e22c](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/a06e22ce831325fb566ce74f5b34e71720f3ee1b))
+* **manager:** fix picker, exports, language and dynamic colors ([c7f44e6](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/c7f44e6cb0ffb6890b19e0c241a90b899e8499c1)), closes [#751](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/751) [#752](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/752) [#766](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/766)
+* **manager:** fix update alerts, reordering and runtime checks ([1494d5a](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/1494d5ac98aab89bf64634ea971570a09d1c9fbd)), closes [#794](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/794) [#795](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/795) [#797](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/797)
+* **manager:** preserve bundle pins and improve UI consistency ([077cf03](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/077cf03d68988cae116fbad8c45d58d271f1186a)), closes [#786](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/786) [#793](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/793) [#792](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/792) [#791](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/791) [#789](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/789)
+* **patcher:** stabilize runtime workers and merging ([ff82091](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/ff8209196f44e80d881c5f54373d2661385b56d9))
+* **reseam:** fix bundle selection and plugin discovery ([582e60e](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/582e60eb0ad55b88bf05a6c57a28244560e4ac85))
+* **reseam:** prevent native loader crashes and update SDK to 0.31.0 ([58b492d](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/58b492d631ebe8367125bd9e0bd9eb233cff0d07))
+* **revanced-v21:** fix resource decoding and bump patcher to 21.1.0-dev.5 ([e3e326b](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/e3e326bab01cfd272f0a44bf0460762b896104e5))
+* **root:** stream APKs into package install sessions ([c4ecbf3](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/c4ecbf34021dcb6acfb0d8b0df4c3de73c346c9e))
+
+
+### Features
+
+* **bundles:** add version pinning and refine settings UI ([24e760f](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/24e760f1d7d276ebbbee15c9921f1a2c6e06d908)), closes [#782](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/782) [#768](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/768) [#773](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/773) [#772](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/772)
+* **discovery:** use the Patch Bundle Registry API ([ea9e377](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/ea9e3774d430d36d2437c60e60a02b44cfe833df))
+* **file-picker:** add breadcrumbs and file details ([781e00b](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/781e00b626aa0f43d5e793954dc74c0c4cd8153b))
+* **patcher:** add embedded JVM runtimes ([430625e](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/430625e3df1c4747f6f17c07e321dc9e96c2861e))
+* **patcher:** add Reseam runtime ([#770](https://github.com/Jman-Github/Universal-ReVanced-Manager/issues/770)) ([8de2cdc](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/8de2cdc3848e6d5fb34456857fb723e203e62b09))
+* **updater:** support UPM updates with migration notice ([6d9e108](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/6d9e108d8cd5b6ac7ca74366ee04f0aed68bbe4d))
+
 # [1.10.0-dev.2](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.10.0-dev.1...v1.10.0-dev.2) (2026-10-25)
 
 
