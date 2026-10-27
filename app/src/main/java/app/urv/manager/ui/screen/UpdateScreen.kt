@@ -41,6 +41,7 @@ import app.urv.manager.network.dto.ReVancedAsset
 import app.urv.manager.ui.component.AppTopBar
 import app.urv.manager.ui.component.DownloadProgressBanner
 import app.urv.manager.ui.component.Markdown
+import app.urv.manager.ui.component.ManagerRebrandNoticeDialog
 import app.urv.manager.ui.component.haptics.HapticExtendedFloatingActionButton
 import app.urv.manager.ui.viewmodel.UpdateViewModel
 import app.urv.manager.ui.viewmodel.UpdateViewModel.State
@@ -56,6 +57,14 @@ fun UpdateScreen(
     vm: UpdateViewModel = koinViewModel()
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
+
+    if (vm.showRebrandNotice) {
+        ManagerRebrandNoticeDialog(
+            secondsRemaining = vm.rebrandNoticeSeconds,
+            onContinue = vm::confirmRebrandNotice,
+            onCancel = vm::dismissRebrandNotice
+        )
+    }
 
     Scaffold(
         topBar = {

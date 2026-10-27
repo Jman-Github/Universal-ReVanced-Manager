@@ -2564,4 +2564,9 @@ Details: %2$s</string>
     <string name="app_info_unavailable">App information unavailable</string>
     <string name="downloader_download_title">%1$s downloader</string>
     <string name="runtime_download_title">%1$s runtime</string>
+    <string name="manager_rebrand_app_name">Universal Patch Manager</string>
+    <string name="manager_rebrand_notice_title">URV has been rebranded to UPM</string>
+    <string name="manager_rebrand_notice_description">URV has been rebranded in this update to UPM (Universal Patch Manager).\n\nUPM installs as a second app because its package name is different. It will not replace URV, and your data will not move automatically.\n\nIn URV, open %1$s &gt; %2$s &gt; %3$s and save the backup. In UPM, open %1$s &gt; %2$s &gt; %4$s and select that backup.\n\nExport everything does not include your signing keystore. Use %5$s in URV and %6$s in UPM on the same settings page if you want to keep signing APKs with the same key.\n\nKeep URV installed until you have checked that your data and signing key were imported successfully.</string>
+    <string name="manager_rebrand_continue_countdown">Continue (%1$d)</string>
+    <string name="manager_update_unexpected_package">The downloaded APK is not a supported manager update.</string>
 </resources>

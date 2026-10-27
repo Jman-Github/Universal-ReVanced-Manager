@@ -7,9 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -36,6 +38,11 @@ import app.urv.manager.util.PM
 import app.urv.manager.util.MANAGER_DATABASE_VERSION_METADATA
 import app.urv.manager.util.releaseDatabaseVersion
 import app.urv.manager.util.isCompatibleManagerUpdate
+import app.urv.manager.util.UPM_PACKAGE_NAME
+import app.urv.manager.util.ManagerRebrandConfirmation
+import app.urv.manager.util.isSupportedManagerUpdatePackage
+import app.urv.manager.util.managerReleaseRequiresMigration
+import app.urv.manager.util.managerUpdateDownloadIdentity
 import app.urv.manager.util.toast
 import app.urv.manager.util.uiSafe
 import app.urv.manager.util.simpleMessage
@@ -68,6 +75,58 @@ class UpdateViewModel(
     private var pendingExternalInstall: InstallerManager.InstallPlan.External? = null
     private var externalInstallTimeoutJob: Job? = null
     private var currentDownloadVersion: String? = null
+    private val rebrandConfirmation = ManagerRebrandConfirmation(SystemClock::elapsedRealtime)
+    private var rebrandCountdownJob: Job? = null
+    private var pendingRebrandAction: RebrandAction? = null
+
+    var showRebrandNotice by mutableStateOf(false)
+        private set
+    var rebrandNoticeSeconds by mutableIntStateOf(10)
+        private set
+
+    private enum class RebrandAction { DOWNLOAD, INSTALL }
+
+    private fun requireRebrandNotice(action: RebrandAction, packageChanged: Boolean = false): Boolean {
+        val release = releaseInfo ?: return false
+        if (!packageChanged && !managerReleaseRequiresMigration(app.packageName, release.downloadUrl)) {
+            return false
+        }
+        val identity = managerUpdateDownloadIdentity(release.version, release.downloadUrl)
+        if (!rebrandConfirmation.request(identity)) return false
+        pendingRebrandAction = action
+        showRebrandNotice = true
+        rebrandNoticeSeconds = rebrandConfirmation.secondsRemaining
+        if (rebrandCountdownJob?.isActive != true) {
+            rebrandCountdownJob = viewModelScope.launch {
+                while (showRebrandNotice) {
+                    rebrandNoticeSeconds = rebrandConfirmation.secondsRemaining
+                    if (rebrandNoticeSeconds == 0) break
+                    delay(100L)
+                }
+            }
+        }
+        return true
+    }
+
+    fun confirmRebrandNotice() {
+        if (!showRebrandNotice || !rebrandConfirmation.acknowledge()) return
+        val action = pendingRebrandAction
+        pendingRebrandAction = null
+        showRebrandNotice = false
+        rebrandCountdownJob?.cancel()
+        when (action) {
+            RebrandAction.DOWNLOAD -> downloadUpdate()
+            RebrandAction.INSTALL -> installUpdate()
+            null -> Unit
+        }
+    }
+
+    fun dismissRebrandNotice() {
+        if (!showRebrandNotice || !rebrandConfirmation.cancel()) return
+        pendingRebrandAction = null
+        showRebrandNotice = false
+        rebrandCountdownJob?.cancel()
+    }
 
     var downloadedSize by mutableLongStateOf(0L)
         private set
@@ -109,6 +168,9 @@ class UpdateViewModel(
     fun downloadUpdate(ignoreInternetCheck: Boolean = false) = viewModelScope.launch {
         uiSafe(app, R.string.failed_to_download_update, "Failed to download update") {
             val release = releaseInfo ?: return@uiSafe
+            if (state == State.DOWNLOADING || state == State.INSTALLING) return@uiSafe
+            if (requireRebrandNotice(RebrandAction.DOWNLOAD)) return@uiSafe
+            val downloadIdentity = managerUpdateDownloadIdentity(release.version, release.downloadUrl)
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
             withContext(Dispatchers.IO) {
                 if (!allowMeteredUpdates && !networkInfo.isSafe() && !ignoreInternetCheck) {
@@ -117,9 +179,9 @@ class UpdateViewModel(
                     if (currentDownloadVersion == null) {
                         currentDownloadVersion = readPersistedDownloadVersion()
                     }
-                    if (currentDownloadVersion != release.version) {
-                        currentDownloadVersion = release.version
-                        persistDownloadVersion(release.version)
+                    if (currentDownloadVersion != downloadIdentity) {
+                        currentDownloadVersion = downloadIdentity
+                        persistDownloadVersion(downloadIdentity)
                         if (location.exists()) {
                             location.delete()
                         }
@@ -127,7 +189,7 @@ class UpdateViewModel(
                         totalSize = 0L
                         canResumeDownload = false
                     } else {
-                        persistDownloadVersion(release.version)
+                        persistDownloadVersion(downloadIdentity)
                     }
 
                     val resumeOffset = if (location.exists()) location.length() else 0L
@@ -175,6 +237,9 @@ class UpdateViewModel(
 
     fun installUpdate() = viewModelScope.launch {
         if (state == State.INSTALLING) return@launch
+        // Claim the install before archive parsing suspends, so repeated taps cannot
+        // create multiple installer sessions while the new package ID is validated.
+        state = State.INSTALLING
         pendingExternalInstall?.let(installerManager::cleanup)
         pendingExternalInstall = null
         externalInstallTimeoutJob?.cancel()
@@ -182,15 +247,35 @@ class UpdateViewModel(
         installError = ""
         prefs.pendingManagerUpdateVersionCode.update(-1)
 
-        if (BuildConfig.IS_PR_TEST_BUILD) {
-            state = State.INSTALLING
+        val candidate = withContext(Dispatchers.IO) {
+            runCatching {
+                @Suppress("DEPRECATION")
+                app.packageManager.getPackageArchiveInfo(location.absolutePath, PackageManager.GET_META_DATA)
+            }.getOrNull()
+        }
+        if (candidate == null || !isSupportedManagerUpdatePackage(app.packageName, candidate.packageName) ||
+            (releaseInfo?.let { managerReleaseRequiresMigration(app.packageName, it.downloadUrl) } == true &&
+                candidate.packageName != UPM_PACKAGE_NAME)
+        ) {
+            installError = app.getString(R.string.manager_update_unexpected_package)
+            state = State.FAILED
+            app.toast(installError)
+            return@launch
+        }
+        val expectedPackage = candidate.packageName
+        if (expectedPackage != app.packageName && requireRebrandNotice(RebrandAction.INSTALL, packageChanged = true)) {
+            state = State.CAN_INSTALL
+            return@launch
+        }
+        val sourceLabel = if (expectedPackage == UPM_PACKAGE_NAME && expectedPackage != app.packageName) {
+            app.getString(R.string.manager_rebrand_app_name)
+        } else app.getString(R.string.app_name)
+
+        // PR database/version guards apply to an in-place update. A UPM migration
+        // installs a separate app and never opens the running URV profile's database.
+        if (BuildConfig.IS_PR_TEST_BUILD && expectedPackage == app.packageName) {
             val compatible = withContext(Dispatchers.IO) {
                 runCatching {
-                    @Suppress("DEPRECATION")
-                    val candidate = app.packageManager.getPackageArchiveInfo(
-                        location.absolutePath,
-                        PackageManager.GET_META_DATA
-                    ) ?: return@runCatching false
                     val metadata = candidate.applicationInfo?.metaData
                     isCompatibleManagerUpdate(
                         currentPackage = app.packageName,
@@ -215,8 +300,8 @@ class UpdateViewModel(
         val plan = installerManager.resolvePlan(
             InstallerManager.InstallTarget.MANAGER_UPDATE,
             location,
-            app.packageName,
-            app.getString(R.string.app_name)
+            expectedPackage,
+            sourceLabel
         )
 
         when (plan) {
@@ -227,7 +312,7 @@ class UpdateViewModel(
                 }
                 state = State.INSTALLING
                 val result = try {
-                    sessionInstaller.install(location, app.packageName)
+                    sessionInstaller.install(location, expectedPackage)
                 } catch (_: InstallCancelledException) {
                     state = State.CAN_INSTALL
                     return@launch
@@ -241,8 +326,8 @@ class UpdateViewModel(
                         installerManager.createSystemFallbackPlan(
                             target = InstallerManager.InstallTarget.MANAGER_UPDATE,
                             sourceFile = location,
-                            expectedPackage = app.packageName,
-                            sourceLabel = app.getString(R.string.app_name)
+                            expectedPackage = expectedPackage,
+                            sourceLabel = sourceLabel
                         )
                     )
                     return@launch
@@ -290,7 +375,7 @@ class UpdateViewModel(
             is InstallerManager.InstallPlan.Shizuku -> {
                 state = State.INSTALLING
                 try {
-                    shizukuInstaller.install(location, app.packageName, plan.installerPackageNameOverride)
+                    shizukuInstaller.install(location, expectedPackage, plan.installerPackageNameOverride)
                     installError = ""
                     state = State.SUCCESS
                     app.toast(app.getString(R.string.update_completed))
@@ -425,6 +510,7 @@ class UpdateViewModel(
         externalInstallTimeoutJob = null
 
         job.cancel()
+        rebrandCountdownJob?.cancel()
         location.delete()
         persistDownloadVersion(null)
     }
