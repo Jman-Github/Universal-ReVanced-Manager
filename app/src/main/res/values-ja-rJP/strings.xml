@@ -936,6 +936,8 @@
     <string name="string_option_menu_description">その他のオプション</string>
     <string name="option_preset_custom_value">カスタム値</string>
     <string name="path_selector">ストレージから選択</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">前のディレクトリ</string>
     <string name="path_selector_dirs">ディレクトリ</string>
     <string name="path_selector_files">ファイル</string>
@@ -1242,7 +1244,6 @@
     <string name="patches_prereleases_description">%s のプレリリースバージョンを使用</string>
     <string name="patches_url">パッチソース URL</string>
     <string name="patch_bundle_urls_link">パッチソースの URL をここで取得</string>
-    <string name="patch_bundle_discovery_title">パッチソースを探す</string>
     <string name="patch_bundle_discovery_searching">パッチソースを検索しています…</string>
     <string name="patch_bundle_discovery_loading_more">さらにパッチソースを読み込んでいます…</string>
     <string name="patch_bundle_discovery_error">パッチソースを読み込めませんでした。</string>
@@ -1335,4 +1336,6 @@
     <string name="batch_patch_minimum_apps">一括パッチ適用を行うアプリを 2 つ以上選択してください</string>
     <string name="batch_patch_edit_apk">APK を編集</string>
     <string name="batch_patch_metadata_save_failed">インストールされましたが、URV Manager はアプリのメタデータを保存できませんでした: %1$s</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

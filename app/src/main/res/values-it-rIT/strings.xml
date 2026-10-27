@@ -836,6 +836,8 @@ Abilitarle di nuovo (o scegliere alternative) e quindi provare a patchare ancora
     <string name="string_option_menu_description">Altre opzioni</string>
     <string name="option_preset_custom_value">Valore personalizzato</string>
     <string name="path_selector">Seleziona dalla memoria</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Cartella precedente</string>
     <string name="path_selector_dirs">Cartelle</string>
     <string name="path_selector_files">I file</string>
@@ -1053,7 +1055,6 @@ Dettagli: %2$s</string>
     <string name="patches_delete_single_dialog_description">Sei sicuro di voler eliminare \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Sei sicuro di voler eliminare i bundle patch selezionati?</string>
     <string name="about_revanced_manager">Informazioni su URV Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager è un fork di ReVanced Manager. Entrambe le applicazioni utilizzano ReVanced Patcher, che consente di scaricare e patchare le app con patch personalizzate e gestire il processo di patching. Le caratteristiche uniche incluse in URV Manager sono i nomi bundle patch display, supporto per l\'importazione di qualsiasi bundle patch di terze parti e molto altro. Vedi un elenco completo di funzionalità uniche URV Manager che ha da offrire</string>
     <string name="here">qui.</string>
     <string name="update_available">È disponibile un aggiornamento</string>
     <string name="ready_to_install_update">Pronto per installare l\'aggiornamento</string>
@@ -1157,7 +1158,6 @@ Dettagli: %2$s</string>
     <string name="patches_prereleases_description">Usa le versioni pre-release di %s</string>
     <string name="patches_url">URL del bundle patch</string>
     <string name="patch_bundle_urls_link">Ottieni gli URL del bundle patch qui</string>
-    <string name="patch_bundle_discovery_title">Scopri dei bundle patch</string>
     <string name="patch_bundle_discovery_package_label">Cerca pacchetti</string>
     <string name="patch_bundle_discovery_search_label">Cerca bundle</string>
     <string name="patch_bundle_discovery_empty">Nessun bundle trovato</string>
@@ -1250,4 +1250,6 @@ Dettagli: %2$s</string>
     <string name="patcher_runtime_type_label">Tipo:</string>
     <string name="import_button">Importa</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

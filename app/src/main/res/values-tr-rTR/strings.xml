@@ -99,7 +99,6 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Hiçbir yama seçilmedi</string>
     <string name="mixed_patch_bundles_title">Karışık yama paketleri</string>
-    <string name="mixed_patch_bundles_description">ReVanced (.rvp) ve Morphe (.mpp) yamaları birleştirilemiyor. Yalnızca tek bir paket türündeki yamaları seçin. Birden fazla paket türü kullanmak istiyorsanız, kullanmak istediğiniz diğer yamalarla uygulamaya ikinci kez yama uygulamanız gerekir.</string>
     <string name="mixed_revanced_patcher_versions_title">Karışık ReVanced yama sürümleri</string>
     <string name="mixed_revanced_patcher_versions_description">Farklı yama sürümleri için oluşturulmuş ReVanced yamaları birleştirilemiyor. ReVanced v21 ve v22 farklı yama sürümleri kullandığından, yalnızca tek bir ReVanced yama sürümündeki yamaları seçin.</string>
     <string name="network_unavailable_warning">Cihazınız internete bağlı değil. İndirme işlemi daha sonra başarısız olacak.</string>
@@ -204,6 +203,8 @@
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/commit/e181417019239408b23a9a075b42e9399323eb23 -->
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information
@@ -211,4 +212,6 @@
     <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

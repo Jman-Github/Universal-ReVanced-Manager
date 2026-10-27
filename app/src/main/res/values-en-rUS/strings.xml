@@ -44,6 +44,7 @@
     <string name="bundle_type_label">Bundle type</string>
     <string name="bundle_type_revanced">ReVanced</string>
     <string name="bundle_type_morphe">Morphe</string>
+    <string name="bundle_type_reseam">Reseam</string>
     <string name="bundle_type_ample">Ample</string>
     <string name="android_11_bug_dialog_title">Android 11 bug</string>
     <string name="android_11_bug_dialog_description">The app installation permission must be granted ahead of time to avoid a bug in the Android 11 system that will negatively affect the user experience.</string>
@@ -1083,6 +1084,8 @@ Patch profiles are not affected.</string>
     <string name="language_option_greek">Greek</string>
     <string name="language_option_filipino">Filipino</string>
     <string name="language_option_italian">Italian</string>
+    <string name="language_option_german">German</string>
+    <string name="language_option_spanish">Spanish</string>
     <string name="language_option_french">French</string>
     <string name="language_option_chinese_simplified">Chinese (Simplified)</string>
     <string name="language_option_indonesian">Indonesian</string>
@@ -1093,6 +1096,7 @@ Patch profiles are not affected.</string>
     <string name="language_option_vietnamese">Vietnamese</string>
     <string name="language_option_japanese">Japanese</string>
     <string name="language_option_russian">Russian</string>
+    <string name="language_option_turkish">Turkish</string>
     <string name="language_option_ukrainian">Ukrainian</string>
     <string name="device_memory_limit_format">%1$dMB (Normal) - %2$dMB (Large)</string>
     <string name="patches_force_download">Force download all patch bundles</string>
@@ -1856,6 +1860,8 @@ Details: %2$s</string>
     <string name="install_app_fail">Failed to install app: %s</string>
     <string name="install_app_fail_missing_stock">Missing original APK for mount.</string>
     <string name="mount_split_not_supported">Rooted mount installer does not support split APKs. Use system installer instead.</string>
+    <string name="root_mount_automatic_success">%1$s was remounted automatically</string>
+    <string name="root_mount_automatic_failure">%1$s could not be remounted. Export root diagnostics.</string>
     <string name="root_mount_notification_channel">Root mount safety</string>
     <string name="root_mount_repatch_title">Root mount needs repatching</string>
     <string name="root_mount_repair_notification_title">Root mount needs repair</string>
@@ -1875,6 +1881,9 @@ Details: %2$s</string>
     <string name="root_mount_downgrade_confirmation">Android rejected the in-place downgrade. Continuing briefly unregisters the app for this user, keeps app data, and immediately installs verified stock. App data created by a newer version may still be incompatible.</string>
     <string name="root_mount_downgrade_title">Confirm safe downgrade fallback</string>
     <string name="root_mount_repair">Repair root mount</string>
+    <string name="root_mount_repair_progress">Repairing root mount…</string>
+    <string name="root_mount_repair_success">Root mount repaired successfully</string>
+    <string name="root_mount_repair_failed">Failed to repair root mount: %1$s</string>
     <string name="root_mount_tools">Root mount tools</string>
     <string name="root_mount_use_stock">Use stock app</string>
     <string name="root_mount_export_diagnostics">Export mount diagnostics</string>
@@ -2079,7 +2088,7 @@ Details: %2$s</string>
     <string name="patches_delete_single_dialog_description">Are you sure you want to delete \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Are you sure you want to delete the selected patch bundles?</string>
     <string name="about_revanced_manager">About URV Manager</string>
-    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is a fork of ReVanced Manager. Both applications use the ReVanced Patcher, which allows you to download and patch apps with custom patches and manage the patching process. The unique features included in URV Manager are patch bundle display names, support for importing any third party patch bundles, and much more. See a full list of unique features URV Manager has to offer</string>
+    <string name="revanced_manager_description">Universal ReVanced (URV) Manager is an Android manager for ReVanced and Morphe. It expands the patching workflow with third-party patch bundles, saved apps and patch profiles, batch and automatic repatching, flexible APK sources, advanced installers, and built-in APK tools. See the full feature list</string>
     <string name="here">here.</string>
     <string name="update_available">An update is available</string>
     <string name="ready_to_install_update">Ready to install update</string>
@@ -2541,6 +2550,8 @@ Details: %2$s</string>
     <string name="catalog_requires_v21">Requires the ReVanced v21 runtime plugin to be used in URV.</string>
     <string name="catalog_requires_reseam">Requires the Reseam runtime plugin to be used in URV.</string>
     <string name="scroll_position">Scroll position</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
     <string name="bundle_setting_change_queued">This setting will change after the ongoing bundle update finishes.</string>
     <string name="bundle_use_specific_version">Use specific version</string>
     <string name="bundle_use_specific_version_description">Keep this bundle on a selected version. Previous release preferences are restored when disabled.</string>

@@ -521,6 +521,8 @@
     <string name="string_option_menu_description">Nhiều tuỳ chọn hơn</string>
     <string name="option_preset_custom_value">Giá trị tuỳ chỉnh</string>
     <string name="path_selector">Chọn từ bộ nhớ trong</string>
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
+         https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
     <string name="path_selector_parent_dir">Thư mục trước đó</string>
     <string name="path_selector_dirs">Thư mục</string>
     <string name="path_selector_files">Tập tin</string>
@@ -762,7 +764,6 @@ Chi tiết: %2$s</string>
     <string name="patches_prereleases_description">Dùng phiên bản phát hành trước của %s</string>
     <string name="patches_url">URL gói vá</string>
     <string name="patch_bundle_urls_link">Lấy URL gói vá ở đây</string>
-    <string name="patch_bundle_discovery_title">Khám phá gói vá</string>
     <string name="patch_bundle_discovery_error">Không thể tải gói vá.</string>
     <string name="patch_bundle_discovery_imported">Đã thêm</string>
     <string name="patch_bundle_discovery_release">Bản phát hành</string>
@@ -783,4 +784,6 @@ Chi tiết: %2$s</string>
     <string name="export">Xuất</string>
     <string name="confirm">OK</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
+    <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
+    <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>
