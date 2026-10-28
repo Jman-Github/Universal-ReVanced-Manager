@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1320 420" role="img">
+  <defs>
+    <linearGradient id="upm-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#102E46"/>
+      <stop offset="100%" stop-color="#0A4E4D"/>
+    </linearGradient>
+    <linearGradient id="upm-mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#B6F78E"/>
+      <stop offset="100%" stop-color="#54DFC1"/>
+    </linearGradient>
+    <radialGradient id="upm-glow" cx="82%" cy="6%" r="90%">
+      <stop offset="0%" stop-color="#53B6A5" stop-opacity=".31"/>
+      <stop offset="100%" stop-color="#53B6A5" stop-opacity="0"/>
+    </radialGradient><clipPath id="upm-badge-clip"><rect x="0" y="0" width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <title>UPM - Universal Patch Manager - Patch Grid</title>
+  <g transform="translate(32 20) scale(.74)" clip-path="url(#upm-badge-clip)">
+    <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#upm-bg)"/>
+
+    <circle cx="414" cy="72" r="203" fill="url(#upm-glow)"/>
+    <path d="M75 405 H135 M378 104 H437" stroke="#9BE7D3" stroke-width="5" opacity=".2" stroke-linecap="round"/>
+
+    <!-- Four independent rounded app/patch modules. -->
+    <rect x="126" y="126" width="121" height="121" rx="28" fill="#E5FFF7"/>
+    <rect x="265" y="126" width="121" height="121" rx="28" fill="#AAF57E"/>
+    <rect x="126" y="265" width="121" height="121" rx="28" fill="#64E5CF"/>
+    <rect x="265" y="265" width="121" height="121" rx="28" fill="#DCFDF0"/>
+    <!-- Unified hub with a precise patch-plus glyph. -->
+    <circle cx="256" cy="256" r="66" fill="#103C46"/>
+    <circle cx="256" cy="256" r="56" fill="url(#upm-mark)"/>
+    <path d="M244 220 H268 V244 H292 V268 H268 V292 H244 V268 H220 V244 H244 Z"
+          fill="#123E47"/>
+    <circle cx="159" cy="161" r="8" fill="#178A8E" opacity=".47"/>
+    <circle cx="350" cy="351" r="8" fill="#178A8E" opacity=".47"/>
+  </g>
+  <g fill="#153D3A">
+    <text x="465" y="197" font-family="Inter, Arial, sans-serif" font-weight="800"
+          font-size="128" letter-spacing="-5">UPM</text>
+    <rect x="469" y="223" width="78" height="9" rx="4.5" fill="#AEF47E"/>
+    <text x="464" y="290" font-family="Inter, Arial, sans-serif" font-weight="700"
+          font-size="54" letter-spacing="-1">Universal Patch Manager</text>
+    <text x="467" y="337" font-family="Inter, Arial, sans-serif" font-weight="500"
+          font-size="21" letter-spacing="3" opacity=".68">Morphe  ·  ReSeam  ·  ReVanced</text>
+  </g>
+</svg>

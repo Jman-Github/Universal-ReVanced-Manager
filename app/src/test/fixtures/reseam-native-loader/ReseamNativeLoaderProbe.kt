@@ -1,12 +1,12 @@
-package app.urv.manager.patcher.reseam
+package app.universal.patch.manager.patcher.reseam
 
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
-import app.urv.manager.network.runtime.LoadedPatcherRuntimePlugin
-import app.urv.manager.network.runtime.PatcherRuntimeKind
-import app.urv.manager.patcher.runtime.PatcherRuntimePluginRegistry
-import app.urv.manager.patcher.runtime.reseam.prepareReseamRuntimeFiles
+import app.universal.patch.manager.network.runtime.LoadedPatcherRuntimePlugin
+import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
+import app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry
+import app.universal.patch.manager.patcher.runtime.reseam.prepareReseamRuntimeFiles
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.io.IOException
@@ -56,7 +56,7 @@ object ReseamNativeLoaderProbe {
             check(expected.message.orEmpty().contains("already")) { expected.toString() }
             println("PASS: reproduced ART's native library ownership collision")
         }
-        val entry = competing.loadClass("app.urv.manager.reseam.runtime.ReseamRuntimeEntry")
+        val entry = competing.loadClass("app.universal.patch.manager.reseam.runtime.ReseamRuntimeEntry")
         try {
             entry.getMethod("loadMetadataForBundle", String::class.java).invokeReseamRuntime("/missing-bundle")
             error("Expected failed JNI initialization")

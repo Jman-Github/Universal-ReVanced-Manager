@@ -41,13 +41,13 @@ with tempfile.TemporaryDirectory(prefix="jvm-image-", dir=root / "build") as dir
     run(ndk / "bin/clang++.exe", "--target=x86_64-linux-android26",
         "-static-libstdc++", "-std=c++17",
         root / "app/src/test/fixtures/jvm-image/JvmImageLauncher.cpp", "-ldl", "-o", launcher)
-    installation = (root / "app/src/main/java/app/urv/manager/patcher/runtime/jvm/JvmInstallation.kt").read_text()
+    installation = (root / "app/src/main/java/app/universal/patch/manager/patcher/runtime/jvm/JvmInstallation.kt").read_text()
     preloads = re.findall(r'"([^"]+)"', installation.split("val PRELOAD = listOf(", 1)[1].split(")", 1)[0])
     host = root / "revanced21-patcher-core/build/shrunk-host/revanced21-patcher-core.jar"
     if not host.is_file():
         raise RuntimeError("Assemble the v21 runtime once to supply the Apktool classpath")
     shutil.copyfile(host, work / "host.jar")
-    remote = "/data/local/tmp/urv-jvm-image-" + uuid.uuid4().hex
+    remote = "/data/local/tmp/upm-jvm-image-" + uuid.uuid4().hex
     device = [adb, "-s", "emulator-5554"]
     try:
         run(*device, "shell", "mkdir", "-p", remote)
@@ -65,5 +65,5 @@ with tempfile.TemporaryDirectory(prefix="jvm-image-", dir=root / "build") as dir
         run(*command, *preloads, timeout=90)
     finally:
         resolved = subprocess.check_output([str(a) for a in device + ["shell", "readlink", "-f", remote]], text=True).strip()
-        if resolved == remote and remote.startswith("/data/local/tmp/urv-jvm-image-"):
+        if resolved == remote and remote.startswith("/data/local/tmp/upm-jvm-image-"):
             run(*device, "shell", "rm", "-rf", remote)

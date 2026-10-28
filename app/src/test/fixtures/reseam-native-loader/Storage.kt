@@ -1,4 +1,4 @@
-package app.urv.manager.util
+package app.universal.patch.manager.util
 
 import android.content.Context
 

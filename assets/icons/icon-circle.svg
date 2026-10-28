@@ -1,33 +1,37 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048" role="img" aria-label="ReVanced circular icon">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" role="img">
   <defs>
-    <linearGradient id="circleGradient" x1="230" y1="240" x2="1810" y2="1810" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#24359f" />
-      <stop offset="0.28" stop-color="#64218b" />
-      <stop offset="0.52" stop-color="#9f1b60" />
-      <stop offset="0.78" stop-color="#d12a25" />
-      <stop offset="1" stop-color="#ff4d08" />
+    <linearGradient id="upm-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#102E46"/>
+      <stop offset="100%" stop-color="#0A4E4D"/>
     </linearGradient>
-    <radialGradient id="circleDepth" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(995 990) rotate(135) scale(1000)">
-      <stop offset="0" stop-color="#ba1b6b" stop-opacity="0.36" />
-      <stop offset="0.56" stop-color="#742395" stop-opacity="0.26" />
-      <stop offset="1" stop-color="#000000" stop-opacity="0" />
-    </radialGradient>
-    <linearGradient id="triangleGradient" x1="1024" y1="731" x2="1024" y2="1328" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff6518" />
-      <stop offset="0.35" stop-color="#d94458" />
-      <stop offset="0.72" stop-color="#7132b5" />
-      <stop offset="1" stop-color="#1737d0" />
+    <linearGradient id="upm-mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#B6F78E"/>
+      <stop offset="100%" stop-color="#54DFC1"/>
     </linearGradient>
-    <filter id="iconShadow" x="-18%" y="-18%" width="136%" height="136%">
-      <feDropShadow dx="0" dy="5" stdDeviation="9" flood-color="#000000" flood-opacity="0.35" />
-    </filter>
+    <radialGradient id="upm-glow" cx="82%" cy="6%" r="90%">
+      <stop offset="0%" stop-color="#53B6A5" stop-opacity=".31"/>
+      <stop offset="100%" stop-color="#53B6A5" stop-opacity="0"/>
+    </radialGradient><clipPath id="upm-badge-clip"><rect x="0" y="0" width="512" height="512" rx="112"/></clipPath>
   </defs>
+  <title>UPM Patch Grid Icon</title>
+  <g clip-path="url(#upm-badge-clip)">
+    <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#upm-bg)"/>
 
-  <circle cx="1024" cy="1024" r="1024" fill="url(#circleGradient)" />
-  <circle cx="1024" cy="1024" r="1024" fill="url(#circleDepth)" />
-
-  <g filter="url(#iconShadow)">
-    <path fill="#ffffff" d="M721 667C646 667 599 749 638 814L934 1308C974 1374 1074 1374 1114 1308L1410 814C1449 749 1402 667 1327 667H721Z" />
-    <path fill="url(#triangleGradient)" d="M713 731C685 731 668 762 682 786L982 1287C1001 1319 1047 1319 1066 1287L1366 786C1380 762 1363 731 1335 731H713Z" />
+    <circle cx="414" cy="72" r="203" fill="url(#upm-glow)"/>
+    <path d="M75 405 H135 M378 104 H437" stroke="#9BE7D3" stroke-width="5" opacity=".2" stroke-linecap="round"/>
+  </g>
+  <g id="upm-symbol">
+    <!-- Four independent rounded app/patch modules. -->
+    <rect x="126" y="126" width="121" height="121" rx="28" fill="#E5FFF7"/>
+    <rect x="265" y="126" width="121" height="121" rx="28" fill="#AAF57E"/>
+    <rect x="126" y="265" width="121" height="121" rx="28" fill="#64E5CF"/>
+    <rect x="265" y="265" width="121" height="121" rx="28" fill="#DCFDF0"/>
+    <!-- Unified hub with a precise patch-plus glyph. -->
+    <circle cx="256" cy="256" r="66" fill="#103C46"/>
+    <circle cx="256" cy="256" r="56" fill="url(#upm-mark)"/>
+    <path d="M244 220 H268 V244 H292 V268 H268 V292 H244 V268 H220 V244 H244 Z"
+          fill="#123E47"/>
+    <circle cx="159" cy="161" r="8" fill="#178A8E" opacity=".47"/>
+    <circle cx="350" cy="351" r="8" fill="#178A8E" opacity=".47"/>
   </g>
 </svg>

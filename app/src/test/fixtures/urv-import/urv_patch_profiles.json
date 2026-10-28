@@ -1,0 +1,62 @@
+{
+    "profiles": [
+        {
+            "name": "URV user profile",
+            "packageName": "com.example.app",
+            "appVersion": "1.0",
+            "useSelectedApkVersion": true,
+            "autoPatch": true,
+            "installerToken": ":shizuku:",
+            "autoInstall": true,
+            "createdAt": 1700000000000,
+            "payload": {
+                "bundles": [
+                    {
+                        "bundleUid": 42,
+                        "patches": [
+                            "Patch"
+                        ],
+                        "options": {
+                            "Patch": {
+                                "enabled": {
+                                    "raw": true
+                                },
+                                "count": {
+                                    "raw": 42
+                                },
+                                "large": {
+                                    "raw": 9007199254740993
+                                },
+                                "ratio": {
+                                    "raw": 0.75
+                                },
+                                "customPackage": {
+                                    "raw": "app.urv.manager.keep.this"
+                                },
+                                "names": {
+                                    "raw": [
+                                        "URV",
+                                        "UPM"
+                                    ]
+                                },
+                                "unset": {
+                                    "raw": null
+                                }
+                            }
+                        },
+                        "displayName": "URV custom bundle",
+                        "sourceEndpoint": "https://example.com/patches.json",
+                        "sourceName": "Example",
+                        "version": "v1",
+                        "optionDisplayInfo": null
+                    }
+                ],
+                "signatureWorkflow": {
+                    "enabled": true,
+                    "remembered": true,
+                    "injected": false
+                }
+            }
+        }
+    ]
+}

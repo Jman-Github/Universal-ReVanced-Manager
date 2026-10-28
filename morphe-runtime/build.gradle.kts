@@ -7,12 +7,12 @@ plugins {
 }
 
 android {
-    namespace = "app.universal.revanced.manager.morphe.runtime"
+    namespace = "app.universal.patch.manager.morphe.runtime"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "app.universal.revanced.manager.morphe.runtime"
+        applicationId = "app.universal.patch.manager.morphe.runtime"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
@@ -61,7 +61,7 @@ android {
     sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
     // Share the resource sampler with the host so both process modes report the same metrics.
     sourceSets.named("main") {
-        kotlin.directories += "../app/src/main/java/app/urv/manager/patcher/runtime/usage"
+        kotlin.directories += "../app/src/main/java/app/universal/patch/manager/patcher/runtime/usage"
     }
 
     compileOptions {

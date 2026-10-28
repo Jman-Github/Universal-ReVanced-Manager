@@ -18,9 +18,9 @@ compiler = [artifact("org.jetbrains.kotlin", name, "2.4.10") for name in (
     "kotlin-compiler-embeddable", "kotlin-stdlib", "kotlin-reflect", "kotlin-script-runtime")]
 compiler += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2"),
              artifact("org.jetbrains", "annotations", "13.0")]
-core = ROOT / "urv-patcher-core/build/libs/urv-patcher-core.jar"
+core = ROOT / "upm-patcher-core/build/libs/upm-patcher-core.jar"
 sources = list((ROOT / "jvm-host/src/main/kotlin").rglob("*.kt"))
-sources += [ROOT / "app/src/main/java/app/urv/manager/patcher/runtime/JvmHeapPolicy.kt",
+sources += [ROOT / "app/src/main/java/app/universal/patch/manager/patcher/runtime/JvmHeapPolicy.kt",
             ROOT / "app/src/test/fixtures/jvm-memory/MemoryRuntimeChecks.kt"]
 
 with tempfile.TemporaryDirectory(prefix="jvm-memory-test-", dir=ROOT / "build") as temporary:
@@ -32,15 +32,15 @@ with tempfile.TemporaryDirectory(prefix="jvm-memory-test-", dir=ROOT / "build") 
         *map(str, sources)], check=True, timeout=90)
     cp = os.pathsep.join(map(str, [classes, core]))
     subprocess.run([str(JAVA), "-cp", cp,
-        "app.urv.manager.patcher.host.MemoryRuntimeChecksKt"], check=True, timeout=10)
+        "app.universal.patch.manager.patcher.host.MemoryRuntimeChecksKt"], check=True, timeout=10)
     for fail in (False, True):
         request = work / "request.json"
         events = work / "events.jsonl"
         request.write_text(json.dumps({"device": {"sdk": 37, "fingerprint": "fixture",
             "abis": ["arm64-v8a"], "locales": ["en-US"], "density": 420}, "fail": fail}))
         subprocess.run([str(JAVA), "-Xmx128m", "-cp", cp,
-            "app.urv.manager.patcher.host.HostMainKt", str(request), str(events),
-            "app.urv.manager.patcher.host.MemoryRuntimeFixtureEntry"], check=True, timeout=15)
+            "app.universal.patch.manager.patcher.host.HostMainKt", str(request), str(events),
+            "app.universal.patch.manager.patcher.host.MemoryRuntimeFixtureEntry"], check=True, timeout=15)
         messages = [json.loads(line) for line in events.read_text().splitlines()]
         assert messages[0]["type"] == "started"
         assert messages[-1]["type"] == "finished"

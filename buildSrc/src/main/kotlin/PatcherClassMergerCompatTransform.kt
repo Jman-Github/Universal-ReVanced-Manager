@@ -38,8 +38,8 @@ abstract class PatcherClassMergerCompatTransform : TransformAction<TransformPara
 
 /** Android D8 inputs and isolated JVM hosts must consume the same corrected SDKs. */
 fun Project.usePatcherClassMergerCompatibility() {
-    val compatible = Attribute.of("app.urv.patcher-merger-compatible", Boolean::class.javaObjectType)
-    val archiveKind = Attribute.of("app.urv.patcher-archive-kind", String::class.java)
+    val compatible = Attribute.of("app.upm.patcher-merger-compatible", Boolean::class.javaObjectType)
+    val archiveKind = Attribute.of("app.upm.patcher-archive-kind", String::class.java)
     dependencies.attributesSchema.attribute(compatible)
     dependencies.attributesSchema.attribute(archiveKind)
     for (type in listOf("jar", "aar")) {

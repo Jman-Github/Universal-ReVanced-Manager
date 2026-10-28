@@ -25,4 +25,5 @@
     <!-- KeystoreManager also keeps external backups and a legacy internal key. -->
     <exclude domain="external" path="keystore" />
     <exclude domain="file" path="manager.keystore" />
+    <exclude domain="file" path="urv_keystore.keystore" />
 </full-backup-content>

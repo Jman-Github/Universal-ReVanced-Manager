@@ -140,7 +140,7 @@ fun androidVersionCode(versionName: String, developmentBuild: Boolean = false): 
     return computedVersionCode.toInt()
 }
 
-val outputApkFileName = "universal-revanced-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
+val outputApkFileName = "universal-patch-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
@@ -204,7 +204,7 @@ usePatcherClassMergerCompatibility()
 dependencies {
     // Bundle format detection inspects DEX superclasses before loading a patcher SDK.
     implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
-    patcherHost(project(":urv-patcher-core", "hostJar"))
+    patcherHost(project(":upm-patcher-core", "hostJar"))
     patcherHost(project(":revanced22-patcher-core", "hostJar"))
     implementation("org.tukaani:xz:1.11")
     constraints {
@@ -261,7 +261,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
 
-    // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
+    // ReVanced (PR #39: https://github.com/Jman-Github/Universal-Patch-Manager/pull/39)
     implementation(libs.revanced.patcher.v22) {
         exclude(group = "xmlpull", module = "xmlpull")
         exclude(group = "xpp3", module = "xpp3")
@@ -355,7 +355,7 @@ buildscript {
 }
 
 android {
-    namespace = "app.universal.revanced.manager"
+    namespace = "app.universal.patch.manager"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
     // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
@@ -366,7 +366,7 @@ android {
         buildConfigField("int", "EMBEDDED_JVM_FEATURE", embeddedJvmFeature.toString())
         buildConfigField("String", "EMBEDDED_JVM_ID", "\"$embeddedJvmId\"")
         externalNativeBuild.cmake.arguments += "-DANDROID_STL=c++_shared"
-        applicationId = "app.universal.revanced.manager"
+        applicationId = "app.universal.patch.manager"
         buildConfigField("boolean", "IS_PR_TEST_BUILD", prTestBuild.toString())
         buildConfigField("long", "PR_BUILD_TIMESTAMP", "${if (prTestBuild) System.currentTimeMillis() else 0L}L")
         buildConfigField("int", "DATABASE_VERSION", managerDatabaseVersion.toString())
@@ -542,7 +542,7 @@ androidComponents {
                 ?: "universal"
             output.outputFileName.set(
                 output.versionName.orElse(resolvedProjectVersion).map { resolvedVersionName ->
-                    "universal-revanced-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
+                    "universal-patch-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
                 }
             )
         }

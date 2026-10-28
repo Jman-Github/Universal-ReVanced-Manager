@@ -47,12 +47,12 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
 }
 
 android {
-    namespace = "app.universal.revanced.manager.revanced.v21.runtime"
+    namespace = "app.universal.patch.manager.revanced.v21.runtime"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
+        applicationId = "app.universal.patch.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 36
         versionCode = 7

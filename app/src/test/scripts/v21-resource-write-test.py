@@ -43,33 +43,33 @@ with tempfile.TemporaryDirectory(prefix="v21-resource-write-", dir=ROOT / "build
                     artifact("org.jetbrains.kotlin", "kotlin-stdlib", version=kotlin),
                     artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm"),
                     artifact("junit", "junit", version="4.13.2"), artifact("org.hamcrest", "hamcrest-core")]
-    models = (ROOT / "app/src/main/java/app/urv/manager/ui/model/PatcherStep.kt").read_text()
-    models = re.sub(r"import (android.os.Parcelable|androidx.annotation.StringRes|app.universal.revanced.manager.R|kotlinx.parcelize.Parcelize)\n", "", models)
+    models = (ROOT / "app/src/main/java/app/universal/patch/manager/ui/model/PatcherStep.kt").read_text()
+    models = re.sub(r"import (android.os.Parcelable|androidx.annotation.StringRes|app.universal.patch.manager.R|kotlinx.parcelize.Parcelize)\n", "", models)
     models = re.sub(r"enum class StepCategory\([^}]+}", "enum class StepCategory { PREPARING, PATCHING, SAVING }", models)
     models = models.replace("@Parcelize\n", "").replace(" : Parcelable", "")
     (work / "PatcherStep.kt").write_text(models)
     sources = [
-        ROOT / "revanced.v21-runtime-plugin/src/main/java/app/urv/manager/patcher/Session.kt",
-        ROOT / "revanced.v21-runtime-plugin/src/main/java/app/urv/manager/patcher/util/DecodedResourceReferences.kt",
-        ROOT / "revanced21-patcher-core/src/test/kotlin/app/urv/manager/patcher/util/DecodedResourceReferencesTest.kt",
-        ROOT / "revanced21-patcher-core/src/test/kotlin/app/urv/manager/patcher/SessionWriteProgressTest.kt",
-        ROOT / "app/src/main/java/app/urv/manager/ui/model/PatcherProgressTracker.kt",
-        ROOT / "app/src/main/java/app/urv/manager/ui/model/ExpandableStepProgress.kt",
-        ROOT / "app/src/test/java/app/urv/manager/ui/model/PatcherProgressTrackerTest.kt",
+        ROOT / "revanced.v21-runtime-plugin/src/main/java/app/universal/patch/manager/patcher/Session.kt",
+        ROOT / "revanced.v21-runtime-plugin/src/main/java/app/universal/patch/manager/patcher/util/DecodedResourceReferences.kt",
+        ROOT / "revanced21-patcher-core/src/test/kotlin/app/universal/patch/manager/patcher/util/DecodedResourceReferencesTest.kt",
+        ROOT / "revanced21-patcher-core/src/test/kotlin/app/universal/patch/manager/patcher/SessionWriteProgressTest.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/ui/model/PatcherProgressTracker.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/ui/model/ExpandableStepProgress.kt",
+        ROOT / "app/src/test/java/app/universal/patch/manager/ui/model/PatcherProgressTrackerTest.kt",
         work / "PatcherStep.kt"]
     classes = work / "classes"
     subprocess.run([str(JAVA), "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-Xfriend-paths=" + str(core),
         "-classpath", cp(dependencies), "-d", str(classes), *map(str, sources)], check=True, timeout=120)
     subprocess.run([str(JAVA), "-cp", cp([classes] + dependencies), "org.junit.runner.JUnitCore",
-        "app.urv.manager.patcher.util.DecodedResourceReferencesTest",
-        "app.urv.manager.patcher.SessionWriteProgressTest",
-        "app.urv.manager.ui.model.PatcherProgressTrackerTest"], check=True, timeout=90)
+        "app.universal.patch.manager.patcher.util.DecodedResourceReferencesTest",
+        "app.universal.patch.manager.patcher.SessionWriteProgressTest",
+        "app.universal.patch.manager.ui.model.PatcherProgressTrackerTest"], check=True, timeout=90)
 
     if args.emulator:
         resource_tests = work / "resource-tests.jar"
         with zipfile.ZipFile(resource_tests, "w") as archive:
-            for file in (classes / "app/urv/manager/patcher/util").glob("DecodedResource*.class"):
+            for file in (classes / "app/universal/patch/manager/patcher/util").glob("DecodedResource*.class"):
                 archive.write(file, file.relative_to(classes).as_posix())
         dex = work / "resource-tests.zip"
         subprocess.run([str(JAVA), "-cp", str(artifact("com.android.tools", "r8")),
@@ -79,15 +79,15 @@ with tempfile.TemporaryDirectory(prefix="v21-resource-write-", dir=ROOT / "build
             str(artifact("junit", "junit", version="4.13.2")), str(artifact("org.hamcrest", "hamcrest-core")),
             str(artifact("xpp3", "xpp3"))], check=True, timeout=120)
         adb = Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb.exe"
-        remote = "/data/local/tmp/urv-resource-tests-" + uuid.uuid4().hex
+        remote = "/data/local/tmp/upm-resource-tests-" + uuid.uuid4().hex
         device = [str(adb), "-s", args.emulator]
         try:
             subprocess.run(device + ["shell", "mkdir", "-p", remote], check=True, timeout=15)
             subprocess.run(device + ["push", str(dex), remote + "/tests.zip"], check=True, timeout=30)
             subprocess.run(device + ["shell", "env", "CLASSPATH=" + remote + "/tests.zip",
                 "app_process", "-Djava.io.tmpdir=" + remote, "/system/bin", "org.junit.runner.JUnitCore",
-                "app.urv.manager.patcher.util.DecodedResourceReferencesTest"], check=True, timeout=90)
+                "app.universal.patch.manager.patcher.util.DecodedResourceReferencesTest"], check=True, timeout=90)
         finally:
             resolved = subprocess.check_output(device + ["shell", "readlink", "-f", remote], text=True, timeout=15).strip()
-            if resolved == remote and remote.startswith("/data/local/tmp/urv-resource-tests-"):
+            if resolved == remote and remote.startswith("/data/local/tmp/upm-resource-tests-"):
                 subprocess.run(device + ["shell", "rm", "-rf", remote], check=True, timeout=15)

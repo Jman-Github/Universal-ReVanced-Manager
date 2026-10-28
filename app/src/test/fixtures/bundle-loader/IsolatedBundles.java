@@ -4,7 +4,7 @@ import java.net.*;
 import java.util.*;
 
 public class IsolatedBundles {
-    private static final String LOADER_KEY = "urv.fixture.bundleLoader";
+    private static final String LOADER_KEY = "upm.fixture.bundleLoader";
     private static Collection<?> load(Object instance, Method method, String path) throws Exception {
         return (Collection<?>) method.invoke(instance, path);
     }
@@ -63,10 +63,10 @@ public class IsolatedBundles {
                 if (!(cause instanceof ClassFormatError)) throw expected;
             }
             if (morphe) {
-                System.setProperty("urv.fixture.failOnce", "true");
+                System.setProperty("upm.fixture.failOnce", "true");
                 type.getMethod("preload", String.class).invoke(instance, args[4]);
                 verify(load(instance, load, args[4]), engine, args[3]);
-                System.setProperty("urv.fixture.strict", "true");
+                System.setProperty("upm.fixture.strict", "true");
                 try {
                     load(instance, load, args[4]);
                     throw new AssertionError("Morphe strict universal-patch validation was bypassed");
@@ -77,7 +77,7 @@ public class IsolatedBundles {
                         cause = cause.getCause();
                     if (cause == null) throw expected;
                 } finally {
-                    System.clearProperty("urv.fixture.strict");
+                    System.clearProperty("upm.fixture.strict");
                 }
             }
             verify(load(instance, load, args[4]), engine, args[3]);
@@ -86,8 +86,8 @@ public class IsolatedBundles {
                 (morphe ? ", bundle provenance, strict defaults, preload recovery" : ""));
         } finally {
             System.getProperties().remove(LOADER_KEY);
-            System.clearProperty("urv.fixture.failOnce");
-            System.clearProperty("urv.fixture.strict");
+            System.clearProperty("upm.fixture.failOnce");
+            System.clearProperty("upm.fixture.strict");
         }
     }
 }

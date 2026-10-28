@@ -51,8 +51,8 @@ compiler = [artifact("org.jetbrains.kotlin", name, kotlin) for name in
 coroutines = artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm")
 compiler += [coroutines, artifact("org.jetbrains", "annotations")]
 tests = [stdlib, coroutines, artifact("junit", "junit", "4.13.2"), artifact("org.hamcrest", "hamcrest-core")]
-main = ROOT / "app/src/main/java/app/urv/manager/patcher"
-unit = ROOT / "app/src/test/java/app/urv/manager/patcher"
+main = ROOT / "app/src/main/java/app/universal/patch/manager/patcher"
+unit = ROOT / "app/src/test/java/app/universal/patch/manager/patcher"
 pure_sources = [main / "reseam/ReseamRuntimeLoaderCache.kt", main / "reseam/ReseamRuntimeReflection.kt",
                 main / "runtime/reseam/ReseamRuntimeFiles.kt"]
 unit_sources = [unit / "reseam/ReseamRuntimeLoaderCacheTest.kt", unit / "reseam/ReseamRuntimeReflectionTest.kt",
@@ -64,9 +64,9 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
     run([java, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
          "-jvm-target", "17", "-classpath", cp(tests), "-d", classes] + pure_sources + unit_sources, timeout=120)
     run([java, "-cp", cp([classes] + tests), "org.junit.runner.JUnitCore",
-         "app.urv.manager.patcher.reseam.ReseamRuntimeLoaderCacheTest",
-         "app.urv.manager.patcher.reseam.ReseamRuntimeReflectionTest",
-         "app.urv.manager.patcher.runtime.reseam.ReseamRuntimeFilesTest"], timeout=90)
+         "app.universal.patch.manager.patcher.reseam.ReseamRuntimeLoaderCacheTest",
+         "app.universal.patch.manager.patcher.reseam.ReseamRuntimeReflectionTest",
+         "app.universal.patch.manager.patcher.runtime.reseam.ReseamRuntimeFilesTest"], timeout=90)
     if args.emulator:
         sdk = Path(os.environ.get("ANDROID_HOME", os.environ.get("ANDROID_SDK_ROOT", "")))
         platforms = sorted((sdk / "platforms").glob("android-37*/android.jar"))
@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
         assert args.plugin.is_file(), "Pass --plugin with a previously assembled Reseam runtime APK"
         fixture = ROOT / "app/src/test/fixtures/reseam-native-loader"
         sources = pure_sources + [main / "reseam/ReseamRuntimeBridge.kt", main / "runtime/reseam/ReseamRuntimeAssets.kt",
-            main / "runtime/PatcherRuntimePluginRegistry.kt", ROOT / "shared/runtime-plugin/src/main/java/app/urv/manager/patcher/logger/Logger.kt"]
+            main / "runtime/PatcherRuntimePluginRegistry.kt", ROOT / "shared/runtime-plugin/src/main/java/app/universal/patch/manager/patcher/logger/Logger.kt"]
         sources += sorted(fixture.glob("*.kt"))
         harness = work / "harness.jar"
         run([java, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",
@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
         run([java, "-cp", d8, "com.android.tools.r8.D8", "--min-api", "26", "--lib", android,
              "--classpath", coroutines, "--output", dex, harness, stdlib], timeout=120)
         device = [adb, "-s", args.emulator]
-        remote = "/data/local/tmp/urv-reseam-native-" + uuid.uuid4().hex
+        remote = "/data/local/tmp/upm-reseam-native-" + uuid.uuid4().hex
         try:
             run(device + ["shell", "mkdir", "-p", remote])
             run(device + ["push", dex, remote + "/harness.zip"])
@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
                     archive.comment = f"reseam-loader-probe-{version}".encode()
                 run(device + ["push", apk, remote + "/" + apk.name])
             probe = list(map(str, device + ["shell", "env", "CLASSPATH=" + remote + "/harness.zip", "app_process", "/system/bin",
-                                           "app.urv.manager.patcher.reseam.ReseamNativeLoaderProbe", remote]))
+                                           "app.universal.patch.manager.patcher.reseam.ReseamNativeLoaderProbe", remote]))
             publishers = [subprocess.Popen(probe + ["prepare"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
                           for _ in range(2)]
             for publisher in publishers:
@@ -107,5 +107,5 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
             run(probe, timeout=180)
         finally:
             resolved = subprocess.check_output(list(map(str, device + ["shell", "readlink", "-f", remote])), text=True).strip()
-            if resolved == remote and remote.startswith("/data/local/tmp/urv-reseam-native-"):
+            if resolved == remote and remote.startswith("/data/local/tmp/upm-reseam-native-"):
                 run(device + ["shell", "rm", "-rf", remote])

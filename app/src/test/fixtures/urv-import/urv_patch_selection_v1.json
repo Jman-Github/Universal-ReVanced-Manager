@@ -1,0 +1,17 @@
+{
+    "version": 1,
+    "bundles": [
+        {
+            "bundleUid": 42,
+            "name": "URV custom bundle",
+            "displayName": "My bundle",
+            "source": "https://example.com/patches.json",
+            "selection": {
+                "com.example.app": [
+                    "Patch"
+                ]
+            },
+            "options": null
+        }
+    ]
+}

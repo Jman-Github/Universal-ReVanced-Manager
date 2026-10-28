@@ -1,5 +1,5 @@
 {
-  "name": "universal-revanced-manager",
+  "name": "universal-patch-manager",
   "private": true,
   "devDependencies": {
     "@cleyrop-org/semantic-release-backmerge": "^6.2.0",

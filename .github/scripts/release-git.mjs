@@ -65,7 +65,7 @@ export async function prepare(pluginConfig, context) {
     message += `\n\nCrowdin-Dev-Head: ${verifiedDevSha}`;
   }
 
-  const tempDir = await mkdtemp(join(tmpdir(), "urv-release-git-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "upm-release-git-"));
   const messageFile = join(tempDir, "message.txt");
 
   try {

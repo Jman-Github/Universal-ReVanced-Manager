@@ -19,18 +19,18 @@
 
 # ReVanced v22 remains the built-in default runtime and is reached through
 # Revanced22RuntimeBridge reflection, so release shrinking must keep it.
--keep class app.urv.manager.revanced.runtime.** { *; }
+-keep class app.universal.patch.manager.revanced.runtime.** { *; }
 
 -keep class com.android.tools.smali.** { *; }
 
 # The bound ART fallback invokes the same pure tool entry through reflection.
--keep class app.urv.manager.patcher.host.ToolRuntimeEntry { *; }
--keep interface app.urv.manager.patcher.host.ToolRuntimeCallback { *; }
+-keep class app.universal.patch.manager.patcher.host.ToolRuntimeEntry { *; }
+-keep interface app.universal.patch.manager.patcher.host.ToolRuntimeCallback { *; }
 
 -keep class app.revanced.manager.plugin.downloader.** { *; }
 -keep class app.revanced.manager.downloader.** { *; }
--keep class app.urv.manager.plugin.downloader.** { *; }
--keep class app.urv.manager.downloader.** { *; }
+-keep class app.universal.patch.manager.plugin.downloader.** { *; }
+-keep class app.universal.patch.manager.downloader.** { *; }
 -keepnames class com.android.apksig.internal.** { *; }
 -keepnames class org.xmlpull.** { *; }
 
@@ -43,4 +43,4 @@
 -dontwarn org.slf4j.**
 
 # JNI entry point adapted from Morphe PR #1202.
--keep class app.urv.manager.patcher.runtime.jvm.EmbeddedJvm { *; }
+-keep class app.universal.patch.manager.patcher.runtime.jvm.EmbeddedJvm { *; }

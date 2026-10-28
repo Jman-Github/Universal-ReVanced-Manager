@@ -1,5 +1,5 @@
 # Keep entrypoint invoked via reflection from the app.
--keep class app.urv.manager.morphe.runtime.** { *; }
+-keep class app.universal.patch.manager.morphe.runtime.** { *; }
 
 # Keep Morphe patcher API classes that are accessed via reflection.
 -keep class app.morphe.** { *; }
@@ -12,7 +12,7 @@
 -keep class com.android.tools.smali.** { *; }
 
 # Keep shared patcher parcelables stable across processes.
--keep class app.urv.manager.patcher.** { *; }
+-keep class app.universal.patch.manager.patcher.** { *; }
 
 # Ignore desktop-only classes referenced by apktool/lib that aren't used on Android.
 -dontwarn java.awt.Graphics2D

@@ -69,7 +69,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: urv-pr-test-reports
+          name: upm-pr-test-reports
           retention-days: 7
           if-no-files-found: ignore
           path: |
@@ -146,7 +146,7 @@ jobs:
         if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: urv-pr-validation
+          name: upm-pr-validation
           retention-days: 7
           if-no-files-found: error
           path: |

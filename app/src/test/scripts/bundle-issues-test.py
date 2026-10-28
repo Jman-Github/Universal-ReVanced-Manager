@@ -36,42 +36,42 @@ deps = [android, resources, artifact("org.jetbrains.kotlin", "kotlin-stdlib", ko
 with tempfile.TemporaryDirectory(prefix="bundle-issues-", dir=ROOT / "build") as directory:
     work = Path(directory)
     # Compile the real deep-link implementation without unrelated announcement models.
-    deep = (ROOT / "app/src/main/java/app/urv/manager/util/BundleDeepLink.kt").read_text()
+    deep = (ROOT / "app/src/main/java/app/universal/patch/manager/util/BundleDeepLink.kt").read_text()
     deep = deep.split("object ManagerUpdateDeepLinkIntent", 1)[0]
-    deep = deep.replace("import app.urv.manager.ui.model.navigation.Announcement", "")
+    deep = deep.replace("import app.universal.patch.manager.ui.model.navigation.Announcement", "")
     (work / "BundleDeepLink.kt").write_text(deep)
-    (work / "MainActivity.kt").write_text("package app.urv.manager\nclass MainActivity : android.app.Activity()")
+    (work / "MainActivity.kt").write_text("package app.universal.patch.manager\nclass MainActivity : android.app.Activity()")
     sources = [
-        ROOT / "app/src/main/java/app/urv/manager/util/BundleUpdateNotificationCleanup.kt",
-        ROOT / "app/src/main/java/app/urv/manager/receiver/BundleUpdateNotificationDismissReceiver.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/util/BundleUpdateNotificationCleanup.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/receiver/BundleUpdateNotificationDismissReceiver.kt",
         ROOT / "app/src/test/fixtures/bundle-issues/BundleNotificationProbe.kt",
-        ROOT / "app/src/main/java/app/urv/manager/domain/repository/RuntimePluginReleaseSelection.kt",
-        ROOT / "app/src/main/java/app/urv/manager/network/dto/GitHubRelease.kt",
-        ROOT / "app/src/test/java/app/urv/manager/domain/repository/RuntimePluginReleaseSelectionTest.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/domain/repository/RuntimePluginReleaseSelection.kt",
+        ROOT / "app/src/main/java/app/universal/patch/manager/network/dto/GitHubRelease.kt",
+        ROOT / "app/src/test/java/app/universal/patch/manager/domain/repository/RuntimePluginReleaseSelectionTest.kt",
         work / "BundleDeepLink.kt", work / "MainActivity.kt"]
     classes = work / "classes"
     run(JAVA, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp(deps),
         "-d", classes, *sources)
     run(JAVA, "-cp", cp([classes] + deps), "org.junit.runner.JUnitCore",
-        "app.urv.manager.domain.repository.RuntimePluginReleaseSelectionTest")
+        "app.universal.patch.manager.domain.repository.RuntimePluginReleaseSelectionTest")
     probe = work / "probe.jar"
     with zipfile.ZipFile(probe, "w") as archive:
         for file in classes.rglob("*.class"):
             relative = file.relative_to(classes).as_posix()
-            if relative.startswith(("app/urv/manager/util/", "app/urv/manager/receiver/", "app/urv/manager/MainActivity")):
+            if relative.startswith(("app/universal/patch/manager/util/", "app/universal/patch/manager/receiver/", "app/universal/patch/manager/MainActivity")):
                 archive.write(file, relative)
     dex = work / "tests.zip"
     run(JAVA, "-cp", artifact("com.android.tools", "r8"), "com.android.tools.r8.D8",
         "--min-api", "26", "--lib", android, "--output", dex, probe, resources, deps[2])
     device = [SDK / "platform-tools/adb.exe", "-s", os.environ.get("ANDROID_SERIAL", "emulator-5554")]
-    remote = "/data/local/tmp/urv-bundle-issues-" + uuid.uuid4().hex
+    remote = "/data/local/tmp/upm-bundle-issues-" + uuid.uuid4().hex
     try:
         run(*device, "shell", "mkdir", "-p", remote)
         run(*device, "push", dex, remote + "/tests.zip")
         run(*device, "shell", "env", "CLASSPATH=" + remote + "/tests.zip",
-            "app_process", "/system/bin", "app.urv.manager.util.BundleNotificationProbe")
+            "app_process", "/system/bin", "app.universal.patch.manager.util.BundleNotificationProbe")
     finally:
         resolved = subprocess.check_output(list(map(str, device + ["shell", "readlink", "-f", remote])), text=True, timeout=15).strip()
-        if resolved == remote and remote.startswith("/data/local/tmp/urv-bundle-issues-"):
+        if resolved == remote and remote.startswith("/data/local/tmp/upm-bundle-issues-"):
             run(*device, "shell", "rm", "-rf", remote)

@@ -53,11 +53,11 @@ rm -rf release-assets
 mkdir -p release-assets
 
 EXPECTED_MANAGER_APKS=(
-  "universal-revanced-manager-v${VERSION}-universal.apk"
-  "universal-revanced-manager-v${VERSION}-arm64-v8a.apk"
-  "universal-revanced-manager-v${VERSION}-armeabi-v7a.apk"
-  "universal-revanced-manager-v${VERSION}-x86.apk"
-  "universal-revanced-manager-v${VERSION}-x86_64.apk"
+  "universal-patch-manager-v${VERSION}-universal.apk"
+  "universal-patch-manager-v${VERSION}-arm64-v8a.apk"
+  "universal-patch-manager-v${VERSION}-armeabi-v7a.apk"
+  "universal-patch-manager-v${VERSION}-x86.apk"
+  "universal-patch-manager-v${VERSION}-x86_64.apk"
 )
 
 for apk in "${EXPECTED_MANAGER_APKS[@]}"; do
