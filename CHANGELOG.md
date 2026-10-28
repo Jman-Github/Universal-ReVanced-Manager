@@ -4,6 +4,13 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+## [1.10.1-dev.1](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.10.0...v1.10.1-dev.1) (2026-10-28)
+
+
+### Bug Fixes
+
+* **runtime:** preserve update trust and patch progress order ([ceb7da4](https://github.com/Jman-Github/Universal-ReVanced-Manager/commit/ceb7da4594faea16ce3d0b990e9ec28150142ed0))
+
 # [1.10.0](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.9.0...v1.10.0) (2026-10-27)
 
 
