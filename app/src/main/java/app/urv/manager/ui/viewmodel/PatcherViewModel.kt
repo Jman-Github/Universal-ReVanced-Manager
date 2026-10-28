@@ -5288,7 +5288,8 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
                 sequence = update.sequence,
                 event = event,
                 notificationProgressCurrent = update.notificationProgressCurrent,
-                notificationProgressMax = update.notificationProgressMax
+                notificationProgressMax = update.notificationProgressMax,
+                patchExecutionOrder = update.patchExecutionOrder
             )
         }
     }
@@ -5330,11 +5331,13 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
         notificationProgressCurrent: Int?,
         notificationProgressMax: Int?,
         failedPatchIndexes: Set<Int> = emptySet(),
+        patchExecutionOrder: List<Int> = emptyList(),
         seedFromWorkerSnapshot: Boolean = false
     ) = viewModelScope.launch {
         progressEventMutex.withLock {
             if (!shouldApplyWorkerProgress(generation, sequence)) return@withLock
             recordAppliedWorkerProgress(generation, sequence)
+            progressState.applyPatchExecutionOrder(patchExecutionOrder)
             if (seedFromWorkerSnapshot) {
                 seedVisualProgressFromWorkerProgress(
                     current = notificationProgressCurrent,
@@ -5604,6 +5607,7 @@ var missingPatchWarning by mutableStateOf<MissingPatchWarningState?>(null)
             notificationProgressCurrent = snapshot.notificationProgressCurrent,
             notificationProgressMax = snapshot.notificationProgressMax,
             failedPatchIndexes = snapshot.failedPatchIndexes,
+            patchExecutionOrder = snapshot.patchExecutionOrder,
             seedFromWorkerSnapshot = true
         )
     }

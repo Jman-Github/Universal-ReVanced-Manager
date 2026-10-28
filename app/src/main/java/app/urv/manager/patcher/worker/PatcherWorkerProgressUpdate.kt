@@ -9,5 +9,6 @@ data class PatcherWorkerProgressUpdate(
     val notificationProgressCurrent: Int? = null,
     val notificationProgressMax: Int? = null,
     val memoryUsage: PatcherMemoryUsage? = null,
-    val isMemorySample: Boolean = false
+    val isMemorySample: Boolean = false,
+    val patchExecutionOrder: List<Int> = emptyList()
 )

@@ -11,6 +11,10 @@ import android.content.res.Resources
 import android.net.Uri
 import android.os.Parcelable
 import android.util.Log
+import androidx.core.content.ContextCompat
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.data.room.AppDatabase
@@ -46,6 +50,11 @@ import app.urv.manager.util.tag
 import dalvik.system.PathClassLoader
 import io.ktor.client.request.url
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,6 +84,8 @@ class DownloaderPluginRepository(
 ) {
     private val trustDao = db.trustedDownloaderPluginDao()
     private val managedSourceRoot = app.getDir("managed_downloader_plugins", Context.MODE_PRIVATE)
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val reloadMutex = Mutex()
     private val _pluginStates = MutableStateFlow(emptyMap<String, DownloaderPluginState>())
     private val _sourceStates = MutableStateFlow(emptyMap<String, DownloaderPluginSourceState>())
     private val _apkDownloadHelpers = MutableStateFlow(emptyList<ApkDownloadHelperContract.Helper>())
@@ -98,6 +109,53 @@ class DownloaderPluginRepository(
 
     private val acknowledgedDownloaderPlugins = prefs.acknowledgedDownloaderPlugins
     private val installedPluginPackageNames = MutableStateFlow(emptySet<String>())
+    private val installedPluginPackageSnapshots = MutableStateFlow(emptyMap<String, Pair<String?, String?>>())
+
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            if (action !in PACKAGE_ACTIONS) return
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            if (replacing && action == Intent.ACTION_PACKAGE_REMOVED) return
+            scope.launch {
+                runCatching {
+                    if (action == Intent.ACTION_PACKAGE_REMOVED && !replacing) {
+                        val known = packageName in installedPluginPackageNames.value ||
+                            packageName in acknowledgedDownloaderPlugins.get() ||
+                            trustDao.getTrustedSignature(packageName) != null ||
+                            _apkDownloadHelpers.value.any { it.packageName == packageName }
+                        if (known) {
+                            removePlugin(packageName)
+                            reload()
+                        }
+                    } else {
+                        handlePackageChange(packageName)
+                    }
+                }.onFailure {
+                    if (it is CancellationException) throw it
+                    Log.w(tag, "Failed to handle package change for $packageName", it)
+                }
+            }
+        }
+    }
+
+    init {
+        runCatching {
+            val filter = IntentFilter().apply {
+                PACKAGE_ACTIONS.forEach(::addAction)
+                addDataScheme("package")
+            }
+            ContextCompat.registerReceiver(
+                app,
+                packageChangeReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }.onFailure {
+            Log.w(tag, "Failed to register downloader plugin package change receiver", it)
+        }
+    }
     val newPluginPackageNames = combine(
         installedPluginPackageNames,
         acknowledgedDownloaderPlugins.flow
@@ -105,18 +163,14 @@ class DownloaderPluginRepository(
         installed subtract acknowledged
     }
 
-    suspend fun reload() {
+    suspend fun reload() = reloadMutex.withLock {
+        val installedPackages =
+            withContext(Dispatchers.IO) {
+                pm.getPackagesWithFeatures(DOWNLOADER_PLUGIN_FEATURES)
+            }
         val installedPlugins =
             withContext(Dispatchers.IO) {
-                pm.getPackagesWithFeatures(
-                    setOf(
-                        LEGACY_PLUGIN_FEATURE,
-                        MODERN_PLUGIN_FEATURE,
-                        REVANCED_LEGACY_PLUGIN_FEATURE,
-                        REVANCED_MODERN_PLUGIN_FEATURE
-                    )
-                )
-                    .associate { it.packageName to loadInstalledPlugin(it.packageName) }
+                installedPackages.associate { it.packageName to loadInstalledPlugin(it.packageName) }
             }
         val apkDownloadHelpers = withContext(Dispatchers.IO) {
             // Code adapted from Morphe, see third-party/NOTICE for more information
@@ -186,15 +240,59 @@ class DownloaderPluginRepository(
         _apkDownloadHelpers.value = apkDownloadHelpers
         _trustedApkDownloadHelpers.value = trustedHelpers
         installedPluginPackageNames.value = installedPlugins.keys
+        installedPluginPackageSnapshots.value = installedPackages.associate {
+            it.packageName to (it.versionName to it.applicationInfo?.sourceDir)
+        }
         _hasLoadedInitialState.value = true
 
-        val acknowledgedPlugins = acknowledgedDownloaderPlugins.get()
-        val uninstalledPlugins = acknowledgedPlugins subtract installedPluginPackageNames.value
-        if (uninstalledPlugins.isNotEmpty()) {
-            Log.d(tag, "Uninstalled plugins: ${uninstalledPlugins.joinToString(", ")}")
-            acknowledgedDownloaderPlugins.update(acknowledgedPlugins subtract uninstalledPlugins)
-            trustDao.removeAll(uninstalledPlugins)
+        // Android can briefly omit a package while replacing its APK. Only a confirmed
+        // removal or explicit revocation should discard the stored signer trust.
+    }
+
+    private suspend fun handlePackageChange(packageName: String) {
+        val isKnown = packageName in installedPluginPackageNames.value ||
+            _apkDownloadHelpers.value.any { it.packageName == packageName }
+        val isDownloader = isKnown || withContext(Dispatchers.IO) {
+            pm.getPackageInfo(packageName, PackageManager.GET_CONFIGURATIONS)
+                ?.reqFeatures?.any { it.name in DOWNLOADER_PLUGIN_FEATURES } == true ||
+                ApkDownloadHelperContract.findHelpers(app).any { it.packageName == packageName }
         }
+        if (isDownloader) {
+            Log.d(tag, "Downloader plugin package change detected for $packageName, reloading")
+            reload()
+        }
+    }
+
+    suspend fun reloadIfChanged(): Boolean = withContext(Dispatchers.IO) {
+        val currentPackages = pm.getPackagesWithFeatures(DOWNLOADER_PLUGIN_FEATURES)
+        val currentPackageNames = currentPackages.map { it.packageName }.toSet()
+        val knownPackageNames = installedPluginPackageNames.value
+
+        if (currentPackageNames != knownPackageNames) {
+            reload()
+            return@withContext true
+        }
+
+        val knownSnapshots = installedPluginPackageSnapshots.value
+        val anyChanged = currentPackages.any { pkg ->
+            val snapshot = knownSnapshots[pkg.packageName]
+            snapshot == null || snapshot.first != pkg.versionName || snapshot.second != pkg.applicationInfo?.sourceDir
+        }
+
+        if (anyChanged) {
+            reload()
+            return@withContext true
+        }
+
+        val currentHelpers = ApkDownloadHelperContract.findHelpers(app)
+        val knownHelpers = _apkDownloadHelpers.value
+        val currentHelperMap = currentHelpers.associate { it.componentName to it.version }
+        val knownHelperMap = knownHelpers.associate { it.componentName to it.version }
+        if (currentHelperMap != knownHelperMap) {
+            reload()
+            return@withContext true
+        }
+        false
     }
 
     suspend fun importSourcesFromUrl(rawUrl: String): Int = withContext(Dispatchers.IO) {
@@ -1172,10 +1270,21 @@ class DownloaderPluginRepository(
 
     private companion object {
         private val json = Json { ignoreUnknownKeys = true }
+        private val PACKAGE_ACTIONS = setOf(
+            Intent.ACTION_PACKAGE_ADDED,
+            Intent.ACTION_PACKAGE_REPLACED,
+            Intent.ACTION_PACKAGE_REMOVED
+        )
         const val LEGACY_PLUGIN_FEATURE = "app.urv.manager.plugin.downloader"
         const val MODERN_PLUGIN_FEATURE = "app.urv.manager.downloader"
         const val REVANCED_LEGACY_PLUGIN_FEATURE = "app.revanced.manager.plugin.downloader"
         const val REVANCED_MODERN_PLUGIN_FEATURE = "app.revanced.manager.downloader"
+        private val DOWNLOADER_PLUGIN_FEATURES = setOf(
+            LEGACY_PLUGIN_FEATURE,
+            MODERN_PLUGIN_FEATURE,
+            REVANCED_LEGACY_PLUGIN_FEATURE,
+            REVANCED_MODERN_PLUGIN_FEATURE
+        )
 
         const val LEGACY_METADATA_PLUGIN_CLASS = "app.urv.manager.plugin.downloader.class"
         const val MODERN_METADATA_PLUGIN_CLASS = "app.urv.manager.downloader.class"

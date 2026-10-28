@@ -1,8 +1,11 @@
 package app.urv.manager.reseam.runtime
 
 import app.reseam.sdk.ClosureRunEvent
+import app.reseam.sdk.PatchRef
 import app.reseam.sdk.PatchStatus
 import app.reseam.sdk.RunEvent
+
+private val PatchRef.reference: String get() = if (bundle.isEmpty()) id else "$bundle/$id"
 
 /** Translate dependency-ordered SDK events into URV's indexed progress contract. */
 internal class ReseamProgress(
@@ -51,8 +54,9 @@ internal class ReseamProgress(
             }
             is RunEvent.PatchStarted -> {
                 beginExecution()
-                if (arg0.patch !in completed) {
-                    indexes[arg0.patch]?.let { started("ExecutePatch", it, updateActive = false) }
+                val ref = arg0.patch.reference
+                if (ref !in completed) {
+                    indexes[ref]?.let { started("ExecutePatch", it, updateActive = false) }
                 }
             }
             is RunEvent.PatchFinished -> {
@@ -61,8 +65,9 @@ internal class ReseamProgress(
             }
             is RunEvent.PatchesReverted -> {
                 callback.log("WARN", "Reseam reverted patches and will run them again: " +
-                    arg0.patches.joinToString())
-                arg0.patches.forEach { reference ->
+                    arg0.patches.joinToString { it.reference })
+                arg0.patches.forEach { patchRef ->
+                    val reference = patchRef.reference
                     statuses.remove(reference)
                     completed.remove(reference)
                 }
@@ -72,11 +77,13 @@ internal class ReseamProgress(
                 val entry = arg0.field0
                 callback.log(
                     if (entry.level.name == "DEBUG") "TRACE" else entry.level.name,
-                    "[" + entry.patch + "] " + entry.message
+                    "[" + entry.patch.reference + "] " + entry.message
                 )
             }
         }
     }
+
+    fun finishPatch(patch: PatchRef, status: PatchStatus) = finishPatch(patch.reference, status)
 
     fun finishPatch(reference: String, status: PatchStatus) {
         val previousStatus = statuses.put(reference, status)

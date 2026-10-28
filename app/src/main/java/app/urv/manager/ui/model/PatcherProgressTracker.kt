@@ -1157,6 +1157,22 @@ internal class PatcherProgressTracker(
         }
     }
 
+    /** Reorder rows by runtime execution while retaining stable IDs and failure state. */
+    fun applyPatchExecutionOrder(order: List<Int>) {
+        if (order.isEmpty()) return
+        val positions = steps.indices.filter { steps[it].id is StepId.ExecutePatch }
+        val byIndex = positions.associate { position ->
+            (steps[position].id as StepId.ExecutePatch).index to steps[position]
+        }
+        val indexes = order.filter { it in byIndex }.distinct()
+        val waiting = byIndex.filterKeys { it !in indexes }.toSortedMap().values.map { step ->
+            // Preparation may have speculatively activated the alphabetically first row.
+            if (step.state == State.RUNNING) step.withState(State.WAITING) else step
+        }
+        val ordered = indexes.map { byIndex.getValue(it) } + waiting
+        positions.forEachIndexed { index, position -> steps[position] = ordered[index] }
+    }
+
     fun processProgressEventLocked(event: ProgressEvent) {
         val previousProgress = steps.firstOrNull { it.id == event.stepId }?.progress
         prepareSplitStepForIncomingEvent(event)
@@ -1243,7 +1259,10 @@ internal class PatcherProgressTracker(
             val step = steps[stepIndex]
             val updatedStep = when (event) {
                 is ProgressEvent.Started -> {
-                    if (step.state == State.COMPLETED || step.state == State.FAILED) {
+                    if (eventStepId is StepId.ExecutePatch) {
+                        // Reseam emits a fresh start when rollback requires a rerun.
+                        step.withState(State.RUNNING, message = null, progress = null)
+                    } else if (step.state == State.COMPLETED || step.state == State.FAILED) {
                         null
                     } else {
                         step.withState(State.RUNNING)

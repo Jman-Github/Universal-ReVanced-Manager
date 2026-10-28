@@ -128,6 +128,8 @@ class PatcherWorker(
     @Volatile
     private var patchNotificationSteps: List<String> = emptyList()
     @Volatile
+    private var patchExecutionOrder: List<Int> = emptyList()
+    @Volatile
     private var foregroundStarted: Boolean = false
     @Volatile
     private var lastNotificationProgressCurrent: Int = 0
@@ -496,7 +498,10 @@ class PatcherWorker(
         if (totalPatchCount <= 0) {
             return progressInRange(EXECUTE_PATCHES_START, EXECUTE_PATCHES_END, fraction)
         }
-        val currentPatch = stepId.index.coerceAtLeast(0).coerceAtMost(totalPatchCount)
+        val executionIndex = if (activePatchBundleType == PatchBundleType.RESEAM) {
+            patchExecutionOrder.indexOf(stepId.index).coerceAtLeast(0)
+        } else stepId.index
+        val currentPatch = executionIndex.coerceIn(0, totalPatchCount)
         val overallFraction =
             ((currentPatch.toFloat() + fraction.coerceIn(0f, 1f)) / totalPatchCount.toFloat())
                 .coerceIn(0f, 1f)
@@ -827,7 +832,7 @@ class PatcherWorker(
         if (event is ProgressEvent.Failed) {
             val patchStepId = event.stepId as? StepId.ExecutePatch ?: return
             failedPatchIndexes += patchStepId.index
-        } else if (event is ProgressEvent.Completed) {
+        } else if (event is ProgressEvent.Completed || event is ProgressEvent.Started) {
             (event.stepId as? StepId.ExecutePatch)?.let { patchStepId ->
                 failedPatchIndexes -= patchStepId.index
             }
@@ -853,7 +858,8 @@ class PatcherWorker(
             notificationProgressCurrent = persistedNotificationProgress?.current,
             notificationProgressMax = persistedNotificationProgress?.max,
             memoryUsage = lastPatcherMemoryUsage,
-            failedPatchIndexes = currentFailedPatchIndexes()
+            failedPatchIndexes = currentFailedPatchIndexes(),
+            patchExecutionOrder = patchExecutionOrder
         )
 
         workerRepository.updateActiveProgressSnapshot(id, snapshot)
@@ -1027,7 +1033,8 @@ class PatcherWorker(
             notificationProgressCurrent = persistedNotificationProgress?.current,
             notificationProgressMax = persistedNotificationProgress?.max,
             memoryUsage = lastPatcherMemoryUsage,
-            failedPatchIndexes = currentFailedPatchIndexes()
+            failedPatchIndexes = currentFailedPatchIndexes(),
+            patchExecutionOrder = patchExecutionOrder
         )
 
         workerRepository.updateActiveProgressSnapshot(id, snapshot)
@@ -1046,7 +1053,8 @@ class PatcherWorker(
         event = event,
         notificationProgressCurrent = notificationProgress?.current,
         notificationProgressMax = notificationProgress?.max,
-        memoryUsage = lastPatcherMemoryUsage
+        memoryUsage = lastPatcherMemoryUsage,
+        patchExecutionOrder = patchExecutionOrder
     )
 
     private fun buildWriteApkLogEvent(rawMessage: String): ProgressEvent.Progress? {
@@ -1445,6 +1453,7 @@ class PatcherWorker(
     }
 
     private suspend fun runPatcher(args: Args, totalPatchCount: Int): Result {
+        patchExecutionOrder = emptyList()
         cleanupTemporarySplitArtifacts()
         lastPatcherMemoryUsage = null
         requestedPatcherMemoryLimitMb = null
@@ -1480,6 +1489,15 @@ class PatcherWorker(
         }
         val eventDispatcher: (ProgressEvent) -> Unit = eventDispatcher@{ event ->
             if (shouldSkipForegroundUpdates()) return@eventDispatcher
+            if (activePatchBundleType == PatchBundleType.RESEAM) {
+                if (event is ProgressEvent.Started && event.stepId == StepId.LoadPatches) {
+                    patchExecutionOrder = emptyList()
+                }
+                val patch = event.stepId as? StepId.ExecutePatch
+                if (patch != null && patch.index !in patchExecutionOrder) {
+                    patchExecutionOrder = patchExecutionOrder + patch.index
+                }
+            }
             val sequence = progressSequence.incrementAndGet()
             args.onEvent(
                 buildWorkerProgressUpdate(

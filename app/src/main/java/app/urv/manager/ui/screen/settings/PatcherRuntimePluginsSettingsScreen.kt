@@ -114,6 +114,7 @@ fun PatcherRuntimePluginsSettingsScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.acknowledgeNewPlugins()
+        viewModel.refreshPlugins()
     }
 
     if (showImportUrlDialog) {
@@ -510,7 +511,7 @@ private fun InstalledRuntimeCard(
     val context = LocalContext.current
     val loaded = state as? PatcherRuntimePluginState.Loaded
     val failed = state as? PatcherRuntimePluginState.Failed
-    val packageInfo = remember(packageName) {
+    val packageInfo = remember(packageName, state) {
         viewModel.pm.getPackageInfo(packageName)
     }
     val appName = remember(packageName, packageInfo) {
@@ -519,7 +520,7 @@ private fun InstalledRuntimeCard(
     }
     val runtimeName = remember(appName) { appName.toRuntimeMainName() }
     val runtimeLabel = remember(runtimeName) { runtimeName.toRuntimeDisplayLabel() }
-    val signature = remember(packageName) {
+    val signature = remember(packageName, state) {
         runCatching {
             val androidSignature = viewModel.pm.getSignature(packageName)
             MessageDigest.getInstance("SHA-256")

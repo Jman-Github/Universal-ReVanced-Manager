@@ -8,6 +8,69 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PatcherProgressTrackerTest {
+    private fun patchTracker() = PatcherProgressTracker(
+        steps = mutableStateListOf(
+            Step(StepId.ReadAPK, "Read", StepCategory.PREPARING),
+            Step(StepId.ExecutePatches, "Execute", StepCategory.PATCHING, hide = true),
+            Step(StepId.ExecutePatch(0), "A", StepCategory.PATCHING),
+            Step(StepId.ExecutePatch(1), "B", StepCategory.PATCHING),
+            Step(StepId.ExecutePatch(2), "Z", StepCategory.PATCHING),
+            Step(StepId.WriteAPK, "Write", StepCategory.SAVING)
+        ),
+        stepSubSteps = mutableMapOf(),
+        isMorpheSelection = { false },
+        morpheBytecodeMode = { null }
+    )
+
+    @Test fun dependencyExecutionOrderKeepsTheActivePatchAfterCompletedPatches() {
+        val tracker = patchTracker()
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ReadAPK))
+        tracker.applyPatchExecutionOrder(listOf(2))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatch(2)))
+        assertEquals(listOf("Z", "A", "B"), tracker.steps.filter { it.id is StepId.ExecutePatch }.map { it.title })
+        assertEquals(listOf("Z"), tracker.steps.filter { it.state == State.RUNNING && !it.hide }.map { it.title })
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ExecutePatch(2)))
+        tracker.applyPatchExecutionOrder(listOf(2, 1))
+        tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatch(1)))
+        val patches = tracker.steps.filter { it.id is StepId.ExecutePatch }
+        assertEquals(listOf("Z", "B", "A"), patches.map { it.title })
+        assertEquals(listOf(State.COMPLETED, State.RUNNING, State.WAITING), patches.map { it.state })
+        assertEquals(StepId.ReadAPK, tracker.steps.first().id)
+        assertEquals(StepId.WriteAPK, tracker.steps.last().id)
+    }
+
+    @Test fun restoredExecutionOrderRetainsFailuresAndIgnoresDuplicateOrUnknownIndexes() {
+        val tracker = patchTracker()
+        val error = RemoteError("PatchError", "Failed Z", "Failed Z")
+        tracker.processProgressEventLocked(ProgressEvent.Failed(StepId.ExecutePatch(2), error))
+        tracker.applyPatchExecutionOrder(listOf(2, 2, 99, 1))
+        assertEquals(listOf("Z", "B", "A"), tracker.steps.filter { it.id is StepId.ExecutePatch }.map { it.title })
+        assertEquals(State.FAILED, tracker.steps.first { it.id == StepId.ExecutePatch(2) }.state)
+        tracker.applyPatchExecutionOrder(listOf(2, 1, 0))
+        tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ExecutePatch(2)))
+        assertEquals(State.COMPLETED, tracker.steps.first { it.id == StepId.ExecutePatch(2) }.state)
+        assertNull(tracker.steps.first { it.id == StepId.ExecutePatch(2) }.message)
+    }
+
+    @Test fun rolledBackPatchCanRunAgainWithoutKeepingItsOldTerminalState() {
+        for (previous in listOf(State.COMPLETED, State.FAILED)) {
+            val tracker = patchTracker()
+            tracker.applyPatchExecutionOrder(listOf(2, 0))
+            val position = tracker.steps.indexOfFirst { it.id == StepId.ExecutePatch(2) }
+            tracker.steps[position] = tracker.steps[position].copy(
+                state = previous, message = "Old result", progress = 1L to 1L
+            )
+            tracker.processProgressEventLocked(ProgressEvent.Started(StepId.ExecutePatch(2)))
+            val rerun = tracker.steps.first { it.id == StepId.ExecutePatch(2) }
+            assertEquals(State.RUNNING, rerun.state)
+            assertNull(rerun.message)
+            assertNull(rerun.progress)
+            assertEquals(listOf("Z", "A", "B"), tracker.steps.filter { it.id is StepId.ExecutePatch }.map { it.title })
+            tracker.processProgressEventLocked(ProgressEvent.Completed(StepId.ExecutePatch(2)))
+            assertEquals(State.COMPLETED, tracker.steps.first { it.id == StepId.ExecutePatch(2) }.state)
+        }
+    }
+
     private fun tracker(id: StepId) = PatcherProgressTracker(
         steps = mutableStateListOf(
             Step(StepId.DownloadAPK, "Download", StepCategory.PREPARING, State.COMPLETED),

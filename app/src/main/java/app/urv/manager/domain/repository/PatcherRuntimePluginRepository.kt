@@ -6,6 +6,10 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
+import android.content.BroadcastReceiver
+import android.content.Intent
+import android.content.IntentFilter
 import app.universal.revanced.manager.R
 import app.urv.manager.data.platform.NetworkInfo
 import app.urv.manager.domain.manager.PreferencesManager
@@ -24,6 +28,11 @@ import app.urv.manager.util.PM
 import app.urv.manager.util.tag
 import io.ktor.client.request.url
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +43,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.net.URI
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.UUID
 
 class PatcherRuntimePluginRepository(
@@ -46,10 +57,60 @@ class PatcherRuntimePluginRepository(
     private val downloadProgressNotifier: DownloadProgressNotifier
 ) {
     private val managedSourceRoot = app.getDir("managed_patcher_runtime_plugins", Context.MODE_PRIVATE)
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val reloadMutex = Mutex()
+    private val trustMutex = Mutex()
+    private val sourceMutex = Mutex()
     private val _pluginStates = MutableStateFlow(emptyMap<String, PatcherRuntimePluginState>())
     private val _sourceStates = MutableStateFlow(emptyMap<String, PatcherRuntimePluginSourceState>())
     private val _hasLoadedInitialState = MutableStateFlow(false)
     private val installedPluginPackageNames = MutableStateFlow(emptySet<String>())
+    private val installedPluginPackageSnapshots = MutableStateFlow(emptyMap<String, Triple<String?, String?, Long>>())
+
+    private val packageChangeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            if (action !in PACKAGE_ACTIONS) return
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            if (replacing && action == Intent.ACTION_PACKAGE_REMOVED) return
+            scope.launch {
+                runCatching {
+                    if (action == Intent.ACTION_PACKAGE_REMOVED && !replacing) {
+                        val known = packageName in installedPluginPackageNames.value ||
+                            packageName in readTrustedPackages()
+                        if (known) {
+                            // Installation state is temporary; signer trust is revoked explicitly.
+                            removePlugin(packageName, forgetTrust = false)
+                            reload()
+                        }
+                    } else {
+                        handlePackageChange(packageName)
+                    }
+                }.onFailure {
+                    if (it is CancellationException) throw it
+                    Log.w(tag, "Failed to handle runtime package change for $packageName", it)
+                }
+            }
+        }
+    }
+
+    init {
+        runCatching {
+            val filter = IntentFilter().apply {
+                PACKAGE_ACTIONS.forEach(::addAction)
+                addDataScheme("package")
+            }
+            ContextCompat.registerReceiver(
+                app,
+                packageChangeReceiver,
+                filter,
+                ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        }.onFailure {
+            Log.w(tag, "Failed to register runtime plugin package change receiver", it)
+        }
+    }
 
     val pluginStates = _pluginStates.asStateFlow()
     val sourceStates = _sourceStates.asStateFlow()
@@ -82,10 +143,12 @@ class PatcherRuntimePluginRepository(
                 .associateBy { it.kind }
         }
 
-    suspend fun reload() {
-        val installedPlugins = withContext(Dispatchers.IO) {
+    suspend fun reload() = reloadMutex.withLock {
+        val installedPackages = withContext(Dispatchers.IO) {
             pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE)
-                .associate { it.packageName to loadInstalledPlugin(it.packageName) }
+        }
+        val installedPlugins = withContext(Dispatchers.IO) {
+            installedPackages.associate { it.packageName to loadInstalledPlugin(it.packageName) }
         }
         val managedSources = withContext(Dispatchers.IO) {
             buildMap {
@@ -98,110 +161,174 @@ class PatcherRuntimePluginRepository(
         _pluginStates.value = installedPlugins
         _sourceStates.value = managedSources
         installedPluginPackageNames.value = installedPlugins.keys
+        installedPluginPackageSnapshots.value = installedPackages.associate {
+            it.packageName to Triple(it.versionName, it.applicationInfo?.sourceDir, it.lastUpdateTime)
+        }
         _hasLoadedInitialState.value = true
 
-        val acknowledged = prefs.acknowledgedPatcherRuntimePlugins.get()
-        val uninstalled = acknowledged subtract installedPluginPackageNames.value
-        if (uninstalled.isNotEmpty()) {
-            prefs.acknowledgedPatcherRuntimePlugins.update(acknowledged subtract uninstalled)
-            val trusted = readTrustedPackages() - uninstalled
-            writeTrustedPackages(trusted)
+        // Package scans can temporarily omit an APK while Android replaces it.
+        // Keep signer trust until an explicit uninstall or revocation in the manager.
+    }
+
+    private suspend fun handlePackageChange(packageName: String) {
+        refreshRuntimePluginAfterPackageChange {
+            val isRuntime = packageName in installedPluginPackageNames.value ||
+                packageName in readTrustedPackages() || withContext(Dispatchers.IO) {
+                    pm.getPackageInfo(packageName, PackageManager.GET_CONFIGURATIONS)
+                        ?.reqFeatures?.any { it.name == RUNTIME_PLUGIN_FEATURE } == true
+                }
+            if (!isRuntime) return@refreshRuntimePluginAfterPackageChange false
+            Log.d(tag, "Refreshing runtime plugin after package change: $packageName")
+            reload()
+            when (_pluginStates.value[packageName]) {
+                is PatcherRuntimePluginState.Loaded -> true
+                PatcherRuntimePluginState.Untrusted -> packageName !in readTrustedPackages()
+                else -> false
+            }
         }
+    }
+
+    suspend fun reloadIfChanged(): Boolean = withContext(Dispatchers.IO) {
+        val currentPackages = pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE)
+        val currentPackageNames = currentPackages.map { it.packageName }.toSet()
+        val knownPackageNames = installedPluginPackageNames.value
+
+        if (currentPackageNames != knownPackageNames) {
+            reload()
+            return@withContext true
+        }
+
+        val knownSnapshots = installedPluginPackageSnapshots.value
+        val trustedPackages = readTrustedPackages()
+        val anyChanged = currentPackages.any { pkg ->
+            val snapshot = knownSnapshots[pkg.packageName]
+            snapshot == null || snapshot.first != pkg.versionName ||
+                snapshot.second != pkg.applicationInfo?.sourceDir || snapshot.third != pkg.lastUpdateTime ||
+                _pluginStates.value[pkg.packageName] is PatcherRuntimePluginState.Failed ||
+                (pkg.packageName in trustedPackages &&
+                    _pluginStates.value[pkg.packageName] !is PatcherRuntimePluginState.Loaded)
+        }
+
+        if (anyChanged) {
+            reload()
+            return@withContext true
+        }
+        false
     }
 
     suspend fun importSourcesFromUrl(rawUrl: String): Int = withContext(Dispatchers.IO) {
-        val imported = importSourceEntries(parseImportUrl(rawUrl))
-        reload()
-        imported.size
+        sourceMutex.withLock {
+            val imported = importSourceEntries(parseImportUrl(rawUrl))
+            reload()
+            imported.size
+        }
     }
 
     suspend fun updateSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().toMutableList()
-        val index = entries.indexOfFirst { it.id == id }
-        if (index == -1) return@withContext
-        // A manual check should reuse the current release, while still allowing repair
-        // of an archive that failed to load. Missing files are retried by updateEntry.
-        val needsRepair = _sourceStates.value[id]?.state is PatcherRuntimePluginSourceState.State.Failed
-        entries[index] = updateEntry(entries[index], force = needsRepair)
-        writeSourceEntries(entries)
-        reload()
+        sourceMutex.withLock {
+            val entries = readSourceEntries().toMutableList()
+            val index = entries.indexOfFirst { it.id == id }
+            if (index == -1) return@withContext
+            // A manual check should reuse the current release, while still allowing repair
+            // of an archive that failed to load. Missing files are retried by updateEntry.
+            val needsRepair = _sourceStates.value[id]?.state is PatcherRuntimePluginSourceState.State.Failed
+            entries[index] = updateEntry(entries[index], force = needsRepair)
+            writeSourceEntries(entries)
+            reload()
+        }
     }
 
     suspend fun removeSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().filterNot { it.id == id }
-        managedSourceDirectory(id).deleteRecursively()
-        writeSourceEntries(entries)
-        reload()
+        sourceMutex.withLock {
+            val entries = readSourceEntries().filterNot { it.id == id }
+            managedSourceDirectory(id).deleteRecursively()
+            writeSourceEntries(entries)
+            reload()
+        }
     }
 
     suspend fun clearManagedSources() = withContext(Dispatchers.IO) {
-        check(!managedSourceRoot.exists() || managedSourceRoot.deleteRecursively()) {
-            "Failed to delete managed patcher runtime plugin files"
+        sourceMutex.withLock {
+            check(!managedSourceRoot.exists() || managedSourceRoot.deleteRecursively()) {
+                "Failed to delete managed patcher runtime plugin files"
+            }
+            check(managedSourceRoot.mkdirs() || managedSourceRoot.isDirectory) {
+                "Failed to recreate managed patcher runtime plugin directory"
+            }
+            writeSourceEntries(emptyList())
+            reload()
         }
-        check(managedSourceRoot.mkdirs() || managedSourceRoot.isDirectory) {
-            "Failed to recreate managed patcher runtime plugin directory"
-        }
-        writeSourceEntries(emptyList())
-        reload()
     }
 
     suspend fun trustSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().toMutableList()
-        val index = entries.indexOfFirst { it.id == id }
-        if (index == -1) return@withContext
-        val entry = entries[index]
-        val packageInfo = readArchivePackageInfo(sourceFile(entry))
-        resolvePlugin(packageInfo, sourceId = entry.id)
-        entries[index] = entry.copy(trustedSignatureHex = archiveSignatureHex(packageInfo))
-        writeSourceEntries(entries)
-        reload()
+        sourceMutex.withLock {
+            val entries = readSourceEntries().toMutableList()
+            val index = entries.indexOfFirst { it.id == id }
+            if (index == -1) return@withContext
+            val entry = entries[index]
+            val packageInfo = readArchivePackageInfo(sourceFile(entry))
+            resolvePlugin(packageInfo, sourceId = entry.id)
+            entries[index] = entry.copy(trustedSignatureHex = archiveSignatureHex(packageInfo))
+            writeSourceEntries(entries)
+            reload()
+        }
     }
 
     suspend fun revokeTrustForSource(id: String) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(trustedSignatureHex = null) else entry
+        sourceMutex.withLock {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) entry.copy(trustedSignatureHex = null) else entry
+            }
+            writeSourceEntries(entries)
+            reload()
         }
-        writeSourceEntries(entries)
-        reload()
     }
 
     suspend fun setSourceAutoUpdate(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(autoUpdate = enabled) else entry
+        sourceMutex.withLock {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) entry.copy(autoUpdate = enabled) else entry
+            }
+            writeSourceEntries(entries)
+            reload()
         }
-        writeSourceEntries(entries)
-        reload()
     }
 
     suspend fun setSourceLatest(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) {
-                entry.copy(
-                    latest = enabled,
-                    prerelease = if (enabled) false else entry.prerelease
-                )
-            } else {
-                entry
+        sourceMutex.withLock {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) {
+                    entry.copy(
+                        latest = enabled,
+                        prerelease = if (enabled) false else entry.prerelease
+                    )
+                } else {
+                    entry
+                }
             }
+            writeSourceEntries(entries)
+            reload()
         }
-        writeSourceEntries(entries)
-        reload()
     }
 
     suspend fun setSourcePrerelease(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val entries = readSourceEntries().map { entry ->
-            if (entry.id == id) entry.copy(prerelease = enabled) else entry
+        sourceMutex.withLock {
+            val entries = readSourceEntries().map { entry ->
+                if (entry.id == id) entry.copy(prerelease = enabled) else entry
+            }
+            writeSourceEntries(entries)
+            reload()
         }
-        writeSourceEntries(entries)
-        reload()
     }
 
     suspend fun trustPackage(packageName: String) = withContext(Dispatchers.IO) {
         val packageInfo = pm.getPackageInfo(packageName, flags = signingPackageInfoFlags)
             ?: throw IllegalArgumentException("Runtime plugin $packageName is not installed")
         resolvePlugin(packageInfo, sourceId = null)
-        val trusted = readTrustedPackages() + (packageName to archiveSignatureHex(packageInfo))
-        writeTrustedPackages(trusted)
+        trustMutex.withLock {
+            val approval = installedTrust(packageInfo, archiveSignatureHex(packageInfo))
+            writeTrustedPackages(readTrustedPackages() + (packageName to approval.encode()))
+        }
         prefs.acknowledgedPatcherRuntimePlugins.update(
             prefs.acknowledgedPatcherRuntimePlugins.get() + packageName
         )
@@ -209,15 +336,19 @@ class PatcherRuntimePluginRepository(
     }
 
     suspend fun revokeTrustForPackage(packageName: String) = withContext(Dispatchers.IO) {
-        writeTrustedPackages(readTrustedPackages() - packageName)
+        trustMutex.withLock {
+            writeTrustedPackages(readTrustedPackages() - packageName)
+        }
         reload()
     }
 
     suspend fun acknowledgeAllNewPlugins() =
         prefs.acknowledgedPatcherRuntimePlugins.update(installedPluginPackageNames.value)
 
-    suspend fun removePlugin(packageName: String) {
-        writeTrustedPackages(readTrustedPackages() - packageName)
+    suspend fun removePlugin(packageName: String, forgetTrust: Boolean = true) {
+        if (forgetTrust) trustMutex.withLock {
+            writeTrustedPackages(readTrustedPackages() - packageName)
+        }
         prefs.acknowledgedPatcherRuntimePlugins.update(
             prefs.acknowledgedPatcherRuntimePlugins.get() - packageName
         )
@@ -226,31 +357,36 @@ class PatcherRuntimePluginRepository(
     }
 
     suspend fun updateCheck() {
-        if (!networkInfo.isConnected()) return
-        if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return
+        sourceMutex.withLock {
+            if (!networkInfo.isConnected()) return
+            if (!prefs.allowMeteredUpdates.get() && !networkInfo.isUnmetered()) return
 
-        val entries = withContext(Dispatchers.IO) { readSourceEntries() }
-        if (entries.none { it.autoUpdate && it.trustedSignatureHex != null }) return
-        val currentSourceStates = sourceStates.value
+            val entries = withContext(Dispatchers.IO) { readSourceEntries() }
+            if (entries.none { it.autoUpdate && it.trustedSignatureHex != null }) return
+            val currentSourceStates = sourceStates.value
 
-        val updatedEntries = buildList {
-            entries.forEach { entry ->
-                val updateMode = shouldAutoUpdate(entry, currentSourceStates[entry.id]?.state)
-                if (updateMode == SourceUpdateMode.SKIP) {
-                    add(entry)
-                    return@forEach
+            val updatedEntries = buildList {
+                entries.forEach { entry ->
+                    val updateMode = shouldAutoUpdate(entry, currentSourceStates[entry.id]?.state)
+                    if (updateMode == SourceUpdateMode.SKIP) {
+                        add(entry)
+                        return@forEach
+                    }
+                    val updated = runCatching { updateEntry(entry, force = updateMode == SourceUpdateMode.FORCE) }
+                        .onFailure {
+                            if (it is CancellationException) throw it
+                            Log.e(tag, "Failed to update patcher runtime source ${entry.repoUrl}", it)
+                        }
+                        .getOrElse { entry }
+                    add(updated)
                 }
-                val updated = runCatching { updateEntry(entry, force = updateMode == SourceUpdateMode.FORCE) }
-                    .onFailure { Log.e(tag, "Failed to update patcher runtime source ${entry.repoUrl}", it) }
-                    .getOrElse { entry }
-                add(updated)
             }
-        }
 
-        withContext(Dispatchers.IO) {
-            writeSourceEntries(updatedEntries)
+            withContext(Dispatchers.IO) {
+                writeSourceEntries(updatedEntries)
+            }
+            reload()
         }
-        reload()
     }
 
     private suspend fun loadInstalledPlugin(packageName: String): PatcherRuntimePluginState {
@@ -363,11 +499,31 @@ class PatcherRuntimePluginRepository(
         )
     }
 
-    private suspend fun verifyPackageTrust(packageInfo: PackageInfo): Boolean {
-        val expectedSignature = readTrustedPackages()[packageInfo.packageName] ?: return false
-        val actualSignature = archiveSignatureHex(packageInfo)
-        return actualSignature == expectedSignature
+    private suspend fun verifyPackageTrust(packageInfo: PackageInfo): Boolean = trustMutex.withLock {
+        val trusted = readTrustedPackages()
+        val approval = RuntimePluginInstalledTrust.decode(trusted[packageInfo.packageName])
+            ?: return@withLock false
+        val signers = archiveSigners(packageInfo)
+        val uid = packageInfo.applicationInfo?.uid ?: -1
+        if (!approval.trusts(packageInfo.packageName, uid, packageInfo.firstInstallTime, signers)) {
+            return@withLock false
+        }
+
+        // Migrate legacy approvals while the signer still matches, and retain the
+        // current signer as the fallback if this package is later reinstalled.
+        val refreshed = installedTrust(packageInfo, signers.identity).encode()
+        if (trusted[packageInfo.packageName] != refreshed) {
+            writeTrustedPackages(trusted + (packageInfo.packageName to refreshed))
+        }
+        true
     }
+
+    private fun installedTrust(packageInfo: PackageInfo, signer: String) = RuntimePluginInstalledTrust(
+        signer = signer,
+        packageName = packageInfo.packageName,
+        uid = packageInfo.applicationInfo?.uid,
+        firstInstallTime = packageInfo.firstInstallTime
+    )
 
     private suspend fun readSourceEntries(): List<PatcherRuntimePluginSourceEntry> {
         val raw = prefs.patcherRuntimePluginSourcesJson.get()
@@ -406,22 +562,37 @@ class PatcherRuntimePluginRepository(
         pm.getPackageInfo(file, includeSigning = true)
             ?: throw Exception("Failed to read patcher runtime archive ${file.name}")
 
-    private fun archiveSignatureHex(packageInfo: PackageInfo): String {
-        val signature = pm.getSignature(packageInfo)?.toByteArray()
-            ?: throw SecurityException("Failed to read signer for ${packageInfo.packageName}")
-        return signature.joinToString(separator = "") { byte -> "%02X".format(byte) }
+    private fun archiveSignatureHex(packageInfo: PackageInfo): String = archiveSigners(packageInfo).identity
+
+    private fun archiveSigners(packageInfo: PackageInfo): RuntimePluginSigners {
+        fun android.content.pm.Signature.hex() =
+            toByteArray().joinToString(separator = "") { byte -> "%02X".format(byte) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.let { signingInfo ->
+                val history = if (signingInfo.hasMultipleSigners()) emptyList()
+                    else signingInfo.signingCertificateHistory.orEmpty().map { it.hex() }
+                val current = signingInfo.apkContentsSigners.orEmpty().map { it.hex() }
+                    .ifEmpty { history.takeLast(1) }
+                if (current.isNotEmpty()) return RuntimePluginSigners(current, history)
+            }
+        }
+        @Suppress("DEPRECATION")
+        val current = packageInfo.signatures.orEmpty().map { it.hex() }
+        if (current.isEmpty()) throw SecurityException("Failed to read signer for ${packageInfo.packageName}")
+        return RuntimePluginSigners(current)
     }
 
     private fun verifyArchiveTrust(
         entry: PatcherRuntimePluginSourceEntry,
         packageInfo: PackageInfo
     ): ArchiveTrust {
-        val actualSignatureHex = runCatching { archiveSignatureHex(packageInfo) }
+        val signers = runCatching { archiveSigners(packageInfo) }
             .getOrElse { return ArchiveTrust.Unreadable(it) }
+        val actualSignatureHex = signers.identity
         val expectedSignatureHex = entry.trustedSignatureHex
             ?: return ArchiveTrust.Untrusted(actualSignatureHex)
 
-        return if (actualSignatureHex == expectedSignatureHex) {
+        return if (signers.trusts(expectedSignatureHex)) {
             ArchiveTrust.Trusted
         } else {
             ArchiveTrust.Mismatch(actualSignatureHex)
@@ -623,9 +794,9 @@ class PatcherRuntimePluginRepository(
                     )
                 }
             }
-            if (target.exists()) target.delete()
-            tempFile.copyTo(target, overwrite = true)
-            ensureManagedSourceIsReadOnly(target)
+            ensureManagedSourceIsReadOnly(tempFile)
+            Files.move(tempFile.toPath(), target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
         }.getOrElse { error ->
             if (error is CancellationException) {
                 progressNotification.cancel()
@@ -763,6 +934,11 @@ class PatcherRuntimePluginRepository(
         private val json = Json { ignoreUnknownKeys = true }
         const val RUNTIME_PLUGIN_FEATURE = "app.urv.manager.patcher.runtime"
         const val METADATA_RUNTIME_KIND = "app.urv.manager.patcher.runtime.kind"
+        private val PACKAGE_ACTIONS = setOf(
+            Intent.ACTION_PACKAGE_ADDED,
+            Intent.ACTION_PACKAGE_REPLACED,
+            Intent.ACTION_PACKAGE_REMOVED
+        )
         val signingPackageInfoFlags: Int
             get() {
                 val signingFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

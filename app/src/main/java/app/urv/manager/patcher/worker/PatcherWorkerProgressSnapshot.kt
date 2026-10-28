@@ -16,7 +16,8 @@ data class PatcherWorkerProgressSnapshot(
     val notificationProgressCurrent: Int? = null,
     val notificationProgressMax: Int? = null,
     val memoryUsage: PatcherMemoryUsage? = null,
-    val failedPatchIndexes: Set<Int> = emptySet()
+    val failedPatchIndexes: Set<Int> = emptySet(),
+    val patchExecutionOrder: List<Int> = emptyList()
 )
 
 object PatcherWorkerProgressState {
@@ -31,6 +32,7 @@ object PatcherWorkerProgressState {
         "patching_progress_memory_requested_max_mb"
     private const val PROGRESS_MEMORY_SAMPLE_TIME_KEY = "patching_progress_memory_sample_time"
     private const val PROGRESS_FAILED_PATCH_INDEXES_KEY = "patching_progress_failed_patch_indexes"
+    private const val PROGRESS_PATCH_ORDER_KEY = "patching_progress_patch_order"
     private const val PROGRESS_RESOURCE_TIME_KEY = "patching_progress_resource_time"
     private const val PROGRESS_CPU_CORES_KEY = "patching_progress_cpu_cores"
     private const val PROGRESS_CPU_SYSTEM_KEY = "patching_progress_cpu_system"
@@ -75,6 +77,9 @@ object PatcherWorkerProgressState {
                 memory.ioWriteKbPerSec?.let { builder.putInt(PROGRESS_IO_WRITE_KEY, it) }
                 builder.putBoolean(PROGRESS_IO_BLOCK_KEY, memory.ioBlockAccounting)
                 memory.processMemoryMb?.let { builder.putLong(PROGRESS_PROCESS_MEMORY_KEY, it) }
+            }
+            if (snapshot.patchExecutionOrder.isNotEmpty()) {
+                builder.putIntArray(PROGRESS_PATCH_ORDER_KEY, snapshot.patchExecutionOrder.toIntArray())
             }
             if (snapshot.failedPatchIndexes.isNotEmpty()) {
                 builder.putIntArray(
@@ -135,14 +140,15 @@ object PatcherWorkerProgressState {
             notificationProgressCurrent = notificationCurrent,
             notificationProgressMax = notificationMax,
             memoryUsage = memoryUsage,
-            failedPatchIndexes = data.getIntArray(PROGRESS_FAILED_PATCH_INDEXES_KEY)?.toSet().orEmpty()
+            failedPatchIndexes = data.getIntArray(PROGRESS_FAILED_PATCH_INDEXES_KEY)?.toSet().orEmpty(),
+            patchExecutionOrder = data.getIntArray(PROGRESS_PATCH_ORDER_KEY)?.toList().orEmpty()
         )
     }
 
     private fun marshal(event: ProgressEvent): ByteArray? {
         val parcel = Parcel.obtain()
         return try {
-            event.toParcel().writeToParcel(parcel, 0)
+            parcel.writeParcelable(event.toParcel(), 0)
             parcel.marshall()
         } finally {
             parcel.recycle()

@@ -1278,7 +1278,7 @@ class PatchBundleRepository(
         throw error
     }
 
-    private suspend fun loadMetadata(sources: Map<Int, PatchBundleSource>): Map<Int, PatchBundleInfo.Global> {
+    private suspend fun loadMetadata(sources: MutableMap<Int, PatchBundleSource>): Map<Int, PatchBundleInfo.Global> {
         // Map bundles -> sources
         val map = sources.mapNotNull { (_, src) ->
             (src.patchBundle ?: return@mapNotNull null) to src
@@ -1318,14 +1318,10 @@ class PatchBundleRepository(
             }
         }
 
-        if (failures.isNotEmpty()) {
-            dispatchAction("Mark bundles as failed") { state ->
-                state.copy(sources = state.sources.mutate {
-                    failures.forEach { (uid, throwable) ->
-                        it[uid] = it[uid]?.copy(error = throwable) ?: return@forEach
-                    }
-                })
-            }
+        // Commit failures with this reload. A queued action could otherwise overwrite
+        // a newer successful reload after a runtime install or trust change.
+        failures.forEach { (uid, throwable) ->
+            sources[uid] = sources[uid]?.copy(error = throwable) ?: return@forEach
         }
 
         return metadata

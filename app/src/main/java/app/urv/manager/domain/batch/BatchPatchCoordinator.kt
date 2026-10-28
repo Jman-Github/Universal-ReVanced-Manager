@@ -916,6 +916,7 @@ class BatchPatchCoordinator(
                 synchronized(progressLock) {
                     val current = update.notificationProgressCurrent
                     val max = update.notificationProgressMax
+                    visualProgress.applyPatchExecutionOrder(update.patchExecutionOrder)
                     update.event?.let(visualProgress::processProgressEventLocked)
                     val progressSnapshot = visualProgress.snapshot()
                     mutableState.update { state ->

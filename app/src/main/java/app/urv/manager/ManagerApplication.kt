@@ -66,6 +66,8 @@ import com.topjohnwu.superuser.internal.BuilderImpl
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -263,6 +265,20 @@ class ManagerApplication : Application() {
                 }
             }
             scope.launch(Dispatchers.Default) {
+                patcherRuntimePluginRepository.hasLoadedInitialState.first { it }
+                // Include the first emission: an auto-update may finish before this
+                // collector starts, after the initial bundle load used the older runtime.
+                patcherRuntimePluginRepository.loadedRuntimes.distinctUntilChanged().collect {
+                    Log.d(tag, "Loaded patcher runtimes changed, reloading patch bundles")
+                    runCatching {
+                        patchBundleRepository.reload()
+                    }.onFailure {
+                        if (it is CancellationException) throw it
+                        Log.w(tag, "Failed to reload patch bundles after runtime change", it)
+                    }
+                }
+            }
+            scope.launch(Dispatchers.Default) {
                 PatchListCatalog.refreshIfNeeded(httpService)
             }
             scope.launch(Dispatchers.Default) {
@@ -298,6 +314,20 @@ class ManagerApplication : Application() {
                 bundleUpdateWebSocketCoordinator.onAppForegroundChanged(true)
                 if (activity is MainActivity) {
                     scheduleAbandonedRootExternalInstallRecovery()
+                }
+                scope.launch(Dispatchers.Default) {
+                    runCatching {
+                        patcherRuntimePluginRepository.reloadIfChanged()
+                    }.onFailure {
+                        if (it is CancellationException) throw it
+                        Log.w(tag, "Failed to reload patcher runtime plugins on resume", it)
+                    }
+                    runCatching {
+                        downloaderPluginRepository.reloadIfChanged()
+                    }.onFailure {
+                        if (it is CancellationException) throw it
+                        Log.w(tag, "Failed to reload downloader plugins on resume", it)
+                    }
                 }
                 scope.launch {
                     if (prefs.autoPatchEnabled.get()) {
