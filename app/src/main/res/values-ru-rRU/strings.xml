@@ -7,10 +7,6 @@
     <string name="patch_bundle_file_import_dialog_title">Добавить пакет патчей?</string>
     <string name="patch_bundle_file_import_dialog_message">Добавить этот файл пакета патчей как локальный набор исправлений?</string>
     <string name="manager">Менеджер</string>
-    <string name="plugin_host_permission_label">URV Manager плагин хост</string>
-    <string name="plugin_host_permission_description">Используется для управления доступом к плагинам URV Manager. Эта функция доступна только в URV Manager.</string>
-    <string name="downloader_host_permission_label">URV Manager хост загрузчика</string>
-    <string name="downloader_host_permission_description">Используется для управления доступом к загрузчикам URV Manager. Эта функция доступна только в URV Manager.</string>
     <string name="toast_copied_to_clipboard">Скопировано</string>
     <string name="downloader_plugin_url_copied">URL плагина загрузчика скопирован</string>
     <string name="runtime_plugin_url_copied">URL плагина Runtime скопирован</string>
@@ -205,12 +201,8 @@
     <string name="apk_source_downloaded">Использование загруженного APK</string>
     <string name="legacy_import_failed">Не удалось импортировать устаревшие настройки</string>
     <string name="auto_updates_dialog_title">Настроить обновление</string>
-    <string name="auto_updates_dialog_description">Вы хотите, чтобы URV Manager периодически проверял наличие обновлений для следующих компонентов?</string>
-    <string name="auto_updates_dialog_manager">URV Менеджер</string>
-    <string name="auto_updates_dialog_patches">Официальные ReVance Патчи</string>
     <string name="auto_updates_dialog_note">Эти настройки можно изменить позже.</string>
     <string name="background_manager_update">Фоновое обновление менеджера</string>
-    <string name="background_manager_update_description">Проверка наличия обновлений программ в фоновом режиме и уведомление о доступности новой версии URV Менеджер</string>
     <string name="background_bundle_update">Фоновые обновления пакета</string>
     <string name="background_bundle_update_description">Проверка обновлений пакетов патчей в фоновом режиме и уведомление о доступных или загруженных обновлениях пакетов</string>
     <string name="announcement_system_enabled">Включить объявление</string>
@@ -241,13 +233,11 @@
     <string name="notification_channel_bundle_updates_name">Фоновые обновления пакета</string>
     <string name="notification_channel_bundle_updates_description">Показывает прогресс в фоновом обновлении пакетов патчей.</string>
     <string name="notification_channel_manager_updates_name">Фоновое обновление менеджера</string>
-    <string name="notification_channel_manager_updates_description">Уведомляет вас, когда доступна новая версия URV Менеджер.</string>
     <string name="notification_channel_announcements_name">Уведомление об объявлении</string>
     <string name="notification_channel_announcements_description">Сообщает вам о публикации нового объявления ReVanced.</string>
     <string name="notification_channel_bundle_websocket_name">Поддержка уведомлений</string>
     <string name="notification_channel_bundle_websocket_description">Обеспечивает активность доставки веб сокетов и очистку кэша для фоновых уведомлений.</string>
     <string name="notification_channel_cache_cleanup_name">Очистка кэша</string>
-    <string name="notification_channel_cache_cleanup_description">Показывает, когда URV Менеджер автоматически очищает файлы кэша.</string>
     <string name="bundle_update_websocket_notification_title">Фоновые оповещения поддерживаются активными</string>
     <string name="bundle_update_websocket_target_bundle">Обновление пакета</string>
     <string name="bundle_update_websocket_target_manager">Обновление менеджера</string>
@@ -265,7 +255,6 @@
         <item quantity="many">Найдено обновления пакетов патчей</item>
         <item quantity="other">Найдено обновления пакетов патчей</item>
     </plurals>
-    <string name="manager_updates_notification_title">Найдено обновление URV Менеджера</string>
     <string name="manager_updates_notification_available">Доступно новое обновление для менеджера: %1$s</string>
     <string name="announcement_notification_title">Новое ReVanced объявление</string>
     <string name="never">Никогда</string>
@@ -280,9 +269,7 @@
     <string name="downloads">Загрузки</string>
     <string name="downloads_description">Обработка загрузок и экспорт</string>
     <string name="storage_cache_management">Хранилище &amp; Управление кэшем</string>
-    <string name="storage_cache_management_description">Просмотр использования хранилища URV Manager</string>
     <string name="plugins_help_title">Что такое загрузчик?</string>
-    <string name="plugins_help_description">Загрузчик – это плагин, позволяющий URV Manager загружать стандартные APK из разных источников. Загруженные APK будут отображаться в нижнем разделе. Во время установки патчей вы можете выбрать уже загруженный APK или загрузить его с помощью плагина.\n\nСписок поддерживаемых плагинов загрузчика можно найти</string>
     <string name="import_export">Экспорт &amp; Импорт</string>
     <string name="import_export_description">Инструменты резервирования, восстановления, хранилища ключей и сброса настроек</string>
     <string name="changelog">Посмотреть журнал изменений</string>
@@ -313,7 +300,6 @@
     <string name="merge_split_flow_section">Объединение Split APK потока</string>
     <string name="saved_apps_section">Сохранение программ</string>
     <string name="safeguards_compatibility_section">Меры защиты и совместимость</string>
-    <string name="bundle_system_recovery_section">Пакет / Восстановление системы</string>
     <string name="diagnostics_output_section">Диагностика и исходные данные</string>
     <string name="update_checks_section">Проверки обновлений</string>
     <string name="network_delivery_section">Сеть и доставка</string>
@@ -404,7 +390,6 @@
     <string name="lsposed_checksum_missing">Опубликованная контрольная сумма недоступна. Убедитесь, что вы доверяете этому источнику.</string>
     <string name="lsposed_install">Установить</string>
     <string name="lsposed_forget_title">Забыли модуль?</string>
-    <string name="lsposed_forget_description">Это удалит %1$s из списка URV. Установленный модуль не будет удален.</string>
     <string name="lsposed_module_installed_title">Модуль установлен</string>
     <string name="lsposed_module_installed_description">Откройте LSPosed Manager, чтобы включить модуль и выбрать его область действия.</string>
     <string name="lsposed_open_manager">Открыть диспетчер LSPosed</string>
@@ -641,7 +626,6 @@
     <string name="export_patch_bundles_partial">Экспортировано %1$d пакеты патчей. Некоторые пакеты невозможно было экспортировать, поскольку они были добавлены локально.</string>
     <string name="bundle_type_remote">Удаленный</string>
     <string name="bundle_type_local">Локальный</string>
-    <string name="bundle_type_preinstalled">Предустановлено</string>
     <string name="bundle_created_at">Создано %1$s</string>
     <string name="bundle_updated_at">Обновлено %1$s</string>
     <string name="bundle_refreshed_at">Последняя проверка %1$s</string>
@@ -810,7 +794,6 @@
     <string name="downloader_helper_source_install">Установить</string>
     <string name="downloader_helper_source_install_success">Вспомогательное приложение установлено</string>
     <string name="downloader_helper_uninstall_title">Деинсталлировать вспомогательное приложение</string>
-    <string name="downloader_helper_uninstall_description">Деинсталлировать %1$s и удалить все APK источники помощника, хранимые URV Manager?</string>
     <string name="downloader_helper_uninstall_success">Деинсталлировано вспомогательное приложение %1$s</string>
     <string name="downloader_helper_uninstall_failed">Не удалось деинсталлировать вспомогательное приложение %1$s</string>
     <string name="downloader_plugin_state_trusted">Доверенный</string>
@@ -819,7 +802,6 @@
     <string name="trust">Доверять</string>
     <string name="downloader_plugin_revoke_trust">Отозвать доверие</string>
     <string name="downloader_plugin_trust_dialog_title">Доверять</string>
-    <string name="downloader_plugin_trust_dialog_body">Продолжение позволит этому плагину загрузчика запускать код патчера внутри URV Manager. Доверяйте плагинам загрузчика только из источников, которым вы доверяете.</string>
     <string name="downloader_plugin_trust_dialog_signature">Подпись</string>
     <string name="downloader_plugin_trust_dialog_plugin">Плагин</string>
     <string name="downloader_plugin_view_error">Просмотр сведений об ошибке</string>
@@ -851,20 +833,16 @@
     <string name="clear">Очистить</string>
     <string name="storage_overview_section">Обзор</string>
     <string name="storage_total_app_storage">Хранилище отслеживаемых приложений</string>
-    <string name="storage_total_app_storage_description">Внутренние файлы, кэширование и папка с внешними приложениями, прослеженными URV Менеджер</string>
     <string name="storage_refresh_usage">Обновить использование хранилища</string>
     <string name="storage_refresh_usage_description">Пересчитать разбивку размера хранилища</string>
     <string name="storage_usage_section">Использование памяти</string>
-    <string name="storage_usage_section_description">Показывает, что занимает место в хранилище программы URV Manager</string>
     <string name="storage_cache_actions_section">Действия кэша</string>
     <string name="storage_internal_cache">Внутренний кэш</string>
-    <string name="storage_internal_cache_description">Временные файлы URV Менеджер может безопасно пересоздавать, включая кодовой кэш</string>
     <string name="storage_code_cache">Кэш кода</string>
     <string name="storage_code_cache_description">Кэш исполнения, сгенерированный библиотеками Android и приложений</string>
     <string name="storage_apk_signer_cache">Кеш подписанного APK</string>
     <string name="storage_apk_signer_cache_description">Временные копии APK и подписанные выходы, созданные инструментом подписки APK</string>
     <string name="storage_internal_files">Внутренние файлы</string>
-    <string name="storage_internal_files_description">Файлы во внутренней памяти Диспетчера, включая пользовательские фоны</string>
     <string name="storage_no_backup_files">Без резервных копий</string>
     <string name="storage_no_backup_files_description">Внутренние файлы Android исключает из резервных копий устройства</string>
     <string name="storage_downloaded_apps">Загруженные приложения</string>
@@ -893,8 +871,6 @@
     <string name="storage_clear_app_cache">Очистить кэш приложения</string>
     <string name="storage_clear_app_cache_description">Удаляет внутренние, коды и внешние файлы кэша. Настройки и сохраненные файлы сохраняются</string>
     <string name="storage_auto_clear_cache">Автоочистка кэша</string>
-    <string name="storage_auto_clear_cache_description">Автоматически очищает кэш URV менеджера в расписании и уведомляет вас о запуске</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s • Автоматически очищает кэш URV менеджеров по расписанию и уведомляет вас о запуске</string>
     <string name="storage_auto_clear_cache_dialog_title">Автоочистка кэша</string>
     <string name="storage_auto_clear_cache_run_now">Выполнить очистку</string>
     <string name="storage_auto_clear_cache_queued">Очистка кэша поставлена ​​в очередь</string>
@@ -907,7 +883,6 @@
     <string name="storage_cache_cleared">Очистка %1$s из кэша</string>
     <string name="storage_cache_clear_failed">Не удалось очистить кэш</string>
     <string name="storage_open_app_storage_settings">Открыть настройки хранилища приложений Android</string>
-    <string name="storage_open_app_storage_settings_description">Используйте системные настройки для управления или очистки всех данных программы URV Manager</string>
     <string name="storage_open_app_storage_settings_failed">Не удалось открыть настройки хранилища приложений</string>
     <string name="storage_calculating">Вычисление...</string>
     <string name="storage_empty">Пустой</string>
@@ -972,12 +947,6 @@
     <string name="patch_profile_patch_options_title">Варианты для %1$s</string>
     <string name="patch_option_preview_action">Просмотреть полный предварительный просмотр</string>
     <string name="patch_option_preview_title">Выбранные опции для %1$s</string>
-    <string name="restore_official_bundle">Восстанавливает предустановленный пакет официальных патчей ReVanced</string>
-    <string name="restore_official_bundle_description_missing">Переустановите предустановленный пакет официальных патчей ReVanced</string>
-    <string name="restore_official_bundle_description_installed">В настоящее время установлен предустановленный пакет официальных патчей ReVanced</string>
-    <string name="restore_official_bundle_success">Официальный пакет патчей ReVanced восстановлен.</string>
-    <string name="restore_official_bundle_failed">Не удалось восстановить официальный пакет патчей ReVanced: %1$s</string>
-    <string name="restore_official_bundle_already">Официальный пакет патчей ReVanced уже установлен</string>
     <string name="app_exporting">Экспорт приложения</string>
     <string name="export_name_format">Экспорт формата имени файла</string>
     <string name="export_name_format_description">Настройте имя файла по умолчанию для экспортированных исправленных приложений</string>
@@ -1017,7 +986,6 @@
     <string name="api_url">URL API</string>
     <string name="api_url_description">API, используемый для загрузки необходимых файлов</string>
     <string name="api_url_dialog_title">Изменить URL API</string>
-    <string name="api_url_dialog_warning">URV Менеджер подключается к API для загрузки патчей и обновлений. Убедитесь, что вы ему доверяете.</string>
     <string name="api_url_dialog_save">Сохранить</string>
     <string name="api_url_dialog_reset">Сбросить URL API</string>
     <string name="github_pat">GitHub Токен</string>
@@ -1052,7 +1020,6 @@
     <string name="patches_force_download_started">Загрузка всех пакетов патчей...</string>
     <string name="patches_force_download_none">Не загружен ни один пакет патчей</string>
     <string name="reset_patch_bundles">Сбросить пакеты патчей</string>
-    <string name="reset_patch_bundles_description">Удаляет все пакеты и восстанавливает предварительно установленный официальный пакет ReVanced</string>
     <string name="reset_patch_bundles_dialog_title">Сбросить пакеты патчей?</string>
     <string name="reset_patch_bundles_confirm">Сбросить пакеты</string>
     <string name="storage">Хранилище</string>
@@ -1634,7 +1601,6 @@
     <string name="installer_play_store_warning_continue">Я понимаю, продолжаю</string>
     <string name="installer_shizuku_install_fail">Установка Shizuku не удалась: %s</string>
     <string name="installer_shizuku_install_fail_with_details">Установка Shizuku не удалась: %1$s\n\nПодробности: %2$s</string>
-    <string name="installer_shizuku_error_permission">Разрешение Shizuku отсутствует. Дайте разрешение URV Manager и повторите попытку.</string>
     <string name="installer_shizuku_error_timeout">Shizuku не вернул результат установки. Убедитесь, что он все еще запущен и повторите попытку.</string>
     <string name="installer_custom_header">Пользовательские установщики</string>
     <string name="installer_custom_manage_title">Управление пользовательскими установщиками</string>
@@ -1818,7 +1784,6 @@
     <string name="continue_">Продолжить</string>
     <string name="continue_with_count">Продолжить (%1$d)</string>
     <string name="dismiss">Отклонить</string>
-    <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">Это приложение использует код с ReVanced и является форком ReVanced Manager</string>
@@ -1845,7 +1810,6 @@
     <string name="patches_view_any_package">Любой пакет</string>
     <string name="patches_delete_single_dialog_description">Вы уверены, что хотите удалить \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Вы уверены, что хотите удалить выбранные пакеты патчей?</string>
-    <string name="about_revanced_manager">О URV Manager</string>
     <string name="here">здесь.</string>
     <string name="update_available">Доступно обновление</string>
     <string name="ready_to_install_update">Готов к установке обновления</string>
@@ -1857,11 +1821,8 @@
     <string name="update_on_metered_connections">Обновление по лимитным соединениям</string>
     <string name="update_on_metered_connections_description">Разрешить обновления патчей и менеджеров по сетям с лимитным трафиком</string>
     <string name="update_checking_manager">Проверка обновлений при запуске</string>
-    <string name="update_checking_manager_description">Проверять наличие новых версий URV Manager при запуске приложения</string>
     <string name="manager_prereleases">Использовать пред релизы</string>
-    <string name="manager_prereleases_description">Использовать пред релиз версии URV Manager</string>
     <string name="update_published">Опубликовано %s</string>
-    <string name="battery_optimization_notification">Оптимизация батареи должна быть отключена для правильной работы URV Manager в фоновом режиме. Нажмите здесь, чтобы отключить оптимизацию.</string>
     <string name="battery_optimization_dialog_title">Оптимизация батареи</string>
     <string name="battery_optimization_banner_title">Баннер оптимизации заряда батареи</string>
     <string name="battery_optimization_banner_description">Показывает баннер предупреждения об оптимизации заряда батареи на панели управления</string>
@@ -1871,7 +1832,6 @@
     <string name="downloading_manager_update">Загрузка обновления…</string>
     <string name="download_progress_notification_channel">Загрузки</string>
     <string name="download_progress_indeterminate">Загрузка…</string>
-    <string name="manager_update_banner_title">Обновление URV Manager</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Не удалось загрузить обновление: %s</string>
     <string name="cancel">Отмена</string>
@@ -1909,7 +1869,6 @@
     <string name="bundle_update_phase_checking">Проверка</string>
     <string name="bundle_update_phase_downloading">Загрузка</string>
     <string name="bundle_update_phase_finalizing">Завершение</string>
-    <string name="update_available_dialog_description">Доступна новая версия URV Manager (%s).</string>
     <string name="failed_to_download_update">Не удалось загрузить обновление: %s</string>
     <string name="download">Скачать</string>
     <string name="resume_download">Возобновить загрузку</string>
@@ -1953,8 +1912,6 @@
     <string name="next">Дальше</string>
     <string name="auto_update">Автообновление</string>
     <string name="add_patches">Добавить пакет патчей</string>
-    <string name="patches_prereleases">Использовать пред релизы</string>
-    <string name="patches_prereleases_description">Используйте пред релиз версию %s</string>
     <string name="patches_url">URL пакета патчей</string>
     <string name="patch_bundle_urls_link">Получите URL пакетов патчей здесь</string>
     <string name="patch_bundle_discovery_package_label">Поиск пакетов</string>
@@ -2043,7 +2000,6 @@
     <string name="export">Экспорт</string>
     <string name="confirm">Подтвердить</string>
     <string name="patcher_runtime_plugins">Патчер Runtimes</string>
-    <string name="patcher_runtime_plugins_description">Управление APKs плагинов runtime, используемых для применения патчей</string>
     <string name="patcher_runtime_import_url">Импорт источник runtime</string>
     <string name="patcher_runtime_import_url_description">Добавьте плагины runtime из GitHub репозитория или релиза APK URL</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
@@ -2070,7 +2026,6 @@
     <string name="patcher_runtime_uninstall_failed">Не удалось удалить %1$s</string>
     <string name="patcher_runtime_type_label">Тип:</string>
     <string name="patcher_runtime_trust_dialog_title">Доверять</string>
-    <string name="patcher_runtime_trust_dialog_body">Продолжение позволит этому плагину выполнения запускать код патчера внутри URV Manager.\n\nВключите этот плагин runtime, только если вы ему доверяете. Плагины runtime могут выполнять произвольный код и могут поставить под угрозу устройство.</string>
     <string name="import_button">Импорт</string>
     <string name="use_latest_release">Использовать последний релиз</string>
     <string name="use_prereleases">Используйте пред релиз</string>

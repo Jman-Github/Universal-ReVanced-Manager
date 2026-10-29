@@ -124,7 +124,6 @@
     <string name="apk_source_downloaded">ダウンロード済みの APK を使用</string>
     <string name="legacy_import_failed">以前の設定をインポートできませんでした</string>
     <string name="auto_updates_dialog_title">アップデートの設定</string>
-    <string name="auto_updates_dialog_patches">公式 ReVanced パッチ</string>
     <string name="auto_updates_dialog_note">これらの設定は後で変更できます。</string>
     <string name="background_manager_update">バックグラウンドでのマネージャーの更新</string>
     <string name="background_bundle_update">バックグラウンドでのソースのアップデート</string>
@@ -151,7 +150,6 @@
     <string name="bundle_update_websocket_notification_description_single">%1$s を待機中。</string>
     <string name="bundle_update_websocket_notification_description_pair">%1$s と %2$s を待機中。</string>
     <string name="bundle_update_websocket_notification_description_triple">%1$s、%2$s、%3$s を待機中。</string>
-    <string name="manager_updates_notification_title">URV Manager の更新が見つかりました</string>
     <string name="manager_updates_notification_available">マネージャーの新しい更新が利用可能です: %1$s</string>
     <string name="announcement_notification_title">新しいReVancedのお知らせ</string>
     <string name="never">オフ</string>
@@ -186,7 +184,6 @@
     <string name="patching_flow_section">パッチフロー</string>
     <string name="saved_apps_section">保存済みアプリ</string>
     <string name="safeguards_compatibility_section">セーフガードと互換性</string>
-    <string name="bundle_system_recovery_section">ソース/システムリカバリ</string>
     <string name="diagnostics_output_section">診断と出力</string>
     <string name="update_checks_section">更新確認</string>
     <string name="network_delivery_section">ネットワークと配信</string>
@@ -319,7 +316,6 @@
     <string name="export_patch_bundles_partial">%1$d 件のパッチソースをエクスポートしました。一部のソースはローカルに追加されたためエクスポートできませんでした。</string>
     <string name="bundle_type_remote">リモート</string>
     <string name="bundle_type_local">ローカル</string>
-    <string name="bundle_type_preinstalled">プリインストール</string>
     <string name="bundle_created_at">作成日: %1$s</string>
     <string name="bundle_updated_at">更新日: %1$s</string>
     <string name="bundle_refreshed_at">最終確認日時: %1$s</string>
@@ -492,12 +488,6 @@
     <string name="patch_profile_patch_options_title">%1$s のオプション</string>
     <string name="patch_option_preview_action">完全なプレビューを表示</string>
     <string name="patch_option_preview_title">%1$s の選択されたオプション</string>
-    <string name="restore_official_bundle">プリインストールされた公式 ReVanced パッチソースを復元</string>
-    <string name="restore_official_bundle_description_missing">プリインストールされている公式 ReVanced パッチソースを再インストールします</string>
-    <string name="restore_official_bundle_description_installed">プリインストールされた公式 ReVanced パッチソースが現在インストールされています</string>
-    <string name="restore_official_bundle_success">公式 ReVanced パッチソースが復元されました</string>
-    <string name="restore_official_bundle_failed">公式 ReVanced パッチソースを復元できませんでした: %1$s</string>
-    <string name="restore_official_bundle_already">公式 ReVanced パッチソースはすでにインストールされています</string>
     <string name="app_exporting">アプリのエクスポート</string>
     <string name="export_name_format">エクスポート時のファイル名の形式</string>
     <string name="export_name_format_description">エクスポートされるパッチ済みアプリのデフォルトのファイル名をカスタマイズします</string>
@@ -563,7 +553,6 @@
     <string name="device_memory_limit_format">%1$dMB (通常) - %2$dMB (大)</string>
     <string name="patches_force_download">すべてのパッチソースを強制的にダウンロード</string>
     <string name="reset_patch_bundles">パッチソースをリセット</string>
-    <string name="reset_patch_bundles_description">すべてのソースを削除し、事前にインストールされた公式 ReVanced ソースを復元します</string>
     <string name="reset_patch_bundles_dialog_title">パッチソースをリセットしますか？</string>
     <string name="reset_patch_bundles_confirm">ソースをリセット</string>
     <string name="storage">ストレージ</string>
@@ -1240,8 +1229,6 @@
     <string name="next">次へ</string>
     <string name="auto_update">自動更新</string>
     <string name="add_patches">パッチソースを追加</string>
-    <string name="patches_prereleases">プレリリースを使用</string>
-    <string name="patches_prereleases_description">%s のプレリリースバージョンを使用</string>
     <string name="patches_url">パッチソース URL</string>
     <string name="patch_bundle_urls_link">パッチソースの URL をここで取得</string>
     <string name="patch_bundle_discovery_searching">パッチソースを検索しています…</string>
@@ -1322,7 +1309,6 @@
     <string name="confirm">確認</string>
     <!-- Batch patching. Code adapted from Morphe PR #795; see third-party/NOTICE. -->
     <string name="saved_app_launcher_shortcut">アプリのショートカットで表示</string>
-    <string name="saved_app_launcher_shortcut_description">この保存されたパッチ適用済みアプリを、URV Manager の Android ランチャーショートカットに追加します</string>
     <string name="saved_app_launcher_shortcut_limit_reached">ショートカットの制限に達しました (保存されたアプリ: %1$d 個)。先に別のショートカットを無効にしてください</string>
     <string name="yes">はい</string>
     <string name="no">いいえ</string>
@@ -1335,7 +1321,6 @@
     <string name="batch_queue_configure_app">アプリを一括キューに追加</string>
     <string name="batch_patch_minimum_apps">一括パッチ適用を行うアプリを 2 つ以上選択してください</string>
     <string name="batch_patch_edit_apk">APK を編集</string>
-    <string name="batch_patch_metadata_save_failed">インストールされましたが、URV Manager はアプリのメタデータを保存できませんでした: %1$s</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
 </resources>

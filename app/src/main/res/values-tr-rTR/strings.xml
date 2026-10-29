@@ -7,10 +7,6 @@
     <string name="patch_bundle_file_import_dialog_title">Yama paketi eklensin mi?</string>
     <string name="patch_bundle_file_import_dialog_message">Bu yama paketini yerel yama paketi olarak eklemek istiyor musunuz?</string>
     <string name="manager">Yönetici</string>
-    <string name="plugin_host_permission_label">URV Manager plugin host</string>
-    <string name="plugin_host_permission_description">URV Manager eklentilerine erişimi denetlemek için kullanılır. Bu izin yalnızca URV Manager\'da bulunur.</string>
-    <string name="downloader_host_permission_label">URV Manager indirme hizmeti</string>
-    <string name="downloader_host_permission_description">URV Manager indiricilerine erişimi denetlemek için kullanılır. Bu izin yalnızca URV Manager\'da bulunur.</string>
     <string name="toast_copied_to_clipboard">Kopyalandı</string>
     <string name="downloader_plugin_url_copied">İndirici eklentisinin bağlantısı kopyalandı</string>
     <string name="runtime_plugin_url_copied">Runtime eklentisinin bağlantısı kopyalandı</string>
@@ -111,12 +107,8 @@
     <string name="apk_source_downloaded">İndirilen APK kullanılıyor</string>
     <string name="legacy_import_failed">Eski ayarlar içe aktarılamadı</string>
     <string name="auto_updates_dialog_title">Güncellemeleri yapılandır</string>
-    <string name="auto_updates_dialog_description">URV Manager\'ın aşağıdaki bileşenler için düzenli olarak güncellemeleri kontrol etmesini ister misiniz?</string>
-    <string name="auto_updates_dialog_manager">URV Manager</string>
-    <string name="auto_updates_dialog_patches">Resmi ReVanced Yamaları</string>
     <string name="auto_updates_dialog_note">Bu ayarları daha sonra değiştirebilirsiniz.</string>
     <string name="background_manager_update">Arka planda yönetici güncellemeleri</string>
-    <string name="background_manager_update_description">Arka planda uygulama güncellemelerini kontrol eder ve yeni bir URV Manager sürümü kullanılabilir olduğunda sizi bilgilendirir</string>
     <string name="background_bundle_update">Arka planda paket güncellemeleri</string>
     <string name="background_bundle_update_description">Arka planda yama paketi güncellemelerini kontrol eder ve kullanılabilir veya indirilmiş paket güncellemeleri hakkında sizi bilgilendirir</string>
     <string name="announcement_system_enabled">Duyuruları etkinleştir</string>
@@ -131,9 +123,7 @@
     <string name="downloads">İndirilenler</string>
     <string name="downloads_description">İndirme işlemleri ve dışa aktarma</string>
     <string name="storage_cache_management">Depolama &amp; Önbellek Yönetimi</string>
-    <string name="storage_cache_management_description">URV Manager depolama kullanımını incele</string>
     <string name="plugins_help_title">İndirici nedir?</string>
-    <string name="plugins_help_description">İndirici, URV Manager\'ın çeşitli kaynaklardan orijinal APK\'ları indirmesini sağlayan bir eklentidir. İndirilen APK\'lar alt bölümde gösterilir. Yama işlemi sırasında daha önce indirilmiş bir APK\'yı seçebilir veya bir eklenti aracılığıyla APK indirebilirsiniz.\n\nDesteklenen indirici eklentilerinin listesine buradan ulaşabilirsiniz</string>
     <string name="import_export">Dışa &amp; İçe Aktar</string>
     <string name="import_export_description">Yedekleme, geri yükleme, anahtar deposu ve sıfırlama araçları</string>
     <string name="changelog">Değişiklikleri görüntüle</string>
@@ -161,7 +151,6 @@
     <string name="merge_split_flow_section">Bölünmüş APK birleştirme akışı</string>
     <string name="saved_apps_section">Kayıtlı Uygulamalar</string>
     <string name="safeguards_compatibility_section">Korumalar &amp; Uyumluluk</string>
-    <string name="bundle_system_recovery_section">Paket/Sistem Kurtarma</string>
     <string name="diagnostics_output_section">Tanılama &amp; Çıktı</string>
     <string name="update_checks_section">Güncelleme Denetimleri</string>
     <string name="network_delivery_section">Ağ &amp; Dağıtım</string>
@@ -198,7 +187,6 @@
     <string name="lsposed_checksum_missing">Yayınlanmış bir sağlama toplamı mevcut değil. Bu kaynağa güvendiğinizden emin olun.</string>
     <string name="lsposed_install">Yükle</string>
     <string name="lsposed_forget_title">Modülü unut?</string>
-    <string name="lsposed_forget_description">Bu işlem, URV\'nin listesinden %1$s öğesini kaldırır. Yüklü modül kaldırılmayacak.</string>
     <string name="lsposed_module_installed_title">Modül yüklendi</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
