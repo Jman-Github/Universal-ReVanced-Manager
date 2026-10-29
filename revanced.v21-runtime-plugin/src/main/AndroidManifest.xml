@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature
-        android:name="app.urv.manager.patcher.runtime"
+        android:name="app.universal.patch.manager.patcher.runtime"
         android:required="false" />
 
     <application
@@ -9,7 +9,7 @@
         android:largeHeap="true"
         android:roundIcon="@drawable/ic_runtime_plugin">
         <meta-data
-            android:name="app.urv.manager.patcher.runtime.kind"
+            android:name="app.universal.patch.manager.patcher.runtime.kind"
             android:value="revanced-v21" />
     </application>
 </manifest>

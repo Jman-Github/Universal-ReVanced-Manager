@@ -47,16 +47,16 @@ val strippedApkEditorLib by tasks.registering(Jar::class) {
 }
 
 android {
-    namespace = "app.universal.revanced.manager.revanced.v21.runtime"
+    namespace = "app.universal.patch.manager.revanced.v21.runtime"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
 
     defaultConfig {
-        applicationId = "app.universal.revanced.manager.revanced.v21.runtime"
+        applicationId = "app.universal.patch.manager.revanced.v21.runtime"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.8.0"
+        versionCode = 8
+        versionName = "1.8.1"
     }
 
     val keystoreFile = rootProject.file("app/keystore.jks")
@@ -105,6 +105,8 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    androidResources { noCompress += "jar" }
 
     buildFeatures {
         aidl = true

@@ -128,8 +128,6 @@
     <string name="apk_source_downloaded">Usando APK scaricato</string>
     <string name="legacy_import_failed">Impossibile importare le impostazioni legacy</string>
     <string name="auto_updates_dialog_title">Configura gli aggiornamenti</string>
-    <string name="auto_updates_dialog_manager">URV Manager</string>
-    <string name="auto_updates_dialog_patches">Patch Ufficiali ReVanced</string>
     <string name="auto_updates_dialog_note">Queste impostazioni possono essere modificate più tardi.</string>
     <string name="background_manager_update">Aggiornamenti del manager in background</string>
     <string name="background_bundle_update">Aggiornamenti del bundle in background</string>
@@ -151,7 +149,6 @@
     <string name="bundle_update_websocket_notification_description_single">Ascoltando per %1$s.</string>
     <string name="bundle_update_websocket_notification_description_pair">Ascoltando per %1$s e %2$s.</string>
     <string name="bundle_update_websocket_notification_description_triple">Ascoltando per %1$s, %2$s, e %3$s.</string>
-    <string name="manager_updates_notification_title">Aggiornamento URV Manager trovato</string>
     <string name="manager_updates_notification_available">È disponibile un nuovo aggiornamento del manager: %1$s</string>
     <string name="announcement_notification_title">Nuovo Annuncio ReVanced</string>
     <string name="never">Mai</string>
@@ -181,7 +178,6 @@
     <string name="patching_flow_section">Flusso Del Patching</string>
     <string name="saved_apps_section">App Salvate</string>
     <string name="safeguards_compatibility_section">Salvaguarde &amp; Compatibilità</string>
-    <string name="bundle_system_recovery_section">Recupero Bundle/Sistema</string>
     <string name="diagnostics_output_section">Diagnostica &amp; Output</string>
     <string name="update_checks_section">Controllo Aggiornamenti</string>
     <string name="network_delivery_section">Rete &amp; Consegna</string>
@@ -273,7 +269,6 @@
     <string name="export_patch_bundles_partial">Esportato %1$d bundle patch. Alcuni bundle non possono essere esportati perché sono stati aggiunti localmente.</string>
     <string name="bundle_type_remote">Remoto</string>
     <string name="bundle_type_local">Locale</string>
-    <string name="bundle_type_preinstalled">Preinstallato</string>
     <string name="bundle_created_at">Creato %1$s</string>
     <string name="bundle_updated_at">Aggiornato %1$s</string>
     <string name="bundle_refreshed_at">Ultimo controllo %1$s</string>
@@ -455,12 +450,6 @@ I profili patch non subiscono modifiche.</string>
     <string name="patch_profile_patch_options_title">Opzioni per %1$s</string>
     <string name="patch_option_preview_action">Visualizza anteprima completa</string>
     <string name="patch_option_preview_title">Opzioni selezionate per %1$s</string>
-    <string name="restore_official_bundle">Ripristina il bundle patch ufficiale ReVanced preinstallato</string>
-    <string name="restore_official_bundle_description_missing">Reinstalla il bundle patch Ufficiale ReVanced preinstallato</string>
-    <string name="restore_official_bundle_description_installed">Il bundle patch Ufficiale ReVanced preinstallato è attualmente installato</string>
-    <string name="restore_official_bundle_success">Bundle patch Ufficiale ReVanced ripristinato</string>
-    <string name="restore_official_bundle_failed">Ripristino del bundle patch ufficiale ReVanced non riuscito: %1$s</string>
-    <string name="restore_official_bundle_already">Il bundle patch Ufficiale ReVanced è già installato</string>
     <string name="app_exporting">Esportazione app</string>
     <string name="export_name_format">Esporta formato nome file</string>
     <string name="export_name_format_description">Personalizza il nome di file predefinito per le applicazioni patched esportate</string>
@@ -521,7 +510,6 @@ I profili patch non subiscono modifiche.</string>
     <string name="language_option_ukrainian">Ucraino</string>
     <string name="device_memory_limit_format">%1$dMB (normale) - %2$dMB (Large)</string>
     <string name="reset_patch_bundles">Ripristina i bundle patch</string>
-    <string name="reset_patch_bundles_description">Elimina tutti i bundle e ripristina il bundle ufficiale preinstallato</string>
     <string name="reset_patch_bundles_dialog_title">Ripristina i bundle patch?</string>
     <string name="reset_patch_bundles_confirm">Ripristina i bundle</string>
     <string name="storage">Memoria</string>
@@ -1027,7 +1015,6 @@ Dettagli: %2$s</string>
     <string name="less">Meno</string>
     <string name="continue_">Continua</string>
     <string name="dismiss">Ignora</string>
-    <string name="github">URV Manager GitHub</string>
     <string name="credits">Ringraziamenti</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">Questa app utilizza il codice da ReVanced ed è un fork di ReVanced Manager</string>
@@ -1054,7 +1041,6 @@ Dettagli: %2$s</string>
     <string name="patches_view_any_package">Qualsiasi pacchetto</string>
     <string name="patches_delete_single_dialog_description">Sei sicuro di voler eliminare \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Sei sicuro di voler eliminare i bundle patch selezionati?</string>
-    <string name="about_revanced_manager">Informazioni su URV Manager</string>
     <string name="here">qui.</string>
     <string name="update_available">È disponibile un aggiornamento</string>
     <string name="ready_to_install_update">Pronto per installare l\'aggiornamento</string>
@@ -1066,11 +1052,8 @@ Dettagli: %2$s</string>
     <string name="update_on_metered_connections">Aggiornamento sulle connessioni misurate</string>
     <string name="update_on_metered_connections_description">Consenti aggiornamenti di patch e manager su reti misurate</string>
     <string name="update_checking_manager">Controlla gli aggiornamenti all\'avvio</string>
-    <string name="update_checking_manager_description">Controlla le nuove versioni di URV Manager all\'avvio dell\'applicazione</string>
     <string name="manager_prereleases">Usa la pre-release</string>
-    <string name="manager_prereleases_description">Usa le versioni pre-release di URV Manager</string>
     <string name="update_published">Pubblicato %s</string>
-    <string name="battery_optimization_notification">Le ottimizzazioni della batteria devono essere disattivate affinché URV Manager funzioni correttamente in background. Clicca qui per disattivare le ottimizzazioni.</string>
     <string name="battery_optimization_dialog_title">Ottimizzazione della batteria</string>
     <string name="battery_optimization_banner_title">Banner ottimizzazione della batteria</string>
     <string name="battery_optimization_banner_disable_title">Nascondi l\'avviso di ottimizzazione della batteria?</string>
@@ -1154,8 +1137,6 @@ Dettagli: %2$s</string>
     <string name="next">Successivo</string>
     <string name="auto_update">Aggiornamento automatico</string>
     <string name="add_patches">Aggiungi bundle patch</string>
-    <string name="patches_prereleases">Usa la pre-release</string>
-    <string name="patches_prereleases_description">Usa le versioni pre-release di %s</string>
     <string name="patches_url">URL del bundle patch</string>
     <string name="patch_bundle_urls_link">Ottieni gli URL del bundle patch qui</string>
     <string name="patch_bundle_discovery_package_label">Cerca pacchetti</string>

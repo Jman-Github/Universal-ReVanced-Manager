@@ -1,9 +1,9 @@
-package app.urv.manager.network.api
+package app.universal.patch.manager.network.api
 
-import app.urv.manager.network.dto.*
-import app.urv.manager.domain.bundles.*
-import app.urv.manager.network.utils.*
-import app.urv.manager.ui.component.*
+import app.universal.patch.manager.network.dto.*
+import app.universal.patch.manager.domain.bundles.*
+import app.universal.patch.manager.network.utils.*
+import app.universal.patch.manager.ui.component.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import java.net.URI

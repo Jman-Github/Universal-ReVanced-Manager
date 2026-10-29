@@ -21,12 +21,12 @@ parser.add_argument("--legacy-bundle", type=Path)
 args = parser.parse_args()
 java_bin = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Java\jdk-17")) / "bin"
 suffix = ".exe" if os.name == "nt" else ""
-with tempfile.TemporaryDirectory(prefix="urv-host-shrink-") as temporary:
+with tempfile.TemporaryDirectory(prefix="upm-host-shrink-") as temporary:
     subprocess.run([str(java_bin / ("javac" + suffix)), "--release", "17", "-d", temporary,
                     str(ROOT / "app/src/test/fixtures/host-shrinking/ShrunkHostCheck.java")], check=True)
     for root in args.worktree or [ROOT]:
         for module, engine, bundle in (
-            ("urv-patcher-core", "morphe", args.morphe_bundle),
+            ("upm-patcher-core", "morphe", args.morphe_bundle),
             ("revanced22-patcher-core", "revanced", args.revanced_bundle),
             ("revanced21-patcher-core", "revanced21", args.v21_bundle),
             ("revanced-legacy-patcher-core", "revanced-legacy", args.legacy_bundle),

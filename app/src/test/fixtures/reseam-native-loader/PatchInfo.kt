@@ -1,4 +1,4 @@
-package app.urv.manager.patcher.patch
+package app.universal.patch.manager.patcher.patch
 
 class PatchInfo {
     companion object {

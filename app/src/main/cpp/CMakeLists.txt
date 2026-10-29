@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project("urv_jvm")
+project("upm_jvm")
 
 # Code adapted from Morphe, see third-party/NOTICE for more information.
 # https://github.com/MorpheApp/morphe-manager/pull/1202

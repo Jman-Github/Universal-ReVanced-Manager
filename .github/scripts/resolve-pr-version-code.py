@@ -21,17 +21,22 @@ def latest_release(pages):
 def manager_asset(release):
     assets = [
         asset for asset in release.get("assets", [])
-        if asset["name"].startswith("universal-revanced-manager-")
+        if asset["name"].startswith(("universal-patch-manager-", "universal-revanced-manager-"))
         and asset["name"].endswith(".apk")
     ]
     if not assets:
         raise ValueError("The newest release has no manager APK; refusing a guessed version code")
+    # A cutover release may contain both package generations. Prefer UPM even
+    # if only the legacy package has a universal APK.
+    assets = [asset for asset in assets if asset["name"].startswith("universal-patch-manager-")] or assets
     return min(assets, key=lambda asset: (not asset["name"].endswith("-universal.apk"), asset["name"]))
 
 
 def version_code(badging):
     package = re.search(r"^package: name='([^']+)' versionCode='([0-9]+)'", badging, re.MULTILINE)
-    if package is None or package[1] != "app.universal.revanced.manager":
+    if package is None or package[1] not in (
+        "app.universal.patch.manager", "app.universal.revanced.manager"
+    ):
         raise ValueError("The release APK has an unexpected package identity")
     code = int(package[2])
     if not 1 <= code <= 2_100_000_000:
@@ -50,7 +55,7 @@ def main():
     ], text=True, encoding="utf-8"))
     release = latest_release(pages)
     asset = manager_asset(release)
-    with tempfile.TemporaryDirectory(prefix="urv-pr-release-") as temp:
+    with tempfile.TemporaryDirectory(prefix="upm-pr-release-") as temp:
         subprocess.run([
             "gh", "release", "download", release["tag_name"],
             "--repo", args.repository, "--pattern", asset["name"], "--dir", temp,

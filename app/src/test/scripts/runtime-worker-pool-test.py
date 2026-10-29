@@ -17,7 +17,7 @@ compiler = [artifact("org.jetbrains.kotlin", name, "2.4.10") for name in (
     "kotlin-compiler-embeddable", "kotlin-stdlib", "kotlin-reflect", "kotlin-script-runtime")]
 compiler += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm", "1.10.2"),
              artifact("org.jetbrains", "annotations", "13.0")]
-core = ROOT / "urv-patcher-core/build/libs/urv-patcher-core.jar"
+core = ROOT / "upm-patcher-core/build/libs/upm-patcher-core.jar"
 fixtures = {
     "Binder.kt": """
 package android.os
@@ -32,7 +32,7 @@ class RemoteException : Exception()
     "Context.kt": """
 package android.content
 import android.os.IBinder
-import app.urv.manager.patcher.runtime.jvm.FakeService
+import app.universal.patch.manager.patcher.runtime.jvm.FakeService
 class ComponentName
 class Intent(context: Context, component: Class<*>)
 interface ServiceConnection {
@@ -65,7 +65,7 @@ class Context {
 }
 """,
     "Service.kt": """
-package app.urv.manager.patcher.runtime.jvm
+package app.universal.patch.manager.patcher.runtime.jvm
 import android.os.*
 data class JvmLaunch(val libjvm: String, val preload: List<String>, val options: List<String>,
     val mainClass: String, val entryClass: String,
@@ -105,13 +105,13 @@ class PatcherService2 : PatcherService()
 class PatcherService3 : PatcherService()
 """,
     "Failure.kt": """
-package app.urv.manager.patcher.runtime
+package app.universal.patch.manager.patcher.runtime
 class JvmUnavailableException(message: String) : Exception(message)
 """,
     "Main.kt": """
 import android.content.Context
-import app.urv.manager.patcher.runtime.*
-import app.urv.manager.patcher.runtime.jvm.JvmLaunch
+import app.universal.patch.manager.patcher.runtime.*
+import app.universal.patch.manager.patcher.runtime.jvm.JvmLaunch
 import kotlinx.coroutines.*
 fun main() = runBlocking {
     val context = Context()
@@ -131,7 +131,7 @@ fun main() = runBlocking {
         check(disconnected !in context.bindings) {
             "A dead disposable worker kept its auto-create binding and could reconnect"
         }
-        val late = app.urv.manager.patcher.runtime.jvm.FakeService()
+        val late = app.universal.patch.manager.patcher.runtime.jvm.FakeService()
         disconnected.onServiceConnected(android.content.ComponentName(), late)
         check(late.deathLinks == 0) { "A dead connection accepted another worker" }
         crashed.close()
@@ -183,8 +183,8 @@ with tempfile.TemporaryDirectory(prefix="runtime-worker-test-", dir=ROOT / "buil
         source = work / name
         source.write_text(content)
         sources.append(source)
-    sources += [ROOT / "app/src/main/java/app/urv/manager/patcher/runtime/BoundArtRuntimes.kt",
-                ROOT / "app/src/main/java/app/urv/manager/patcher/runtime/RuntimeEngine.kt"]
+    sources += [ROOT / "app/src/main/java/app/universal/patch/manager/patcher/runtime/BoundArtRuntimes.kt",
+                ROOT / "app/src/main/java/app/universal/patch/manager/patcher/runtime/RuntimeEngine.kt"]
     classes = work / "classes"
     subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, compiler)),
         "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",

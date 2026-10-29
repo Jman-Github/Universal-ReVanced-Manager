@@ -1,6 +1,6 @@
 // Each patcher version has its own classpath and isolated class loader in the shared JVM.
 plugins { alias(libs.plugins.kotlin.jvm) }
-sourceSets.main { java.srcDir("../app/src/main/java"); java.include("app/urv/manager/patcher/split/ApkEditorMergeProcess.java") }
+sourceSets.main { java.srcDir("../app/src/main/java"); java.include("app/universal/patch/manager/patcher/split/ApkEditorMergeProcess.java") }
 kotlin {
     jvmToolchain(17)
     compilerOptions {
@@ -8,26 +8,28 @@ kotlin {
     }
     sourceSets.main {
         kotlin.srcDir("../app/src/main/java")
+        kotlin.srcDir("../shared/runtime-framework/src/main/java")
+        kotlin.srcDir("../shared/revanced22/src/main/java")
         kotlin.srcDir("../shared/merger/src/main/java")
         kotlin.include(
-            "app/urv/manager/patcher/aapt/AaptSelector.kt",
-            "app/urv/manager/patcher/runtime/FrameworkCacheResolver.kt",
-            "app/urv/manager/patcher/split/Merger.kt",
-            "app/urv/manager/patcher/split/SplitApkPreparer.kt",
-            "app/urv/manager/patcher/split/SplitApkFiles.kt",
-            "app/urv/manager/patcher/split/SplitManifestInspector.kt",
-            "app/urv/manager/patcher/split/SplitApkInspector.kt",
-            "app/urv/manager/patcher/split/SplitDexCompression.kt",
-            "app/urv/manager/patcher/util/**",
-            "app/urv/manager/revanced/runtime/**",
-            "app/urv/manager/patcher/host/ToolRuntimeEntry.kt",
-            "app/urv/manager/domain/manager/SignatureMetadataArchiveEngine.kt",
-            "app/urv/manager/domain/manager/SignatureMetadataModels.kt",
-            "app/urv/manager/domain/manager/SignatureMetadataArscEngine.kt",
-            "app/urv/manager/patcher/revanced/RevancedSession.kt",
-            "app/urv/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
-            "app/urv/manager/patcher/split/ApkEditorMergeRuntime.kt",
-            "app/urv/manager/patcher/split/SplitManifestCleaner.kt"
+            "app/universal/patch/manager/patcher/aapt/AaptSelector.kt",
+            "app/universal/patch/manager/patcher/runtime/FrameworkCacheResolver.kt",
+            "app/universal/patch/manager/patcher/split/Merger.kt",
+            "app/universal/patch/manager/patcher/split/SplitApkPreparer.kt",
+            "app/universal/patch/manager/patcher/split/SplitApkFiles.kt",
+            "app/universal/patch/manager/patcher/split/SplitManifestInspector.kt",
+            "app/universal/patch/manager/patcher/split/SplitApkInspector.kt",
+            "app/universal/patch/manager/patcher/split/SplitDexCompression.kt",
+            "app/universal/patch/manager/patcher/util/**",
+            "app/universal/patch/manager/revanced/runtime/**",
+            "app/universal/patch/manager/patcher/host/ToolRuntimeEntry.kt",
+            "app/universal/patch/manager/domain/manager/SignatureMetadataArchiveEngine.kt",
+            "app/universal/patch/manager/domain/manager/SignatureMetadataModels.kt",
+            "app/universal/patch/manager/domain/manager/SignatureMetadataArscEngine.kt",
+            "app/universal/patch/manager/patcher/revanced/RevancedSession.kt",
+            "app/universal/patch/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
+            "app/universal/patch/manager/patcher/split/ApkEditorMergeRuntime.kt",
+            "app/universal/patch/manager/patcher/split/SplitManifestCleaner.kt"
         )
     }
 }
@@ -47,12 +49,16 @@ dependencies {
 
 val hostJar = tasks.register<Jar>("hostJar") {
     // Refresh fat JARs cached before framework/reflection packaging changed.
-    inputs.property("hostPackagingVersion", 1)
+    inputs.property("hostPackagingVersion", 2)
+    dependsOn(":app:androidArscLib")
+    from({ zipTree(project(":app").layout.buildDirectory.file("libs/ARSCLib-android.jar").get().asFile) }) {
+        include("frameworks/**")
+    }
     archiveFileName.set("${project.name}.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(sourceSets.main.map { it.output })
     from(configurations.runtimeClasspath.map { files -> files.map { if (it.isDirectory) it else zipTree(it) } })
-    exclude("frameworks/**")
+    // Standalone plugins must carry their own framework resources.
     // QName comes from java.xml on the embedded JVM, not an Android compatibility JAR.
     exclude("javax/xml/namespace/**")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class", "META-INF/versions/**")
@@ -76,7 +82,7 @@ val shrunkHostJar = tasks.register<ShrinkJarTask>("shrinkHostJar") {
     excludes.addAll("META-INF/proguard/**", "META-INF/com.android.tools/**", "META-INF/maven/**")
     jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) })
     proguardClasspath.from(proguard)
-    restoreFrameworks.set(false)
+    restoreFrameworks.set(true)
     outputJar.set(layout.buildDirectory.file("shrunk-host/${project.name}.jar"))
 }
 

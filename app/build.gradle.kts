@@ -25,15 +25,18 @@ plugins {
 // https://github.com/MorpheApp/morphe-manager/pull/1212
 // https://github.com/MorpheApp/morphe-manager/pull/1215
 // https://github.com/MorpheApp/morphe-manager/pull/1246
+// https://github.com/MorpheApp/morphe-manager/pull/1302
 val patcherHost: Configuration = configurations.create("patcherHost") {
     isCanBeConsumed = false
 }
-val embeddedJvmFeature = 17
-val embeddedJvmRelease = "https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre$embeddedJvmFeature"
+// Hybrid JVM layout adapted from Morphe PR #1302: keep the stable ARM32 JIT.
+data class EmbeddedJvm(val feature: Int, val file: String, val sha256: String, val platform: String) {
+    val url get() = "https://github.com/AngelAuraMC/angelauramc-openjdk-build/releases/download/download_jre$feature/$file"
+}
 val embeddedJvms = mapOf(
-    "arm64-v8a" to Triple("jre17-android-arm64.tar.xz", "e162c860fe05ee4a4e4af7606437419879f6c748386a7b09fa77d10db6a64091", "linux-aarch64"),
-    "armeabi-v7a" to Triple("jre17-android-arm.tar.xz", "4a9134f1ebf6340dd855805d351712462cddab6f3c2684da7e7da10ccf06648d", "linux-arm"),
-    "x86_64" to Triple("jre17-android-x86_64.tar.xz", "893e27d2aed8b40407f29fe939e2a0f193e5d55f72892a303db634b0808a2b61", "linux-amd64")
+    "arm64-v8a" to EmbeddedJvm(25, "jre25-android-arm64.tar.xz", "d3eb7afe2240c26728a1bb440502c5f18ac3883e932d202dd7f0c9bcbbce4c37", "linux-aarch64"),
+    "armeabi-v7a" to EmbeddedJvm(17, "jre17-android-arm.tar.xz", "4a9134f1ebf6340dd855805d351712462cddab6f3c2684da7e7da10ccf06648d", "linux-arm"),
+    "x86_64" to EmbeddedJvm(25, "jre25-android-x86_64.tar.xz", "7fca862ee1b2d5fe23cd9c9c3d9b7ad3c241947ad1a6cc9464ef2e674867105d", "linux-amd64")
 )
 
 /**
@@ -56,6 +59,8 @@ val embeddedJvmFiles = listOf(
     "lib/*/libjvm.so",
     "lib/libjava.so", "lib/libjimage.so", "lib/libzip.so", "lib/libnet.so", "lib/libnio.so",
     "lib/libverify.so", "lib/libmanagement.so", "lib/libprefs.so",
+    // JDK 25 resolves java.base native symbols through this library.
+    "lib/libsyslookup.so",
     // Headless AWT and ImageIO still need native image and font support on Android.
     "lib/libawt.so", "lib/libawt_headless.so", "lib/libjavajpeg.so",
     "lib/libfontmanager.so", "lib/libfreetype.so", "lib/liblcms.so", "lib/libmlib_image.so",
@@ -64,16 +69,15 @@ val embeddedJvmFiles = listOf(
 )
 
 val embeddedJvmTasks = embeddedJvms.map { (abi, build) ->
-    val (file, sha256, platform) = build
     tasks.register<PrepareEmbeddedJvmTask>("prepareEmbeddedJvm${abi.replace("-", "").replace("_", "").replaceFirstChar(Char::uppercase)}") {
         group = "build"
         description = "Links the embedded JVM for $abi."
-        url.set("$embeddedJvmRelease/$file")
-        this.sha256.set(sha256)
-        targetPlatform.set(platform)
+        url.set(build.url)
+        sha256.set(build.sha256)
+        targetPlatform.set(build.platform)
         modules.set(embeddedJvmModules)
         runtimeFiles.set(embeddedJvmFiles)
-        jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(embeddedJvmFeature)) })
+        jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(build.feature)) })
         downloadCache.set(File(gradle.gradleUserHomeDir, "caches/urv-embedded-jvm"))
         outputArchive.set(layout.buildDirectory.file("intermediates/embeddedJvm/$abi.zip.xz"))
         outputImage.set(layout.buildDirectory.file("intermediates/embeddedJvm/$abi.modules"))
@@ -84,7 +88,7 @@ val embeddedJvmTasks = embeddedJvms.map { (abi, build) ->
 val embeddedJvmAbis = embeddedJvms.keys.joinToString(prefix = "{", postfix = "}") { abi -> "\"$abi\"" }
 
 /** Changes with whatever goes into the runtime, which the app then unpacks again. */
-val embeddedJvmId = (listOf("shared-image-v1") + embeddedJvms.values.map { build -> build.second } + embeddedJvmModules + embeddedJvmFiles)
+val embeddedJvmId = (listOf("shared-image-v1") + embeddedJvms.values.map { build -> build.sha256 } + embeddedJvmModules + embeddedJvmFiles)
     .hashCode().toUInt().toString(16)
 
 /** Assets the embedded JVM runs from, read by JvmInstallation. */
@@ -140,7 +144,8 @@ fun androidVersionCode(versionName: String, developmentBuild: Boolean = false): 
     return computedVersionCode.toInt()
 }
 
-val outputApkFileName = "universal-revanced-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
+val outputApkFileName = "universal-patch-manager-${artifactVersionName(resolvedProjectVersion)}-universal.apk"
+val reseamRuntimeAssetsDir = layout.buildDirectory.dir("generated/reseam-runtime")
 val morpheRuntimeAssetsDir = layout.buildDirectory.dir("generated/morphe-runtime")
 val legalResourcesDir = layout.buildDirectory.dir("generated/legal-res")
 val devVersionSuffix = providers.gradleProperty("devVersionSuffix")
@@ -204,8 +209,8 @@ usePatcherClassMergerCompatibility()
 dependencies {
     // Bundle format detection inspects DEX superclasses before loading a patcher SDK.
     implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
-    patcherHost(project(":urv-patcher-core", "hostJar"))
-    patcherHost(project(":revanced22-patcher-core", "hostJar"))
+    patcherHost(project(":upm-patcher-core", "hostJar"))
+    patcherHost(project(":tools-patcher-core", "hostJar"))
     implementation("org.tukaani:xz:1.11")
     constraints {
         implementation("com.android.tools.smali:smali-dexlib2:3.0.9")
@@ -261,11 +266,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
 
-    // ReVanced (PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39)
-    implementation(libs.revanced.patcher.v22) {
-        exclude(group = "xmlpull", module = "xmlpull")
-        exclude(group = "xpp3", module = "xpp3")
-    }
+    // ReVanced (PR #39: https://github.com/Jman-Github/Universal-Patch-Manager/pull/39)
     implementation(libs.revanced.library) {
         exclude(group = "xpp3", module = "xpp3")
         exclude(group = "app.revanced", module = "revanced-patcher")
@@ -355,7 +356,7 @@ buildscript {
 }
 
 android {
-    namespace = "app.universal.revanced.manager"
+    namespace = "app.universal.patch.manager"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
     // Pin to NDK r25c to restore 32-bit x86 support (NDK r27 dropped it).
@@ -363,10 +364,11 @@ android {
 
     defaultConfig {
         buildConfigField("String[]", "EMBEDDED_JVM_ABIS", embeddedJvmAbis)
-        buildConfigField("int", "EMBEDDED_JVM_FEATURE", embeddedJvmFeature.toString())
+        buildConfigField("int", "EMBEDDED_JVM_64_BIT_FEATURE", "25")
+        buildConfigField("int", "EMBEDDED_JVM_32_BIT_FEATURE", "17")
         buildConfigField("String", "EMBEDDED_JVM_ID", "\"$embeddedJvmId\"")
         externalNativeBuild.cmake.arguments += "-DANDROID_STL=c++_shared"
-        applicationId = "app.universal.revanced.manager"
+        applicationId = "app.universal.patch.manager"
         buildConfigField("boolean", "IS_PR_TEST_BUILD", prTestBuild.toString())
         buildConfigField("long", "PR_BUILD_TIMESTAMP", "${if (prTestBuild) System.currentTimeMillis() else 0L}L")
         buildConfigField("int", "DATABASE_VERSION", managerDatabaseVersion.toString())
@@ -505,13 +507,16 @@ android {
     android {
         androidResources {
             generateLocaleConfig = true
-            noCompress += "xz"
+            noCompress += listOf("xz", "apk")
         }
     }
+
+    sourceSets.getByName("main").kotlin.directories.add(rootProject.file("shared/runtime-framework/src/main/java").path)
 
     sourceSets {
         getByName("main").kotlin.directories.add(rootProject.file("shared/merger/src/main/java").path)
         getByName("main").assets.directories.add(morpheRuntimeAssetsDir.get().asFile.path)
+        getByName("main").assets.directories.add(reseamRuntimeAssetsDir.get().asFile.path)
         getByName("main").res.directories.add(legalResourcesDir.get().asFile.path)
         getByName("androidTest").assets.directories.add(file("$projectDir/schemas").path)
     }
@@ -542,7 +547,7 @@ androidComponents {
                 ?: "universal"
             output.outputFileName.set(
                 output.versionName.orElse(resolvedProjectVersion).map { resolvedVersionName ->
-                    "universal-revanced-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
+                    "universal-patch-manager-${artifactVersionName(resolvedVersionName)}-$abiSuffix.apk"
                 }
             )
         }
@@ -596,6 +601,13 @@ tasks {
         }
     }
 
+    val copyReseamRuntimeApk by registering(Sync::class) {
+        into(reseamRuntimeAssetsDir)
+        dependsOn(":reseam-runtime:assembleRelease")
+        from(project(":reseam-runtime").layout.buildDirectory.file("outputs/apk/release/reseam-runtime.apk"))
+        rename { "reseam-runtime.apk" }
+    }
+
     val copyMorpheRuntimeApk by registering(Sync::class) {
         into(morpheRuntimeAssetsDir)
         if (includedMorpheRuntime) {
@@ -624,7 +636,7 @@ tasks {
 
     named("preBuild") {
         dependsOn(copyNoticeFile, copyAboutLibrariesJson)
-        dependsOn(copyMorpheRuntimeApk)
+        dependsOn(copyMorpheRuntimeApk, copyReseamRuntimeApk)
     }
 
 

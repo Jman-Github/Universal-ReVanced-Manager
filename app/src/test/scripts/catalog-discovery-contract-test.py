@@ -6,7 +6,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[4]
-MAIN = ROOT / "app/src/main/java/app/urv/manager"
+MAIN = ROOT / "app/src/main/java/app/universal/patch/manager"
 CACHE = ROOT / ".gradle-user-home/caches/modules-2/files-2.1"
 JAVA = Path(r"C:\Program Files\Java\jdk-17\bin\java.exe")
 
@@ -43,10 +43,10 @@ metadata = source[source.index("internal fun BundleNode.hasCurrentPatchMetadata"
 with tempfile.TemporaryDirectory(prefix="catalog-contract-") as temporary:
     temporary = Path(temporary)
     core = temporary / "CatalogFiltersCore.kt"
-    core.write_text("package app.urv.manager.network.api\n"
+    core.write_text("package app.universal.patch.manager.network.api\n"
                     "import kotlinx.serialization.Serializable\n"
                     "import kotlinx.serialization.json.*\n"
-                    "import app.urv.manager.network.dto.BundleNode\n" + filters + metadata,
+                    "import app.universal.patch.manager.network.dto.BundleNode\n" + filters + metadata,
                     encoding="utf-8")
     classes = temporary / "classes"
     sources = [core, MAIN / "network/api/CatalogAppsIndex.kt",
@@ -62,4 +62,4 @@ with tempfile.TemporaryDirectory(prefix="catalog-contract-") as temporary:
                     "-Xplugin=" + jar("org.jetbrains.kotlin", "kotlin-serialization-compiler-plugin-embeddable", "2.4.10"),
                     "-d", str(classes), *map(str, sources)], check=True)
     subprocess.run([str(JAVA), "-cp", os.pathsep.join([str(classes), *runtime]),
-                    "app.urv.manager.network.api.CatalogDiscoveryContractKt", *sys.argv[1:]], check=True)
+                    "app.universal.patch.manager.network.api.CatalogDiscoveryContractKt", *sys.argv[1:]], check=True)

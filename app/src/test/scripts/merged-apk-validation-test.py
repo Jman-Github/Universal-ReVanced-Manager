@@ -23,7 +23,7 @@ import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util.zip.*
 fun main(args: Array<String>) {
-    val type = Class.forName("app.urv.manager.patcher.split.SplitApkPreparer")
+    val type = Class.forName("app.universal.patch.manager.patcher.split.SplitApkPreparer")
     val validate = type.getDeclaredMethod("validatePreparedApk", File::class.java).apply { isAccessible = true }
     val instance = type.getField("INSTANCE").get(null)
     val corrupt = File(args[0], "truncated.apk").apply { writeText("PK truncated archive") }
@@ -53,10 +53,10 @@ with tempfile.TemporaryDirectory(prefix="merged-apk-test-", dir=ROOT / "build") 
     main = work / "Main.kt"
     main.write_text(fixture)
     for name, module in (("app", "revanced22-patcher-core"),
-                         ("morphe-runtime", "urv-patcher-core"),
+                         ("morphe-runtime", "upm-patcher-core"),
                          ("shared/runtime-plugin", "revanced21-patcher-core")):
         core = ROOT / module / "build/libs" / (module + ".jar")
-        source = ROOT / name / "src/main/java/app/urv/manager/patcher/split/SplitApkPreparer.kt"
+        source = ROOT / name / "src/main/java/app/universal/patch/manager/patcher/split/SplitApkPreparer.kt"
         classes = work / name.replace("/", "-")
         subprocess.run([str(JAVA), "-cp", os.pathsep.join(map(str, compiler)),
             "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",

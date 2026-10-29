@@ -5,10 +5,6 @@
     <string name="patch_bundles">패치 번들</string>
     <string name="patch_bundle">패치 번들</string>
     <string name="manager">매니저</string>
-    <string name="plugin_host_permission_label">URV 매니저 플러그인 호스트</string>
-    <string name="plugin_host_permission_description">URV Manager 플러그인 접근 제어에 사용됩니다. URV Manager만 이 권한을 가집니다</string>
-    <string name="downloader_host_permission_label">URV Manager 다운로더 호스트</string>
-    <string name="downloader_host_permission_description">URV Manager 다운로더 접근 제어에 사용됩니다. URV Manager만 이 권한을 가집니다</string>
     <string name="toast_copied_to_clipboard">복사하였습니다</string>
     <string name="downloader_plugin_url_copied">다운로더 플러그인 URL을 복사하였습니다</string>
     <string name="runtime_plugin_url_copied">런타임 플러그인 URL을 복사하였습니다</string>
@@ -156,12 +152,8 @@
     <string name="apk_source_downloaded">다운로드된 APK를 사용합니다</string>
     <string name="legacy_import_failed">기존 설정을 가져올 수 없습니다</string>
     <string name="auto_updates_dialog_title">업데이트 설정</string>
-    <string name="auto_updates_dialog_description">URV Manager가 다음 구성 요소에 대한 업데이트를 주기적으로 확인하도록 하시겠습니까?</string>
-    <string name="auto_updates_dialog_manager">URV Manager</string>
-    <string name="auto_updates_dialog_patches">Official ReVanced Patches</string>
     <string name="auto_updates_dialog_note">이 설정은 나중에 변경할 수 있습니다</string>
     <string name="background_manager_update">백그라운드 매니저 업데이트</string>
-    <string name="background_manager_update_description">백그라운드에서 앱 업데이트를 확인하고, 새 매니저 버전이 릴리스되면 알려줍니다</string>
     <string name="background_bundle_update">백그라운드 번들 업데이트</string>
     <string name="background_bundle_update_description">백그라운드에서 패치 번들 업데이트를 확인하고, 업데이트가 릴리스되거나 다운로드된 번들 업데이트가 있으면 알려줍니다</string>
     <string name="announcement_system_enabled">공지사항 활성화</string>
@@ -185,13 +177,11 @@
     <string name="notification_channel_bundle_updates_name">백그라운드 번들 업데이트</string>
     <string name="notification_channel_bundle_updates_description">백그라운드 패치 번들 업데이트 진행 상황을 표시합니다</string>
     <string name="notification_channel_manager_updates_name">백그라운드 매니저 업데이트</string>
-    <string name="notification_channel_manager_updates_description">새 URV Manager 버전이 릴리스되면 알려줍니다</string>
     <string name="notification_channel_announcements_name">공지사항 알림</string>
     <string name="notification_channel_announcements_description">새 ReVanced 공지사항이 게시되면 알려줍니다</string>
     <string name="notification_channel_bundle_websocket_name">알림 유지</string>
     <string name="notification_channel_bundle_websocket_description">백그라운드 알림에 대한 웹소켓 전달 및 캐시 정리를 활성화 상태로 유지합니다.</string>
     <string name="notification_channel_cache_cleanup_name">캐시 삭제</string>
-    <string name="notification_channel_cache_cleanup_description">URV 매니저가 자동으로 캐시를 삭제할떄 알려줍니다.</string>
     <string name="bundle_update_websocket_notification_title">백그라운드 알림 유지 활성화</string>
     <string name="bundle_update_websocket_target_bundle">번들 업데이트</string>
     <string name="bundle_update_websocket_target_manager">매니저 업데이트</string>
@@ -206,7 +196,6 @@
     <plurals name="bundle_updates_notification_title_found_quantity">
         <item quantity="other">패치 번들 업데이트를 찾았습니다</item>
     </plurals>
-    <string name="manager_updates_notification_title">URV 매니저 업데이트 발견</string>
     <string name="manager_updates_notification_available">새 매니저 업데이트 사용 가능: %1$s</string>
     <string name="announcement_notification_title">새 ReVanced 공지사항</string>
     <string name="never">사용 안 함</string>
@@ -221,9 +210,7 @@
     <string name="downloads">다운로드</string>
     <string name="downloads_description">다운로드 처리 및 내보내기</string>
     <string name="storage_cache_management">저장소 &amp; 캐시 관리</string>
-    <string name="storage_cache_management_description">URV 매니저가 사용하는 저장공간 검토</string>
     <string name="plugins_help_title">다운로더란?</string>
-    <string name="plugins_help_description">다운로더는 URV가 다양한 출처에서 순정 APK를 다운로드할 수 있게 해주는 플러그인입니다. 다운로드된 APK는 하단 섹션에 표시됩니다. 패치 과정에서 이미 다운로드된 APK를 선택하거나 플러그인을 통해 APK를 다운로드할 수 있습니다.\n\n지원되는 다운로더 플러그인 목록을 확인하려면</string>
     <string name="import_export">내보내기 및 가져오기</string>
     <string name="import_export_description">백업, 복원, 키스토어 및 초기화 도구</string>
     <string name="changelog">변경 사항 보기</string>
@@ -247,7 +234,6 @@
     <string name="merge_split_flow_section">APK 분할 병합 흐름</string>
     <string name="saved_apps_section">저장된 앱</string>
     <string name="safeguards_compatibility_section">보안 및 호환성</string>
-    <string name="bundle_system_recovery_section">번들/시스템 복구</string>
     <string name="diagnostics_output_section">진단 및 출력</string>
     <string name="update_checks_section">업데이트 확인</string>
     <string name="network_delivery_section">네트워크 및 전달</string>
@@ -426,7 +412,6 @@
     <string name="export_patch_bundles_partial">%1$d 개의 패치 번들을 내보냈습니다. 일부 번들은 기기에 추가되어있기 때문에 내보낼 수 없습니다</string>
     <string name="bundle_type_remote">원격</string>
     <string name="bundle_type_local">로컬</string>
-    <string name="bundle_type_preinstalled">미리 설치됨</string>
     <string name="bundle_created_at">%1$s 생성됨</string>
     <string name="bundle_updated_at">%1$s 업데이트됨</string>
     <string name="bundle_refreshed_at">%1$s 마지막 확인됨</string>
@@ -592,7 +577,6 @@
     <string name="trust">신뢰하기</string>
     <string name="downloader_plugin_revoke_trust">신뢰하지 않음</string>
     <string name="downloader_plugin_trust_dialog_title">신뢰</string>
-    <string name="downloader_plugin_trust_dialog_body">계속하면 이 다운로더 플러그인이 URV 관리자 내에서 패처 코드를 실행할 수 있습니다. 신뢰할 수 있는 출처의 다운로더 플러그인만 신뢰하세요.</string>
     <string name="downloader_plugin_trust_dialog_signature">서명</string>
     <string name="downloader_plugin_trust_dialog_plugin">플러그인</string>
     <string name="downloader_plugin_view_error">오류 세부 정보 보기</string>
@@ -624,20 +608,16 @@
     <string name="clear">지우기</string>
     <string name="storage_overview_section">개요</string>
     <string name="storage_total_app_storage">추적된 앱 스토리지</string>
-    <string name="storage_total_app_storage_description">URV Manager에서 추적하는 내부 파일, 캐시 및 외부 앱 폴더</string>
     <string name="storage_refresh_usage">스토리지 사용량 갱신</string>
     <string name="storage_refresh_usage_description">저장 공간 크기 분석 다시 계산</string>
     <string name="storage_usage_section">저장소 사용량</string>
-    <string name="storage_usage_section_description">무엇이 URV 매니저 앱 스토리지에서 용량을 차지하는지 보여줍니다</string>
     <string name="storage_cache_actions_section">캐시 작업</string>
     <string name="storage_internal_cache">내부 캐시</string>
-    <string name="storage_internal_cache_description">URV Manager가 안전하게 다시 생성할 수 있는 임시 파일 (코드 캐시 포함)</string>
     <string name="storage_code_cache">코드캐시</string>
     <string name="storage_code_cache_description">Android 및 앱 라이브러리에서 생성된 런타임 캐시</string>
     <string name="storage_apk_signer_cache">APK 서명 캐시</string>
     <string name="storage_apk_signer_cache_description">APK 서명 도구에서 생성된 임시 APK 사본 및 서명된 출력</string>
     <string name="storage_internal_files">내부 파일들</string>
-    <string name="storage_internal_files_description">URV Manager 내부 저장소의 파일 (사용자 정의 배경 포함)</string>
     <string name="storage_no_backup_files">백업되지 않은 파일</string>
     <string name="storage_no_backup_files_description">Android에서 기기 백업에서 제외하는 내부 파일</string>
     <string name="storage_downloaded_apps">다운로드된 앱</string>
@@ -666,8 +646,6 @@
     <string name="storage_clear_app_cache">앱 캐시 삭제</string>
     <string name="storage_clear_app_cache_description">내부, 코드 및 외부 캐시 파일을 삭제합니다. 설정 및 저장된 파일은 유지됩니다</string>
     <string name="storage_auto_clear_cache">자동 캐시 지우기</string>
-    <string name="storage_auto_clear_cache_description">예약된 시간에 URV Manager 캐시를 자동으로 지우고 실행 시 알림을 보냅니다</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s • 예약된 시간에 URV 관리자 캐시를 자동으로 지우고 실행 시 알림을 보냅니다</string>
     <string name="storage_auto_clear_cache_dialog_title">자듕 캐시 지우기</string>
     <string name="storage_auto_clear_cache_run_now">정리 시작</string>
     <string name="storage_auto_clear_cache_queued">캐시 정리가 대기 중입니다</string>
@@ -680,7 +658,6 @@
     <string name="storage_cache_cleared">캐시에서 %1$s이 지워짐</string>
     <string name="storage_cache_clear_failed">캐시를 지울 수 없음</string>
     <string name="storage_open_app_storage_settings">안드로이드 앱 저장소 설정 열기</string>
-    <string name="storage_open_app_storage_settings_description">시스템 설정에서 URV Manager의 모든 앱 데이터를 관리하거나 삭제할 수 있습니다</string>
     <string name="storage_open_app_storage_settings_failed">안드로이드 앱 저장소 설정을 실행할 수 없음</string>
     <string name="storage_calculating">계산하는 중...</string>
     <string name="storage_empty">비어 있음</string>
@@ -735,12 +712,6 @@
     <string name="patch_profile_patch_options_title">%1$s 옵션</string>
     <string name="patch_option_preview_action">전체 미리보기 보기</string>
     <string name="patch_option_preview_title">\'%1$s\'에 대한 선택된 옵션</string>
-    <string name="restore_official_bundle">미리 설치된 패치 번들 복원</string>
-    <string name="restore_official_bundle_description_missing">미리 설치된 Official ReVanced Patches 번들을 다시 설치합니다</string>
-    <string name="restore_official_bundle_description_installed">미리 설치된 Official ReVanced Patches 번들이 현재 설치되어 있습니다</string>
-    <string name="restore_official_bundle_success">미리 설치된 Official ReVanced Patches 번들을 복원하였습니다</string>
-    <string name="restore_official_bundle_failed">Official ReVanced Patches 번들을 복원할 수 없습니다: %1$s</string>
-    <string name="restore_official_bundle_already">Official ReVanced Patches 번들이 이미 설치되어 있습니다</string>
     <string name="app_exporting">앱 내보내기</string>
     <string name="export_name_format">내보낼 파일 이름 형식</string>
     <string name="export_name_format_description">내보낼 패치된 앱에 대한 기본 파일 이름 형식을 사용자 정의할 수 있습니다</string>
@@ -781,7 +752,6 @@
     <string name="api_url">API URL</string>
     <string name="api_url_description">필요한 파일을 다운로드하는 데 사용되는 API를 설정할 수 있습니다</string>
     <string name="api_url_dialog_title">API URL 변경</string>
-    <string name="api_url_dialog_warning">URV Manager는 패치 및 업데이트를 다운로드하기 위해 API에 연결합니다. API를 신뢰하는지 확인하세요</string>
     <string name="api_url_dialog_save">설정</string>
     <string name="api_url_dialog_reset">API URL 초기화</string>
     <string name="github_pat">GitHub 개인 액세스 토큰</string>
@@ -816,7 +786,6 @@
     <string name="patches_force_download_started">모든 패치 번들를 다운로드하는 중...</string>
     <string name="patches_force_download_none">다운로드된 패치 번들이 없습니다</string>
     <string name="reset_patch_bundles">패치 번들 초기화</string>
-    <string name="reset_patch_bundles_description">모든 번들을 삭제하고 미리 설치된 공식 ReVanced 번들을 복원합니다</string>
     <string name="reset_patch_bundles_dialog_title">패치 번들 초기화</string>
     <string name="reset_patch_bundles_confirm">번들 초기화</string>
     <string name="storage">기기 저장소</string>
@@ -1458,7 +1427,6 @@
     <string name="less">접기</string>
     <string name="continue_">계속하기</string>
     <string name="dismiss">닫기</string>
-    <string name="github">URV Manager GitHub</string>
     <string name="credits">크레딧</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">이 앱은 ReVanced의 코드를 사용하였으며 ReVanced Manager의 포크입니다</string>
@@ -1485,7 +1453,6 @@
     <string name="patches_view_any_package">모든 패키지</string>
     <string name="patches_delete_single_dialog_description">\'%s\'를 삭제하시겠습니까?</string>
     <string name="patches_delete_multiple_dialog_description">선택된 패치를 삭제하시겠습니까?</string>
-    <string name="about_revanced_manager">URV Manager에 대한 정보</string>
     <string name="here">여기를 탭하세요</string>
     <string name="update_available">업데이트 가능</string>
     <string name="ready_to_install_update">업데이트 설치 준비 완료</string>
@@ -1497,11 +1464,8 @@
     <string name="update_on_metered_connections">모바일 네트워크에서 업데이트</string>
     <string name="update_on_metered_connections_description">모바일 네트워크에서 패치 및 매니저 업데이트를 허용합니다</string>
     <string name="update_checking_manager">시작 시 업데이트 확인</string>
-    <string name="update_checking_manager_description">앱이 시작될 때마다 URV Manager의 새 버전을 확인합니다</string>
     <string name="manager_prereleases">개발자 버전 사용</string>
-    <string name="manager_prereleases_description">URV Manager의 개발자 버전을 사용합니다</string>
     <string name="update_published">%s 게시됨</string>
-    <string name="battery_optimization_notification">URV Manager가 백그라운드에서 정상적으로 작동하려면 배터리 최적화를 비활성화해야 합니다. 배터리 최적화를 비활성화하려면 여기를 탭하세요</string>
     <string name="battery_optimization_dialog_title">배터리 최적화</string>
     <string name="battery_optimization_banner_title">배터리 최적화 배너 표시</string>
     <string name="battery_optimization_banner_description">대시보드에 배터리 최적화 경고 배너를 표시합니다</string>
@@ -1546,7 +1510,6 @@
     <string name="bundle_update_phase_checking">확인하는 중</string>
     <string name="bundle_update_phase_downloading">다운로드하는 중</string>
     <string name="bundle_update_phase_finalizing">마무리하는 중</string>
-    <string name="update_available_dialog_description">URV Manager의 새 버전(%s)을 사용할 수 있습니다</string>
     <string name="failed_to_download_update">업데이트를 다운로드할 수 없습니다: %s</string>
     <string name="download">다운로드</string>
     <string name="resume_download">다운로드 재개</string>
@@ -1588,8 +1551,6 @@
     <string name="next">다음</string>
     <string name="auto_update">자동 업데이트</string>
     <string name="add_patches">패치 번들 추가</string>
-    <string name="patches_prereleases">개발자 버전 사용</string>
-    <string name="patches_prereleases_description">\'%s\'의 개발자 버전을 사용합니다</string>
     <string name="patches_url">패치 번들 URL</string>
     <string name="patch_bundle_urls_link">여기에서 패치 번들 URL을 가져오세요</string>
     <string name="patch_bundle_discovery_package_label">패키지 검색</string>
@@ -1676,7 +1637,6 @@
     <string name="export">내보내기</string>
     <string name="confirm">확인하기</string>
     <string name="patcher_runtime_plugins">패처 런타임</string>
-    <string name="patcher_runtime_plugins_description">패치를 적용하는 데 사용되는 런타임 플러그인 APK를 관리할 수 있습니다</string>
     <string name="patcher_runtime_import_url">런타임 소스 가져오기</string>
     <string name="patcher_runtime_import_url_description">GitHub 리포지토리 또는 릴리스 APK URL에서 런타임 플러그인을 추가합니다</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
@@ -1703,7 +1663,6 @@
     <string name="patcher_runtime_uninstall_failed">%1$s가 제거할 수 없습니다</string>
     <string name="patcher_runtime_type_label">유형:</string>
     <string name="patcher_runtime_trust_dialog_title">신뢰</string>
-    <string name="patcher_runtime_trust_dialog_body">계속하면 이 런타임 플러그인이 URV Manager 내에서 패처 코드를 실행할 수 있습니다.\n\n이 런타임 플러그인을 신뢰하는 경우에만 활성화하세요. 런타임 플러그인은 임의 코드를 실행할 수 있으며 장치가 손상될 수 있습니다</string>
     <string name="import_button">가져오기</string>
     <string name="use_latest_release">최신 버전 사용</string>
     <string name="use_prereleases">개발자 버전 사용</string>

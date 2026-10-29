@@ -1,4 +1,4 @@
-package app.urv.manager.util
+package app.universal.patch.manager.util
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,8 +7,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Resources
 import android.os.Bundle
-import app.universal.revanced.manager.R
-import app.urv.manager.receiver.BundleUpdateNotificationDismissReceiver
+import app.universal.patch.manager.R
+import app.universal.patch.manager.receiver.BundleUpdateNotificationDismissReceiver
 
 /** Exercise Android's real notification builder and manager, not android.jar stubs. */
 object BundleNotificationProbe {
@@ -40,8 +40,8 @@ object BundleNotificationProbe {
         manager = constructor.newInstance(*constructor.parameterTypes.map {
             if (it == Context::class.java) context else android.os.Handler(android.os.Looper.getMainLooper())
         }.toTypedArray()) as NotificationManager
-        val channel = "urv-bundle-notification-probe"
-        manager.createNotificationChannel(NotificationChannel(channel, "URV regression probe", NotificationManager.IMPORTANCE_LOW))
+        val channel = "upm-bundle-notification-probe"
+        manager.createNotificationChannel(NotificationChannel(channel, "UPM regression probe", NotificationManager.IMPORTANCE_LOW))
         fun notification(vararg uids: Int): Notification {
             val style = Notification.InboxStyle().addLine("Updates available")
             uids.forEach { style.addLine("- Bundle $it v2") }

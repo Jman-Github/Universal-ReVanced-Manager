@@ -169,7 +169,7 @@ void *runJvm(void *data) {
 } // namespace
 
 extern "C" JNIEXPORT jint JNICALL
-Java_app_urv_manager_patcher_runtime_jvm_EmbeddedJvm_startJvm(
+Java_app_universal_patch_manager_patcher_runtime_jvm_EmbeddedJvm_startJvm(
         JNIEnv *env, jobject, jstring libjvm, jobjectArray preload, jobjectArray options,
         jstring mainClass, jobjectArray args) {
     const char *libjvmChars = env->GetStringUTFChars(libjvm, nullptr);
@@ -202,7 +202,7 @@ Java_app_urv_manager_patcher_runtime_jvm_EmbeddedJvm_startJvm(
 // The largest block of address space up to limitMb that a single reservation gets, in steps of
 // RESERVATION_STEP_MB, or 0. The block is handed back at once, as the JVM reserves it itself
 extern "C" JNIEXPORT jint JNICALL
-Java_app_urv_manager_patcher_runtime_jvm_EmbeddedJvm_largestReservationMb(JNIEnv *, jobject, jint limitMb) {
+Java_app_universal_patch_manager_patcher_runtime_jvm_EmbeddedJvm_largestReservationMb(JNIEnv *, jobject, jint limitMb) {
     for (jint mb = limitMb; mb > 0; mb -= RESERVATION_STEP_MB) {
         const size_t size = static_cast<size_t>(mb) * MEBIBYTE;
         void *block = mmap(nullptr, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);

@@ -3,7 +3,7 @@ public class ShrunkHostCheck {
  public static void main(String[] args) throws Exception {
   try(URLClassLoader engine=new URLClassLoader(new URL[]{new File(args[0]).toURI().toURL()},ClassLoader.getPlatformClassLoader())) {
    Thread.currentThread().setContextClassLoader(engine);
-   String entry=args[1].equals("morphe")?"app.urv.manager.morphe.runtime.MorpheRuntimeEntry":"app.urv.manager.revanced.runtime.RevancedRuntimeEntry";
+   String entry=args[1].equals("morphe")?"app.universal.patch.manager.morphe.runtime.MorpheRuntimeEntry":"app.universal.patch.manager.revanced.runtime.RevancedRuntimeEntry";
    if(args.length>2) {
     List<?> result=(List<?>)engine.loadClass(entry).getMethod("loadMetadataForBundle",String.class).invoke(null,args[2]);
     if(result.isEmpty())throw new AssertionError("Empty metadata");

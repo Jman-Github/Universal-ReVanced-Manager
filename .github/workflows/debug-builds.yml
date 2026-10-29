@@ -49,7 +49,9 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            25
+            17
 
       - name: Set Gradle Java Home
         run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
@@ -82,7 +84,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: urv-debug-test-reports
+          name: upm-debug-test-reports
           retention-days: 7
           if-no-files-found: ignore
           path: |
@@ -94,8 +96,10 @@ jobs:
             morphe-runtime/build/reports/tests/testDebugUnitTest/
             revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
             revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
-            reseam-runtime-plugin/build/test-results/testDebugUnitTest/
-            reseam-runtime-plugin/build/reports/tests/testDebugUnitTest/
+            reseam-runtime/build/test-results/testDebugUnitTest/
+            revanced.v22-runtime-plugin/build/test-results/testDebugUnitTest/
+            reseam-runtime/build/reports/tests/testDebugUnitTest/
+            revanced.v22-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Build debug artifacts
         env:
@@ -109,7 +113,7 @@ jobs:
             -Pversion="${{ needs.prepare.outputs.version }}" \
             :app:assembleDev \
             :revanced.v21-runtime-plugin:assembleRelease \
-            :reseam-runtime-plugin:assembleRelease
+            :revanced.v22-runtime-plugin:assembleRelease
 
       - name: Locate debug artifacts
         shell: bash
@@ -118,13 +122,13 @@ jobs:
         run: |
           apk_dir="app/build/outputs/apk/dev"
           expected=(
-            "${apk_dir}/universal-revanced-manager-v${VERSION}-universal.apk"
-            "${apk_dir}/universal-revanced-manager-v${VERSION}-arm64-v8a.apk"
-            "${apk_dir}/universal-revanced-manager-v${VERSION}-armeabi-v7a.apk"
-            "${apk_dir}/universal-revanced-manager-v${VERSION}-x86.apk"
-            "${apk_dir}/universal-revanced-manager-v${VERSION}-x86_64.apk"
+            "${apk_dir}/universal-patch-manager-v${VERSION}-universal.apk"
+            "${apk_dir}/universal-patch-manager-v${VERSION}-arm64-v8a.apk"
+            "${apk_dir}/universal-patch-manager-v${VERSION}-armeabi-v7a.apk"
+            "${apk_dir}/universal-patch-manager-v${VERSION}-x86.apk"
+            "${apk_dir}/universal-patch-manager-v${VERSION}-x86_64.apk"
             "revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk"
-            "reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk"
+            "revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk"
           )
           for artifact in "${expected[@]}"; do
             [[ -f "$artifact" ]] || { echo "Missing expected debug artifact: $artifact" >&2; exit 1; }
@@ -133,11 +137,11 @@ jobs:
       - name: Upload debug artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: urv-debug
+          name: upm-debug
           retention-days: 14
           if-no-files-found: error
           path: |
             app/build/outputs/apk/dev/*.apk
             revanced.v21-runtime-plugin/build/outputs/apk/release/revanced.v21-plugin.apk
-            reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk
+            revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk
             app/build/outputs/apk/dev/output-metadata.json

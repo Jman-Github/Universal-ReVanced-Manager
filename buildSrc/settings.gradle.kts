@@ -1,1 +1,1 @@
-rootProject.name = "urv-build-logic"
+rootProject.name = "upm-build-logic"

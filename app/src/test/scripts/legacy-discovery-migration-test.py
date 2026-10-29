@@ -30,13 +30,13 @@ with tempfile.TemporaryDirectory(prefix="legacy-discovery-migration-", dir=ROOT 
     classes = Path(directory) / "classes"
     names = ["domain/bundles/LegacyDiscoveryMigration", "network/api/ExternalBundlesEndpoints",
              "domain/bundles/BundleIconSource", "domain/bundles/ExternalBundleMetadata"]
-    sources = [ROOT / f"app/src/main/java/app/urv/manager/{name}.kt" for name in names]
-    sources += [ROOT / f"app/src/test/java/app/urv/manager/{name}Test.kt" for name in names]
-    sources += [ROOT / "app/src/main/java/app/urv/manager/network/dto/ExternalBundleSnapshot.kt"]
+    sources = [ROOT / f"app/src/main/java/app/universal/patch/manager/{name}.kt" for name in names]
+    sources += [ROOT / f"app/src/test/java/app/universal/patch/manager/{name}Test.kt" for name in names]
+    sources += [ROOT / "app/src/main/java/app/universal/patch/manager/network/dto/ExternalBundleSnapshot.kt"]
     subprocess.run(list(map(str, [JAVA, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp(deps),
         "-Xplugin=" + str(artifact("org.jetbrains.kotlin", "kotlin-serialization-compiler-plugin-embeddable", kotlin)),
         "-d", classes, *sources])),
         check=True, timeout=120)
     subprocess.run(list(map(str, [JAVA, "-cp", cp([classes] + deps), "org.junit.runner.JUnitCore",
-        *["app.urv.manager." + name.replace("/", ".") + "Test" for name in names]])), check=True, timeout=120)
+        *["app.universal.patch.manager." + name.replace("/", ".") + "Test" for name in names]])), check=True, timeout=120)

@@ -1,12 +1,9 @@
-package app.urv.manager.patcher.reseam
+package app.universal.patch.manager.patcher.reseam
 
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.Build
-import app.urv.manager.network.runtime.LoadedPatcherRuntimePlugin
-import app.urv.manager.network.runtime.PatcherRuntimeKind
-import app.urv.manager.patcher.runtime.PatcherRuntimePluginRegistry
-import app.urv.manager.patcher.runtime.reseam.prepareReseamRuntimeFiles
+import app.universal.patch.manager.patcher.runtime.reseam.prepareReseamRuntimeFiles
 import dalvik.system.DexClassLoader
 import java.io.File
 import java.io.IOException
@@ -56,7 +53,7 @@ object ReseamNativeLoaderProbe {
             check(expected.message.orEmpty().contains("already")) { expected.toString() }
             println("PASS: reproduced ART's native library ownership collision")
         }
-        val entry = competing.loadClass("app.urv.manager.reseam.runtime.ReseamRuntimeEntry")
+        val entry = competing.loadClass("app.universal.patch.manager.reseam.runtime.ReseamRuntimeEntry")
         try {
             entry.getMethod("loadMetadataForBundle", String::class.java).invokeReseamRuntime("/missing-bundle")
             error("Expected failed JNI initialization")
@@ -66,17 +63,13 @@ object ReseamNativeLoaderProbe {
         }
 
         val context = ProbeContext(root.resolve("manager"))
-        var active: File? = a
-        PatcherRuntimePluginRegistry.install {
-            active?.let { mapOf(PatcherRuntimeKind.RESEAM to LoadedPatcherRuntimePlugin(it)) } ?: emptyMap()
-        }
-        ReseamRuntimeBridge.initialize(context)
+        ReseamRuntimeBridge.initialize(context, a.path)
         ReseamRuntimeBridge.engineVersion()
         val first = activeLoader()
         nativeInit(first)
         val alias = root.resolve("reimport.apk")
         a.copyTo(alias, overwrite = true)
-        active = alias
+        ReseamRuntimeBridge.initialize(context, alias.path)
         ReseamRuntimeBridge.engineVersion()
         check(activeLoader() === first)
         nativeInit(activeLoader())
@@ -85,12 +78,12 @@ object ReseamNativeLoaderProbe {
         check(activeLoader() === first)
         println("PASS: identical reimports and timestamp changes reuse the JNI owner")
 
-        active = b
+        ReseamRuntimeBridge.initialize(context, b.path)
         ReseamRuntimeBridge.engineVersion()
         val second = activeLoader()
         check(second !== first)
         nativeInit(second)
-        active = a
+        ReseamRuntimeBridge.initialize(context, a.path)
         ReseamRuntimeBridge.engineVersion()
         check(activeLoader() === first)
         nativeInit(first)
@@ -101,7 +94,7 @@ object ReseamNativeLoaderProbe {
         b.copyTo(alias, overwrite = true)
         alias.setLastModified(stamp)
         check(alias.length() == size)
-        active = alias
+        ReseamRuntimeBridge.initialize(context, alias.path)
         ReseamRuntimeBridge.engineVersion()
         check(activeLoader() === second)
         nativeInit(second)
@@ -111,15 +104,12 @@ object ReseamNativeLoaderProbe {
         check(activeLoader() === first)
         println("PASS: content replacement with unchanged path, size and timestamp selects the right JNI owner")
 
-        active = null
-        try { ReseamRuntimeBridge.engineVersion(); error("Revoked runtime was reused") }
-        catch (_: IOException) { println("PASS: trust removal prevents reuse of a cached runtime") }
-        active = alias
+        ReseamRuntimeBridge.initialize(context, alias.path)
         a.delete()
         ReseamRuntimeBridge.engineVersion()
         check(activeLoader() === first)
         nativeInit(first)
-        println("PASS: deleting the original managed APK does not invalidate the retained snapshot")
+        println("PASS: deleting the original runtime APK does not invalidate the retained snapshot")
 
         val workers = Executors.newFixedThreadPool(8)
         try {

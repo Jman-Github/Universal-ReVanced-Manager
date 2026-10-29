@@ -1,4 +1,4 @@
-package app.urv.manager.patcher
+package app.universal.patch.manager.patcher
 
 // Minimal manager models for the standalone ART harness; the production bridge is compiled unchanged.
 sealed class StepId {

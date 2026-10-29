@@ -47,17 +47,17 @@ else
   APK_DIR="app/build/outputs/apk/release"
 fi
 
-run_gradle -Pversion="$VERSION" "$MANAGER_TASK" :revanced.v21-runtime-plugin:assembleRelease :reseam-runtime-plugin:assembleRelease
+run_gradle -Pversion="$VERSION" "$MANAGER_TASK" :revanced.v21-runtime-plugin:assembleRelease :revanced.v22-runtime-plugin:assembleRelease
 
 rm -rf release-assets
 mkdir -p release-assets
 
 EXPECTED_MANAGER_APKS=(
-  "universal-revanced-manager-v${VERSION}-universal.apk"
-  "universal-revanced-manager-v${VERSION}-arm64-v8a.apk"
-  "universal-revanced-manager-v${VERSION}-armeabi-v7a.apk"
-  "universal-revanced-manager-v${VERSION}-x86.apk"
-  "universal-revanced-manager-v${VERSION}-x86_64.apk"
+  "universal-patch-manager-v${VERSION}-universal.apk"
+  "universal-patch-manager-v${VERSION}-arm64-v8a.apk"
+  "universal-patch-manager-v${VERSION}-armeabi-v7a.apk"
+  "universal-patch-manager-v${VERSION}-x86.apk"
+  "universal-patch-manager-v${VERSION}-x86_64.apk"
 )
 
 for apk in "${EXPECTED_MANAGER_APKS[@]}"; do
@@ -76,12 +76,12 @@ if [[ ! -f "$PLUGIN" ]]; then
   exit 1
 fi
 cp "$PLUGIN" release-assets/
-RESEAM_PLUGIN="reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk"
-if [[ ! -f "$RESEAM_PLUGIN" ]]; then
-  echo "Missing expected runtime plugin APK: $RESEAM_PLUGIN" >&2
+V22_PLUGIN="revanced.v22-runtime-plugin/build/outputs/apk/release/revanced.v22-plugin.apk"
+if [[ ! -f "$V22_PLUGIN" ]]; then
+  echo "Missing expected runtime plugin APK: $V22_PLUGIN" >&2
   exit 1
 fi
-cp "$RESEAM_PLUGIN" release-assets/
+cp "$V22_PLUGIN" release-assets/
 
 count="$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l | tr -d ' ')"
 if [[ "$count" != "7" ]]; then

@@ -1,0 +1,41 @@
+{
+    "bundleUid": 42,
+    "name": "URV custom bundle",
+    "displayName": "My bundle",
+    "source": "https://example.com/patches.json",
+    "selection": {
+        "com.example.app": [
+            "Patch"
+        ]
+    },
+    "options": {
+        "com.example.app": {
+            "Patch": {
+                "enabled": {
+                    "raw": true
+                },
+                "count": {
+                    "raw": 42
+                },
+                "large": {
+                    "raw": 9007199254740993
+                },
+                "ratio": {
+                    "raw": 0.75
+                },
+                "customPackage": {
+                    "raw": "app.urv.manager.keep.this"
+                },
+                "names": {
+                    "raw": [
+                        "URV",
+                        "UPM"
+                    ]
+                },
+                "unset": {
+                    "raw": null
+                }
+            }
+        }
+    }
+}

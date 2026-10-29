@@ -1,0 +1,12 @@
+{
+  "uniqueId": "app.universal.patch.manager",
+  "name": "Universal Patch Manager",
+  "developers": [
+    {
+      "name": "Universal Patch Manager contributors"
+    }
+  ],
+  "licenses": [
+    "GPL-3.0-or-later"
+  ]
+}

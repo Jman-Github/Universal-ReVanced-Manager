@@ -27,10 +27,10 @@ deps += [artifact("junit", "junit", "4.13.2"), artifact("org.hamcrest", "hamcres
 with tempfile.TemporaryDirectory(prefix="manager-update-rebrand-", dir=ROOT / "build") as directory:
     classes = Path(directory) / "classes"
     names = ["ManagerUpdateIdentity", "ManagerUpdateCompatibility"]
-    sources = [ROOT / f"app/src/main/java/app/urv/manager/util/{name}.kt" for name in names]
-    sources += [ROOT / f"app/src/test/java/app/urv/manager/util/{name}Test.kt" for name in names]
+    sources = [ROOT / f"app/src/main/java/app/universal/patch/manager/util/{name}.kt" for name in names]
+    sources += [ROOT / f"app/src/test/java/app/universal/patch/manager/util/{name}Test.kt" for name in names]
     subprocess.run(list(map(str, [JAVA, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler",
         "-no-stdlib", "-no-reflect", "-jvm-target", "17", "-classpath", cp(deps), "-d", classes, *sources])),
         check=True, timeout=120)
     subprocess.run(list(map(str, [JAVA, "-cp", cp([classes] + deps), "org.junit.runner.JUnitCore",
-        *[f"app.urv.manager.util.{name}Test" for name in names]])), check=True, timeout=120)
+        *[f"app.universal.patch.manager.util.{name}Test" for name in names]])), check=True, timeout=120)

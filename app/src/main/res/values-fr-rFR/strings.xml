@@ -107,7 +107,6 @@
     <string name="apk_source_downloaded">Utilisation de l\'APK téléchargé</string>
     <string name="legacy_import_failed">Impossible d\'importer les paramètres hérités</string>
     <string name="auto_updates_dialog_title">Configurer les mises à jour</string>
-    <string name="auto_updates_dialog_patches">Patches officiels ReVanced</string>
     <string name="auto_updates_dialog_note">Ces paramètres peuvent être modifiés ultérieurement.</string>
     <string name="background_manager_update">Mises à jour du gestionnaire d\'arrière-plan</string>
     <string name="background_bundle_update">Mises à jour des packs en arrière-plan</string>
@@ -228,7 +227,6 @@
     <string name="export_patch_bundles_partial">Exportation de %1$d ensembles de correctifs. Certains ensembles n\'ont pas pu être exportés car ils ont été ajoutés localement.</string>
     <string name="bundle_type_remote">Distant</string>
     <string name="bundle_type_local">Local</string>
-    <string name="bundle_type_preinstalled">Préinstallé</string>
     <string name="bundle_created_at">Créé %1$s</string>
     <string name="bundle_updated_at">%1$s mis à jour</string>
     <string name="bundle_refreshed_at">Dernière vérification %1$s</string>
@@ -325,11 +323,6 @@ Les profils de correctifs ne sont pas affectés.</string>
     <string name="skip_unneeded_split_apks_description">Ignorer les modules APK fractionnés qui ne correspondent pas à cet appareil (par exemple, langue ou densité)</string>
     <string name="reset_to_recommended">Réinitialiser aux valeurs recommandées</string>
     <string name="patcher_saved_apps_description">Lorsqu\'elle est activée, cette option permet au gestionnaire d\'enregistrer l\'application modifiée ainsi que son fichier APK afin qu\'elle reste dans l\'onglet Applications et puisse être réinstallée ultérieurement. La désactivation de cette option empêche l\'enregistrement et supprime toutes les applications modifiées enregistrées. Les applications installées via l\'installateur de montage root restent visibles.</string>
-    <string name="restore_official_bundle">Restaurer le pack de correctifs officiels ReVanced préinstallé</string>
-    <string name="restore_official_bundle_description_missing">Réinstallez le pack de correctifs officiels ReVanced préinstallé</string>
-    <string name="restore_official_bundle_description_installed">Le pack de correctifs officiels ReVanced préinstallé est actuellement installé.</string>
-    <string name="restore_official_bundle_success">Pack de correctifs officiels ReVanced restauré</string>
-    <string name="restore_official_bundle_failed">Échec de la restauration du pack de correctifs officiel ReVanced : %1$s</string>
     <string name="export_name_format_error_blank">Le format du nom de fichier ne peut pas être vide.</string>
     <string name="export_name_format_insert">Insérer</string>
     <string name="export_name_variable_app_name">Nom de l\'application</string>
@@ -629,8 +622,6 @@ Détails : %2$s</string>
     <string name="next">Suivant</string>
     <string name="auto_update">Mise à jour automatique</string>
     <string name="add_patches">Ajouter un correctif</string>
-    <string name="patches_prereleases">Utiliser les préversions</string>
-    <string name="patches_prereleases_description">Utiliser les préversions de %s</string>
     <string name="patches_url">URL du pack de correctifs</string>
     <string name="patch_bundle_urls_link">Obtenez les URL des correctifs ici</string>
     <string name="patch_bundle_discovery_searching">Recherche de correctifs…</string>

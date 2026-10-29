@@ -117,7 +117,6 @@
     <string name="apk_source_downloaded">डाउनलोड किए गए APK का उपयोग करना</string>
     <string name="legacy_import_failed">लेगेसी सेटिंग्स इंपोर्ट नहीं की जा सकीं</string>
     <string name="auto_updates_dialog_title">अपडेट कॉन्फ़िगर करें</string>
-    <string name="auto_updates_dialog_patches">आधिकारिक रीवैंस्ड पैच</string>
     <string name="auto_updates_dialog_note">इन सेटिंग्स को बाद में बदला जा सकता है।</string>
     <string name="background_manager_update">पृष्ठभूमि प्रबंधक अद्यतन</string>
     <string name="background_bundle_update">पृष्ठभूमि बंडल अपडेट</string>
@@ -243,7 +242,6 @@
     <string name="export_patch_bundles_partial">%1$d पैच बंडल्स निर्यात किए गए। कुछ बंडल्स निर्यात नहीं हो सके क्योंकि उन्हें स्थानीय रूप से जोड़ा गया था।</string>
     <string name="bundle_type_remote">रिमोट </string>
     <string name="bundle_type_local">स्थानीय</string>
-    <string name="bundle_type_preinstalled">पूर्व स्थापित</string>
     <string name="bundle_created_at">बनाया गया %1$s</string>
     <string name="bundle_updated_at">अद्यतन किया गया %1$s</string>
     <string name="bundle_refreshed_at">पिछली बार चेक %1$s  किया गया</string>

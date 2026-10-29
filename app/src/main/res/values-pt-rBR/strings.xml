@@ -7,10 +7,6 @@
     <string name="patch_bundle_file_import_dialog_title">Adicionar pacote de patches?</string>
     <string name="patch_bundle_file_import_dialog_message">Adicionar este arquivo de pacote de patches como um pacote de patches local?</string>
     <string name="manager">Gerenciador</string>
-    <string name="plugin_host_permission_label">Host do plugin URV Manager</string>
-    <string name="plugin_host_permission_description">Usado para controlar o acesso aos plugins do URV Manager. Somente o URV Manager possui essa funcionalidade.</string>
-    <string name="downloader_host_permission_label">Host de download do URV Manager</string>
-    <string name="downloader_host_permission_description">Usado para controlar o acesso aos programas de download do URV Manager. Somente o URV Manager possui essa funcionalidade.</string>
     <string name="toast_copied_to_clipboard">Copiado</string>
     <string name="downloader_plugin_url_copied">URL do plugin de download copiado</string>
     <string name="runtime_plugin_url_copied">URL do plugin de tempo de execução copiada</string>
@@ -169,12 +165,8 @@
     <string name="apk_source_downloaded">Usando APK baixado</string>
     <string name="legacy_import_failed">Não foi possível importar as configurações antigas</string>
     <string name="auto_updates_dialog_title">Configurar atualizações</string>
-    <string name="auto_updates_dialog_description">Deseja que o URV Manager verifique periodicamente se há atualizações para os seguintes componentes?</string>
-    <string name="auto_updates_dialog_manager">URV Manager</string>
-    <string name="auto_updates_dialog_patches">ReVanced Patches oficial</string>
     <string name="auto_updates_dialog_note">Essas configurações podem ser alteradas depois.</string>
     <string name="background_manager_update">Atualizações do gerenciador em segundo plano</string>
-    <string name="background_manager_update_description">Verifica se há atualizações do aplicativo em segundo plano e notifica você quando uma nova versão do URV Manager estiver disponível</string>
     <string name="background_bundle_update">Atualizações de pacote em segundo plano</string>
     <string name="background_bundle_update_description">Verifica se há atualizações de pacotes de patches em segundo plano e notifica você sobre atualizações de pacotes disponíveis ou baixadas</string>
     <string name="announcement_system_enabled">Ativar comunicados</string>
@@ -198,13 +190,11 @@
     <string name="notification_channel_bundle_updates_name">Atualizações de pacote em segundo plano</string>
     <string name="notification_channel_bundle_updates_description">Exibe o progresso de atualizações de pacote em segundo plano.</string>
     <string name="notification_channel_manager_updates_name">Atualizações do gerenciador em segundo plano</string>
-    <string name="notification_channel_manager_updates_description">Notifica você quando uma nova versão do URV Manager estiver disponível.</string>
     <string name="notification_channel_announcements_name">Notificações de comunicado</string>
     <string name="notification_channel_announcements_description">Notifica você quando um novo comunicado ReVanced é publicado.</string>
     <string name="notification_channel_bundle_websocket_name">Manter notificação ativa</string>
     <string name="notification_channel_bundle_websocket_description">Mantém a entrega de websockets e a limpeza de cache ativas para notificações em segundo plano.</string>
     <string name="notification_channel_cache_cleanup_name">Limpeza de cache</string>
-    <string name="notification_channel_cache_cleanup_description">Mostra quando o URV Manager limpa automaticamente os arquivos de cache.</string>
     <string name="bundle_update_websocket_notification_title">Manter notificação em segundo plano ativa</string>
     <string name="bundle_update_websocket_target_bundle">atualizações de pacotes</string>
     <string name="bundle_update_websocket_target_manager">atualizações do gerenciador</string>
@@ -220,7 +210,6 @@
         <item quantity="one">Pacotes de patches de atualização encontrados</item>
         <item quantity="other">Pacotes de patches com atualizações encontradas</item>
     </plurals>
-    <string name="manager_updates_notification_title">Atualização do URV Manager encontrada</string>
     <string name="manager_updates_notification_available">Uma nova atualização do gerenciador está disponível: %1$s</string>
     <string name="announcement_notification_title">Novo comunicado ReVanced</string>
     <string name="never">Nunca</string>
@@ -235,9 +224,7 @@
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Manuseio e exportação de downloads</string>
     <string name="storage_cache_management">Gerenciamento de Armazenamento &amp; Cache</string>
-    <string name="storage_cache_management_description">Analise o uso do armazenamento do URV Manager</string>
     <string name="plugins_help_title">O que é um downloader?</string>
-    <string name="plugins_help_description">Um downloader é um plugin que permite ao URV Manager baixar APKs originais de diversas fontes. Os APKs baixados serão exibidos na seção inferior. Durante o processo de aplicação de patches, você pode escolher um.\n\n A lista de plugins de download suportados pode ser encontrada</string>
     <string name="import_export">Exportar e Importar</string>
     <string name="import_export_description">Backup, restaurar, keystore, e redefinir ferramentas</string>
     <string name="changelog">Ver registro de alterações</string>
@@ -261,7 +248,6 @@
     <string name="merge_split_flow_section">Fluxo de Fusão de APKs Divididos</string>
     <string name="saved_apps_section">Aplicativos salvos</string>
     <string name="safeguards_compatibility_section">Defesas e Compatibilidade</string>
-    <string name="bundle_system_recovery_section">Pacote/Recuperação de Sistema</string>
     <string name="diagnostics_output_section">Diagnósticos e Saída</string>
     <string name="update_checks_section">Verificações de atualizações</string>
     <string name="network_delivery_section">Rede e Entrega</string>
@@ -348,7 +334,6 @@
     <string name="lsposed_checksum_missing">Não há checksum publicado disponível. Verifique se você confia nesta fonte.</string>
     <string name="lsposed_install">Instalar</string>
     <string name="lsposed_forget_title">Esquecer o módulo?</string>
-    <string name="lsposed_forget_description">Isso remove %1$s da lista do URV. O módulo instalado não será desinstalado.</string>
     <string name="lsposed_module_installed_title">Módulo instalado</string>
     <string name="lsposed_module_installed_description">Abra o LSPosed Manager para ativar o módulo e escolher seu escopo.</string>
     <string name="lsposed_open_manager">Abra o Gerenciador LSPosed</string>
@@ -571,7 +556,6 @@
     <string name="export_patch_bundles_partial">%1$d pacote de patches exportados. Alguns pacotes não poderam ser exportados porque foram adicionados localmente.</string>
     <string name="bundle_type_remote">Remoto</string>
     <string name="bundle_type_local">Local</string>
-    <string name="bundle_type_preinstalled">Pré-instalado</string>
     <string name="bundle_created_at">Criado %1$s</string>
     <string name="bundle_updated_at">Atualizado %1$s</string>
     <string name="bundle_refreshed_at">Última verificação em %1$s</string>
@@ -741,7 +725,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="downloader_plugin_revoke_trust">Remover confiança</string>
     <string name="downloader_plugin_trust_dialog_title">Confiança</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Revogar confiança</string>
-    <string name="downloader_plugin_trust_dialog_body">Ao continuar, você permitirá que este plugin de download execute o código de patch dentro do URV Manager. Confie apenas em plugins de download de fontes confiáveis.</string>
     <string name="downloader_plugin_trust_dialog_signature">Assinatura</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin</string>
     <string name="downloader_plugin_view_error">Ver detalhes do erro</string>
@@ -773,20 +756,16 @@ Osperfis de patches não serão afetados.</string>
     <string name="clear">Limpar</string>
     <string name="storage_overview_section">Visão geral</string>
     <string name="storage_total_app_storage">Armazenamento de aplicativos monitorado</string>
-    <string name="storage_total_app_storage_description">O URV Manager monitora arquivos internos, cache e pastas externas de aplicativos</string>
     <string name="storage_refresh_usage">Atualizar uso de armazenamento</string>
     <string name="storage_refresh_usage_description">Recalcular a distribuição do tamanho do armazenamento</string>
     <string name="storage_usage_section">Uso de armazenamento</string>
-    <string name="storage_usage_section_description">Mostra o que está ocupando espaço no armazenamento do aplicativo URV Manager</string>
     <string name="storage_cache_actions_section">Ações de cache</string>
     <string name="storage_internal_cache">Cache interno</string>
-    <string name="storage_internal_cache_description">Os arquivos temporários que o URV Manager pode recriar com segurança, incluindo o cache de código, são armazenados em cache</string>
     <string name="storage_code_cache">Cache de código</string>
     <string name="storage_code_cache_description">Cache de tempo de execução gerado pelo Android e pelas bibliotecas do aplicativo</string>
     <string name="storage_apk_signer_cache">Cache de assinatura APK</string>
     <string name="storage_apk_signer_cache_description">Cópias temporárias de APK e arquivos assinados criados pela ferramenta de assinatura de APK</string>
     <string name="storage_internal_files">Arquivos internos</string>
-    <string name="storage_internal_files_description">Arquivos no armazenamento interno do URV Manager, incluindo planos de fundo personalizados</string>
     <string name="storage_no_backup_files">Arquivos sem backup</string>
     <string name="storage_no_backup_files_description">Arquivos internos que o Android exclui dos backups do dispositivo</string>
     <string name="storage_downloaded_apps">Aplicativos baixados</string>
@@ -794,7 +773,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="storage_patch_bundles">Pacotes de patches</string>
     <string name="storage_patch_bundles_description">Arquivos oficiais do pacote de patches baixados e importados</string>
     <string name="storage_signing_files">Assinar arquivos</string>
-    <string name="storage_signing_files_description">Repositório de chaves do URV Manager, credenciais de assinatura e backup externo</string>
     <string name="storage_downloader_plugins">Arquivos do plugin Downloader</string>
     <string name="storage_downloader_plugins_description">Arquivos gerenciados usados por plugins de download</string>
     <string name="storage_patcher_runtime_plugins">Arquivos de plug-in de tempo de execução do Patcher</string>
@@ -820,8 +798,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="storage_clear_app_cache">Limpar cache do aplicativo</string>
     <string name="storage_clear_app_cache_description">Exclui arquivos de cache internos, de código e externos. As configurações e os arquivos salvos são mantidos</string>
     <string name="storage_auto_clear_cache">Limpar cache automaticamente</string>
-    <string name="storage_auto_clear_cache_description">Limpa automaticamente o cache do Gerenciador URV de acordo com um cronograma e notifica você quando isso acontece</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s - Limpa automaticamente o cache do Gerenciador URV de acordo com um cronograma e notifica você quando isso acontece</string>
     <string name="storage_auto_clear_cache_dialog_title">Limpar cache automaticamente</string>
     <string name="storage_auto_clear_cache_run_now">Executar limpeza</string>
     <string name="storage_auto_clear_cache_queued">Limpeza de cache enfileirada</string>
@@ -835,7 +811,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="storage_cache_cleared">%1$s foi removido do cache</string>
     <string name="storage_cache_clear_failed">Não foi possível limpar o cache</string>
     <string name="storage_open_app_storage_settings">Abra as configurações de armazenamento de aplicativos do Android</string>
-    <string name="storage_open_app_storage_settings_description">Utilize as configurações do sistema para gerenciar ou limpar todos os dados do aplicativo URV Manager</string>
     <string name="storage_open_app_storage_settings_failed">Não foi possível abrir as configurações de armazenamento do aplicativo</string>
     <string name="storage_calculating">Calculando...</string>
     <string name="storage_empty">Vazio</string>
@@ -899,12 +874,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="patch_profile_patch_options_title">Opções para %1$s</string>
     <string name="patch_option_preview_action">Ver pré-visualização completa</string>
     <string name="patch_option_preview_title">Opções selecionadas para %1$s</string>
-    <string name="restore_official_bundle">Restaurar pacote de patches oficial ReVanced pré-instalado</string>
-    <string name="restore_official_bundle_description_missing">Reinstalar o pacote de patches oficial ReVanced pré-instalado</string>
-    <string name="restore_official_bundle_description_installed">O pacote de patches oficial ReVanced pré-instalado está atualmente instalado</string>
-    <string name="restore_official_bundle_success">Pacote de patches oficial ReVanced restaurado</string>
-    <string name="restore_official_bundle_failed">Falha ao reataurar o pacote de patches oficial ReVanced: %1$s</string>
-    <string name="restore_official_bundle_already">O pacote de patches oficial ReVanced já está instalado</string>
     <string name="app_exporting">Exportnado aplicativo</string>
     <string name="export_name_format">Formato do nome do arquivo de exportação</string>
     <string name="export_name_format_description">Personalize o nome do arquivo padrão para aplicativos com patches aplicados exportados</string>
@@ -944,7 +913,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="api_url">URL da API</string>
     <string name="api_url_description">A API usada para baixar arquivos necessários</string>
     <string name="api_url_dialog_title">Alterar URL da API</string>
-    <string name="api_url_dialog_warning">O URV Manager se conecta à API para baixar patches e atualizações. Certifique-se de que você confia nela.</string>
     <string name="api_url_dialog_save">Definir</string>
     <string name="api_url_dialog_reset">Restaurar URL da API</string>
     <string name="github_pat">GitHub TAP</string>
@@ -979,7 +947,6 @@ Osperfis de patches não serão afetados.</string>
     <string name="patches_force_download_started">Baixando todos os pacotes de patches...</string>
     <string name="patches_force_download_none">Nenhum pacote de patches foi baixado</string>
     <string name="reset_patch_bundles">Restaurar pacotes de patches</string>
-    <string name="reset_patch_bundles_description">Exclua todos os pacotes e restaure o pacote oficial ReVanced pré-instalado</string>
     <string name="reset_patch_bundles_dialog_title">Redefinir pacotes de patches?</string>
     <string name="reset_patch_bundles_confirm">Restaurar pacotes</string>
     <string name="storage">Armazenamento</string>
@@ -1598,7 +1565,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="installer_status_not_supported">Não suportado para essa ação.</string>
     <string name="installer_status_shizuku_not_installed">Shizuku, Shevery ou Sui são necessários</string>
     <string name="installer_status_shizuku_not_running">Inicie com Shizuku, Shevery ou Sui e tente novamente.</string>
-    <string name="installer_status_shizuku_permission">Conceda permissão a Shizuku ou Shevery para acessar o URV Manager por meio do aplicativo de gerenciamento.</string>
     <string name="installer_mount_warning_title">Instalador de montagem com root selecionado</string>
     <string name="installer_mount_warning_install">Seu instalador primário está definido como instalador de montagem com root. Este aplicativo salvo não foi instalado usando montagem.</string>
     <string name="installer_mount_warning_update">Seu instalador primário está definido como instalador de montagem com root. Este aplicativo salvo não foi instalado usando montagem.</string>
@@ -1776,7 +1742,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="less">Menos</string>
     <string name="continue_">Continuar</string>
     <string name="dismiss">Dispensar</string>
-    <string name="github">Gerenciador URV GitHub</string>
     <string name="credits">Créditos</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">Este aplicativo usa código do ReVanced e é um fork do ReVanced Manager</string>
@@ -1803,7 +1768,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="patches_view_any_package">Qualquer pacote</string>
     <string name="patches_delete_single_dialog_description">Tem certeza que deseja excluir \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Tem certeza que deseja excluir os pacotes de patches seleciondos?</string>
-    <string name="about_revanced_manager">Sobre o URV Manager</string>
     <string name="here">aqui.</string>
     <string name="update_available">Uma atualização está disponível</string>
     <string name="ready_to_install_update">Pronto para instalar a atualização</string>
@@ -1815,11 +1779,8 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="update_on_metered_connections">Atualizar em conexões limitadas</string>
     <string name="update_on_metered_connections_description">Permitir atualizações de patches e do gerenciador em redes limitadas.</string>
     <string name="update_checking_manager">Buscar por atualizações ao iniciar o aplicativo</string>
-    <string name="update_checking_manager_description">Verifique se há novas versões do URV Manager quando o aplicativo for iniciado</string>
     <string name="manager_prereleases">Usar pré-lançamentos</string>
-    <string name="manager_prereleases_description">Utilize versões de pré-lançamento do URV Manager</string>
     <string name="update_published">Publicado %s</string>
-    <string name="battery_optimization_notification">Para que o URV Manager funcione corretamente em segundo plano, as otimizações de bateria devem estar desativadas. Clique aqui para desativar as otimizações.</string>
     <string name="battery_optimization_dialog_title">Otimização de bateria</string>
     <string name="battery_optimization_banner_title">Banner de otimização de bateria</string>
     <string name="battery_optimization_banner_description">Exibir o aviso de otimização da bateria no painel de controle</string>
@@ -1866,7 +1827,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="bundle_update_phase_checking">Verificando</string>
     <string name="bundle_update_phase_downloading">Baixando</string>
     <string name="bundle_update_phase_finalizing">Finalizando</string>
-    <string name="update_available_dialog_description">Uma nova versão do URV Manager (%s) está disponível.</string>
     <string name="failed_to_download_update">Falha ao baixar atualização: %s</string>
     <string name="download">Download</string>
     <string name="resume_download">Retomar download</string>
@@ -1908,8 +1868,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="next">Proxímo</string>
     <string name="auto_update">Atualização automática</string>
     <string name="add_patches">Adicionar pacote de patches</string>
-    <string name="patches_prereleases">Usar pré-lançamentos</string>
-    <string name="patches_prereleases_description">Usar versões de pré-lançamento de %s</string>
     <string name="patches_url">URL do pacote de patches</string>
     <string name="patch_bundle_urls_link">Obter URLs de pacote de patchs aqui</string>
     <string name="patch_bundle_discovery_package_label">Pesquisar pacotes</string>
@@ -1996,7 +1954,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="export">Exportar</string>
     <string name="confirm">Confirmar</string>
     <string name="patcher_runtime_plugins">Runtimes do Patcher</string>
-    <string name="patcher_runtime_plugins_description">Gerenciar APKs plugin de runtime usados para aplicar patches</string>
     <string name="patcher_runtime_import_url">Importar fonte de execução</string>
     <string name="patcher_runtime_import_url_description">Adicione plugins de download a partir de um repositório do GitHub ou URL de um recurso de lançamento</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
@@ -2023,7 +1980,6 @@ Ativá-los novamente (ou escolher alternativos) e então tentar aplicar os patch
     <string name="patcher_runtime_uninstall_failed">Falha ao desinstalar %1$s</string>
     <string name="patcher_runtime_type_label">Tipo:</string>
     <string name="patcher_runtime_trust_dialog_title">Confiança</string>
-    <string name="patcher_runtime_trust_dialog_body">Ao continuar, você permitirá que este plugin de tempo de execução execute código de patch dentro do Gerenciador URV.\n\nHabilite este plugin de tempo de execução somente se você confiar nele. Plugins de tempo de execução podem executar código arbitrário e podem comprometer sua segurança.</string>
     <string name="import_button">Importar</string>
     <string name="use_latest_release">Usar a última versão</string>
     <string name="use_prereleases">Usar pré-lançamentos</string>

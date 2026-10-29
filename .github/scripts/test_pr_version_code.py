@@ -21,17 +21,31 @@ class ReleaseVersionCodeTest(unittest.TestCase):
 
     def test_universal_manager_is_preferred(self):
         assets = [{"name": "revanced.v21-plugin.apk"},
-                  {"name": "universal-revanced-manager-v1-arm64-v8a.apk"},
-                  {"name": "universal-revanced-manager-v1-universal.apk"}]
+                  {"name": "universal-patch-manager-v1-arm64-v8a.apk"},
+                  {"name": "universal-patch-manager-v1-universal.apk"}]
         self.assertEqual(resolver.manager_asset({"assets": assets}), assets[2])
+
+    def test_upm_assets_win_in_mixed_brand_releases(self):
+        legacy = {"name": "universal-revanced-manager-v1-universal.apk"}
+        current = {"name": "universal-patch-manager-v1-arm64-v8a.apk"}
+        universal = {"name": "universal-patch-manager-v1-universal.apk"}
+        self.assertEqual(resolver.manager_asset({"assets": [legacy, current]}), current)
+        self.assertEqual(resolver.manager_asset({"assets": [legacy, current, universal]}), universal)
 
     def test_legacy_code_is_read_without_recalculating_it(self):
         self.assertEqual(resolver.version_code(
-            "package: name='app.universal.revanced.manager' versionCode='10080100' versionName='1.8.1-dev.22'"
+            "package: name='app.universal.patch.manager' versionCode='10080100' versionName='1.8.1-dev.22'"
+        ), 10080100)
+
+    def test_pre_rebrand_releases_remain_usable_as_version_baselines(self):
+        asset = {"name": "universal-revanced-manager-v1-universal.apk"}
+        self.assertEqual(resolver.manager_asset({"assets": [asset]}), asset)
+        self.assertEqual(resolver.version_code(
+            "package: name='app.universal.revanced.manager' versionCode='10080100'"
         ), 10080100)
 
     def test_other_packages_and_invalid_codes_fail(self):
-        for package, code in [("plugin", 10080100), ("app.universal.revanced.manager", 0)]:
+        for package, code in [("plugin", 10080100), ("app.universal.patch.manager", 0)]:
             with self.assertRaises(ValueError):
                 resolver.version_code(f"package: name='{package}' versionCode='{code}'")
 

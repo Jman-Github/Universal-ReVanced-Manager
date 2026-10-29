@@ -38,8 +38,8 @@ deps += [artifact("org.jetbrains.kotlinx", "kotlinx-coroutines-core-jvm"),
          artifact("org.jetbrains.kotlinx", "kotlinx-serialization-core-jvm"),
          artifact("org.jetbrains.kotlinx", "kotlinx-serialization-json-jvm"),
          artifact("junit", "junit", "4.13.2"), artifact("org.hamcrest", "hamcrest-core")]
-base = ROOT / "app/src/main/java/app/urv/manager/domain/installer/root"
-tests = ROOT / "app/src/test/java/app/urv/manager/domain/installer/root"
+base = ROOT / "app/src/main/java/app/universal/patch/manager/domain/installer/root"
+tests = ROOT / "app/src/test/java/app/universal/patch/manager/domain/installer/root"
 main_names = ["RootInstallCommands", "RootPaths", "RootMountModels", "RootMountBoundaries",
               "RootSplitApks", "RootMountPolicy", "RootMountTransactionCoordinator", "MountTableReader"]
 test_names = ["RootInstallCommandsTest", "RootSplitApksTest", "RootMountPolicyTest", "RootMountTransactionCoordinatorTest"]
@@ -53,18 +53,18 @@ with tempfile.TemporaryDirectory(prefix="root-install-write-", dir=ROOT / "build
          "-jvm-target", "17", "-Xplugin=" + str(artifact("org.jetbrains.kotlin", "kotlin-serialization-compiler-plugin-embeddable", kotlin)),
          "-classpath", cp(deps), "-d", classes, *sources])
     run([JAVA, "-cp", cp([classes] + deps), "org.junit.runner.JUnitCore",
-         *["app.urv.manager.domain.installer.root." + name for name in test_names]])
+         *["app.universal.patch.manager.domain.installer.root." + name for name in test_names]])
     if args.device:
         device = [Path(os.environ["ANDROID_HOME"]) / "platform-tools/adb.exe", "-s", args.device]
         def shell(command, **kwargs):
             return run(device + ["shell", command], capture_output=True, text=True, **kwargs)
-        remote = "/data/local/tmp/urv-root-write-" + uuid.uuid4().hex
+        remote = "/data/local/tmp/upm-root-write-" + uuid.uuid4().hex
         payload = work / "payload.apk"
         payload.write_bytes(bytes(i * 31 % 256 for i in range(8193)))
         path = remote + "/stock ' quoted.apk"
         def command(backend, session="42", source=path):
             return subprocess.check_output(list(map(str, [JAVA, "-cp", cp([classes] + deps),
-                "app.urv.manager.domain.installer.root.RootInstallCommandEmitter",
+                "app.universal.patch.manager.domain.installer.root.RootInstallCommandEmitter",
                 backend, session, "0.apk", source, payload.stat().st_size])), text=True, timeout=15).strip()
         try:
             shell("mkdir -p " + quote(remote))
@@ -98,5 +98,5 @@ cmd() { [ "$1" = package ] || return 9; shift; pm "$@"; }
                     shell(backend + " install-abandon " + session)
         finally:
             resolved = shell("readlink -f " + quote(remote)).stdout.strip()
-            if resolved == remote and remote.startswith("/data/local/tmp/urv-root-write-"):
+            if resolved == remote and remote.startswith("/data/local/tmp/upm-root-write-"):
                 shell("rm -rf " + quote(remote))

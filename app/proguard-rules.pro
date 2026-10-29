@@ -5,32 +5,29 @@
 # so externally compiled plugins do not fail on stripped stdlib methods.
 -keep class kotlin.** { *; }
 
-# Keep the legacy ReVanced patcher/library API surface intact in the host app.
-# Patch bundles loaded by the in-app v21 metadata/runtime path resolve these
-# classes and methods reflectively against the manager APK itself.
--keep class app.revanced.patcher.** { *; }
--keep class app.revanced.library.** { *; }
+# Keep signing helpers; patcher engines live exclusively in runtime plugins.
+
+-keep class app.revanced.library.ApkSigner** { *; }
 
 # External v22 patch bundles compile against Patcher's relocated mutable
 # Dexlib API. These calls are invisible to R8 because the bundles are loaded
 # at runtime, so preserve the two relocated API packages they can reference.
--keep class app.revanced.com.android.tools.smali.dexlib2.iface.value.** { *; }
--keep class app.revanced.com.android.tools.smali.dexlib2.mutable.** { *; }
 
-# ReVanced v22 remains the built-in default runtime and is reached through
-# Revanced22RuntimeBridge reflection, so release shrinking must keep it.
--keep class app.urv.manager.revanced.runtime.** { *; }
+
+
+# ReVanced engine entry points are retained by their standalone runtime plugins.
+
 
 -keep class com.android.tools.smali.** { *; }
 
 # The bound ART fallback invokes the same pure tool entry through reflection.
--keep class app.urv.manager.patcher.host.ToolRuntimeEntry { *; }
--keep interface app.urv.manager.patcher.host.ToolRuntimeCallback { *; }
+-keep class app.universal.patch.manager.patcher.host.ToolRuntimeEntry { *; }
+-keep interface app.universal.patch.manager.patcher.host.ToolRuntimeCallback { *; }
 
 -keep class app.revanced.manager.plugin.downloader.** { *; }
 -keep class app.revanced.manager.downloader.** { *; }
--keep class app.urv.manager.plugin.downloader.** { *; }
--keep class app.urv.manager.downloader.** { *; }
+-keep class app.universal.patch.manager.plugin.downloader.** { *; }
+-keep class app.universal.patch.manager.downloader.** { *; }
 -keepnames class com.android.apksig.internal.** { *; }
 -keepnames class org.xmlpull.** { *; }
 
@@ -43,4 +40,4 @@
 -dontwarn org.slf4j.**
 
 # JNI entry point adapted from Morphe PR #1202.
--keep class app.urv.manager.patcher.runtime.jvm.EmbeddedJvm { *; }
+-keep class app.universal.patch.manager.patcher.runtime.jvm.EmbeddedJvm { *; }

@@ -7,10 +7,6 @@
     <string name="patch_bundle_file_import_dialog_title">Додати пакет патчів?</string>
     <string name="patch_bundle_file_import_dialog_message">Додати цей файл набору патчів як локальний набір патчів?</string>
     <string name="manager">Менеджер</string>
-    <string name="plugin_host_permission_label">URV Manager плагін хост</string>
-    <string name="plugin_host_permission_description">Використовується для керування доступом до плагінів URV Manager. Тільки URV Manager має цю функцію.</string>
-    <string name="downloader_host_permission_label">URV Manager хост завантажувача</string>
-    <string name="downloader_host_permission_description">Використовується для керування доступом до завантажувачів URV Manager. Тільки URV Manager має цю функцію.</string>
     <string name="toast_copied_to_clipboard">Скопійовано</string>
     <string name="downloader_plugin_url_copied">URL плагіна завантажувача скопійовано</string>
     <string name="runtime_plugin_url_copied">URL плагіна Runtime скопійовано</string>
@@ -44,6 +40,7 @@
     <string name="bundle_type_label">Тип пакета</string>
     <string name="bundle_type_revanced">Тип пакета ReVanced</string>
     <string name="bundle_type_morphe">Тип пакета Morphe</string>
+    <string name="bundle_type_reseam">Reseam</string>
     <string name="bundle_type_ample">Тип пакета Ample</string>
     <string name="android_11_bug_dialog_title">Android 11 помилка</string>
     <string name="android_11_bug_dialog_description">Дозвіл на встановлення програми потрібно надати заздалегідь, щоб уникнути помилки в системі Android 11, яка негативно вплине на роботу користувача.</string>
@@ -193,6 +190,7 @@
     <string name="patch_count_overflow">999+</string>
     <string name="no_patches_selected">Патчі не вибрано</string>
     <string name="mixed_patch_bundles_title">Змішані пакети патчів</string>
+    <string name="mixed_patch_bundles_description">Патчі ReVanced (.rvp), Morphe (.mpp) та Reseam (.reseam) не можна об\'єднувати в одному циклі патчування. Вибирайте патчі одночасно лише з одного типу бандла. Щоб використати патчі іншого типу, пропатчіть отриманий додаток знову.</string>
     <string name="mixed_revanced_patcher_versions_title">Змішані версії патчерів ReVanced</string>
     <string name="mixed_revanced_patcher_versions_description">Патчі ReVanced, які створені для різних версій патчера, не можна комбінувати. ReVanced v21 та v22 використовують різні версії патчера, тому вибирайте патчі лише з однієї версії патчера ReVanced.</string>
     <string name="network_unavailable_warning">Ваш пристрій не підключений до інтернету. Завантаження пізніше не вдасться.</string>
@@ -205,12 +203,8 @@
     <string name="apk_source_downloaded">Використання завантаженого APK</string>
     <string name="legacy_import_failed">Не вдалося імпортувати застарілі налаштування</string>
     <string name="auto_updates_dialog_title">Налаштувати оновлення</string>
-    <string name="auto_updates_dialog_description">Ви хочете, щоб URV Manager періодично перевіряв наявність оновлень для наступних компонентів?</string>
-    <string name="auto_updates_dialog_manager">URV Менеджер</string>
-    <string name="auto_updates_dialog_patches">Офіційні ReVance Патчі</string>
     <string name="auto_updates_dialog_note">Ці параметри можна змінити пізніше.</string>
     <string name="background_manager_update">Фонове оновлення менеджера</string>
-    <string name="background_manager_update_description">Перевіряє наявність оновлень програм у фоновому режимі та повідомляє вас про доступність нової версії URV Менеджер</string>
     <string name="background_bundle_update">Фонове оновлення пакетів</string>
     <string name="background_bundle_update_description">Перевіряє наявність оновлень пакетів патчів у фоновому режимі та повідомляє вас про доступні або завантажені оновлення пакетів</string>
     <string name="announcement_system_enabled">Увімкнути оголошення</string>
@@ -241,13 +235,11 @@
     <string name="notification_channel_bundle_updates_name">Фонове оновлення пакетів</string>
     <string name="notification_channel_bundle_updates_description">Показує прогрес у фоновому оновленні пакетів патчів.</string>
     <string name="notification_channel_manager_updates_name">Фонове оновлення менеджера</string>
-    <string name="notification_channel_manager_updates_description">Повідомляє вас, коли доступна нова версія URV Менеджер.</string>
     <string name="notification_channel_announcements_name">Сповіщення про оголошення</string>
     <string name="notification_channel_announcements_description">Повідомляє вас про публікацію нового оголошення ReVanced.</string>
     <string name="notification_channel_bundle_websocket_name">Підтримка сповіщень</string>
     <string name="notification_channel_bundle_websocket_description">Забезпечує активність доставлення вебсокетів та очищення кешу для фонових сповіщень.</string>
     <string name="notification_channel_cache_cleanup_name">Очищення кешу</string>
-    <string name="notification_channel_cache_cleanup_description">Показує, коли URV Менеджер автоматично очищає файли кешу.</string>
     <string name="bundle_update_websocket_notification_title">Фонові сповіщення підтримуються активними</string>
     <string name="bundle_update_websocket_target_bundle">Оновлення пакету</string>
     <string name="bundle_update_websocket_target_manager">Оновлення менеджера</string>
@@ -265,7 +257,6 @@
         <item quantity="many">Знайдено оновлення пакетів патчів</item>
         <item quantity="other">Знайдено оновлення пакетів патчів</item>
     </plurals>
-    <string name="manager_updates_notification_title">Знайдено оновлення URV Менеджера</string>
     <string name="manager_updates_notification_available">Доступне нове оновлення для менеджера: %1$s</string>
     <string name="announcement_notification_title">Нове ReVanced оголошення</string>
     <string name="never">Ніколи</string>
@@ -280,9 +271,7 @@
     <string name="downloads">Завантаження</string>
     <string name="downloads_description">Обробка завантажень та експорт</string>
     <string name="storage_cache_management">Сховище &amp; Керування кешем</string>
-    <string name="storage_cache_management_description">Перегляд використання сховища URV Manager</string>
     <string name="plugins_help_title">Що таке завантажувач?</string>
-    <string name="plugins_help_description">Завантажувач – це плагін, який дозволяє URV Manager завантажувати стандартні APK з різних джерел. Завантажені APK будуть відображатися в нижньому розділі. Під час процесу встановлення патчів ви можете вибрати вже завантажений APK або завантажити його за допомогою плагіна.\n\nСписок підтримуваних плагінів завантажувача можна знайти</string>
     <string name="import_export">Експорт &amp; імпорт</string>
     <string name="import_export_description">Інструменти резервування, відновлення, сховища ключів та скидання налаштувань</string>
     <string name="changelog">Переглянути журнал змін</string>
@@ -313,7 +302,6 @@
     <string name="merge_split_flow_section">Об\'єднання Split APK потоку</string>
     <string name="saved_apps_section">Збереження програм</string>
     <string name="safeguards_compatibility_section">Заходи захисту та сумісність</string>
-    <string name="bundle_system_recovery_section">Пакет / Відновлення системи</string>
     <string name="diagnostics_output_section">Діагностика та вихідні дані</string>
     <string name="update_checks_section">Перевірки оновлень</string>
     <string name="network_delivery_section">Мережа та доставлення</string>
@@ -404,7 +392,6 @@
     <string name="lsposed_checksum_missing">Опублікована контрольна сума відсутня. Переконайтеся, що довіряєте цьому джерелу.</string>
     <string name="lsposed_install">Встановити</string>
     <string name="lsposed_forget_title">Забути модуль?</string>
-    <string name="lsposed_forget_description">Це вилучить %1$s зі списку URV. Встановлений модуль не буде видалено.</string>
     <string name="lsposed_module_installed_title">Модуль встановлено</string>
     <string name="lsposed_module_installed_description">Відкрийте LSPosed Manager, щоб увімкнути модуль та вибрати область застосування.</string>
     <string name="lsposed_open_manager">Відкрити LSPosed Manager</string>
@@ -664,7 +651,6 @@
     <string name="export_patch_bundles_partial">Експортовано %1$d пакетів патча. Деякі пакети не вдалося експортувати, оскільки вони були додані локально.</string>
     <string name="bundle_type_remote">Віддалений</string>
     <string name="bundle_type_local">Локальний</string>
-    <string name="bundle_type_preinstalled">Попередньо встановлено</string>
     <string name="bundle_created_at">Створено %1$s</string>
     <string name="bundle_updated_at">Оновлено %1$s</string>
     <string name="bundle_refreshed_at">Остання перевірка %1$s</string>
@@ -846,10 +832,7 @@
     <string name="downloader_helper_source_installing">Встановлення допоміжного додатка…</string>
     <string name="downloader_helper_source_install">Встановити</string>
     <string name="downloader_helper_source_install_success">Допоміжний додаток встановлено</string>
-    <string name="downloader_helper_source_trust_dialog_body">Довіряти автору підпису цього допоміжного додатка для встановлень і майбутніх оновлень джерел. Допоміжний додаток працює окремо і не виконує код усередині URV Manager.</string>
-    <string name="downloader_helper_installed_trust_dialog_body">Довіряти автору підпису цього допоміжного додатка, щоб дозволити URV Manager використовувати його як джерело APK. Допоміжний додаток працює окремо і не виконує код усередині URV Manager.</string>
     <string name="downloader_helper_uninstall_title">Видалити допоміжний додаток</string>
-    <string name="downloader_helper_uninstall_description">Видалити %1$s та вилучити вихідний APK допоміжного додатка, збережений в URV Manager?</string>
     <string name="downloader_helper_uninstall_success">Допоміжний додаток %1$s видалено</string>
     <string name="downloader_helper_uninstall_failed">Не вдалося видалити допоміжний додаток %1$s</string>
     <string name="downloader_plugin_state_trusted">Довірений</string>
@@ -859,7 +842,6 @@
     <string name="downloader_plugin_revoke_trust">Відкликати довіру</string>
     <string name="downloader_plugin_trust_dialog_title">Довіряти</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Відкликати довіру</string>
-    <string name="downloader_plugin_trust_dialog_body">Продовження дозволить цьому плагіну завантажувача запускати код патчера всередині URV Manager. Довіряйте плагінам завантажувача лише з джерел, яким ви довіряєте.</string>
     <string name="downloader_plugin_trust_dialog_signature">Підпис</string>
     <string name="downloader_plugin_trust_dialog_plugin">Плагін</string>
     <string name="downloader_plugin_view_error">Переглянути деталі помилки</string>
@@ -891,20 +873,16 @@
     <string name="clear">Очистити</string>
     <string name="storage_overview_section">Огляд</string>
     <string name="storage_total_app_storage">Відстежуване сховище додатків</string>
-    <string name="storage_total_app_storage_description">Внутрішні файли, кешування та тека із зовнішніми додатками, простеженими URV Менеджер</string>
     <string name="storage_refresh_usage">Оновити використання сховища</string>
     <string name="storage_refresh_usage_description">Перерахувати розмір сховища</string>
     <string name="storage_usage_section">Використання пам\'яті</string>
-    <string name="storage_usage_section_description">Показує, що займає місце в сховищі програми URV Manager</string>
     <string name="storage_cache_actions_section">Дії кешу</string>
     <string name="storage_internal_cache">Внутрішній кеш</string>
-    <string name="storage_internal_cache_description">Тимчасові файли URV Менеджер, можуть безпечно відновлюватися, включаючи кеш коду</string>
     <string name="storage_code_cache">Кеш коду</string>
     <string name="storage_code_cache_description">Кеш виконання, згенерований бібліотеками Android та додатків</string>
     <string name="storage_apk_signer_cache">Кеш підписаного APK</string>
     <string name="storage_apk_signer_cache_description">Тимчасові копії APK та підписані виходи, створені інструментом підписування APK</string>
     <string name="storage_internal_files">Внутрішні файли</string>
-    <string name="storage_internal_files_description">Файли в вбудованому сховищі URV, включно з користувацькими фонами</string>
     <string name="storage_no_backup_files">Без резервних копій</string>
     <string name="storage_no_backup_files_description">Внутрішні файли Android не виключають резервних копій пристрою</string>
     <string name="storage_downloaded_apps">Завантажені додатки</string>
@@ -912,7 +890,6 @@
     <string name="storage_patch_bundles">Пакети патчів</string>
     <string name="storage_patch_bundles_description">Офіційні, завантажені та імпортні файли патчу</string>
     <string name="storage_signing_files">Підписування файлів</string>
-    <string name="storage_signing_files_description">Сховище ключів URV Manager, облікові дані підпису та зовнішня резервна копія</string>
     <string name="storage_downloader_plugins">Файли плагіна завантажувача</string>
     <string name="storage_downloader_plugins_description">Керовані файли, що використовуються плагінами завантажувача</string>
     <string name="storage_patcher_runtime_plugins">Файли плагінів середовища виконання патчера</string>
@@ -944,34 +921,24 @@
     <string name="storage_clear_app_cache">Очистити кеш програми</string>
     <string name="storage_clear_app_cache_description">Видаляє внутрішні, коди та зовнішні кеш-файли. Налаштування та збережені файли зберігаються до бази даних</string>
     <string name="storage_auto_clear_cache">Автоочищення кешу</string>
-    <string name="storage_auto_clear_cache_description">Автоматично очищає кеш URV менеджера за розкладом і повідомляє вас про дії під час запуску</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s • Автоматично очищує кеш URV Manager на розкладі і повідомляє вас коли він запускається</string>
     <string name="storage_auto_clear_cache_dialog_title">Автоочищення кешу</string>
     <string name="storage_auto_clear_cache_run_now">Виконати очищення</string>
     <string name="storage_auto_clear_cache_queued">Очищення кешу поставлено в чергу</string>
     <string name="storage_auto_clear_cache_updated">Автоматичне очищення кешу встановлено на %1$s</string>
     <string name="storage_clear_cache_dialog_title">Очистити кеш програми?</string>
-    <string name="storage_clear_cache_dialog_description">Це видалить кешовані файли URV Manager, які можна створити заново. Налаштування, профілі патчів, сховища ключів та збережені APK видалені не будуть</string>
     <string name="storage_clear_area_dialog_title">Очистити %1$s?</string>
     <string name="storage_clear_area_dialog_description">Це видалить файли з %1$s. Використовуйте лише тоді, коли файли звідти більше не потрібні</string>
     <string name="storage_clear_area_warning_title">Очистити %1$s назавжди?</string>
-    <string name="storage_clear_internal_files_warning_description">Це видалить приватні файли у внутрішньому сховищі URV Manager, включно з власними фонами. Налаштування, файли підписів та збережені APK модулів LSPosed зберігаються, але інші імпортовані файли можуть бути втрачені. Цю дію не можна скасувати</string>
-    <string name="storage_clear_no_backup_files_warning_description">Це видалить особисті файли зі сховища без резервного копіювання. Ці файли навмисно виключені з резервного копіювання Android і можуть містити дані для відновлення або стан додатка, які URV Manager не зможе відновити автоматично. Цю дію не можна скасувати</string>
-    <string name="storage_clear_patch_bundles_warning_description">Це видалить усі локальні набори патчів, включно з попередньо встановленим офіційним набором ReVanced. Офіційний набір можна відновити пізніше в меню Налаштування &gt; Додатково &gt; Відновлення наборів/системи, але імпортовані або сторонні набори доведеться додавати знову. Цю дію не можна скасувати</string>
     <string name="storage_clear_signing_files_warning_description">Це видалить згенеровані та імпортовані файли підпису, зокрема зовнішню резервну копію сховища ключів. Для оновлення поверх уже встановлених додатків, підписаних видаленим ключем, може знадобитися повторний імпорт цього ключа. Цю дію не можна скасувати</string>
     <string name="storage_clear_patcher_runtime_plugins_warning_description">Це видалить керовані APK середовища виконання патчера та вилучить їхні джерела. Встановлені плагіни середовища виконання не видаляються. Керовані джерела доведеться додати знову. Цю дію не можна скасувати</string>
-    <string name="storage_clear_lsposed_modules_warning_description">Це видалить збережені локальні APK модулів LSPosed і вилучить записи про них з URV Manager. Встановлені модулі не видаляються. Цю дію не можна скасувати</string>
     <string name="storage_clear_patched_apps_warning_description">Це видалить збережені файли пропатчених APK і вилучить їхні записи зі списку збережених додатків. Вам доведеться заново пропатчити або зберегти ці додатки, щоб встановлювати, експортувати чи відкривати їх зі списку. Цю дію не можна скасувати</string>
     <string name="storage_clear_patch_profile_inputs_warning_description">Це видалить вихідні файли APK або XAPK, прикріплені до профілів патчингу, та скине вибір цих додатків у профілях. Самі профілі залишаться, але вхідні додатки потрібно буде вибрати знову перед патчингом. Цю дію не можна скасувати</string>
-    <string name="storage_clear_other_internal_data_warning_description">Це видалить інші приватні дані додатка, не зазначені в попередніх пунктах. Це рівнозначно очищенню частини даних URV Manager. Цю дію не можна скасувати</string>
-    <string name="storage_clear_external_files_warning_description">Це видалить файли, які URV Manager зберіг у зовнішніх папках додатка, крім резервної копії підписів. Ці файли можуть бути видимі за межами додатка, і URV Manager не зможе відновити їх автоматично. Цю дію не можна скасувати</string>
     <string name="storage_cache_in_use">Сховище зараз використовується. Повторіть спробу після завершення поточної операції</string>
     <string name="storage_area_cleared">Очищено %1$s: %2$s</string>
     <string name="storage_manage_area">Керувати</string>
     <string name="storage_cache_cleared">Очищено %1$s з кешу</string>
     <string name="storage_cache_clear_failed">Не вдалося очистити кеш</string>
     <string name="storage_open_app_storage_settings">Відкрити налаштування сховища додатків Android</string>
-    <string name="storage_open_app_storage_settings_description">Використовуйте системні налаштування для керування або очищення всіх даних програми URV Manager</string>
     <string name="storage_open_app_storage_settings_failed">Не вдалося відкрити налаштування сховища програми</string>
     <string name="storage_calculating">Обчислення...</string>
     <string name="storage_empty">Порожній</string>
@@ -1000,8 +967,6 @@
     <string name="skip_split_merge_signing_description">Залишати APKs створені інструментом об\'єднання split APK Об\'єднання непідписаними. Ви все ще можете зберегти або надіслати їх до вибраного установника, але Android зазвичай відхиляє непідписані APKs</string>
     <string name="merge_split_apk_signing_skipped">Підписування APK пропущено; результат залишено непідписаним</string>
     <string name="disable_apk_signature_checks">Вимкнути перевірку підпису APK</string>
-    <string name="disable_apk_signature_checks_description">Пропустити перевірки підпису URV та попередження про невідповідність для установників APK. Монтування з root-правами зберігає свої обов\'язкові перевірки</string>
-    <string name="disable_apk_signature_checks_confirmation">Це налаштування призначене для пристроїв, які використовують Core Patch або іншу модифікацію, що обходить примусову перевірку підпису Android. Для встановлення APK, URV пропустить свої перевірки підпису та попередження про невідповідність. Монтування з root-правами зберігає всі свої обов\'язкові перевірки. Android зазвичай відхиляє непідписані APK, недійсні підписи та оновлення, чиї підписи не збігаються зі встановленим додатком. Це налаштування не обходить перевірки Android, і лише наявність root-доступу не вимикає їх. Встановлення все одно може завершитися помилкою без сумісної системної модифікації.</string>
     <string name="skip_apk_signing">Пропустити підпис APK</string>
     <string name="skip_apk_signing_description">Залишати пропатчені APKs без підпису. Ви зможете зберегти їх або надіслати у вибраний інсталятор, проте зазвичай Android блокує встановлення непідписаних APKs</string>
     <string name="patcher_log_mode">Журнал патчера</string>
@@ -1011,6 +976,8 @@
     <string name="patcher_log_mode_default_description">Зберігає лише необхідний журнал поступу для інтерфейсу патчера, відсікаючи зайве. Це зменшує навантаження від логів і запобігає затримкам або надмірному використанню пам’яті</string>
     <string name="patcher_log_mode_verbose">Детально</string>
     <string name="patcher_log_mode_verbose_description">Веде повний журнал, включно з детальним трасуванням. Корисно для налагодження помилок патчингу, але може сповільнити процес і збільшити використання пам’яті</string>
+    <string name="patcher_jvm_enable">Використовувати JVM для патчування</string>
+    <string name="patcher_jvm_unavailable">Для цього пристрою немає вбудованої JVM. Патчування та підтримувані інструменти використовують середовище виконання Android (ART)</string>
     <string name="morphe_bytecode_mode">Режим обробки байт-коду Morphe</string>
     <string name="morphe_bytecode_mode_description">Керує тим, як середовище виконання Morphe обробляє байт-код під час встановлення патчів. Застосовується лише до середовища виконання Morphe</string>
     <string name="morphe_bytecode_mode_dialog_description">Виберіть, як Morphe обробляє файли DEX під час застосування патчів Morphe. Це впливає лише на середовище виконання Morphe</string>
@@ -1055,12 +1022,6 @@
     <string name="patch_profile_patch_options_title">Варіанти для %1$s</string>
     <string name="patch_option_preview_action">Переглянути повний попередній перегляд</string>
     <string name="patch_option_preview_title">Вибрані опції для %1$s</string>
-    <string name="restore_official_bundle">Відновлює пред встановлений пакет офіційних патчів ReVanced</string>
-    <string name="restore_official_bundle_description_missing">Перевстановіть попередньо встановлений офіційний пакет патчів ReVanced</string>
-    <string name="restore_official_bundle_description_installed">Офіційний пакет патчів ReVanced наразі встановлено попередньо</string>
-    <string name="restore_official_bundle_success">Офіційний патч ReVanced було відновлено.</string>
-    <string name="restore_official_bundle_failed">Не вдалося відновити офіційний пакет патча ReVanced: %1$s</string>
-    <string name="restore_official_bundle_already">Офіційний пакет патчів ReVanced уже встановлено</string>
     <string name="app_exporting">Експорт програми</string>
     <string name="export_name_format">Експорт формату імені файлу</string>
     <string name="export_name_format_description">Налаштуйте назву файлу за замовчуванням для експортованих виправлених програм</string>
@@ -1100,8 +1061,6 @@
     <string name="api_url">URL API</string>
     <string name="api_url_description">API, що використовується для завантаження необхідних файлів</string>
     <string name="api_url_dialog_title">Змінити URL API</string>
-    <string name="api_url_dialog_description">Змінити URL-адресу API URV Manager. URV Manager використовує API для завантаження патчів та оновлень</string>
-    <string name="api_url_dialog_warning">URV Менеджер підключається до API для завантаження патчів та оновлень. Переконайтеся, що ви йому довіряєте.</string>
     <string name="api_url_dialog_save">Зберегти</string>
     <string name="api_url_dialog_reset">Скинути URL API</string>
     <string name="github_pat">GitHub Токен</string>
@@ -1113,6 +1072,7 @@
     <string name="include_github_pat_in_exports_warning">Не діліться власним Токен. Якщо ви включите його в експорт налаштувань, збережіть цей файл приватним, оскільки він містить токен.</string>
     <string name="language_settings">Мова</string>
     <string name="app_language">Мова додатку</string>
+    <string name="app_language_description">Виберіть мову, яку використовуватиме менеджер</string>
     <string name="language_dialog_title">Виберіть мову програми</string>
     <string name="language_restart_title">Потрібний перезапуск</string>
     <string name="language_restart_message">Перезапустіть додаток зараз, щоб застосувати нову мову. Якщо ви виберете пізніше, зміни будуть застосовані під час наступного відкриття додатка.</string>
@@ -1120,6 +1080,12 @@
     <string name="language_restart_later">Пізніше</string>
     <string name="language_option_system">Використовується мова пристрою</string>
     <string name="language_option_english">Англійська</string>
+    <string name="language_option_arabic">Арабська</string>
+    <string name="language_option_greek">Грецька</string>
+    <string name="language_option_filipino">Філіппінська</string>
+    <string name="language_option_italian">Італійська</string>
+    <string name="language_option_german">Німецька</string>
+    <string name="language_option_spanish">Іспанська</string>
     <string name="language_option_french">Французька</string>
     <string name="language_option_chinese_simplified">Китайська (спрощена)</string>
     <string name="language_option_indonesian">Індонезійська</string>
@@ -1130,15 +1096,14 @@
     <string name="language_option_vietnamese">В\'єтнамська</string>
     <string name="language_option_japanese">Японський</string>
     <string name="language_option_russian">Російська</string>
+    <string name="language_option_turkish">Турецька</string>
     <string name="language_option_ukrainian">Українська</string>
     <string name="device_memory_limit_format">%1$dMB (Нормальний) - %2$dMB (Великий)</string>
     <string name="patches_force_download">Примусово завантажити всі пакети патчів</string>
     <string name="patches_force_download_started">Завантаження всіх пакетів патчів...</string>
     <string name="patches_force_download_none">Не завантажено жодного пакета патчів</string>
     <string name="reset_patch_bundles">Скинути пакети патчів</string>
-    <string name="reset_patch_bundles_description">Видаляє всі пакети та відновлює попередньо встановлений офіційний пакет ReVanced</string>
     <string name="reset_patch_bundles_dialog_title">Скинути пакети патчів?</string>
-    <string name="reset_patch_bundles_dialog_description">Це видалить усі набори патчів та локальні файли наборів, а потім відновить попередньо встановлений офіційний набір ReVanced</string>
     <string name="reset_patch_bundles_confirm">Скинути пакети</string>
     <string name="storage">Сховище</string>
     <string name="no_patch_found">Не знайдено жодних пакетів патчів. Перевірте свої пакети</string>
@@ -1666,6 +1631,7 @@
     <string name="selected_file_not_supported_keystore">Вибраний файл не є підтримуваним сховищем ключів (.jks;.keystore;.p12;.pfx;.bks)</string>
     <!-- Zero-width spaces allow wrapping before dot-prefixed extensions instead of moving the whole list. -->
     <string name="selected_file_not_supported_keystore_info">Вибраний файл не є підтримуваним сховищем ключів (.jks, \u200B.keystore, \u200B.p12, \u200B.pfx, \u200B.bks).</string>
+    <string name="patch_bundle_url_invalid_json_or_external">Введіть URL-адресу репозиторію патчів, індекс бандла JSON або підтримувану URL-адресу API зовнішніх бандлів</string>
     <string name="patch_bundle_url_invalid_external">URL пакета патчів має вказувати на підтримуваний URL API зовнішніх пакетів</string>
     <string name="selected_file_not_supported_image">Вибраний файл не є підтримуваним типом зображення</string>
     <string name="loading">Завантаження…</string>
@@ -1676,7 +1642,6 @@
     <string name="uninstall">Видалити</string>
     <string name="repatch">Перепатч</string>
     <string name="repatch_source_unavailable_title">APK для Repatch недоступний</string>
-    <string name="repatch_source_not_remembered_description">URV не має збереженого джерела APK для цього додатка. Це може статися, якщо додаток був пропатчений до того, як було додано збереження джерел для Repatch. Продовжте, щоб знову вибрати джерело APK.</string>
     <string name="repatch_source_missing_description">Збережене джерело APK для цього додатка відсутнє або непридатне для використання. Продовжте, щоб знову вибрати джерело APK.</string>
     <string name="install_type">Тип установки</string>
     <string name="package_name">Ім\'я пакету</string>
@@ -1722,6 +1687,8 @@
     <string name="downloaded_apps_export">Експорт вибраних програм</string>
     <string name="downloaded_apps_export_success">Експортовано %1$d додаток(и)</string>
     <string name="downloaded_apps_export_failed">Не вдалося експортувати завантажені програми.</string>
+    <string name="downloaded_app_format_apk">APK</string>
+    <string name="downloaded_app_format_split_apk">Спліт-APK</string>
     <string name="downloaded_app_install_success">Завантажений додаток встановлено</string>
     <string name="downloaded_app_install_permission_required">Дозвольте встановлення додатків у налаштуваннях Android, а потім знову натисніть «Встановити».</string>
     <string name="downloaded_app_install_merging">Об’єднання розділеного APK…</string>
@@ -1751,6 +1718,12 @@
     <string name="path_selector">Виберіть зі сховища</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information.
          https://github.com/MorpheApp/morphe-manager/blob/0b39b6479b07cfdae5b976cd922480fba406d155/app/src/main/java/app/morphe/manager/ui/screen/shared/FilePicker.kt -->
+    <plurals name="path_selector_item_count">
+        <item quantity="one">%1$d елемент</item>
+        <item quantity="few">%1$d елементи</item>
+        <item quantity="many">%1$d елементів</item>
+        <item quantity="other">%1$d елемента</item>
+    </plurals>
     <string name="path_selector_parent_dir">Попередній каталог</string>
     <string name="path_selector_dirs">Каталоги</string>
     <string name="path_selector_files">Файли</string>
@@ -1812,7 +1785,6 @@
     <string name="installer_status_not_supported">Не підтримується для цієї дії.</string>
     <string name="installer_status_shizuku_not_installed">Потрібен Shizuku, Shevery або Sui</string>
     <string name="installer_status_shizuku_not_running">Запустіть Shizuku, Shevery або Sui та повторіть спробу</string>
-    <string name="installer_status_shizuku_permission">Надайте URV Manager дозвіл у додатку Shizuku або Shevery.</string>
     <string name="installer_mount_warning_title">Вибрано кореневу програму встановлення</string>
     <string name="installer_mount_warning_install">Ваш основний інсталятор налаштований на кореневий інсталятор. Ця збережена програма не була встановлена ​​за допомогою монтування.</string>
     <string name="installer_mount_warning_update">Ваш основний інсталятор налаштований на кореневий інсталятор. Ця збережена програма не була встановлена ​​за допомогою монтування.</string>
@@ -1838,17 +1810,14 @@
     <string name="installer_play_store_warning_message">Пропатчений додаток буде зафіксовано як встановлений із магазину Google Play. Це може допомогти сервісам розпізнавати його як додаток із Play Маркету, але поведінка залежить від пристрою та версії Android.</string>
     <string name="installer_play_store_warning_risk">Google Play може запропонувати оновлення, яке замінить пропатчений APK і видалить його патчі.</string>
     <string name="installer_play_store_warning_continue">Розумію, продовжити</string>
-    <string name="installer_play_store_attribution_failed">Встановлено успішно, але URV Manager не зміг записати Google Play Store як джерело встановлення: %1$s</string>
     <string name="settings_auto_install_with_shizuku">Автоматично встановлювати пропатчені додатки</string>
     <string name="settings_auto_install_with_shizuku_description">Автоматично встановлювати успішно пропатчені додатки, коли основним інсталятором є Shizuku або Shevery</string>
     <string name="settings_auto_uninstall_with_shizuku">Автоматичне видалення в разі конфлікту</string>
     <string name="settings_auto_uninstall_with_shizuku_description">Під час автоматичного встановлення через Shizuku чи Shevery спочатку видаляти наявний додаток, якщо Android повідомляє про конфлікт підписів</string>
     <string name="settings_auto_uninstall_warning_title">Увімкнути автоматичне видалення?</string>
-    <string name="settings_auto_uninstall_warning_message">Якщо Android повідомить про конфлікт підписів під час автоматичного встановлення через Shizuku, URV Manager видалить наявний додаток перед повторною спробою.</string>
     <string name="settings_auto_uninstall_warning_risk">Це може видалити дані додатка. Якщо подальше встановлення не вдасться, попередній додаток уже буде втрачено.</string>
     <string name="installer_shizuku_install_fail">Збій встановлення через Shizuku: %s</string>
     <string name="installer_shizuku_install_fail_with_details">Збій встановлення через Shizuku: %1$s\n\nПодробиці: %2$s</string>
-    <string name="installer_shizuku_error_permission">Відсутній дозвіл Shizuku. Надайте дозвіл URV Manager і повторіть спробу.</string>
     <string name="installer_shizuku_error_timeout">Shizuku не повернув результат встановлення. Переконайтеся, що він працює, і повторіть спробу.</string>
     <string name="installer_shizuku_error_downgrade">Android заблокував це, оскільки це призведе до пониження версії встановленого додатка.</string>
     <string name="installer_shizuku_error_signature">Android заблокував це, оскільки встановлений додаток має інший підпис.</string>
@@ -1913,6 +1882,8 @@
     <string name="install_app_fail">Не вдалося встановити додаток: %s</string>
     <string name="install_app_fail_missing_stock">Відсутній оригінальний APK для монтування.</string>
     <string name="mount_split_not_supported">Інсталятор Root монтування не підтримує Split APK. Використовуйте замість нього системний інсталятор.</string>
+    <string name="root_mount_automatic_success">%1$s було повторно змонтовано автоматично</string>
+    <string name="root_mount_automatic_failure">Не вдалося автоматично повторно змонтувати %1$s. Експортуйте діагностику root.</string>
     <string name="root_mount_notification_channel">Безпека монтування з root</string>
     <string name="root_mount_repatch_title">Монтування з root потребує повторного патчингу</string>
     <string name="root_mount_repair_notification_title">Монтування з root потребує відновлення</string>
@@ -1920,11 +1891,9 @@
     <string name="root_mount_recovered_title">Монтування з root безпечно відновлено</string>
     <string name="root_mount_recovered_previous_message">Попередню пропатчену збірку відновлено. Діагностика: %1$s.</string>
     <string name="root_mount_recovered_stock_message">Оригінальний додаток відновлено та залишено незмонтованим. Діагностика: %1$s.</string>
-    <string name="root_mount_recovery_in_progress">URV виявив незавершений відкат монтування з root, але не зміг його відновити: %1$s</string>
     <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
     <string name="root_mount_update_guidance_title">Оновлення змонтованих додатків</string>
-    <string name="root_mount_safe_update_notice">Для цілком безпечного оновлення оновлюйте змонтовані додатки через URV Manager та вимкніть зовнішні автоматичні оновлення. Якщо в KernelSU увімкнено параметр «Розмонтувати модулі за замовчуванням», відкрийте KernelSU &gt; Superuser &gt; змонтований додаток &gt; Профіль &gt; Власні та вимкніть «Розмонтувати модулі». Інакше змонтований пропатчений APK може не запрацювати.</string>
     <string name="root_mount_renamed_package_not_supported">Монтування з root не можна використовувати, оскільки пропатчений APK має іншу назву пакета, ніж оригінальний додаток.</string>
     <string name="root_mount_incompatible_output">Монтування з root-правами недоступне, оскільки цей APK або його оригінальний додаток не відповідають вимогам безпеки.</string>
     <string name="root_mount_requires_installed_stock">Безпечне монтування з root вимагає окремо встановленого сумісного оригінального додатка. Один APK не може використовуватися і як оригінальний, і як пропатчений компонент.</string>
@@ -1932,6 +1901,9 @@
     <string name="root_mount_downgrade_confirmation">Android відхилив пряме пониження версії. Продовження короткочасно скасує реєстрацію додатка для цього користувача, збереже дані та негайно встановить перевірену оригінальну версію. Дані, створені новішою версією, усе ж можуть бути несумісними.</string>
     <string name="root_mount_downgrade_title">Підтвердити безпечне пониження версії</string>
     <string name="root_mount_repair">Відновити монтування з root</string>
+    <string name="root_mount_repair_progress">Відновлення монтування root…</string>
+    <string name="root_mount_repair_success">Монтування root успішно відновлено</string>
+    <string name="root_mount_repair_failed">Не вдалося відновити монтування root: %1$s</string>
     <string name="root_mount_tools">Інструменти монтування з root</string>
     <string name="root_mount_use_stock">Використовувати оригінальний додаток</string>
     <string name="root_mount_export_diagnostics">Експортувати діагностику монтування</string>
@@ -2057,6 +2029,7 @@
     <string name="patcher_step_group_preparing">Підготовка</string>
     <string name="patcher_step_load_patches">Завантаження патчів</string>
     <string name="patcher_step_prepare_split_apk">Об\'єднати \"split\" APK</string>
+    <string name="patcher_step_prepare_separate_apks">Підготувати спліт-APK</string>
     <string name="patcher_step_unpack">Читання файлу APK</string>
     <string name="patcher_step_group_patching">Патчінг</string>
     <string name="patcher_step_group_saving">Збереження</string>
@@ -2106,7 +2079,6 @@
     <string name="continue_">Продовжити</string>
     <string name="continue_with_count">Продовжити (%1$d)</string>
     <string name="dismiss">Відхилити</string>
-    <string name="github">URV Manager GitHub</string>
     <string name="credits">Credits</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">Ця програма використовує код з ReVanced та є форком ReVanced Manager</string>
@@ -2133,7 +2105,6 @@
     <string name="patches_view_any_package">Будь-який пакет</string>
     <string name="patches_delete_single_dialog_description">Ви впевнені, що хочете видалити \"%s\"?</string>
     <string name="patches_delete_multiple_dialog_description">Ви впевнені, що бажаєте видалити вибрані пакети патча?</string>
-    <string name="about_revanced_manager">Про URV менеджера</string>
     <string name="here">тут.</string>
     <string name="update_available">Доступне оновлення</string>
     <string name="ready_to_install_update">Готовий до встановлення оновлення</string>
@@ -2145,12 +2116,8 @@
     <string name="update_on_metered_connections">Оновлення з’єднань з обмеженнями</string>
     <string name="update_on_metered_connections_description">Дозволити оновлення патчів і менеджерів у мережах з обмеженим трафіком</string>
     <string name="update_checking_manager">Перевірка оновлень під час запуску</string>
-    <string name="update_checking_manager_description">Перевіряти наявність нових версій URV Manager при запуску програми</string>
     <string name="manager_prereleases">Використовувати пред релізи</string>
-    <string name="manager_prereleases_description">Використовувати перед реліз версії URV Manager</string>
     <string name="update_published">Опубліковано %s</string>
-    <string name="battery_optimization_notification">Оптимізація батареї повинна бути вимкнена, для правильної роботи в фоновому режимі. Натисніть тут, щоб вимкнути оптимізацію.</string>
-    <string name="battery_optimization_dialog_description">Щоб надійно отримувати сповіщення про оновлення наборів у фоновому режимі, вимкніть оптимізацію батареї для URV Manager</string>
     <string name="battery_optimization_dialog_title">Оптимізація батареї</string>
     <string name="battery_optimization_banner_title">Банер оптимізації батареї</string>
     <string name="battery_optimization_banner_description">Показувати попередження щодо оптимізації батареї на панелі керування</string>
@@ -2161,7 +2128,6 @@
     <string name="downloading_manager_update">Завантаження оновлення…</string>
     <string name="download_progress_notification_channel">Завантаження</string>
     <string name="download_progress_indeterminate">Завантаження…</string>
-    <string name="manager_update_banner_title">Оновлення URV Manager</string>
     <string name="manager_update_progress_detail">%1$.1f MB / %2$.1f MB (%3$d%%)</string>
     <string name="download_manager_failed">Не вдалося завантажити оновлення: %s</string>
     <string name="cancel">Скасувати</string>
@@ -2199,7 +2165,6 @@
     <string name="bundle_update_phase_checking">Перевірка</string>
     <string name="bundle_update_phase_downloading">Завантаження</string>
     <string name="bundle_update_phase_finalizing">Завершення</string>
-    <string name="update_available_dialog_description">Доступна нова версія URV Manager (%s).</string>
     <string name="failed_to_download_update">Не вдалося завантажити оновлення: %s</string>
     <string name="download">Завантажити</string>
     <string name="resume_download">Відновити завантаження</string>
@@ -2244,10 +2209,10 @@
     <string name="auto_update">Автооновлення</string>
     <string name="add_patches">Додати пакет патчів</string>
     <string name="auto_update_description">Автоматично оновлювати за наявності нової версії</string>
-    <string name="patches_prereleases">Використовувати пред релізи</string>
-    <string name="patches_prereleases_description">Використовувати пред реліз версію %s</string>
     <string name="patches_url">URL пакета патчів</string>
     <string name="patch_bundle_urls_link">Отримайте URL пакетів патчів тут</string>
+    <string name="patch_bundle_discovery_title">Огляд</string>
+    <string name="patch_bundle_discovery_description">Переглядайте бандли патчів та підтримувані додатки з реєстру бандлів патчів (Patch Bundle Registry).</string>
     <string name="patch_bundle_discovery_package_label">Пошук пакетів</string>
     <string name="patch_bundle_discovery_search_label">Пошук бандлів</string>
     <string name="patch_bundle_discovery_empty">Пакетів не знайдено</string>
@@ -2334,7 +2299,6 @@
     <string name="export">Експорт</string>
     <string name="confirm">Підтвердити</string>
     <string name="patcher_runtime_plugins">Патчер Runtimes</string>
-    <string name="patcher_runtime_plugins_description">Керування APKs плагінів runtime, що використовуються для застосування патчів</string>
     <string name="patcher_runtime_import_url">Імпорт джерела runtime</string>
     <string name="patcher_runtime_import_url_description">Додайте плагіни runtime з GitHub репозиторію або релізу APK URL</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
@@ -2362,7 +2326,6 @@
     <string name="patcher_runtime_uninstall_failed">Не вдалося видалити %1$s</string>
     <string name="patcher_runtime_type_label">Тип:</string>
     <string name="patcher_runtime_trust_dialog_title">Довіряти</string>
-    <string name="patcher_runtime_trust_dialog_body">Продовження дозволить цьому плагіну виконання запускати код патчера всередині URV Manager.\n\nУвімкніть цей плагін runtime, лише якщо ви йому довіряєте. Плагіни runtime можуть виконувати довільний код і можуть поставити під загрозу ваш пристрій.</string>
     <string name="import_button">Імпорт</string>
     <string name="use_latest_release">Використати останній реліз</string>
     <string name="use_prereleases">Використовуйте перед-реліз</string>
@@ -2504,7 +2467,6 @@
     <string name="shortcut_check_patch_updates_short">Оновити &amp; перепатчити</string>
     <string name="shortcut_patch_app">Пропатчити %1$s</string>
     <string name="saved_app_launcher_shortcut">Показувати в ярликах додатка</string>
-    <string name="saved_app_launcher_shortcut_description">Додати цей збережений пропатчений додаток до ярликів головного екрана Android для URV Manager</string>
     <string name="saved_app_launcher_shortcut_limit_reached">Досягнуто ліміту ярликів (%1$d збережених додатків). Спочатку вимкніть інший ярлик</string>
     <string name="yes">Так</string>
     <string name="no">Ні</string>
@@ -2517,7 +2479,6 @@
     <string name="batch_queue_configure_app">Додати додаток до черги патчингу</string>
     <string name="batch_patch_minimum_apps">Виберіть щонайменше два додатки для пакетного патчення</string>
     <string name="batch_patch_edit_apk">Редагувати APK</string>
-    <string name="batch_patch_metadata_save_failed">Встановлено, але URV Manager не вдалося зберегти метадані додатка: %1$s</string>
     <string name="manager_update_incompatible_pr">Цей реліз несумісний із цією збіркою PR. Будь ласка, дочекайтеся новішої версії менеджера. Ваші дані не було змінено.</string>
     <string name="patcher_resource_graphs_compact_title">Компактні графіки патчера</string>
     <string name="patcher_resource_graphs_compact_description">Показувати графіки пам\'яті, процесора та вводу/виводу накопичувача поруч, у тому числі на екранах телефонів</string>
@@ -2587,6 +2548,49 @@
     <string name="merger_resource_graph_options_title">Показувати додаткову інформацію (стандартні графіки об\'єднувача)</string>
     <string name="merger_compact_resource_graph_options_title">Показувати додаткову інформацію (компактні графіки об\'єднувача)</string>
     <string name="resource_graph_current_accessibility">%1$s. %2$s. %3$s.</string>
+    <string name="patcher_process_memory_usage">Пам\'ять процесу патчера</string>
+    <string name="patcher_process_memory_format">%1$d МБ</string>
+    <string name="patcher_process_memory_detail">Включає нативну пам\'ять. Купа Java (heap): %1$d / %2$d МБ.</string>
+    <string name="patcher_process_memory_accessibility">Пам\'ять процесу %1$d МБ, пік %2$d МБ, %3$s, %4$s.</string>
+    <string name="catalog_bundles">Бандли</string>
+    <string name="catalog_apps">Додатки</string>
+    <string name="catalog_all">Усі</string>
+    <string name="catalog_source">Джерело</string>
+    <string name="catalog_bundle_type">Тип бандла</string>
+    <string name="catalog_bundle_version">Версія бандла</string>
+    <string name="catalog_view_bundles">Переглянути сумісні бандли</string>
+    <string name="catalog_refresh">Оновити каталог</string>
+    <string name="catalog_search">Пошук</string>
+    <string name="catalog_clear_filters">Очистити фільтри</string>
+    <string name="catalog_hide_filters">Сховати фільтри</string>
+    <string name="catalog_show_filters">Показати фільтри</string>
+    <string name="catalog_sources_error">Не вдалося завантажити джерела. Спробуйте ще раз.</string>
+    <string name="catalog_retry">Повторити</string>
+    <string name="catalog_search_apps">Пошук додатків</string>
+    <string name="catalog_apps_empty">Додатків не знайдено</string>
+    <string name="catalog_release_history">Історія релізів</string>
+    <string name="catalog_history_empty">Історію релізів не знайдено.</string>
+    <string name="catalog_history_more">Завантажити старіші релізи</string>
+    <string name="catalog_history_unavailable">Оригінальний реліз або завантаження більше недоступні.</string>
+    <string name="catalog_hide_changelog">Сховати список змін</string>
+    <string name="catalog_history_no_changelog">Для цього релізу не записано списку змін.</string>
+    <string name="catalog_history_no_bundle">Для цього релізу немає проіндексованого бандла патчів.</string>
+    <string name="catalog_history_open_release">Відкрити реліз</string>
+    <string name="scroll_position">Позиція прокручування</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->
+    <string name="bundle_setting_change_queued">Це налаштування зміниться після завершення поточного оновлення бандла.</string>
+    <string name="bundle_use_specific_version">Використовувати конкретну версію</string>
+    <string name="bundle_use_specific_version_description">Утримувати цей бандл на вибраній версії. Попередні налаштування вибору релізів відновлюються після вимкнення.</string>
+    <string name="bundle_select_version">Вибрати версію</string>
+    <string name="bundle_versions_load_error">Не вдалося завантажити версії бандла.</string>
+    <string name="bundle_versions_empty">Немає доступних версій бандла.</string>
+    <string name="app_info_unavailable">Інформація про додаток недоступна</string>
+    <string name="downloader_download_title">Завантажувач %1$s</string>
+    <string name="runtime_download_title">Середовище виконання %1$s</string>
+    <string name="manager_rebrand_app_name">Universal Patch Manager</string>
+    <string name="manager_rebrand_notice_title">URV було перейменовано на UPM</string>
+    <string name="manager_rebrand_notice_description">У цьому оновленні URV було перейменовано на UPM (Universal Patch Manager).\n\nUPM встановлюється як другий додаток, оскільки ім\'я його пакета відрізняється. Він не замінить URV, і ваші дані не перенесуться автоматично.\n\nВ URV відкрийте %1$s &gt; %2$s &gt; %3$s і збережіть резервну копію. В UPM відкрийте %1$s &gt; %2$s &gt; %4$s і виберіть цю резервну копію.\n\n«Експортувати все» не включає ваше сховище ключів підпису. Використовуйте %5$s в URV та %6$s в UPM на тій самій сторінці налаштувань, якщо хочете продовжити підписувати APK тим самим ключем.\n\nНе видаляйте URV, доки не переконаєтеся, що ваші дані та ключ підпису успішно імпортовано.</string>
+    <string name="manager_rebrand_continue_countdown">Продовжити (%1$d)</string>
+    <string name="manager_update_unexpected_package">Завантажений APK не є підтримуваним оновленням менеджера.</string>
 </resources>

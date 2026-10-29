@@ -1,4 +1,4 @@
-package app.urv.manager.domain.installer.root
+package app.universal.patch.manager.domain.installer.root
 
 object RootInstallCommandEmitter {
     @JvmStatic fun main(args: Array<String>) {

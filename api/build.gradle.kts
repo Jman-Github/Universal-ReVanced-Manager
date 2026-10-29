@@ -19,7 +19,7 @@ dependencies {
 }
 
 android {
-    namespace = "app.universal.revanced.manager.plugin.downloader"
+    namespace = "app.universal.patch.manager.plugin.downloader"
     compileSdk = 37
 
     defaultConfig {
@@ -64,7 +64,7 @@ kotlin {
 }
 
 apiValidation {
-    nonPublicMarkers += "app.urv.manager.plugin.downloader.PluginHostApi"
+    nonPublicMarkers += "app.universal.patch.manager.plugin.downloader.PluginHostApi"
 }
 
 publishing {
@@ -73,7 +73,7 @@ publishing {
             name = "GitHubPackages"
             // Publish to the current GitHub repository packages by default.
             // Fallback keeps local publishing possible when the env var is absent.
-            val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-ReVanced-Manager"
+            val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-Patch-Manager"
             url = uri("https://maven.pkg.github.com/$ghRepo")
             credentials {
                 // Priority: hardcoded fallback -> environment -> Gradle properties
@@ -98,7 +98,7 @@ publishing {
             }
 
             groupId = "app.revanced"
-            artifactId = "universal-revanced-manager-api"
+            artifactId = "universal-patch-manager-api"
             version = project.version.toString()
 
             pom {
@@ -120,7 +120,7 @@ publishing {
                     }
                 }
                 scm {
-                    val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-ReVanced-Manager"
+                    val ghRepo = System.getenv("GITHUB_REPOSITORY") ?: "Jman-Github/Universal-Patch-Manager"
                     connection = "scm:git:git://github.com/$ghRepo.git"
                     developerConnection = "scm:git:git@github.com:$ghRepo.git"
                     url = "https://github.com/$ghRepo"

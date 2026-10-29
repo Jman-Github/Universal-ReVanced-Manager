@@ -58,12 +58,12 @@ public class Fixture {{
     public static final {patch} field = patch("Field fixture");
     public static {patch} getSample() {{ return patch("Getter fixture"); }}
     private static {patch} patch(String name) {{
-        if ("true".equals(System.getProperty("urv.fixture.failOnce"))) {{
-            System.clearProperty("urv.fixture.failOnce");
+        if ("true".equals(System.getProperty("upm.fixture.failOnce"))) {{
+            System.clearProperty("upm.fixture.failOnce");
             throw new IllegalStateException("fixture transient preload failure");
         }}
-        System.getProperties().put("urv.fixture.bundleLoader", Fixture.class.getClassLoader());
-        return PatchKt.resourcePatch(name, null, Boolean.getBoolean("urv.fixture.strict"), builder -> {{
+        System.getProperties().put("upm.fixture.bundleLoader", Fixture.class.getClassLoader());
+        return PatchKt.resourcePatch(name, null, Boolean.getBoolean("upm.fixture.strict"), builder -> {{
             builder.dependsOn(dependency);
             return Unit.INSTANCE;
         }});
@@ -78,18 +78,18 @@ public class Fixture {{
 """
 
 
-with tempfile.TemporaryDirectory(prefix="urv-bundle-isolation-", dir=args.gradle_user_home) as temporary:
+with tempfile.TemporaryDirectory(prefix="upm-bundle-isolation-", dir=args.gradle_user_home) as temporary:
     work = Path(temporary)
     harness = ROOT / "app/src/test/fixtures/bundle-loader/IsolatedBundles.java"
     subprocess.run([str(JAVAC), "--release", "17", "-d", str(work), str(harness)], check=True, timeout=30)
     for root in args.worktree or [ROOT]:
         for name, module, source, loader, sdk in (
-            ("morphe", "urv-patcher-core",
-             "morphe-runtime/src/main/java/app/urv/manager/patcher/morphe/MorphePatchBundleLoader.kt",
-             "app.urv.manager.patcher.morphe.MorphePatchBundleLoader", "app.morphe.patcher.patch"),
+            ("morphe", "upm-patcher-core",
+             "morphe-runtime/src/main/java/app/universal/patch/manager/patcher/morphe/MorphePatchBundleLoader.kt",
+             "app.universal.patch.manager.patcher.morphe.MorphePatchBundleLoader", "app.morphe.patcher.patch"),
             ("revanced", "revanced22-patcher-core",
-             "app/src/main/java/app/urv/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
-             "app.urv.manager.patcher.revanced.RevancedPatchBundleLoader", "app.revanced.patcher.patch"),
+             "shared/revanced22/src/main/java/app/universal/patch/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
+             "app.universal.patch.manager.patcher.revanced.RevancedPatchBundleLoader", "app.revanced.patcher.patch"),
         ):
             core = (args.core_dir / root.name / f"{module}.jar") if args.core_dir else root / module / "build/libs" / f"{module}.jar"
             if not core.is_file():

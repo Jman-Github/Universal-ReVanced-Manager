@@ -115,7 +115,6 @@
     <string name="apk_source_downloaded">Menggunakan APK yang telah diunduh</string>
     <string name="legacy_import_failed">Tidak dapat mengimpor setelan lama</string>
     <string name="auto_updates_dialog_title">Konfigurasi pembaruan</string>
-    <string name="auto_updates_dialog_patches">Patch ReVanced Resmi</string>
     <string name="auto_updates_dialog_note">Pengaturan ini dapat diubah nanti.</string>
     <string name="background_bundle_update">Pembaruan paketan latar belakang</string>
     <string name="background_radio_menu_title">Pembaruan latar belakang</string>

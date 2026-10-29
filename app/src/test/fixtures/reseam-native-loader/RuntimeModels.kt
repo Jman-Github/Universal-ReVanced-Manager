@@ -1,4 +1,4 @@
-package app.urv.manager.network.runtime
+package app.universal.patch.manager.network.runtime
 
 import java.io.File
 

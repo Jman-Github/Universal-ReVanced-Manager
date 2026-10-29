@@ -7,10 +7,6 @@
     <string name="patch_bundle_file_import_dialog_title">Patch-Bundle hinzufügen?</string>
     <string name="patch_bundle_file_import_dialog_message">Dieses Patch-Bundle als lokales Patch-Bundle hinzufügen?</string>
     <string name="manager">Manager</string>
-    <string name="plugin_host_permission_label">Universal ReVanced Manager Plugin Host</string>
-    <string name="plugin_host_permission_description">Wird verwendet, um den Zugriff auf Universal ReVanced Manager Plugins zu steuern. Nur Universal ReVanced Manager besitzt diese Berechtigung.</string>
-    <string name="downloader_host_permission_label">URV Manager Downloader Host</string>
-    <string name="downloader_host_permission_description">Wird verwendet, um den Zugriff auf den URV Manager Download zu steuern. Nur URV Manager hat dies.</string>
     <string name="toast_copied_to_clipboard">Kopiert!</string>
     <string name="downloader_plugin_url_copied">URL des Downloader Plugins kopiert</string>
     <string name="runtime_plugin_url_copied">Laufzeit-Plugin URL kopiert</string>
@@ -183,12 +179,8 @@
     <string name="apk_source_downloaded">Heruntergeladene APK wird verwendet</string>
     <string name="legacy_import_failed">Alte Einstellungen konnten nicht importiert werden</string>
     <string name="auto_updates_dialog_title">Updates konfigurieren</string>
-    <string name="auto_updates_dialog_description">Möchtest du, dass Universal ReVanced Manager regelmäßig nach Updates für die folgenden Komponenten sucht?</string>
-    <string name="auto_updates_dialog_manager">Universal ReVanced Manager</string>
-    <string name="auto_updates_dialog_patches">Offizielle ReVanced Patches</string>
     <string name="auto_updates_dialog_note">Diese Einstellungen können später geändert werden.</string>
     <string name="background_manager_update">Aktualisierungen des Hintergrund Managers</string>
-    <string name="background_manager_update_description">Überprüft im Hintergrund auf App Updates und benachrichtigt dich, wenn eine neue Version des URV Managers verfügbar ist</string>
     <string name="background_bundle_update">Hintergrund-Bundle Updates</string>
     <string name="background_bundle_update_description">Steuert die Benachrichtigungen für den Patcher und Bundle Updates. Wenn aktiviert, werden Bundle Updates im Hintergrund heruntergeladen. Wenn Benachrichtigungen erlaubt sind, siehst du Fortschritts- und Abschlussmeldungen zusammen mit der Benachrichtigung über den laufenden Patch Vorgang</string>
     <string name="announcement_system_enabled">Ankündigungen aktivieren</string>
@@ -219,13 +211,11 @@
     <string name="notification_channel_bundle_updates_name">Hintergrund Bundle Updates</string>
     <string name="notification_channel_bundle_updates_description">Zeigt den Fortschritt für Hintergrund Patch Bundle Updates an.</string>
     <string name="notification_channel_manager_updates_name">Aktualisierungen des Hintergrund Managers</string>
-    <string name="notification_channel_manager_updates_description">Benachrichtigt dich, wenn eine neue Version des URV Managers verfügbar ist.</string>
     <string name="notification_channel_announcements_name">Ankündigungsbenachrichtigung</string>
     <string name="notification_channel_announcements_description">Benachrichtigt dich, wenn eine neue ReVanced Ankündigung veröffentlicht wurde.</string>
     <string name="notification_channel_bundle_websocket_name">Benachrichtigung Keep-Alive</string>
     <string name="notification_channel_bundle_websocket_description">Hält die WebSocket Bereitstellung und die Cache Bereinigung für Hintergrundbenachrichtigungen aktiv.</string>
     <string name="notification_channel_cache_cleanup_name">Cache Bereinigung</string>
-    <string name="notification_channel_cache_cleanup_description">Zeigt an, wenn der URV Manager Cache Dateien automatisch löscht.</string>
     <string name="bundle_update_websocket_notification_title">Keep-Alive für Hintergrundbenachrichtigungen aktiv</string>
     <string name="bundle_update_websocket_target_bundle">bundle Updates</string>
     <string name="bundle_update_websocket_target_manager">manager Updates</string>
@@ -241,7 +231,6 @@
         <item quantity="one">Patch-Bundle-Aktualisierung gefunden</item>
         <item quantity="other">Patch-Bundle-Aktualisierungen gefunden</item>
     </plurals>
-    <string name="manager_updates_notification_title">URV Manager-Aktualisierung gefunden</string>
     <string name="manager_updates_notification_available">Eine neue Manager Aktualisierung ist verfügbar: %1$s</string>
     <string name="announcement_notification_title">Neue ReVanced Ankündigung</string>
     <string name="never">Nie</string>
@@ -256,9 +245,7 @@
     <string name="downloads">Downloads</string>
     <string name="downloads_description">Downloader Plugins und heruntergeladene Apps</string>
     <string name="storage_cache_management">Speicher &amp; Cache Verwaltung</string>
-    <string name="storage_cache_management_description">URV Manager Speichernutzung überprüfen</string>
     <string name="plugins_help_title">Was ist ein Downloader?</string>
-    <string name="plugins_help_description">Ein Downloader ist ein Plugin, mit dem URV Standard APKs aus verschiedenen Quellen herunterladen kann. Die heruntergeladenen APKs werden im unteren Bereich angezeigt. Während des Patch-Vorgangs kannst du eine bereits heruntergeladene APK auswählen oder sie über ein Plugin herunterladen.\n\nDie Liste der unterstützten Downloader-Plugins findest du</string>
     <string name="import_export">Import &amp; Export</string>
     <string name="import_export_description">Keystore, Patch Optionen und Auswahl</string>
     <string name="changelog">Änderungsprotokolle anzeigen</string>
@@ -286,7 +273,6 @@
     <string name="merge_split_flow_section">Ablauf zur Zusammenführung von Split-APKs</string>
     <string name="saved_apps_section">Gespeicherte Apps</string>
     <string name="safeguards_compatibility_section">Schutzmaßnahmen &amp; Kompatibilität</string>
-    <string name="bundle_system_recovery_section">Bundle/Systemwiederherstellung</string>
     <string name="diagnostics_output_section">Diagnose &amp; Ausgabe</string>
     <string name="update_checks_section">Update Überprüfungen</string>
     <string name="network_delivery_section">Netzwerk &amp; Bereitstellung</string>
@@ -373,7 +359,6 @@
     <string name="lsposed_checksum_missing">Keine veröffentlichte Prüfsumme verfügbar. Vergewissere dich, dass du dieser Quelle vertrauen kannst.</string>
     <string name="lsposed_install">Installieren</string>
     <string name="lsposed_forget_title">Modul vergessen?</string>
-    <string name="lsposed_forget_description">Dies entfernt %1$s von der URV Liste. Das installierte Modul wird nicht deinstalliert.</string>
     <string name="lsposed_module_installed_title">Modul installiert</string>
     <string name="lsposed_module_installed_description">Öffne den LSPosed Manager, um das Modul zu aktivieren und seinen Anwendungsbereich auszuwählen.</string>
     <string name="lsposed_open_manager">LSPosed Manager öffnen</string>
@@ -597,7 +582,6 @@
     <string name="export_patch_bundles_partial">%1$d Patch Bundles exportiert. Einige Bundles konnten nicht exportiert werden, da sie lokal hinzugefügt wurden.</string>
     <string name="bundle_type_remote">Extern</string>
     <string name="bundle_type_local">Lokal</string>
-    <string name="bundle_type_preinstalled">Vorinstalliert</string>
     <string name="bundle_created_at">Erstellt %1$s</string>
     <string name="bundle_updated_at">Aktualisiert %1$s</string>
     <string name="bundle_refreshed_at">Zuletzt geprüft %1$s</string>
@@ -785,10 +769,7 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="downloader_helper_source_installing">Helfer App wird installiert…</string>
     <string name="downloader_helper_source_install">Installieren</string>
     <string name="downloader_helper_source_install_success">Helfer App installiert</string>
-    <string name="downloader_helper_source_trust_dialog_body">Vertraue diesem Signierer der Helfer App für Installationen und künftige Quellen Updates. Die Helfer App läuft als separate Android App und führt keinen Code innerhalb von URV Manager aus.</string>
-    <string name="downloader_helper_installed_trust_dialog_body">Vertraue diesem Signierer der Helfer App, damit URV Manager sie als APK Quelle verwenden darf. Die Helfer App läuft als separate Android App und führt keinen Code innerhalb von URV Manager aus.</string>
     <string name="downloader_helper_uninstall_title">Helfer App deinstallieren</string>
-    <string name="downloader_helper_uninstall_description">%1$s deinstallieren und alle von URV Manager gespeicherten Helfer Quell APKs entfernen?</string>
     <string name="downloader_helper_uninstall_success">Helfer App %1$s deinstalliert</string>
     <string name="downloader_helper_uninstall_failed">Helfer App %1$s konnte nicht deinstalliert werden</string>
     <string name="downloader_plugin_state_trusted">Vertrauenswürdig</string>
@@ -798,7 +779,6 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="downloader_plugin_revoke_trust">Vertrauen widerrufen</string>
     <string name="downloader_plugin_trust_dialog_title">Plugin vertrauen?</string>
     <string name="downloader_plugin_revoke_trust_dialog_title">Vertrauen widerrufen?</string>
-    <string name="downloader_plugin_trust_dialog_body">Wenn du fortfährst, darf dieses Plugin auf deinem System ausgeführt werden.\n\nAktiviere dieses Plugin nur, wenn du ihm vertraust. Plugins können beliebigen Code ausführen und dein Gerät gefährden.</string>
     <string name="downloader_plugin_trust_dialog_signature">Signatur:\n\n%s</string>
     <string name="downloader_plugin_trust_dialog_plugin">Plugin:\n%s</string>
     <string name="downloader_plugin_view_error">Fehlerdetails anzeigen</string>
@@ -830,20 +810,16 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="clear">Leeren</string>
     <string name="storage_overview_section">Übersicht</string>
     <string name="storage_total_app_storage">Erfasster App Speicher</string>
-    <string name="storage_total_app_storage_description">Interne Dateien, Cache und externe App Ordner, die von URV Manager erfasst werden</string>
     <string name="storage_refresh_usage">Speichernutzung aktualisieren</string>
     <string name="storage_refresh_usage_description">Aufschlüsselung der Speichergröße neu berechnen</string>
     <string name="storage_usage_section">Speichernutzung</string>
-    <string name="storage_usage_section_description">Zeigt, was im App Speicher von URV Manager Platz belegt</string>
     <string name="storage_cache_actions_section">Cache Aktionen</string>
     <string name="storage_internal_cache">Interner Cache</string>
-    <string name="storage_internal_cache_description">Temporäre Dateien, die URV Manager problemlos neu erstellen kann, einschließlich Code Cache</string>
     <string name="storage_code_cache">Code Cache</string>
     <string name="storage_code_cache_description">Von Android und App Bibliotheken erzeugter Laufzeit Cache</string>
     <string name="storage_apk_signer_cache">APK Signierer Cache</string>
     <string name="storage_apk_signer_cache_description">Temporäre APK Kopien und signierte Ausgaben, die vom APK Signierer Werkzeug erstellt wurden</string>
     <string name="storage_internal_files">Interne Dateien</string>
-    <string name="storage_internal_files_description">Dateien im internen Speicher von URV Manager, einschließlich benutzerdefinierter Hintergründe</string>
     <string name="storage_no_backup_files">Dateien ohne Sicherung</string>
     <string name="storage_no_backup_files_description">Interne Dateien, die Android von Gerätesicherungen ausschließt</string>
     <string name="storage_downloaded_apps">Heruntergeladene Apps</string>
@@ -851,7 +827,6 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="storage_patch_bundles">Patch Bundles</string>
     <string name="storage_patch_bundles_description">Offizielle, heruntergeladene und importierte Patch Bundle Dateien</string>
     <string name="storage_signing_files">Signierdateien</string>
-    <string name="storage_signing_files_description">Keystore von URV Manager, Signaturdaten und externe Sicherung</string>
     <string name="storage_downloader_plugins">Downloader Plugin Dateien</string>
     <string name="storage_downloader_plugins_description">Verwaltete Dateien, die von Downloader Plugins verwendet werden</string>
     <string name="storage_patcher_runtime_plugins">Patcher Laufzeit Plugin Dateien</string>
@@ -883,34 +858,24 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="storage_clear_app_cache">App-Cache leeren</string>
     <string name="storage_clear_app_cache_description">Löscht interne, Code- und externe Cache-Dateien. Einstellungen und gespeicherte Dateien bleiben erhalten</string>
     <string name="storage_auto_clear_cache">Cache automatisch leeren</string>
-    <string name="storage_auto_clear_cache_description">Leert den Cache von URV Manager automatisch nach Zeitplan und benachrichtigt dich, wenn dies geschieht</string>
-    <string name="storage_auto_clear_cache_description_with_current">%1$s • Leert den Cache von URV Manager automatisch nach Zeitplan und benachrichtigt dich, wenn dies geschieht</string>
     <string name="storage_auto_clear_cache_dialog_title">Cache automatisch leeren</string>
     <string name="storage_auto_clear_cache_run_now">Bereinigung ausführen</string>
     <string name="storage_auto_clear_cache_queued">Cache-Bereinigung eingeplant</string>
     <string name="storage_auto_clear_cache_updated">Automatisches Leeren des Caches auf %1$s festgelegt</string>
     <string name="storage_clear_cache_dialog_title">App-Cache leeren?</string>
-    <string name="storage_clear_cache_dialog_description">Dadurch werden zwischengespeicherte URV-Manager-Dateien gelöscht, die später neu erstellt werden können. Einstellungen, Patch-Profile, Keystores und gespeicherte APKs werden nicht gelöscht</string>
     <string name="storage_clear_area_dialog_title">%1$s leeren?</string>
     <string name="storage_clear_area_dialog_description">Dadurch werden Dateien aus %1$s gelöscht. Verwende dies nur, wenn du die dort gespeicherten Dateien nicht mehr benötigst</string>
     <string name="storage_clear_area_warning_title">%1$s dauerhaft leeren?</string>
-    <string name="storage_clear_internal_files_warning_description">Dadurch werden private Dateien im internen Speicher von URV Manager gelöscht, einschließlich benutzerdefinierter Hintergründe. Einstellungen, Signierdateien und gespeicherte LSPosed-Modul-APKs bleiben erhalten, andere importierte Dateien gehen jedoch möglicherweise verloren. Dies kann nicht rückgängig gemacht werden</string>
-    <string name="storage_clear_no_backup_files_warning_description">Dadurch werden private Dateien aus dem Speicher ohne Sicherung gelöscht. Diese Dateien sind absichtlich von der Android-Sicherung ausgeschlossen und können Wiederherstellungs- oder App-Zustandsdaten enthalten, die URV Manager nicht automatisch wiederherstellen kann. Dies kann nicht rückgängig gemacht werden</string>
-    <string name="storage_clear_patch_bundles_warning_description">Dadurch werden alle lokalen Patch-Bundles gelöscht, einschließlich des vorinstallierten offiziellen ReVanced-Bundles. Das offizielle Bundle kann später unter Einstellungen &gt; Erweitert &gt; Bundle/Systemwiederherstellung wiederhergestellt werden, importierte oder Drittanbieter-Bundles müssen jedoch erneut hinzugefügt werden. Dies kann nicht rückgängig gemacht werden</string>
     <string name="storage_clear_signing_files_warning_description">Dadurch werden erzeugte und importierte Signierdateien gelöscht, einschließlich der externen Keystore-Sicherung. Apps, die mit einem entfernten Schlüssel signiert wurden, erfordern möglicherweise, dass derselbe Schlüssel erneut importiert wird, bevor sie über eine bestehende Installation aktualisiert werden können. Dies kann nicht rückgängig gemacht werden</string>
     <string name="storage_clear_patcher_runtime_plugins_warning_description">Dadurch werden verwaltete Patcher-Laufzeit-APKs gelöscht und ihre Quelleneinträge entfernt. Installierte Laufzeit-Plugin-Apps werden nicht deinstalliert. Verwaltete Quellen müssen erneut hinzugefügt werden. Dies kann nicht rückgängig gemacht werden</string>
-    <string name="storage_clear_lsposed_modules_warning_description">Dadurch werden gespeicherte lokale LSPosed-Modul-APKs gelöscht und ihre gespeicherten Einträge aus URV Manager entfernt. Installierte Module werden nicht deinstalliert. Dies kann nicht rückgängig gemacht werden</string>
     <string name="storage_clear_patched_apps_warning_description">Dadurch werden gespeicherte gepatchte APK-Dateien gelöscht und ihre Einträge für gespeicherte Apps entfernt. Du musst diese Apps erneut patchen oder speichern, bevor du sie aus der Liste der gespeicherten Apps installieren, exportieren oder öffnen kannst. Dies kann nicht rückgängig gemacht werden</string>
     <string name="storage_clear_patch_profile_inputs_warning_description">Dadurch werden APK- oder XAPK-Eingabedateien gelöscht, die an Patch-Profile angehängt sind, und die App-Auswahl wird aus den Profilen entfernt. Die Profile bleiben bestehen, aber ihre Eingabe-Apps müssen vor dem Patchen erneut ausgewählt werden. Dies kann nicht rückgängig gemacht werden</string>
-    <string name="storage_clear_other_internal_data_warning_description">Dadurch werden private App-Daten gelöscht, die in keiner anderen Speicherzeile aufgeführt sind. Betrachte dies wie das Löschen eines Teils der App-Daten von URV Manager. Dies kann nicht rückgängig gemacht werden</string>
-    <string name="storage_clear_external_files_warning_description">Dadurch werden Dateien gelöscht, die URV Manager in seinen externen App-Ordnern gespeichert hat, mit Ausnahme der Signatursicherung. Diese Dateien sind möglicherweise außerhalb der App sichtbar, und URV Manager kann sie nicht automatisch wiederherstellen. Dies kann nicht rückgängig gemacht werden</string>
     <string name="storage_cache_in_use">Der Speicher wird gerade verwendet. Versuche es erneut, nachdem der aktive Vorgang abgeschlossen ist</string>
     <string name="storage_area_cleared">%1$s geleert: %2$s</string>
     <string name="storage_manage_area">Verwalten</string>
     <string name="storage_cache_cleared">%1$s aus dem Cache entfernt</string>
     <string name="storage_cache_clear_failed">Cache konnte nicht geleert werden</string>
     <string name="storage_open_app_storage_settings">Android-App-Speichereinstellungen öffnen</string>
-    <string name="storage_open_app_storage_settings_description">Alle App-Daten von URV Manager in den Systemeinstellungen verwalten oder löschen</string>
     <string name="storage_open_app_storage_settings_failed">App-Speichereinstellungen konnten nicht geöffnet werden</string>
     <string name="storage_calculating">Wird berechnet...</string>
     <string name="storage_empty">Leer</string>
@@ -982,12 +947,6 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="patch_profile_patch_options_title">Optionen für %1$s</string>
     <string name="patch_option_preview_action">Vollständige Vorschau anzeigen</string>
     <string name="patch_option_preview_title">Ausgewählte Optionen für %1$s</string>
-    <string name="restore_official_bundle">Vorinstalliertes offizielles ReVanced-Patch-Bundle wiederherstellen</string>
-    <string name="restore_official_bundle_description_missing">Das vorinstallierte offizielle ReVanced-Patches-Bundle erneut installieren</string>
-    <string name="restore_official_bundle_description_installed">Das vorinstallierte offizielle ReVanced-Patches-Bundle ist derzeit installiert</string>
-    <string name="restore_official_bundle_success">Offizielles ReVanced-Patch-Bundle wiederhergestellt</string>
-    <string name="restore_official_bundle_failed">Wiederherstellung des offiziellen ReVanced-Patch-Bundles fehlgeschlagen: %1$s</string>
-    <string name="restore_official_bundle_already">Das offizielle ReVanced-Patch-Bundle ist bereits installiert</string>
     <string name="app_exporting">App-Export</string>
     <string name="export_name_format">Format des Export-Dateinamens</string>
     <string name="export_name_format_description">Passe den Standarddateinamen für exportierte gepatchte Apps an</string>
@@ -1027,8 +986,6 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="api_url">API-URL</string>
     <string name="api_url_description">Die API, die zum Herunterladen benötigter Dateien verwendet wird</string>
     <string name="api_url_dialog_title">API-URL ändern</string>
-    <string name="api_url_dialog_description">Ändere die API-URL von Universal ReVanced Manager. Universal ReVanced Manager verwendet die API, um Patches und Updates herunterzuladen.</string>
-    <string name="api_url_dialog_warning">Universal ReVanced Manager verbindet sich mit der API, um Patches und Updates herunterzuladen. Stelle sicher, dass du ihr vertraust.</string>
     <string name="api_url_dialog_save">Festlegen</string>
     <string name="api_url_dialog_reset">API-URL zurücksetzen</string>
     <string name="github_pat">GitHub PAT</string>
@@ -1063,9 +1020,7 @@ Patch Profile sind davon nicht betroffen.</string>
     <string name="patches_force_download_started">Alle Patch-Bundles werden heruntergeladen...</string>
     <string name="patches_force_download_none">Keine Patch-Bundles heruntergeladen</string>
     <string name="reset_patch_bundles">Patch-Bundles zurücksetzen</string>
-    <string name="reset_patch_bundles_description">Alle Bundles löschen und das vorinstallierte offizielle ReVanced-Bundle wiederherstellen</string>
     <string name="reset_patch_bundles_dialog_title">Patch-Bundles zurücksetzen?</string>
-    <string name="reset_patch_bundles_dialog_description">Dadurch werden alle Patch-Bundles und lokalen Bundle-Dateien gelöscht und anschließend das vorinstallierte offizielle ReVanced-Bundle wiederhergestellt</string>
     <string name="reset_patch_bundles_confirm">Bundles zurücksetzen</string>
     <string name="storage">Speicher</string>
     <string name="no_patch_found">Es wurde kein Patch gefunden. Überprüfe deine Patches</string>
@@ -1573,7 +1528,6 @@ Aktiviere sie erneut (oder wähle Alternativen) und versuche dann noch einmal zu
     <string name="uninstall">Deinstallieren</string>
     <string name="repatch">Erneut patchen</string>
     <string name="repatch_source_unavailable_title">APK für erneutes Patchen nicht verfügbar</string>
-    <string name="repatch_source_not_remembered_description">URV hat keine aufbewahrte APK-Quelle für diese App. Das kann passieren, wenn die App gepatcht wurde, bevor die Aufbewahrung von Quellen für erneutes Patchen hinzugefügt wurde. Fahre fort, um erneut eine APK-Quelle auszuwählen.</string>
     <string name="repatch_source_missing_description">Die aufbewahrte APK-Quelle für diese App fehlt oder ist unbrauchbar. Fahre fort, um erneut eine APK-Quelle auszuwählen.</string>
     <string name="install_type">Installationstyp</string>
     <string name="package_name">Paketname</string>
@@ -1705,7 +1659,6 @@ Aktiviere sie erneut (oder wähle Alternativen) und versuche dann noch einmal zu
     <string name="installer_status_not_supported">Für diese Aktion nicht unterstützt.</string>
     <string name="installer_status_shizuku_not_installed">Installiere Shizuku oder Sui, um diese Option zu verwenden.</string>
     <string name="installer_status_shizuku_not_running">Starte Shizuku oder Sui und versuche es erneut.</string>
-    <string name="installer_status_shizuku_permission">Erteile Universal ReVanced Manager in der Shizuku-App die Shizuku-Berechtigung.</string>
     <string name="installer_mount_warning_title">Root-Mount-Installer ausgewählt</string>
     <string name="installer_mount_warning_install">Dein primärer Installer ist auf den Root-Mount-Installer eingestellt. Diese gespeicherte App wurde nicht per Mount installiert.</string>
     <string name="installer_mount_warning_update">Dein primärer Installer ist auf den Root-Mount-Installer eingestellt. Diese gespeicherte App wurde nicht per Mount installiert.</string>
@@ -1731,17 +1684,14 @@ Aktiviere sie erneut (oder wähle Alternativen) und versuche dann noch einmal zu
     <string name="installer_play_store_warning_message">Die gepatchte App wird als aus dem Google Play Store installiert vermerkt. Das kann Diensten helfen, sie als Play-Store-App zu erkennen, das Verhalten variiert jedoch je nach Gerät und Android-Version.</string>
     <string name="installer_play_store_warning_risk">Google Play bietet möglicherweise ein Update an, das die gepatchte APK ersetzt und ihre Patches entfernt.</string>
     <string name="installer_play_store_warning_continue">Ich verstehe, fortfahren</string>
-    <string name="installer_play_store_attribution_failed">Erfolgreich installiert, aber URV Manager konnte den Google Play Store nicht als Installationsquelle festhalten: %1$s</string>
     <string name="settings_auto_install_with_shizuku">Gepatchte Apps automatisch installieren</string>
     <string name="settings_auto_install_with_shizuku_description">Erfolgreich gepatchte Apps automatisch installieren, wenn der primäre Installer Shizuku oder Shevery ist</string>
     <string name="settings_auto_uninstall_with_shizuku">Bei Konflikt automatisch deinstallieren</string>
     <string name="settings_auto_uninstall_with_shizuku_description">Bei der automatischen Installation mit Shizuku oder Shevery zuerst die vorhandene App deinstallieren, wenn Android einen Signaturkonflikt meldet</string>
     <string name="settings_auto_uninstall_warning_title">Automatische Deinstallation aktivieren?</string>
-    <string name="settings_auto_uninstall_warning_message">Wenn Android bei einer automatischen Shizuku-Installation einen Signaturkonflikt meldet, deinstalliert URV Manager die vorhandene App, bevor es erneut versucht.</string>
     <string name="settings_auto_uninstall_warning_risk">Dabei können App-Daten entfernt werden. Schlägt die Installation danach fehl, ist die vorherige App möglicherweise bereits weg.</string>
     <string name="installer_shizuku_install_fail">Shizuku-Installation fehlgeschlagen: %s</string>
     <string name="installer_shizuku_install_fail_with_details">Shizuku-Installation fehlgeschlagen: %1$s\n\nDetails: %2$s</string>
-    <string name="installer_shizuku_error_permission">Die Shizuku-Berechtigung fehlt. Erteile URV Manager die Berechtigung und versuche es erneut.</string>
     <string name="installer_shizuku_error_timeout">Shizuku hat kein Installationsergebnis zurückgegeben. Stelle sicher, dass es noch läuft, und versuche es erneut.</string>
     <string name="installer_shizuku_error_downgrade">Android hat dies blockiert, da die installierte App dadurch herabgestuft würde.</string>
     <string name="installer_shizuku_error_signature">Android hat dies blockiert, da die installierte App eine andere Signatur hat.</string>
@@ -1815,11 +1765,9 @@ Details: %2$s</string>
     <string name="root_mount_recovered_title">Root-Mount sicher wiederhergestellt</string>
     <string name="root_mount_recovered_previous_message">Der vorherige gepatchte Build wurde wiederhergestellt. Diagnose %1$s.</string>
     <string name="root_mount_recovered_stock_message">Die Original-App wurde wiederhergestellt und bleibt ungemountet. Diagnose %1$s.</string>
-    <string name="root_mount_recovery_in_progress">URV hat ein unvollständiges Root-Mount-Rollback gefunden, konnte es aber nicht fortsetzen: %1$s</string>
     <!-- Text adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/779 -->
     <string name="root_mount_update_guidance_title">Updates gemounteter Apps</string>
-    <string name="root_mount_safe_update_notice">Für völlig sichere Updates aktualisiere gemountete Apps über URV Manager und deaktiviere externe automatische Updates. Wenn in KernelSU „Module standardmäßig unmounten“ aktiviert ist, öffne KernelSU &gt; Superuser &gt; die gemountete App &gt; Profil &gt; Benutzerdefiniert und deaktiviere „Module unmounten“. Andernfalls wird die gemountete gepatchte APK möglicherweise nicht wirksam.</string>
     <string name="root_mount_renamed_package_not_supported">Root-Mount kann nicht verwendet werden, da die gepatchte APK einen anderen Paketnamen als die Original-App hat.</string>
     <string name="root_mount_incompatible_output">Root-Mount ist nicht verfügbar, da diese APK oder ihre Original-App die Sicherheitsanforderungen nicht erfüllt.</string>
     <string name="root_mount_requires_installed_stock">Ein sicherer Root-Mount erfordert eine separat installierte kompatible Original-App. Eine APK kann nicht gleichzeitig als Original und als gepatchte Nutzlast verwendet werden.</string>
@@ -2000,7 +1948,6 @@ Details: %2$s</string>
     <string name="less">Weniger</string>
     <string name="continue_">Weiter</string>
     <string name="dismiss">Verwerfen</string>
-    <string name="github">Universal ReVanced Manager GitHub</string>
     <string name="credits">Danksagungen</string>
     <string name="revanced_manager_credit">ReVanced Manager</string>
     <string name="revanced_manager_credit_subtext">Diese App verwendet Code von ReVanced und ist ein Fork des ReVanced Managers</string>
@@ -2027,7 +1974,6 @@ Details: %2$s</string>
     <string name="patches_view_any_package">Jedes Paket</string>
     <string name="patches_delete_single_dialog_description">Möchtest du \"%s\" wirklich löschen?</string>
     <string name="patches_delete_multiple_dialog_description">Möchtest du die ausgewählten Patch-Bundles wirklich löschen?</string>
-    <string name="about_revanced_manager">Über Universal ReVanced Manager</string>
     <string name="here">hier.</string>
     <string name="update_available">Ein Update ist verfügbar</string>
     <string name="ready_to_install_update">Bereit zur Installation des Updates</string>
@@ -2039,12 +1985,8 @@ Details: %2$s</string>
     <string name="update_on_metered_connections">In getakteten Netzwerken aktualisieren</string>
     <string name="update_on_metered_connections_description">Patch- und Manager-Updates über getaktete Netzwerke zulassen</string>
     <string name="update_checking_manager">Beim Start nach Updates suchen</string>
-    <string name="update_checking_manager_description">Beim Starten der Anwendung nach neuen Versionen von Universal ReVanced Manager suchen</string>
     <string name="manager_prereleases">Vorabversionen verwenden</string>
-    <string name="manager_prereleases_description">Vorabversionen von Universal ReVanced Manager verwenden</string>
     <string name="update_published">Veröffentlicht am %s</string>
-    <string name="battery_optimization_notification">Die Akku-Optimierung muss deaktiviert werden, damit Universal ReVanced Manager im Hintergrund einwandfrei funktioniert. Klicke hier, um die Optimierungen zu deaktivieren.</string>
-    <string name="battery_optimization_dialog_description">Um Benachrichtigungen über Hintergrund-Bundle-Updates zuverlässig zu erhalten, deaktiviere die Akku-Optimierung für URV Manager.</string>
     <string name="battery_optimization_dialog_title">Akku-Optimierung</string>
     <string name="battery_optimization_banner_title">Akku-Optimierungsbanner</string>
     <string name="battery_optimization_banner_description">Das Warnbanner zur Akku-Optimierung im Dashboard anzeigen.</string>
@@ -2092,7 +2034,6 @@ Details: %2$s</string>
     <string name="bundle_update_phase_checking">Wird geprüft</string>
     <string name="bundle_update_phase_downloading">Wird heruntergeladen</string>
     <string name="bundle_update_phase_finalizing">Wird abgeschlossen</string>
-    <string name="update_available_dialog_description">Eine neue Version von Universal ReVanced Manager (%s) ist verfügbar.</string>
     <string name="failed_to_download_update">Update konnte nicht heruntergeladen werden: %s</string>
     <string name="download">Herunterladen</string>
     <string name="resume_download">Download fortsetzen</string>
@@ -2135,8 +2076,6 @@ Details: %2$s</string>
     <string name="auto_update">Automatisches Update</string>
     <string name="add_patches">Patch-Bundle hinzufügen</string>
     <string name="auto_update_description">Automatisch aktualisieren, wenn eine neue Version verfügbar ist</string>
-    <string name="patches_prereleases">Vorabversionen verwenden</string>
-    <string name="patches_prereleases_description">Vorabversionen von %s verwenden</string>
     <string name="patches_url">Patch-Bundle-URL</string>
     <string name="patch_bundle_urls_link">Patch-Bundle-URLs hier abrufen</string>
     <string name="patch_bundle_discovery_package_label">Nach Paketname suchen</string>
@@ -2223,7 +2162,6 @@ Details: %2$s</string>
     <string name="export">Exportieren</string>
     <string name="confirm">Bestätigen</string>
     <string name="patcher_runtime_plugins">Patcher-Laufzeiten</string>
-    <string name="patcher_runtime_plugins_description">Laufzeit-Plugin-APKs verwalten, die zum Anwenden von Patches verwendet werden</string>
     <string name="patcher_runtime_import_url">Laufzeitquelle importieren</string>
     <string name="patcher_runtime_import_url_description">Laufzeit-Plugins aus einem GitHub-Repository oder einer Release-APK-URL hinzufügen</string>
     <string name="patcher_runtime_import_url_hint">https://github.com/...</string>
@@ -2251,7 +2189,6 @@ Details: %2$s</string>
     <string name="patcher_runtime_uninstall_failed">%1$s konnte nicht deinstalliert werden</string>
     <string name="patcher_runtime_type_label">Typ:</string>
     <string name="patcher_runtime_trust_dialog_title">Vertrauen</string>
-    <string name="patcher_runtime_trust_dialog_body">Wenn du fortfährst, darf dieses Laufzeit-Plugin Patcher-Code innerhalb von URV Manager ausführen.\n\nAktiviere dieses Laufzeit-Plugin nur, wenn du ihm vertraust. Laufzeit-Plugins können beliebigen Code ausführen und dein Gerät gefährden.</string>
     <string name="import_button">Importieren</string>
     <string name="use_latest_release">Neuestes Release verwenden</string>
     <string name="use_prereleases">Vorabversionen verwenden</string>
@@ -2354,7 +2291,6 @@ Details: %2$s</string>
     <string name="shortcut_check_patch_updates_short">Aktualisieren &amp; erneut patchen</string>
     <string name="shortcut_patch_app">%1$s patchen</string>
     <string name="saved_app_launcher_shortcut">In App-Verknüpfungen anzeigen</string>
-    <string name="saved_app_launcher_shortcut_description">Diese gespeicherte gepatchte App zu den Android-Launcher-Verknüpfungen von URV Manager hinzufügen</string>
     <string name="saved_app_launcher_shortcut_limit_reached">Verknüpfungslimit erreicht (%1$d gespeicherte Apps). Deaktiviere zuerst eine andere Verknüpfung</string>
     <string name="yes">Ja</string>
     <string name="no">Nein</string>
@@ -2367,7 +2303,6 @@ Details: %2$s</string>
     <string name="batch_queue_configure_app">App zur Patch-Warteschlange hinzufügen</string>
     <string name="batch_patch_minimum_apps">Wähle mindestens zwei Apps aus, um Batch-Patching zu verwenden</string>
     <string name="batch_patch_edit_apk">APK bearbeiten</string>
-    <string name="batch_patch_metadata_save_failed">Installiert, aber URV Manager konnte die App-Metadaten nicht speichern: %1$s</string>
     <string name="manager_update_incompatible_pr">Dieses Release ist mit diesem PR-Build nicht kompatibel. Bitte warte auf ein neueres Manager-Release. Deine Daten wurden nicht verändert.</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information. -->
     <!-- https://github.com/MorpheApp/morphe-manager/pull/1202 -->

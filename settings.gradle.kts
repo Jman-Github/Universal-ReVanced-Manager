@@ -36,7 +36,7 @@ dependencyResolutionManagement {
             content { includeModule("com.android.tools", "r8") }
         }
         maven {
-            // From PR #39: https://github.com/Jman-Github/Universal-ReVanced-Manager/pull/39
+            // From PR #39: https://github.com/Jman-Github/Universal-Patch-Manager/pull/39
             url = uri("https://maven.pkg.github.com/brosssh/registry")
             credentials {
                 val gprUser: String? = githubUser()
@@ -111,7 +111,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "universal-revanced-manager"
+rootProject.name = "universal-patch-manager"
 
 fun moduleExists(path: String): Boolean {
     val relativePath = path.removePrefix(":").replace(':', '/')
@@ -126,9 +126,11 @@ fun includeIfAvailable(path: String) {
     if (moduleExists(path)) include(path)
 }
 
-include(":app", ":api", ":urv-patcher-core", ":jvm-host", ":revanced21-patcher-core", ":revanced22-patcher-core")
+include(":app", ":api", ":upm-patcher-core", ":jvm-host", ":revanced21-patcher-core", ":revanced22-patcher-core")
 includeIfAvailable(":morphe-runtime")
 includeIfAvailable(":revanced.v21-runtime-plugin")
-includeIfAvailable(":reseam-runtime-plugin")
+includeIfAvailable(":reseam-runtime")
 
 include(":revanced-legacy-patcher-core")
+
+include(":tools-patcher-core", ":revanced.v22-runtime-plugin")

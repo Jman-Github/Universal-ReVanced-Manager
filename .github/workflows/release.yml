@@ -92,7 +92,9 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: |
+            25
+            17
 
       - name: Set Gradle Java Home
         run: echo "ORG_GRADLE_JAVA_HOME=${{ steps.setup-java.outputs.path }}" >> "$GITHUB_ENV"
@@ -138,7 +140,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: urv-release-test-reports
+          name: upm-release-test-reports
           retention-days: 7
           if-no-files-found: ignore
           path: |
@@ -150,14 +152,16 @@ jobs:
             morphe-runtime/build/reports/tests/testDebugUnitTest/
             revanced.v21-runtime-plugin/build/test-results/testDebugUnitTest/
             revanced.v21-runtime-plugin/build/reports/tests/testDebugUnitTest/
-            reseam-runtime-plugin/build/test-results/testDebugUnitTest/
-            reseam-runtime-plugin/build/reports/tests/testDebugUnitTest/
+            reseam-runtime/build/test-results/testDebugUnitTest/
+            revanced.v22-runtime-plugin/build/test-results/testDebugUnitTest/
+            reseam-runtime/build/reports/tests/testDebugUnitTest/
+            revanced.v22-runtime-plugin/build/reports/tests/testDebugUnitTest/
 
       - name: Upload release workflow artifacts
         if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: urv-${{ steps.semantic-release.outputs.new_release_git_tag }}
+          name: upm-${{ steps.semantic-release.outputs.new_release_git_tag }}
           retention-days: 14
           if-no-files-found: error
           path: |
@@ -168,7 +172,7 @@ jobs:
         if: steps.semantic-release.outputs.new_release_published == 'true'
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: Universal ReVanced Manager ${{ steps.semantic-release.outputs.new_release_git_tag }}
+          subject-name: Universal Patch Manager ${{ steps.semantic-release.outputs.new_release_git_tag }}
           subject-path: release-assets/*.apk
 
       - name: Ensure next dev to main pull request exists

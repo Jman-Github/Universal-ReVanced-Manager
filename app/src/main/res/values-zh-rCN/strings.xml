@@ -78,7 +78,6 @@
     <string name="apk_source_downloaded">使用下载的 APK</string>
     <string name="legacy_import_failed">无法导入旧版设置</string>
     <string name="auto_updates_dialog_title">配置更新</string>
-    <string name="auto_updates_dialog_patches">官方 ReVanced 补丁</string>
     <string name="auto_updates_dialog_note">这些设置以后可以更改。</string>
     <string name="updates">更新</string>
     <string name="downloads">下载</string>
@@ -166,7 +165,6 @@
     <string name="export_patch_bundles_partial">已导出 %1$d 个补丁包。部分包因是本地添加的而无法导出。</string>
     <string name="bundle_type_remote">远程</string>
     <string name="bundle_type_local">本地</string>
-    <string name="bundle_type_preinstalled">预安装</string>
     <string name="bundle_created_at">创建于 %1$s</string>
     <string name="bundle_updated_at">更新于 %1$s</string>
     <string name="bundle_changelog">更新日志</string>
@@ -274,12 +272,6 @@
     <string name="patch_bundle_rename">重命名补丁包</string>
     <string name="patch_profile_view_options">查看选项</string>
     <string name="patch_profile_patch_options_title">%1$s 的选项</string>
-    <string name="restore_official_bundle">恢复预安装的官方 ReVanced 补丁包</string>
-    <string name="restore_official_bundle_description_missing">重新安装预安装的官方 ReVanced 补丁包</string>
-    <string name="restore_official_bundle_description_installed">预安装的官方 ReVanced 补丁包当前已安装</string>
-    <string name="restore_official_bundle_success">官方 ReVanced 补丁包已恢复</string>
-    <string name="restore_official_bundle_failed">恢复官方 ReVanced 补丁包失败：%1$s</string>
-    <string name="restore_official_bundle_already">官方 ReVanced 补丁包已安装</string>
     <string name="app_exporting">应用导出</string>
     <string name="export_name_format">导出文件名格式</string>
     <string name="export_name_format_description">自定义导出修补应用的默认文件名</string>
@@ -624,8 +616,6 @@
     <string name="next">下一步</string>
     <string name="auto_update">自动更新</string>
     <string name="add_patches">添加补丁包</string>
-    <string name="patches_prereleases">使用预发布版本</string>
-    <string name="patches_prereleases_description">使用 %s 的预发布版本</string>
     <string name="patches_url">补丁包 URL</string>
     <string name="incompatible_patches_dialog">这些补丁与选定的应用版本 (%1$s) 不兼容。\n\n点击补丁查看更多详情。</string>
     <string name="incompatible_patch">不兼容的补丁</string>

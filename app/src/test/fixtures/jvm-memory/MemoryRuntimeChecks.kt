@@ -1,6 +1,6 @@
-package app.urv.manager.patcher.host
+package app.universal.patch.manager.patcher.host
 
-import app.urv.manager.patcher.runtime.JvmHeapPolicy
+import app.universal.patch.manager.patcher.runtime.JvmHeapPolicy
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
