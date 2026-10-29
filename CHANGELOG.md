@@ -4,6 +4,31 @@ Release notes are generated automatically from Conventional Commits.
 
 Historical manually maintained release notes remain in `api/CHANGELOG.md` and `api/DEV-CHANGELOG.md`.
 
+# [2.0.0](https://github.com/Jman-Github/Universal-Patch-Manager/compare/v1.10.0...v2.0.0) (2026-10-29)
+
+
+* feat(manager)!: change runtime and patch bundle defaults ([d99e48a](https://github.com/Jman-Github/Universal-Patch-Manager/commit/d99e48ade6cd93dd059dde3575d3a7e8fc365974))
+* feat(manager)!: rebrand URV to Universal Patch Manager ([995ae1c](https://github.com/Jman-Github/Universal-Patch-Manager/commit/995ae1c9f85c45dcf479c049381085e95e9b652f))
+
+
+### Bug Fixes
+
+* **reseam:** update SDK to 0.34.1 ([fa81d17](https://github.com/Jman-Github/Universal-Patch-Manager/commit/fa81d1794ecdb8589e8990f7ef25f59d6c3fd393))
+* **runtime:** preserve update trust and patch progress order ([ceb7da4](https://github.com/Jman-Github/Universal-Patch-Manager/commit/ceb7da4594faea16ce3d0b990e9ec28150142ed0))
+
+
+### BREAKING CHANGES
+
+* ReVanced v22 now requires its runtime plugin.
+Existing official ReVanced v21 plugins must update to version 1.8.1
+(version code 8). Fresh installs include no patch bundles; users must
+add them through discovery or import.
+* The app package changes from
+app.universal.revanced.manager to app.universal.patch.manager.
+UP Manager installs separately from URV. Existing users must import
+their backup and signing keystore to migrate. Runtime plugins and
+integrations using the old manager namespace must use the new IDs.
+
 ## [1.10.1-dev.1](https://github.com/Jman-Github/Universal-ReVanced-Manager/compare/v1.10.0...v1.10.1-dev.1) (2026-10-28)
 
 
