@@ -64,7 +64,7 @@ class RuntimePluginReleaseSelectionTest {
             "checksums.txt"
         )
         assertEquals(
-            listOf("revanced.v21-plugin.apk", "reseam-plugin.apk", "morphe-runtime.apk"),
+            listOf("revanced.v21-plugin.apk", "morphe-runtime.apk"),
             selectRuntimePluginAssets(listOf(release)) {
                 it.name.takeIf(::isRuntimePluginAssetName)
             }.map { it.second.name }

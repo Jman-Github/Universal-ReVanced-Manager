@@ -9,7 +9,7 @@ internal inline fun <T> reseamRuntimeCall(block: () -> T): T = try {
     block()
 } catch (error: LinkageError) {
     throw IOException(
-        "Reseam runtime could not be initialized. Restart the manager and update the Reseam runtime plugin if the problem continues.",
+        "Reseam runtime could not be initialized. Restart the manager and update UP Manager if the problem continues.",
         error
     )
 }

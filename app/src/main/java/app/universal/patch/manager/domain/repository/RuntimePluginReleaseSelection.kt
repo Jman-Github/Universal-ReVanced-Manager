@@ -26,5 +26,6 @@ internal fun selectRuntimePluginAssets(
 // Manager APKs share releases with runtime plugins; skip both branding generations.
 internal fun isRuntimePluginAssetName(name: String): Boolean =
     name.endsWith(".apk", ignoreCase = true) &&
+        !name.equals("reseam-plugin.apk", ignoreCase = true) &&
         !name.contains("universal-revanced-manager", ignoreCase = true) &&
         !name.contains("universal-patch-manager", ignoreCase = true)

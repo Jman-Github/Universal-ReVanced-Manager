@@ -107,7 +107,7 @@ import app.universal.patch.manager.ui.screen.settings.PatcherRuntimePluginsSetti
 import app.universal.patch.manager.ui.screen.settings.StorageSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.ChangelogsSettingsScreen
 import app.universal.patch.manager.ui.screen.settings.update.UpdatesSettingsScreen
-import app.universal.patch.manager.ui.theme.ReVancedManagerTheme
+import app.universal.patch.manager.ui.theme.UpmTheme
 import app.universal.patch.manager.ui.theme.Theme
 import app.universal.patch.manager.ui.viewmodel.BatchPatcherViewModel
 import app.universal.patch.manager.ui.viewmodel.DashboardViewModel
@@ -208,7 +208,7 @@ class MainActivity : AppCompatActivity() {
             CompositionLocalProvider(
                 LocalPreventAccidentalTouching provides preventAccidentalTouching
             ) {
-                ReVancedManagerTheme(
+                UpmTheme(
                     darkTheme = darkThemeEnabled,
                     dynamicColor = dynamicColor,
                     pureBlackTheme = pureBlackEnabled,

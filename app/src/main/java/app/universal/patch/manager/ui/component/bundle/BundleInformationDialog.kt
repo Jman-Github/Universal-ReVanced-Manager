@@ -72,7 +72,6 @@ import app.universal.patch.manager.domain.bundles.JsonPatchBundle
 import app.universal.patch.manager.domain.bundles.PatchBundleChangelogEntry
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.domain.repository.PatchBundleRepository
 import app.universal.patch.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
@@ -483,34 +482,6 @@ fun BundleInformationDialog(
                     )
                 }
 
-                if (src.isDefault) {
-                    val useBundlePrerelease by prefs.usePatchesPrereleases.getAsState()
-
-                    BundleListItem(
-                        headlineText = stringResource(R.string.patches_prereleases),
-                        supportingText = stringResource(R.string.patches_prereleases_description, src.name),
-                        trailingContent = {
-                            ExpressiveSettingsSwitch(
-                                checked = useBundlePrerelease,
-                                onCheckedChange = {
-                                    composableScope.launch {
-                                        prefs.usePatchesPrereleases.update(
-                                            it
-                                        )
-                                        onUpdate()
-                                    }
-                                }
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            composableScope.launch {
-                                prefs.usePatchesPrereleases.update(!useBundlePrerelease)
-                                onUpdate()
-                            }
-                        }
-                    )
-                }
-
                 (src as? JsonPatchBundle)?.takeIf { it.supportsPrereleases }?.let { repositoryBundle ->
                     BundleListItem(
                         headlineText = stringResource(R.string.repository_bundle_prereleases),
@@ -574,7 +545,7 @@ fun BundleInformationDialog(
                     )
                 }
 
-                endpoint?.takeUnless { src.isDefault }?.let { url ->
+                endpoint?.let { url ->
                     val remote = src.asRemoteOrNull
                     var showUrlInputDialog by rememberSaveable {
                         mutableStateOf(false)

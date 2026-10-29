@@ -362,7 +362,6 @@ class MainViewModel(
         }
         settings.usePrereleases?.let { prereleases ->
             prefs.useManagerPrereleases.update(prereleases)
-            prefs.usePatchesPrereleases.update(prereleases)
         }
         settings.apiUrl?.let { api ->
             prefs.api.update(api.removeSuffix("/"))

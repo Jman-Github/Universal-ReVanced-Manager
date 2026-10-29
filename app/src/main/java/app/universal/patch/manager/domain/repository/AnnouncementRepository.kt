@@ -1,6 +1,6 @@
 package app.universal.patch.manager.domain.repository
 
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.dto.ReVancedAnnouncement
 import app.universal.patch.manager.network.dto.ReVancedAnnouncementTag
 import app.universal.patch.manager.network.utils.getOrNull
@@ -8,7 +8,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 class AnnouncementRepository(
-    private val api: ReVancedAPI
+    private val api: UpmAPI
 ) {
     private val mutex = Mutex()
     private var cachedAnnouncements: List<ReVancedAnnouncement>? = null

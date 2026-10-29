@@ -17,7 +17,7 @@ import app.universal.patch.manager.domain.bundles.BundleDiscoveryStateStore
 import app.universal.patch.manager.domain.bundles.BundleIconRepository
 import app.universal.patch.manager.domain.bundles.BundleReleasePageRepository
 import app.universal.patch.manager.network.api.ExternalBundlesApi
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import org.koin.core.module.dsl.createdAtStart
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
@@ -35,7 +35,7 @@ val repositoryModule = module {
     }
     singleOf(::BundleIconRepository)
     singleOf(::BundleReleasePageRepository)
-    singleOf(::ReVancedAPI)
+    singleOf(::UpmAPI)
     singleOf(::Filesystem) {
         createdAtStart()
     }

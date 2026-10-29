@@ -47,7 +47,6 @@ object SettingsSectionIcons {
     val Installer: ImageVector = Icons.Outlined.InstallMobile
     val SeparateProcesses: ImageVector = Icons.Outlined.Memory
     val SafeguardsCompatibility: ImageVector = Icons.Outlined.Warning
-    val BundleSystemRecovery: ImageVector = Icons.Outlined.SettingsBackupRestore
     val PatchingEngine: ImageVector = Icons.Outlined.Build
     val PatchingFlow: ImageVector = Icons.Outlined.SwapHoriz
     val SavedApps: ImageVector = Icons.Outlined.Save

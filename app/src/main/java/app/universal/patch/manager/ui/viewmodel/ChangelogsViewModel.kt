@@ -7,14 +7,14 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.R
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.dto.ReVancedAsset
 import app.universal.patch.manager.network.utils.getOrThrow
 import app.universal.patch.manager.util.uiSafe
 import kotlinx.coroutines.launch
 
 class ChangelogsViewModel(
-    private val api: ReVancedAPI,
+    private val api: UpmAPI,
     private val app: Application,
 ) : ViewModel() {
     var releaseInfo: ReVancedAsset? by mutableStateOf(null)

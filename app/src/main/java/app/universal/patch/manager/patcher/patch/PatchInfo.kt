@@ -1,8 +1,6 @@
 package app.universal.patch.manager.patcher.patch
 
 import androidx.compose.runtime.Immutable
-import app.revanced.patcher.patch.Patch
-import app.revanced.patcher.patch.resourcePatch as revancedResourcePatch
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -79,17 +77,9 @@ data class PatchInfo(
             ?.contains(versionName) == true
     }
 
-    /**
-     * Create a fake ReVanced [Patch] with the same metadata as the [PatchInfo] instance.
-     * The resulting patch cannot be executed.
-     * This is necessary because some functions in ReVanced Library only accept full [Patch] objects.
-     */
-    fun toPatcherPatch(): Patch =
-        revancedResourcePatch(name = name, description = description, use = include) {
-            compatiblePackages?.let { pkgs ->
-                compatibleWith(*pkgs.map { it.packageName to it.versions }.toTypedArray())
-            }
-        }
+    /** Metadata adapter for version recommendations; no patcher SDK is loaded. */
+    fun toPatcherPatch(): MetadataPatch = MetadataPatch(include,
+        compatiblePackages?.map { it.packageName to it.versions }?.toSet())
 
     companion object {
         fun fromMorpheMetadata(metadata: Map<String, Any?>, preserveDouble: Boolean = false): PatchInfo {

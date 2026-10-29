@@ -133,9 +133,6 @@ class PreferencesManager(
         "merged_apk_export_format",
         ExportNameFormatter.DEFAULT_MERGED_APK_TEMPLATE
     )
-    val officialBundleRemoved = booleanPreference("official_bundle_removed", false)
-    val officialBundleSortOrder = intPreference("official_bundle_sort_order", -1)
-    val officialBundleCustomDisplayName = stringPreference("official_bundle_custom_display_name", "")
     val patchBundleCacheVersionCode = intPreference("patch_bundle_cache_version_code", -1)
     val patchBundleImportAutoUpdate = booleanPreference("patch_bundle_import_auto_update", true)
     val patchBundleImportSearchUpdate = booleanPreference("patch_bundle_import_search_update", true)
@@ -334,7 +331,9 @@ class PreferencesManager(
     val useManagerPrereleases = booleanPreference("manager_prereleases", false)
     private val managerPrereleaseAutoEnabledVersion =
         stringPreference("manager_prerelease_auto_enabled_version", "")
-    val usePatchesPrereleases = booleanPreference("patches_prereleases", false)
+    // Read only while migrating a previously installed API source.
+    internal val legacyOfficialBundleRemoved = booleanPreference("official_bundle_removed", false)
+    internal val legacyPatchesPrereleases = booleanPreference("patches_prereleases", false)
     val showBatteryOptimizationBanner = booleanPreference("show_battery_optimization_banner", true)
     val allowPatchProfileBundleOverride = booleanPreference(
         "allow_patch_profile_bundle_override",
@@ -886,7 +885,6 @@ class PreferencesManager(
             announcementPushNotificationInterval = announcementPushNotificationInterval.value,
             autoClearCacheInterval = autoClearCacheInterval.value,
             useManagerPrereleases = useManagerPrereleases.value,
-            usePatchesPrereleases = usePatchesPrereleases.value,
             showBatteryOptimizationBanner = showBatteryOptimizationBanner.value,
             allowPatchProfileBundleOverride = allowPatchProfileBundleOverride.value,
             searchForUpdatesBackgroundInterval = searchForUpdatesBackgroundInterval.value,
@@ -973,9 +971,6 @@ class PreferencesManager(
 
     private fun EditorContext.exportPatchingSettings(snapshot: SettingsSnapshot): SettingsSnapshot {
         return snapshot.copy(
-            officialBundleRemoved = officialBundleRemoved.value,
-            officialBundleSortOrder = officialBundleSortOrder.value,
-            officialBundleCustomDisplayName = officialBundleCustomDisplayName.value,
             disablePatchVersionCompatCheck = disablePatchVersionCompatCheck.value,
             disableSelectionWarning = disableSelectionWarning.value,
             disableUniversalPatchCheck = disableUniversalPatchCheck.value,
@@ -1103,7 +1098,6 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importCoreUpdateSettings(snapshot: SettingsSnapshot) {
-        snapshot.usePatchesPrereleases?.let { usePatchesPrereleases.value = it }
         snapshot.selectedAnnouncementTags?.let { selectedAnnouncementTags.value = it }
         snapshot.api?.let { api.value = it }
         snapshot.gitHubPat?.let { gitHubPat.value = it }
@@ -1253,9 +1247,6 @@ class PreferencesManager(
     }
 
     private fun EditorContext.importPatchingSettings(snapshot: SettingsSnapshot) {
-        snapshot.officialBundleSortOrder?.let { officialBundleSortOrder.value = it }
-        snapshot.officialBundleRemoved?.let { officialBundleRemoved.value = it }
-        snapshot.officialBundleCustomDisplayName?.let { officialBundleCustomDisplayName.value = it }
         snapshot.disablePatchVersionCompatCheck?.let { disablePatchVersionCompatCheck.value = it }
         snapshot.disableSelectionWarning?.let { disableSelectionWarning.value = it }
         snapshot.disableUniversalPatchCheck?.let { disableUniversalPatchCheck.value = it }

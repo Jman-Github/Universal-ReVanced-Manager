@@ -5,10 +5,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Source
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
@@ -28,14 +26,13 @@ import app.universal.patch.manager.util.transparentListItemColors
 import app.universal.patch.manager.ui.component.CenteredDialogTitle
 
 @Composable
-fun AutoUpdatesDialog(onSubmit: (Boolean, Boolean) -> Unit) {
-    var patchesEnabled by rememberSaveable { mutableStateOf(true) }
+fun AutoUpdatesDialog(onSubmit: (Boolean) -> Unit) {
     var managerEnabled by rememberSaveable { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = {},
         confirmButton = {
-            TextButton(onClick = { onSubmit(managerEnabled, patchesEnabled) }) {
+            TextButton(onClick = { onSubmit(managerEnabled) }) {
                 Text(stringResource(R.string.save))
             }
         },
@@ -54,13 +51,7 @@ fun AutoUpdatesDialog(onSubmit: (Boolean, Boolean) -> Unit) {
                         checked = managerEnabled,
                         onCheckedChange = { managerEnabled = it }
                     )
-                    HorizontalDivider()
-                    AutoUpdatesItem(
-                        headline = R.string.auto_updates_dialog_patches,
-                        icon = Icons.Outlined.Source,
-                        checked = patchesEnabled,
-                        onCheckedChange = { patchesEnabled = it }
-                    )
+
                 }
 
                 Text(text = stringResource(R.string.auto_updates_dialog_note))

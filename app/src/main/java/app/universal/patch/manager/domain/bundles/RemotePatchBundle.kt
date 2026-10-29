@@ -3,7 +3,7 @@ package app.universal.patch.manager.domain.bundles
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.network.api.ExternalBundlesApi
 import app.universal.patch.manager.network.api.ExternalBundlesEndpoints
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.dto.ExternalBundleSnapshot
 import app.universal.patch.manager.network.dto.GitHubAsset
 import app.universal.patch.manager.network.dto.GitHubRelease
@@ -201,7 +201,7 @@ sealed class RemotePatchBundle(
         val fallback = PatchBundleChangelogResult(asset)
         if (this is GitHubPullRequestBundle) return fallback
         val repoUrl = inferGitHubRepoUrl(asset.pageUrl, asset.downloadUrl, endpoint) ?: return fallback
-        val releaseApi: ReVancedAPI by inject()
+        val releaseApi: UpmAPI by inject()
         val release = try {
             releaseApi.getRepositoryReleaseByTag(repoUrl, asset.version).getOrNull()
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
@@ -255,7 +255,7 @@ sealed class RemotePatchBundle(
         vararg candidates: String?
     ): List<PatchBundleChangelogEntry> {
         val repoUrl = inferGitHubRepoUrl(*candidates) ?: return emptyList()
-        val api: ReVancedAPI by inject()
+        val api: UpmAPI by inject()
         return api.getRepositoryReleaseHistory(repoUrl, prerelease = prerelease, limit = limit)
             .getOrThrow()
             .map { release -> release.toChangelogEntry(repoUrl) }
@@ -388,7 +388,7 @@ class JsonPatchBundle(
     enabled
 ) {
     override val supportsHistoricalChangelog: Boolean = true
-    private val releaseApi: ReVancedAPI by inject()
+    private val releaseApi: UpmAPI by inject()
     val supportsPrereleases: Boolean = repositoryReleaseSource() != null
     val releaseChannel: RepositoryBundleReleaseChannel
         get() = when {
@@ -795,124 +795,6 @@ class JsonPatchBundle(
 
 }
 
-class APIPatchBundle(
-    name: String,
-    uid: Int,
-    displayName: String?,
-    createdAt: Long?,
-    updatedAt: Long?,
-    installedVersionSignature: String?,
-    error: Throwable?,
-    directory: File,
-    endpoint: String,
-    autoUpdate: Boolean,
-    searchUpdate: Boolean,
-    lastNotifiedVersion: String?,
-    enabled: Boolean,
-) : RemotePatchBundle(
-    name,
-    uid,
-    displayName,
-    createdAt,
-    updatedAt,
-    installedVersionSignature,
-    error,
-    directory,
-    endpoint,
-    autoUpdate,
-    searchUpdate,
-    lastNotifiedVersion,
-    enabled
-) {
-    private val api: ReVancedAPI by inject()
-    private val prefs: PreferencesManager by inject()
-    override val supportsHistoricalChangelog: Boolean = true
-
-    override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
-        val includePrerelease = prefs.usePatchesPrereleases.get()
-        api.getPatchesUpdate(prerelease = includePrerelease).getOrThrow()
-    }
-
-    override suspend fun downloadLatest(onProgress: PatchBundleDownloadProgress?): PatchBundleDownloadResult {
-        return download(refreshLatestReleaseInfo(), onProgress)
-    }
-
-    override suspend fun update(onProgress: PatchBundleDownloadProgress?): PatchBundleDownloadResult? =
-        withContext(Dispatchers.IO) {
-            if (!hasInstalled()) {
-                return@withContext downloadLatest(onProgress)
-            }
-            val latest = fetchLatestReleaseInfo()
-
-            val latestSignature = normalizeVersionForCompare(latest.version)
-            val installedSignature = normalizeVersionForCompare(installedVersionSignature)
-            val manifestSignature = normalizeVersionForCompare(version)
-
-            if (
-                latestSignature != null &&
-                (
-                    (installedSignature != null && latestSignature == installedSignature) ||
-                        (manifestSignature != null && latestSignature == manifestSignature)
-                    )
-            ) {
-                return@withContext null
-            }
-
-            download(latest, onProgress)
-        }
-
-    override suspend fun getHistoricalChangelogEntries(limit: Int) = withContext(Dispatchers.IO) {
-        val includePrerelease = prefs.usePatchesPrereleases.get()
-        val latest = runCatching { fetchLatestReleaseInfo() }.getOrNull()
-        fetchGitHubChangelogHistory(
-            limit,
-            includePrerelease,
-            latest?.pageUrl,
-            latest?.downloadUrl,
-            endpoint
-        )
-    }
-
-    override suspend fun latestInfoCacheIdentity(): String {
-        val includePrerelease = prefs.usePatchesPrereleases.get()
-        val apiBase = prefs.api.get().trim().removeSuffix("/")
-        return "$endpoint|api=$apiBase|prerelease=$includePrerelease"
-    }
-
-    override suspend fun historicalInfoCacheIdentity(): String {
-        val includePrerelease = prefs.usePatchesPrereleases.get()
-        val apiBase = prefs.api.get().trim().removeSuffix("/")
-        return "$endpoint|history|api=$apiBase|prerelease=$includePrerelease"
-    }
-
-    override fun copy(
-        error: Throwable?,
-        name: String,
-        displayName: String?,
-        createdAt: Long?,
-        updatedAt: Long?,
-        autoUpdate: Boolean,
-        searchUpdate: Boolean,
-        lastNotifiedVersion: String?,
-        enabled: Boolean
-    ) = APIPatchBundle(
-        name,
-        uid,
-        displayName,
-        createdAt,
-        updatedAt,
-        installedVersionSignature,
-        error,
-        directory,
-        endpoint,
-        autoUpdate,
-        searchUpdate,
-        lastNotifiedVersion,
-        enabled
-    )
-
-}
-
 // PR #35: https://github.com/Jman-Github/Universal-Patch-Manager/pull/35
 class GitHubPullRequestBundle(
     name: String,
@@ -944,7 +826,7 @@ class GitHubPullRequestBundle(
     enabled
 ) {
 
-    private val api: ReVancedAPI by inject()
+    private val api: UpmAPI by inject()
 
     override suspend fun getLatestInfo() = withContext(Dispatchers.IO) {
         val (owner, repo, prNumber) = endpoint.split("/").let { parts ->
@@ -1097,7 +979,7 @@ class ExternalGraphqlPatchBundle(
     enabled
 ) {
     private val api: ExternalBundlesApi by inject()
-    private val officialApi: ReVancedAPI by inject()
+    private val officialApi: UpmAPI by inject()
     override val supportsHistoricalChangelog: Boolean = true
     private val installedArtifactUrlFile = directory.resolve("installed_artifact_url")
     private data class EndpointMetadata(

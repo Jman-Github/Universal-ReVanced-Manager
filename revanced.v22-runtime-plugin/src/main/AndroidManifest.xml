@@ -5,12 +5,12 @@
 
     <application
         android:icon="@drawable/ic_runtime_plugin"
-        android:label="Reseam"
+        android:label="ReVanced v22"
         android:largeHeap="true"
         android:roundIcon="@drawable/ic_runtime_plugin">
         <meta-data
             android:name="app.universal.patch.manager.patcher.runtime.kind"
-            android:value="reseam" />
+            android:value="revanced-v22" />
     </application>
 </manifest>
 

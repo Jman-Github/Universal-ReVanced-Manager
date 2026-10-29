@@ -4,8 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.util.Log
 import androidx.annotation.StringRes
-import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
-import app.revanced.patcher.patch.Patch as RevancedPatch
+import app.universal.patch.manager.patcher.patch.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
+import app.universal.patch.manager.patcher.patch.MetadataPatch as RevancedPatch
 import app.universal.patch.manager.R
 import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.data.platform.NetworkInfo
@@ -18,7 +18,6 @@ import app.universal.patch.manager.data.room.AppDatabase.Companion.generateUid
 import app.universal.patch.manager.data.room.bundles.PatchBundleEntity
 import app.universal.patch.manager.data.room.bundles.PatchBundleProperties
 import app.universal.patch.manager.data.room.bundles.Source
-import app.universal.patch.manager.domain.bundles.APIPatchBundle
 import app.universal.patch.manager.domain.bundles.ExternalBundleMetadata
 import app.universal.patch.manager.domain.bundles.ExternalBundleMetadataStore
 import app.universal.patch.manager.domain.bundles.ExternalGraphqlPatchBundle
@@ -30,10 +29,11 @@ import app.universal.patch.manager.domain.bundles.PatchBundleChangelogEntry
 import app.universal.patch.manager.domain.bundles.mergePatchBundleChangelogs
 import app.universal.patch.manager.domain.bundles.PatchBundleDownloadProgress
 import app.universal.patch.manager.domain.bundles.PatchBundleDownloadResult
+import app.universal.patch.manager.domain.bundles.legacyOfficialBundleRegistryUrl
+import app.universal.patch.manager.domain.bundles.isLegacyOfficialBundle
 import app.universal.patch.manager.domain.bundles.RemotePatchBundle
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.domain.bundles.RepositoryBundleReleaseChannel
 import app.universal.patch.manager.domain.bundles.RepositoryBundleSettings
 import app.universal.patch.manager.domain.bundles.RepositoryBundleSettingsStore
@@ -706,34 +706,6 @@ class PatchBundleRepository(
         return bundle.name
     }
 
-    suspend fun enforceOfficialOrderPreference() = withTrackedReload {
-        dispatchAction("Enforce official order preference") { state ->
-            val storedOrder = prefs.officialBundleSortOrder.get()
-            if (storedOrder < 0) return@dispatchAction state
-            val entities = dao.all().sortedBy { entity -> entity.sortOrder }
-            val currentIndex = entities.indexOfFirst { entity -> entity.uid == DEFAULT_SOURCE_UID }
-            if (currentIndex == -1) return@dispatchAction state
-            val targetIndex = storedOrder.coerceIn(0, entities.lastIndex)
-            if (currentIndex == targetIndex) return@dispatchAction state
-
-            val adjusted = entities.toMutableList()
-            val defaultEntity = adjusted.removeAt(currentIndex)
-            adjusted.add(targetIndex, defaultEntity)
-            adjusted.forEachIndexed { index, entity ->
-                dao.updateSortOrder(entity.uid, index)
-            }
-            doReload()
-        }
-    }
-
-    suspend fun getOfficialBundleSortOrder(): Int? =
-        prefs.officialBundleSortOrder.get().takeIf { it >= 0 }
-
-    suspend fun setOfficialBundleSortOrder(order: Int?) {
-        val value = order?.takeIf { it >= 0 } ?: -1
-        prefs.officialBundleSortOrder.update(value)
-    }
-
     suspend fun snapshotSelection(selection: PatchSelection) =
         selection.toPayload(sources.first(), bundleInfoFlow.first())
 
@@ -766,7 +738,7 @@ class PatchBundleRepository(
      * Performs a reload. Do not call this outside of a store action.
      */
     private suspend fun doReload(): State {
-        val entities = loadEntitiesEnforcingOfficialOrder()
+        val entities = loadFromDb()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
         val entityByUid = entities.associateBy { it.uid }
@@ -836,26 +808,6 @@ class PatchBundleRepository(
             }
         }
 
-        val officialSource = sources[0]
-        val officialDisplayName = "Official ReVanced Patches"
-        if (officialSource != null) {
-            val storedCustomName = prefs.officialBundleCustomDisplayName.get().takeIf { it.isNotBlank() }
-            val currentName = officialSource.displayName
-            when {
-                storedCustomName != null && currentName != storedCustomName -> {
-                    updateDb(officialSource.uid) { it.copy(displayName = storedCustomName) }
-                    sources[officialSource.uid] = officialSource.copy(displayName = storedCustomName)
-                }
-                storedCustomName == null && currentName.isNullOrBlank() -> {
-                    updateDb(officialSource.uid) { it.copy(displayName = officialDisplayName) }
-                    sources[officialSource.uid] = officialSource.copy(displayName = officialDisplayName)
-                }
-                storedCustomName == null && !currentName.isNullOrBlank() && currentName != officialDisplayName -> {
-                    prefs.officialBundleCustomDisplayName.update(currentName)
-                }
-            }
-        }
-
         manualUpdateInfoFlow.update { current ->
             current.filterKeys { uid ->
                 val bundle = sources[uid] as? RemotePatchBundle
@@ -876,20 +828,27 @@ class PatchBundleRepository(
         reloadInProgress.first { inProgress -> !inProgress }
     }
 
-    private suspend fun loadFromDb(): List<PatchBundleEntity> {
-        val all = dao.all()
-        if (all.isEmpty()) {
-            val shouldRestoreDefault = !prefs.officialBundleRemoved.get()
-            if (shouldRestoreDefault) {
-                val default = createDefaultEntityWithStoredOrder()
-                dao.upsert(default)
-                return listOf(default)
+    private suspend fun loadFromDb(): List<PatchBundleEntity> =
+        dao.all().mapNotNull { entity ->
+            if (!isLegacyOfficialBundle(entity.uid, entity.source.toString())) return@mapNotNull entity
+            if (prefs.legacyOfficialBundleRemoved.get()) {
+                dao.remove(entity.uid)
+                directoryOf(entity.uid).deleteRecursively()
+                return@mapNotNull null
             }
-            return emptyList()
+            // Keep installed data and UID-based selections when upgrading. The old
+            // built-in source becomes an ordinary removable repository source.
+            val directory = directoryOf(entity.uid)
+            val settings = RepositoryBundleSettingsStore.read(directory).forLegacyOfficialMigration(
+                apiSource = entity.source is SourceInfo.API,
+                legacyPrereleases = prefs.legacyPatchesPrereleases.get()
+            )
+            RepositoryBundleSettingsStore.write(directory, settings)
+            entity.copy(
+                source = SourceInfo.Remote(Url(legacyOfficialBundleRegistryUrl(if (settings.useLatest) null else settings.usePrereleases))),
+                name = entity.name.ifBlank { app.getString(R.string.patches_name_default) }
+            ).also { dao.upsert(it) }
         }
-
-        return all
-    }
 
     fun discoveryImportKey(bundle: ExternalBundleSnapshot, preferLatestAcrossChannels: Boolean = false): String {
         val sourceUrl = bundle.sourceUrl.trim().trimEnd('/').lowercase(Locale.US)
@@ -1080,7 +1039,7 @@ class PatchBundleRepository(
         val declaredType = detectDeclaredBundleType(bundle, source)
         if (declaredType == PatchBundleType.RESEAM) {
             if (!ReseamRuntimeAssets.isAvailable(app)) {
-                throw missingRuntimeException("Reseam")
+                throw IllegalStateException("Reseam runtime is not included in this build.")
             }
             return PatchBundleType.RESEAM to
                 ReseamRuntimeBridge.loadMetadata(bundlePath)
@@ -1168,7 +1127,10 @@ class PatchBundleRepository(
             }
             Revanced21RuntimeBridge.loadMetadata(bundlePath)
         }
-        RevancedPatcherVersion.V22 -> Revanced22RuntimeBridge.loadMetadata(bundlePath)
+        RevancedPatcherVersion.V22 -> {
+            if (!Revanced22RuntimeAssets.isAvailable(app)) throw missingRuntimeException("ReVanced v22")
+            Revanced22RuntimeBridge.loadMetadata(bundlePath)
+        }
     }
 
     private fun missingRuntimeException(runtimeName: String): IllegalStateException =
@@ -1452,7 +1414,7 @@ class PatchBundleRepository(
     private fun PatchBundleEntity.load(): PatchBundleSource {
         val dir = directoryOf(uid)
         val actualName =
-            name.ifEmpty { app.getString(if (uid == 0) R.string.patches_name_default else R.string.patches_name_fallback) }
+            name.ifEmpty { app.getString(R.string.patches_name_fallback) }
         val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
 
         return when (source) {
@@ -1466,21 +1428,9 @@ class PatchBundleRepository(
                 dir,
                 enabled
             )
-            is SourceInfo.API -> APIPatchBundle(
-                actualName,
-                uid,
-                normalizedDisplayName,
-                createdAt,
-                updatedAt,
-                versionHash,
-                null,
-                dir,
-                SourceInfo.API.SENTINEL,
-                autoUpdate,
-                searchUpdate,
-                lastNotifiedVersion,
-                enabled,
-            )
+            is SourceInfo.API -> copy(
+                source = SourceInfo.Remote(Url(legacyOfficialBundleRegistryUrl(RepositoryBundleSettingsStore.read(dir).usePrereleases)))
+            ).load()
 
             is SourceInfo.Remote -> {
                 val repositorySettings = RepositoryBundleSettingsStore.read(dir)
@@ -1545,51 +1495,6 @@ class PatchBundleRepository(
         }
     }
 
-    private suspend fun loadEntitiesEnforcingOfficialOrder(): List<PatchBundleEntity> {
-        var entities = loadFromDb()
-        if (enforceOfficialSortOrderIfNeeded(entities)) {
-            entities = loadFromDb()
-        }
-        entities.forEach { Log.d(tag, "Bundle: $it") }
-        return entities
-    }
-
-    private suspend fun enforceOfficialSortOrderIfNeeded(entities: List<PatchBundleEntity>): Boolean {
-        if (entities.isEmpty()) return false
-        val ordered = entities.sortedBy { it.sortOrder }
-        val currentIndex = ordered.indexOfFirst { it.uid == DEFAULT_SOURCE_UID }
-        if (currentIndex == -1) return false
-
-        val desiredOrder = prefs.officialBundleSortOrder.get()
-        val currentOrder = currentIndex.coerceAtLeast(0)
-        if (desiredOrder < 0) {
-            prefs.officialBundleSortOrder.update(currentOrder)
-            return false
-        }
-
-        val targetIndex = desiredOrder.coerceIn(0, ordered.lastIndex)
-        if (currentIndex == targetIndex) {
-            prefs.officialBundleSortOrder.update(currentOrder)
-            return false
-        }
-
-        val reordered = ordered.toMutableList()
-        val defaultEntity = reordered.removeAt(currentIndex)
-        reordered.add(targetIndex, defaultEntity)
-
-        reordered.forEachIndexed { index, entity ->
-            dao.updateSortOrder(entity.uid, index)
-        }
-        prefs.officialBundleSortOrder.update(targetIndex)
-        return true
-    }
-
-    private suspend fun createDefaultEntityWithStoredOrder(): PatchBundleEntity {
-        val storedOrder = prefs.officialBundleSortOrder.get().takeIf { it >= 0 }
-        val base = defaultSource()
-        return storedOrder?.let { base.copy(sortOrder = it) } ?: base
-    }
-
     private suspend fun nextSortOrder(): Int = (dao.maxSortOrder() ?: -1) + 1
 
     private suspend fun ensureUniqueName(requestedName: String?, excludeUid: Int? = null): String {
@@ -1628,12 +1533,8 @@ class PatchBundleRepository(
         val existingProps = dao.getProps(resolvedUid)
         val normalizedDisplayName = displayName?.takeUnless { it.isBlank() }
             ?: existingProps?.displayName?.takeUnless { it.isBlank() }
-            ?: if (resolvedUid == DEFAULT_SOURCE_UID) "Official ReVanced Patches" else null
-        val normalizedName = if (resolvedUid == DEFAULT_SOURCE_UID) {
-            name
-        } else {
-            ensureUniqueName(name, resolvedUid)
-        }
+
+        val normalizedName = ensureUniqueName(name, resolvedUid)
         val assignedSortOrder = when {
             sortOrder != null -> sortOrder
             else -> existingProps?.sortOrder ?: nextSortOrder()
@@ -1692,7 +1593,6 @@ class PatchBundleRepository(
     suspend fun reset() = withTrackedReload {
         dispatchAction("Reset") { state ->
             dao.reset()
-            prefs.officialBundleRemoved.update(false)
             state.sources.keys.forEach { directoryOf(it).deleteRecursively() }
             doReload()
         }
@@ -1839,12 +1739,6 @@ class PatchBundleRepository(
         dispatchAction("Remove (${bundles.map { it.uid }.joinToString(",")})") { state ->
             val removedUids = bundles.map(PatchBundleSource::uid).toSet()
             bundles.forEach {
-                if (it.isDefault) {
-                    prefs.officialBundleRemoved.update(true)
-                    val storedOrder = dao.getProps(it.uid)?.sortOrder ?: 0
-                    prefs.officialBundleSortOrder.update(storedOrder.coerceAtLeast(0))
-                }
-
                 dao.remove(it.uid)
                 directoryOf(it.uid).deleteRecursively()
             }
@@ -1863,16 +1757,6 @@ class PatchBundleRepository(
 
             state.copy(sources = sources, info = info)
         }
-
-    suspend fun restoreDefaultBundle() = withTrackedReload {
-        dispatchAction("Restore default bundle") {
-            prefs.officialBundleRemoved.update(false)
-            dao.upsert(createDefaultEntityWithStoredOrder())
-            doReload()
-        }
-    }
-
-    suspend fun refreshDefaultBundle() = store.dispatch(Update(force = true) { it.uid == DEFAULT_SOURCE_UID })
 
     enum class DisplayNameUpdateResult {
         SUCCESS,
@@ -1926,9 +1810,6 @@ class PatchBundleRepository(
             }
         }
 
-        if (uid == DEFAULT_SOURCE_UID && result == DisplayNameUpdateResult.SUCCESS) {
-            prefs.officialBundleCustomDisplayName.update(normalized.orEmpty())
-        }
 
         return result
     }
@@ -2591,21 +2472,6 @@ class PatchBundleRepository(
         return "https://gitlab.com/${repoSegments.joinToString("/")}/-/raw/$ref/$filePath"
     }
 
-
-    suspend fun reloadApiBundles() {
-        withTrackedReload {
-            dispatchAction("Reload API bundles") {
-                this@PatchBundleRepository.sources.first().filterIsInstance<APIPatchBundle>().forEach {
-                    with(it) { deleteLocalFile() }
-                    updateDb(it.uid) { it.copy(versionHash = null) }
-                }
-
-                doReload()
-            }
-        }
-
-        updateNow(force = true) { it is APIPatchBundle && it.enabled }
-    }
 
     suspend fun RemotePatchBundle.setAutoUpdate(value: Boolean) {
         dispatchAction("Set auto update ($name, $value)") { state ->
@@ -3292,10 +3158,6 @@ class PatchBundleRepository(
             finalOrder.forEachIndexed { index, uid ->
                 dao.updateSortOrder(uid, index)
             }
-            val defaultIndex = finalOrder.indexOf(DEFAULT_SOURCE_UID)
-            if (defaultIndex != -1) {
-                prefs.officialBundleSortOrder.update(defaultIndex)
-            }
 
             doReload()
         }
@@ -3601,7 +3463,7 @@ class PatchBundleRepository(
                             val rawName = runCatching {
                                 PatchBundle(src.patchesJarFile.absolutePath).manifestAttributes?.name
                             }.getOrNull()?.trim().takeUnless { it.isNullOrBlank() } ?: src.name
-                            val name = if (src.uid == DEFAULT_SOURCE_UID) rawName else ensureUniqueName(rawName, src.uid)
+                            val name = ensureUniqueName(rawName, src.uid)
                             val now = System.currentTimeMillis()
 
                             updateDb(src.uid) {
@@ -3807,26 +3669,12 @@ class PatchBundleRepository(
     }
 
     private companion object {
-        const val DEFAULT_SOURCE_UID = 0
         const val LOCAL_IMPORT_STEPS = 2
         const val LOCAL_BUNDLE_HINT_FILE = "bundle_hint.txt"
         const val REVANCED_PATCHER_HINT_FILE = "revanced_patcher_hint.txt"
         val supportedBundleExtensions = setOf("rvp", "mpp", "reseam")
         const val REMOTE_BUNDLE_UPDATE_TIMEOUT_MS = 120_000L
-        fun defaultSource() = PatchBundleEntity(
-            uid = DEFAULT_SOURCE_UID,
-            name = "",
-            displayName = null,
-            versionHash = null,
-            source = Source.API,
-            autoUpdate = false,
-            searchUpdate = true,
-            lastNotifiedVersion = null,
-            enabled = true,
-            sortOrder = 0,
-            createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
-        )
+
     }
 
     private data class DiscoveryImportRequest(

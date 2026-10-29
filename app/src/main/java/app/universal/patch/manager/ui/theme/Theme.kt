@@ -95,7 +95,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun ReVancedManagerTheme(
+fun UpmTheme(
     darkTheme: Boolean,
     dynamicColor: Boolean,
     pureBlackTheme: Boolean,

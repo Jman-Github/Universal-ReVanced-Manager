@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
+
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -831,7 +833,7 @@ class InstalledAppsViewModel(
             source.asRemoteOrNull?.endpoint
                 ?.normalizedBundleEndpoint()
                 ?.let { it to source }
-        }.toMap()
+        }.toLegacyAwareBundleIndex()
         val payloadBundlesByUid = buildMap<Int, PatchProfilePayload.Bundle> {
             payloadBundles.forEach { bundle ->
                 if (sourceMap.containsKey(bundle.bundleUid)) {
@@ -904,7 +906,7 @@ class InstalledAppsViewModel(
 }
 
 private fun String.normalizedBundleEndpoint(): String? =
-    trim().trimEnd('/').takeIf(String::isNotBlank)
+    app.universal.patch.manager.domain.bundles.bundleEndpointIdentity(this).trimEnd('/').takeIf(String::isNotBlank)
 
 internal fun isBundleUpdateAvailable(currentVersion: String, appliedVersion: String): Boolean =
     compareBundleVersionStrings(currentVersion, appliedVersion) > 0

@@ -41,15 +41,14 @@ For runtime behavior, memory limits, and troubleshooting, see the [patching runt
 <summary><strong>Patch Bundles & Patcher Runtimes</strong></summary>
 <ul>
   <li><strong>ReVanced, Morphe, and Reseam in one manager:</strong> Use ReVanced <code>.rvp</code>, Morphe <code>.mpp</code>, and Reseam <code>.reseam</code> patch bundles from the same app.</li>
-  <li><strong>Third-party patch bundles:</strong> Add compatible local or remote patch bundles, including repository and release-based sources, instead of being limited to the pre-installed bundle.</li>
+  <li><strong>Third-party patch bundles:</strong> Add compatible local or remote patch bundles, including repository and release-based sources.</li>
   <li><strong>Bundle discovery:</strong> Browse the <a href="https://github.com/Jman-Github/Patch-Bundle-Registry">Patch Bundle Registry</a> catalog in UPM, search it, inspect supported apps and patches, and import bundles directly.</li>
   <li><strong>Remote updates:</strong> Check, download, and background-update remote bundles with progress, stable/pre-release channel handling, per-bundle update controls, and force-redownload support.</li>
   <li><strong>Full changelog history:</strong> View cached patch bundle changelog history with configurable loading and storage limits, plus release links when available.</li>
   <li><strong>Bundle organization:</strong> Rename imported bundles, reorder them, preserve metadata and timestamps, and export/import bundle configurations.</li>
-  <li><strong>Official bundle recovery:</strong> Remove the pre-installed Official ReVanced bundle and restore it later from Advanced settings.</li>
-  <li><strong>Built-in runtimes:</strong> Current ReVanced and Morphe patching runtimes are bundled with UPM. Choose JVM or ART execution with the JVM switch in Settings &gt; Patcher.</li>
+  <li><strong>Built-in runtimes:</strong> Morphe and Reseam patching runtimes are bundled with UPM. Morphe supports JVM or ART execution; Reseam uses its native Android runtime.</li>
   <li><strong>ReVanced v21 runtime plugin:</strong> Add the supported ReVanced v21 runtime plugin from a local APK or GitHub source and manage its trust, update channel, installed version, and stored plugin files.</li>
-  <li><strong>Reseam runtime plugin:</strong> Patch <code>.reseam</code> bundles with the supported Reseam runtime plugin.</li>
+  <li><strong>ReVanced v22 runtime plugin:</strong> Add the ReVanced v22 plugin with the same trust and update controls as v21. Both JVM and ART execution are supported.</li>
 </ul>
 </details>
 
@@ -162,12 +161,16 @@ Existing URV JSON exports can be imported directly without renaming the files: *
 
 Export/import the signing keystore separately; JSON backups do not include its key material. Files stored privately by URV and Android file-access grants do not move with a JSON backup. Reselect custom backgrounds, local bundle files, APK inputs, or option files if Android no longer grants access to them.
 
-Runtime plugins must be built for UPM: <code>app.universal.patch.manager.revanced.v21.runtime</code> and <code>app.universal.patch.manager.reseam.runtime</code>. The bundled Morphe runtime uses <code>app.universal.patch.manager.morphe.runtime</code>.
+The embedded JVM uses OpenJDK 25 with compact object headers in 64-bit processes and OpenJDK 17 on 32-bit ARM. This configuration follows [Morphe Manager PR #1302](https://github.com/MorpheApp/morphe-manager/pull/1302). Reseam continues to run in its isolated ART worker.
+
+Runtime plugins must be built for UPM: <code>app.universal.patch.manager.revanced.v21.runtime</code> and <code>app.universal.patch.manager.revanced.v22.runtime</code>. The bundled Reseam runtime uses <code>app.universal.patch.manager.reseam.runtime</code>, and Morphe uses <code>app.universal.patch.manager.morphe.runtime</code>.
 
 
 ## 📋 Patch Bundles
 
-UPM can add compatible ReVanced (<code>.rvp</code>), Morphe (<code>.mpp</code>), and Reseam (<code>.reseam</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog. ReVanced v21 and Reseam bundles require their respective runtime plugins.
+UPM starts with no patch bundles installed. Add bundles through discovery or import.
+
+UPM can add compatible ReVanced (<code>.rvp</code>), Morphe (<code>.mpp</code>), and Reseam (<code>.reseam</code>) patch bundles from local files, supported remote URLs, repository/release sources, and the in-app discovery catalog. ReVanced v21 and v22 bundles require their respective runtime plugins. Morphe and Reseam are included by default.
 
 The [Patch Bundle Registry](https://github.com/Jman-Github/Patch-Bundle-Registry) maintains a searchable catalog of community patch sources. Visit its [patch browsing site](https://patch-bundles.jmancentral.com/) to explore bundles, patch lists, supported apps, release versions, and changelogs, and copy remote bundle URLs for import into UPM.
 

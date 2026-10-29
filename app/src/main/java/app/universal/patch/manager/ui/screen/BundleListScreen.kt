@@ -44,7 +44,6 @@ import app.universal.patch.manager.util.EventEffect
 import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
 import org.koin.androidx.compose.koinViewModel
@@ -316,7 +315,7 @@ private fun ReorderableCollectionItemScope.BundleOrderRow(
             )
             val typeLabel = stringResource(
                 when {
-                    bundle.isPreinstalled -> R.string.bundle_type_preinstalled
+
                     bundle.asRemoteOrNull != null -> R.string.bundle_type_remote
                     else -> R.string.bundle_type_local
                 }

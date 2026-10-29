@@ -225,7 +225,7 @@ private fun RuntimeSummaryCard(
             }
         )
         ExpressiveSettingsDivider()
-        RuntimeAvailabilityRow(name = "ReVanced v22", available = true, builtIn = true)
+        RuntimeAvailabilityRow(name = "Reseam", available = true, builtIn = true)
         RuntimeAvailabilityRow(name = "Morphe", available = true, builtIn = true)
         PatcherRuntimeKind.entries.forEach { kind ->
             RuntimeAvailabilityRow(

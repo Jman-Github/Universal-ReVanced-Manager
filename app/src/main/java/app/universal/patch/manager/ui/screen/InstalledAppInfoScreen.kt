@@ -1,5 +1,7 @@
 package app.universal.patch.manager.ui.screen
 
+import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.net.Uri
@@ -302,7 +304,7 @@ fun InstalledAppInfoScreen(
             source.asRemoteOrNull?.endpoint
                 ?.normalizedBundleEndpoint()
                 ?.let { it to source }
-        }.toMap()
+        }.toLegacyAwareBundleIndex()
         val savedBundles = remappedSelectionPayload?.bundles.orEmpty()
         buildMap {
             savedBundles.forEach { bundle ->
@@ -352,7 +354,7 @@ fun InstalledAppInfoScreen(
                 source.asRemoteOrNull?.endpoint
                     ?.normalizedBundleEndpoint()
                     ?.let { it to source }
-            }.toMap()
+            }.toLegacyAwareBundleIndex()
             appliedSelection.entries.mapNotNull { (bundleUid, patches) ->
                 if (patches.isEmpty()) return@mapNotNull null
                 val patchNames = patches.toList().sorted()
@@ -2285,4 +2287,4 @@ private fun String.toPrefixedVersionLabel(): String {
 }
 
 private fun String.normalizedBundleEndpoint(): String? =
-    trim().trimEnd('/').takeIf(String::isNotBlank)
+    app.universal.patch.manager.domain.bundles.bundleEndpointIdentity(this).trimEnd('/').takeIf(String::isNotBlank)

@@ -46,9 +46,24 @@ class JvmInstallation(private val app: Application) {
             .firstOrNull { it in BuildConfig.EMBEDDED_JVM_ABIS }
 
     val isAvailable get() = abi != null
+    val feature get() = if (Process.is64Bit()) BuildConfig.EMBEDDED_JVM_64_BIT_FEATURE
+        else BuildConfig.EMBEDDED_JVM_32_BIT_FEATURE
 
     private val root = app.managerStorageContext.noBackupFilesDir.resolve(ROOT_DIR)
     private val lock = Mutex()
+
+    /** Warm the runtime image without unpacking an unrelated engine's host JAR. */
+    suspend fun prepareRuntime() = lock.withLock {
+        withContext(Dispatchers.IO) { runtimeHome() }
+    }
+
+    private fun runtimeHome(): File {
+        val abi = abi ?: throw JvmUnavailableException("No patcher JVM for ${Build.SUPPORTED_ABIS.joinToString()}")
+        if (!root.isDirectory && !root.mkdirs()) throw IOException("Could not create $root")
+        val home = root.resolve("runtime-$abi-${BuildConfig.EMBEDDED_JVM_ID}")
+        if (!home.isDirectory) unpackRuntime(abi, home)
+        return home
+    }
 
     /** The runtime and host ready to start, unpacked first if they are not yet. */
     suspend fun install(host: String, plugin: File? = null): Installed = lock.withLock {
@@ -58,9 +73,7 @@ class JvmInstallation(private val app: Application) {
             )
 
             try {
-                if (!root.isDirectory && !root.mkdirs()) throw IOException("Could not create $root")
-                val home = root.resolve("runtime-$abi-${BuildConfig.EMBEDDED_JVM_ID}")
-                if (!home.isDirectory) unpackRuntime(abi, home)
+                val home = runtimeHome()
 
                 // UPM PR APKs can share a version code, so refresh the host on every app update.
                 val updatedAt = app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime

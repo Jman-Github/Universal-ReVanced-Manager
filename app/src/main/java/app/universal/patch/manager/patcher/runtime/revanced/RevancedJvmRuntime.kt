@@ -44,7 +44,7 @@ class RevancedJvmRuntime(private val context: Context, private val v22: Boolean)
         }
         client.execute(engine, params, available.values.map { it.patchesJar },
             runtimeClassPath = when {
-                v22 -> null
+                v22 -> app.universal.patch.manager.patcher.runtime.revanced.Revanced22RuntimeAssets.ensureRuntimeClassPath(context).path
                 legacy -> Revanced21RuntimeAssets.ensureLegacyRuntimeClassPath(context).path
                 else -> Revanced21RuntimeAssets.ensureRuntimeClassPath(context).path
             }

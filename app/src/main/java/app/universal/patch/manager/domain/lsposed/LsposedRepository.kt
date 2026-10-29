@@ -11,7 +11,7 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.data.room.lsposed.LsposedModule
 import app.universal.patch.manager.data.room.lsposed.LsposedModuleDao
 import app.universal.patch.manager.domain.installer.RootInstaller
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.api.successOrThrow
 import app.universal.patch.manager.network.dto.GitHubAsset
 import app.universal.patch.manager.network.dto.GitHubRelease
@@ -132,7 +132,7 @@ object LsposedSourceParser {
 class LsposedRepository(
     private val app: Application,
     private val dao: LsposedModuleDao,
-    private val api: ReVancedAPI,
+    private val api: UpmAPI,
     private val http: HttpService,
     private val pm: PM,
     private val rootInstaller: RootInstaller,

@@ -339,7 +339,6 @@ fun AdvancedSettingsScreen(
             }
         }
     }
-    val hasOfficialBundle by viewModel.hasOfficialBundle.collectAsStateWithLifecycle(true)
     val searchTarget by SettingsSearchState.target.collectAsStateWithLifecycle()
     var highlightTarget by rememberSaveable { mutableStateOf<Int?>(null) }
     var autoPatchShizukuConflictOptionsExpanded by rememberSaveable {
@@ -1311,43 +1310,6 @@ fun AdvancedSettingsScreen(
                         coroutineScope = viewModel.viewModelScope,
                         headline = R.string.remove_gmscore_for_primary_mount,
                         description = R.string.remove_gmscore_for_primary_mount_description,
-                    )
-                }
-            }
-            val restoreDescription = if (hasOfficialBundle) {
-                stringResource(R.string.restore_official_bundle_description_installed)
-            } else {
-                stringResource(R.string.restore_official_bundle_description_missing)
-            }
-            val installedTrailingContent: (@Composable () -> Unit)? = if (hasOfficialBundle) {
-                {
-                    Text(
-                        text = stringResource(R.string.installed),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            } else null
-            GroupHeader(
-                stringResource(R.string.bundle_system_recovery_section),
-                icon = SettingsSectionIcons.BundleSystemRecovery
-            )
-            ExpressiveSettingsCard(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
-            ) {
-                SettingsSearchHighlight(
-                    targetKey = R.string.restore_official_bundle,
-                    activeKey = highlightTarget,
-                    onHighlightComplete = { highlightTarget = null }
-                ) { highlightModifier ->
-                    ExpressiveSettingsItem(
-                        modifier = highlightModifier,
-                        headlineContent = stringResource(R.string.restore_official_bundle),
-                        supportingContent = restoreDescription,
-                        trailingContent = installedTrailingContent,
-                        enabled = !hasOfficialBundle,
-                        onClick = if (hasOfficialBundle) null else ({ viewModel.restoreOfficialBundle() })
                     )
                 }
             }

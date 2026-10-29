@@ -10,7 +10,7 @@ class LoadedPatcherRuntimePluginTest {
         packageName = "fixture.runtime",
         name = "Runtime",
         version = "1.4.0",
-        kind = PatcherRuntimeKind.RESEAM,
+        kind = PatcherRuntimeKind.REVANCED_V22,
         sourceId = "source",
         apkFile = file
     )

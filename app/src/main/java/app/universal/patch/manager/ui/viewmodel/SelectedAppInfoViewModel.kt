@@ -22,7 +22,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
 import androidx.lifecycle.viewmodel.compose.saveable
 import app.universal.patch.manager.R
-import app.revanced.library.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
+import app.universal.patch.manager.patcher.patch.mostCommonCompatibleVersions as revancedMostCommonCompatibleVersions
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.data.room.apps.downloaded.DownloadedApp
 import app.universal.patch.manager.data.room.apps.installed.InstallType

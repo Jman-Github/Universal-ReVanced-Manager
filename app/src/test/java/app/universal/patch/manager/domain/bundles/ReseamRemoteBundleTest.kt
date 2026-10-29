@@ -51,7 +51,7 @@ class ReseamRemoteBundleTest {
                 }
             }
         }
-        // Deliberately omit ReVancedAPI: a Reseam index must not use repository-release lookup.
+        // Deliberately omit UpmAPI: a Reseam index must not use repository-release lookup.
         startKoin { modules(module { single { HttpService(Json { ignoreUnknownKeys = true }, client) } }) }
     }
 

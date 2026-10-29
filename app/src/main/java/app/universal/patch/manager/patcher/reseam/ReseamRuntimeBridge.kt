@@ -167,15 +167,14 @@ object ReseamRuntimeBridge {
 
     private fun ensureClassLoader(): DexClassLoader = synchronized(lock) {
         val context = appContext ?: error("ReseamRuntimeBridge is not initialized.")
-        val runtimeClassPathFile = runtimeClassPathOverride
+        val overrideFile = runtimeClassPathOverride
             ?.takeIf { it.isNotBlank() }
             ?.let { path ->
                 File(path).takeIf { it.exists() }
                     ?: throw IOException("Reseam runtime classpath does not exist: $path")
             }
-            ?: ReseamRuntimeAssets.ensureRuntimeClassPath(context)
-        // Authorization is checked above on every call, including when a retained loader exists.
-        val runtime = ReseamRuntimeAssets.prepareRuntime(context, runtimeClassPathFile)
+        val runtime = if (overrideFile != null) ReseamRuntimeAssets.prepareRuntime(context, overrideFile)
+            else ReseamRuntimeAssets.prepareBundledRuntime(context)
         val cacheKey = runtime.nativeLibraryDirectory.canonicalPath
         val existing = classLoader
         if (existing != null && runtimeClassPath == cacheKey) return@synchronized existing

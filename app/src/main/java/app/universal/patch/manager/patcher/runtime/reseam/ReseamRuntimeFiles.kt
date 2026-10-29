@@ -30,7 +30,7 @@ internal fun prepareReseamRuntimeFiles(apk: File, cacheRoot: File, abis: List<St
             if (!snapshot.setWritable(false, false)) throw IOException("Cannot protect Reseam runtime snapshot")
             return ZipFile(snapshot).use { zip ->
                 val abi = abis.firstOrNull { zip.getEntry("lib/$it/libreseam-sdk-native.so") != null }
-                    ?: throw IOException("Reseam plugin has no native library for this process (${abis.joinToString()}).")
+                    ?: throw IOException("Reseam runtime has no native library for this process (${abis.joinToString()}).")
                 val nativeDirectory = directory.resolve(abi)
                 if (!nativeDirectory.mkdirs() && !nativeDirectory.isDirectory) {
                     throw IOException("Cannot create Reseam native cache")

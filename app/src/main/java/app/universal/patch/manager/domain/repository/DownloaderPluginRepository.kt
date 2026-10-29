@@ -20,7 +20,7 @@ import app.universal.patch.manager.data.platform.NetworkInfo
 import app.universal.patch.manager.data.room.AppDatabase
 import app.universal.patch.manager.data.room.plugins.TrustedDownloaderPlugin
 import app.universal.patch.manager.domain.manager.PreferencesManager
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.api.successOrThrow
 import app.universal.patch.manager.network.downloader.ApkDownloadHelperContract
 import app.universal.patch.manager.network.downloader.DownloaderPluginSourceEntry
@@ -76,7 +76,7 @@ class DownloaderPluginRepository(
     private val pm: PM,
     private val prefs: PreferencesManager,
     private val app: Application,
-    private val api: ReVancedAPI,
+    private val api: UpmAPI,
     private val httpService: HttpService,
     private val networkInfo: NetworkInfo,
     private val downloadProgressNotifier: DownloadProgressNotifier,

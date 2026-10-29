@@ -70,7 +70,7 @@ internal fun migrateManagerRuntimePackage(value: String): String {
     val current = "app.universal.patch.manager"
     if (!value.startsWith(legacy)) return value
     val suffix = value.removePrefix(legacy)
-    return if (suffix in setOf(".morphe.runtime", ".revanced.v21.runtime", ".reseam.runtime")) {
+    return if (suffix in setOf(".morphe.runtime", ".revanced.v21.runtime", ".revanced.v22.runtime", ".reseam.runtime")) {
         current + suffix
     } else value
 }

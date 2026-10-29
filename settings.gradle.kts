@@ -129,6 +129,8 @@ fun includeIfAvailable(path: String) {
 include(":app", ":api", ":upm-patcher-core", ":jvm-host", ":revanced21-patcher-core", ":revanced22-patcher-core")
 includeIfAvailable(":morphe-runtime")
 includeIfAvailable(":revanced.v21-runtime-plugin")
-includeIfAvailable(":reseam-runtime-plugin")
+includeIfAvailable(":reseam-runtime")
 
 include(":revanced-legacy-patcher-core")
+
+include(":tools-patcher-core", ":revanced.v22-runtime-plugin")

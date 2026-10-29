@@ -24,7 +24,6 @@ import app.universal.patch.manager.data.room.options.Option as StoredOption
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.universal.patch.manager.domain.bundles.RemotePatchBundle
 import app.universal.patch.manager.domain.repository.PatchBundleRepository
 import app.universal.patch.manager.domain.repository.PatchSelectionRepository
@@ -172,7 +171,7 @@ class PatchesSelectorViewModel(input: SelectedApplicationInfo.PatchesSelector.Vi
         patchBundleRepository.sources.map { sources ->
             sources.associate { source ->
                 val type = when {
-                    source.isPreinstalled -> BundleSourceType.Preinstalled
+
                     source.asRemoteOrNull != null -> BundleSourceType.Remote
                     else -> BundleSourceType.Local
                 }

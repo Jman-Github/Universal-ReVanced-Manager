@@ -32,12 +32,13 @@ import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.JsonPatchBundle
 import app.universal.patch.manager.domain.bundles.RepositoryBundleSettings
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.domain.bundles.PatchBundleChangelogEntry
 import app.universal.patch.manager.domain.repository.remapLocalBundles
 import app.universal.patch.manager.domain.worker.WorkerRepository
 import app.universal.patch.manager.patcher.worker.AutoPatchWorker
-import app.universal.patch.manager.data.room.bundles.Source as SourceInfo
+import app.universal.patch.manager.domain.bundles.bundleEndpointIdentity
+import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
+import app.universal.patch.manager.domain.bundles.legacyBundleEndpointsMatch
 import app.universal.patch.manager.util.tag
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.uiSafe
@@ -763,12 +764,12 @@ class ImportExportViewModel(
         require(exportFile.version in 1..2) { "Unsupported patch selection backup version" }
         val bundles = patchBundleRepository.sources.first()
         val byEndpoint =
-            bundles.mapNotNull { it.asRemoteOrNull?.endpoint?.trim()?.takeIf(String::isNotBlank)?.let { endpoint -> endpoint to it } }
-                .toMap()
+            bundles.mapNotNull { it.asRemoteOrNull?.endpoint?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)?.let { endpoint -> endpoint to it } }
+                .toLegacyAwareBundleIndex()
 
         var skipped = 0
         for (bundleExport in exportFile.bundles) {
-            val endpoint = bundleExport.source?.trim()?.takeIf(String::isNotBlank)
+            val endpoint = bundleExport.source?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
             val source = if (endpoint != null) {
                 byEndpoint[endpoint]
             } else {
@@ -861,10 +862,10 @@ class ImportExportViewModel(
     private fun PatchSelectionBundleExport.matchesSelectedBundle(
         source: PatchBundleSource
     ): Boolean {
-        val exportEndpoint = this.source?.trim()?.takeIf(String::isNotBlank)
-        val selectedEndpoint = source.asRemoteOrNull?.endpoint?.trim()?.takeIf(String::isNotBlank)
+        val exportEndpoint = this.source?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
+        val selectedEndpoint = source.asRemoteOrNull?.endpoint?.let(::bundleEndpointIdentity)?.takeIf(String::isNotBlank)
         if (exportEndpoint != null || selectedEndpoint != null) {
-            return exportEndpoint != null && exportEndpoint == selectedEndpoint
+            return exportEndpoint != null && selectedEndpoint != null && legacyBundleEndpointsMatch(this.source.orEmpty(), selectedEndpoint)
         }
 
         val exportNames = setOfNotNull(name, displayName)
@@ -1015,15 +1016,8 @@ class ImportExportViewModel(
         exportFile: PatchBundleExportFile,
         onToast: (String) -> Unit
     ) {
-        // Older settings backups store this preference only in the bundle section.
-        // Apply it before restoring or downloading the official bundle.
-        val previousUsePrereleases = preferencesManager.usePatchesPrereleases.get()
-        val importedUsePrereleases = exportFile.bundles.firstOrNull {
-            it.endpoint.trim().equals(SourceInfo.API.SENTINEL, ignoreCase = true)
-        }?.officialUsePrereleases
-        importedUsePrereleases?.let { preferencesManager.usePatchesPrereleases.update(it) }
-        val officialPrereleasesChanged = importedUsePrereleases != null &&
-            importedUsePrereleases != previousUsePrereleases
+        // Only an explicit legacy bundle entry is imported; settings never add sources.
+        val importedBundles = exportFile.bundles.mapNotNull { it.asUserManagedBundle() }
         coroutineScope {
             val importActive = AtomicBoolean(true)
             val progressToast = withContext(Dispatchers.Main) {
@@ -1047,10 +1041,6 @@ class ImportExportViewModel(
                 }
             }
 
-            var officialCreated = false
-            var officialUpdated = false
-            var hasOfficialSnapshot = false
-            var shouldRemoveOfficial = true
 
             val summary = try {
                 withContext(Dispatchers.Default) {
@@ -1058,22 +1048,21 @@ class ImportExportViewModel(
                         .mapNotNull { it.asRemoteOrNull }
                     val endpointToSource =
                         initialSources.associateBy { it.endpoint }.toMutableMap()
-                    val importedEndpoints = exportFile.bundles
+                    val importedEndpoints = importedBundles
                         .map { it.endpoint.trim() }
-                        .filter { it.isNotBlank() && !it.equals(SourceInfo.API.SENTINEL, true) }
+                        .filter { it.isNotBlank() }
                         .toSet()
 
                     var createdCount = 0
                     var updatedCount = 0
                     var skippedCount = 0
-                    var officialSnapshot: PatchBundleSnapshot? = null
                     val pendingEnabledUpdates = LinkedHashMap<Int, Boolean>()
                     val pendingReleaseSettings =
                         LinkedHashMap<Int, RepositoryBundleSettings>()
-                    val total = exportFile.bundles.size.coerceAtLeast(1)
+                    val total = importedBundles.size.coerceAtLeast(1)
                     var processed = 0
 
-                    for (snapshot in exportFile.bundles) {
+                    for (snapshot in importedBundles) {
                         val endpoint = snapshot.endpoint.trim()
                         val snapshotEnabled = snapshot.enabled
                         val displayName = snapshot.displayName?.trim().takeUnless { it.isNullOrBlank() }
@@ -1112,13 +1101,6 @@ class ImportExportViewModel(
                         }
 
                         setImportProgress(PatchBundleRepository.BundleImportPhase.Processing)
-                        if (endpoint.equals(SourceInfo.API.SENTINEL, true)) {
-                            officialSnapshot = snapshot
-                            shouldRemoveOfficial = false
-                            hasOfficialSnapshot = true
-                            finishImportItem()
-                            continue
-                        }
                         if (endpoint.isBlank()) {
                             skippedCount += 1
                             finishImportItem()
@@ -1266,120 +1248,11 @@ class ImportExportViewModel(
                         finishImportItem()
                     }
 
-                    officialSnapshot?.let { snapshot ->
-                        val desiredState = snapshot.officialState ?: OfficialBundleState.PRESENT
-                        val desiredDisplayName = snapshot.displayName?.takeUnless { it.isBlank() }
-                        val desiredAutoUpdate = snapshot.officialAutoUpdate
-                        when (desiredState) {
-                            OfficialBundleState.PRESENT -> {
-                                snapshot.position?.let { position ->
-                                    patchBundleRepository.setOfficialBundleSortOrder(position)
-                                }
-                                var defaultSource = patchBundleRepository.sources.first()
-                                    .firstOrNull { it.isDefault }
-                                if (defaultSource == null) {
-                                    patchBundleRepository.restoreDefaultBundle()
-                                    patchBundleRepository.refreshDefaultBundle()
-                                    defaultSource = withTimeoutOrNull(15_000) {
-                                        patchBundleRepository.sources
-                                            .map { sources -> sources.firstOrNull { it.isDefault } }
-                                            .first { it != null }
-                                    }
-                                    if (defaultSource != null) {
-                                        officialCreated = true
-                                    }
-                                } else if (defaultSource.state is PatchBundleSource.State.Missing ||
-                                    officialPrereleasesChanged
-                                ) {
-                                    patchBundleRepository.refreshDefaultBundle()
-                                    val refreshed = withTimeoutOrNull(15_000) {
-                                        patchBundleRepository.sources
-                                            .map { sources -> sources.firstOrNull { it.isDefault } }
-                                            .first { it != null && it.state !is PatchBundleSource.State.Missing }
-                                    }
-                                    if (refreshed != null) {
-                                        defaultSource = refreshed
-                                        officialUpdated = true
-                                    }
-                                }
-                                defaultSource?.let { source ->
-                                    if (desiredDisplayName != null && source.displayName != desiredDisplayName) {
-                                        val result = patchBundleRepository.setDisplayName(source.uid, desiredDisplayName)
-                                        if (result == PatchBundleRepository.DisplayNameUpdateResult.SUCCESS) {
-                                            officialUpdated = true
-                                        }
-                                    }
-                                    if (snapshot.changelogHistory.isNotEmpty()) {
-                                        val existingHistory =
-                                            patchBundleRepository.getChangelogHistory(source)
-                                        if (existingHistory != snapshot.changelogHistory) {
-                                            patchBundleRepository.setChangelogHistory(
-                                                source,
-                                                snapshot.changelogHistory
-                                            )
-                                            officialUpdated = true
-                                        }
-                                    }
-                                    val remote = source.asRemoteOrNull
-                                    desiredAutoUpdate?.let { autoUpdate ->
-                                        if (remote != null && remote.autoUpdate != autoUpdate) {
-                                            with(patchBundleRepository) {
-                                                remote.setAutoUpdate(autoUpdate)
-                                            }
-                                            officialUpdated = true
-                                        }
-                                    }
-                                    if (remote != null && remote.searchUpdate != snapshot.searchUpdate) {
-                                        with(patchBundleRepository) {
-                                            remote.setSearchUpdate(snapshot.searchUpdate)
-                                        }
-                                        officialUpdated = true
-                                    }
-                                    if (source.enabled != snapshot.enabled) {
-                                        pendingEnabledUpdates[source.uid] = snapshot.enabled
-                                        officialUpdated = true
-                                    }
-                                    snapshot.officialUsePrereleases?.let { usePrereleases ->
-                                        val currentValue =
-                                            preferencesManager.usePatchesPrereleases.get()
-                                        if (currentValue != usePrereleases) {
-                                            preferencesManager.usePatchesPrereleases.update(usePrereleases)
-                                            officialUpdated = true
-                                        }
-                                    }
-                                    if (snapshot.createdAt != null || snapshot.updatedAt != null) {
-                                        patchBundleRepository.updateTimestamps(
-                                            source,
-                                            snapshot.createdAt,
-                                            snapshot.updatedAt
-                                        )
-                                    }
-                                }
-                                patchBundleRepository.enforceOfficialOrderPreference()
-                            }
-                            OfficialBundleState.ABSENT -> {
-                                patchBundleRepository.sources.first()
-                                    .firstOrNull { it.isDefault }
-                                    ?.let {
-                                        patchBundleRepository.remove(it)
-                                    }
-                            }
-                        }
-                    }
-
                     if (pendingEnabledUpdates.isNotEmpty()) {
                         patchBundleRepository.setEnabledStates(pendingEnabledUpdates)
                     }
 
-                    if (shouldRemoveOfficial) {
-                        patchBundleRepository.sources.first()
-                            .firstOrNull { it.isDefault }
-                            ?.let {
-                                patchBundleRepository.remove(it)
-                            }
-                    }
-
-                    val orderedSnapshots = exportFile.bundles
+                    val orderedSnapshots = importedBundles
                         .mapIndexed { index, snapshot -> snapshot to index }
                         .sortedWith(
                             compareBy<Pair<PatchBundleSnapshot, Int>> { pair ->
@@ -1394,57 +1267,11 @@ class ImportExportViewModel(
                                 source.asRemoteOrNull?.let { remote -> remote.endpoint to remote.uid }
                             }
                             .toMap()
-                        val actualDefaultUid = latestSources.firstOrNull { it.isDefault }?.uid
-                        val defaultUid = actualDefaultUid ?: PREINSTALLED_BUNDLE_UID
-                        val storedOfficialOrder = patchBundleRepository.getOfficialBundleSortOrder()
                         val desiredOrder = orderedSnapshots.mapNotNull { (snapshot, _) ->
-                            val endpoint = snapshot.endpoint.trim()
-                            when {
-                                endpoint.equals(SourceInfo.API.SENTINEL, true) -> defaultUid
-                                else -> endpointToUid[endpoint]
-                            }
-                        }.toMutableList()
-
-                        val sentinelIndex = orderedSnapshots.indexOfFirst { (snapshot, _) ->
-                            snapshot.endpoint.trim().equals(SourceInfo.API.SENTINEL, true)
+                            endpointToUid[snapshot.endpoint.trim()]
                         }
-                        var officialPositionApplied = false
-                        if (sentinelIndex != -1) {
-                            val resolvedBeforeOfficial = orderedSnapshots
-                                .take(sentinelIndex)
-                                .mapNotNull { (snapshot, _) ->
-                                    val endpoint = snapshot.endpoint.trim()
-                                    when {
-                                        endpoint.equals(SourceInfo.API.SENTINEL, true) -> defaultUid
-                                        else -> endpointToUid[endpoint]
-                                    }
-                                }
-                                .size
-                            val currentIndex = desiredOrder.indexOf(defaultUid)
-                            val targetIndex = resolvedBeforeOfficial.coerceIn(0, desiredOrder.size)
-                            if (currentIndex == -1) {
-                                desiredOrder.add(targetIndex, defaultUid)
-                            } else if (currentIndex != targetIndex) {
-                                desiredOrder.removeAt(currentIndex)
-                                desiredOrder.add(targetIndex.coerceIn(0, desiredOrder.size), defaultUid)
-                            }
-                            officialPositionApplied = true
-                        }
-
-                        if (!officialPositionApplied && sentinelIndex != -1 && storedOfficialOrder != null) {
-                            val currentIndex = desiredOrder.indexOf(defaultUid)
-                            val targetIndex = storedOfficialOrder.coerceIn(0, desiredOrder.size)
-                            if (currentIndex == -1) {
-                                desiredOrder.add(targetIndex, defaultUid)
-                            } else if (currentIndex != targetIndex) {
-                                desiredOrder.removeAt(currentIndex)
-                                desiredOrder.add(targetIndex, defaultUid)
-                            }
-                        }
-
                         if (desiredOrder.isNotEmpty()) {
                             patchBundleRepository.reorderBundles(desiredOrder)
-                            patchBundleRepository.enforceOfficialOrderPreference()
                         }
                     }
 
@@ -1498,8 +1325,8 @@ class ImportExportViewModel(
                 patchBundleRepository.setBundleImportProgress(null)
             }
 
-            val totalCreated = summary.created + if (officialCreated) 1 else 0
-            val totalUpdated = summary.updated + if (!officialCreated && officialUpdated) 1 else 0
+            val totalCreated = summary.created
+            val totalUpdated = summary.updated
 
             onToast(
                 buildPatchBundleImportMessage(
@@ -1508,28 +1335,15 @@ class ImportExportViewModel(
                     skipped = summary.skipped
                 )
             )
-            patchBundleRepository.enforceOfficialOrderPreference()
         }
     }
 
     private suspend fun buildPatchBundleExportResult(): PatchBundleExportResult {
         val sources = patchBundleRepository.sources.first()
-        val nonDefaultSources = sources.filterNot { it.isDefault }
-        val localSources = nonDefaultSources.filter { it.asRemoteOrNull == null }
-        val remoteSources = nonDefaultSources.mapNotNull { it.asRemoteOrNull }
-
-        val officialSource = sources.firstOrNull { it.isDefault }
-        val officialDisplayName = officialSource
-            ?.displayName
-            ?.takeUnless { it.isBlank() }
-        val officialState = officialSource?.let { OfficialBundleState.PRESENT } ?: OfficialBundleState.ABSENT
-        val officialEnabled = officialSource?.enabled ?: true
-
-        val exportedCount = remoteSources.size + if (officialSource != null) 1 else 0
-
+        val localSources = sources.filter { it.asRemoteOrNull == null }
+        val remoteSources = sources.mapNotNull { it.asRemoteOrNull }
+        val exportedCount = remoteSources.size
         val positionLookup = sources.withIndex().associate { it.value.uid to it.index }
-        val officialAutoUpdate = officialSource?.asRemoteOrNull?.autoUpdate ?: false
-        val officialUsePrereleases = preferencesManager.usePatchesPrereleases.get()
 
         val bundles = buildList {
             remoteSources.mapTo(this) {
@@ -1551,25 +1365,7 @@ class ImportExportViewModel(
                     changelogHistory = changelogHistory
                 )
             }
-            add(
-                PatchBundleSnapshot(
-                    endpoint = SourceInfo.API.SENTINEL,
-                    name = "",
-                    displayName = officialDisplayName,
-                    autoUpdate = officialAutoUpdate,
-                    searchUpdate = officialSource?.asRemoteOrNull?.searchUpdate ?: true,
-                    enabled = officialEnabled,
-                    officialState = officialState,
-                    position = officialSource?.let { positionLookup[it.uid] },
-                    officialAutoUpdate = officialAutoUpdate,
-                    officialUsePrereleases = officialUsePrereleases,
-                    createdAt = officialSource?.createdAt,
-                    updatedAt = officialSource?.updatedAt,
-                    changelogHistory = officialSource?.let {
-                        patchBundleRepository.getChangelogHistory(it)
-                    }.orEmpty()
-                )
-            )
+
         }
 
         return PatchBundleExportResult(
@@ -1964,35 +1760,9 @@ class ImportExportViewModel(
                 Log.e(tag, "Failed to update imported patcher runtime plugins", error)
             }
         }
-        var officialBundleRestored = false
-        settings.officialBundleRemoved?.let { removed ->
-            val officialSource = patchBundleRepository.sources.first().firstOrNull { it.isDefault }
-            if (removed) {
-                officialSource?.let { patchBundleRepository.remove(it) }
-            } else if (officialSource == null) {
-                patchBundleRepository.restoreDefaultBundle()
-                officialBundleRestored = true
-            }
-        }
-        settings.officialBundleCustomDisplayName?.let {
-            patchBundleRepository.setDisplayName(PREINSTALLED_BUNDLE_UID, it.ifBlank { null })
-        }
-        settings.officialBundleSortOrder?.let {
-            patchBundleRepository.setOfficialBundleSortOrder(it)
-        }
-        if (settings.api != null && settings.api != previousSettings.api) {
-            patchBundleRepository.reloadApiBundles()
-        } else {
-            patchBundleRepository.reload()
-            val prereleasesChanged = settings.usePatchesPrereleases != null &&
-                settings.usePatchesPrereleases != previousSettings.usePatchesPrereleases
-            if ((officialBundleRestored || prereleasesChanged) &&
-                patchBundleRepository.sources.first().any { it.isDefault }
-            ) {
-                patchBundleRepository.refreshDefaultBundle()
-            }
-        }
+        patchBundleRepository.reload()
     }
+
 
     private suspend fun buildImportedPermissionRequest(
         previousSettings: PreferencesManager.SettingsSnapshot
@@ -2148,7 +1918,6 @@ class ImportExportViewModel(
     }
 
     private companion object {
-        private const val PREINSTALLED_BUNDLE_UID = 0
         val knownPasswords = arrayOf(KeystoreManager.DEFAULT_PASSWORD, KeystoreManager.LEGACY_DEFAULT_ALIAS, KeystoreManager.LEGACY_DEFAULT_PASSWORD)
         val aliases = arrayOf(KeystoreManager.DEFAULT_ALIAS, KeystoreManager.LEGACY_DEFAULT_ALIAS, "ReVanced Key")
     }

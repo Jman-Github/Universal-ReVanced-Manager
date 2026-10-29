@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.universal.patch.manager.R
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.domain.installer.InstallerManager
 import app.universal.patch.manager.domain.installer.RootInstaller
 import app.universal.patch.manager.domain.manager.PreferencesManager
@@ -64,9 +63,6 @@ class AdvancedSettingsViewModel(
         prefs.useJvmRuntime.update(enabled)
     }
 
-    val hasOfficialBundle = patchBundleRepository.sources
-        .map { sources -> sources.any { it.isDefault } }
-
     val debugLogFileName: String
         get() = FilenameUtils.timestampedLogFileName("debug")
 
@@ -74,7 +70,6 @@ class AdvancedSettingsViewModel(
         if (value == prefs.api.get()) return@launch
 
         prefs.api.update(value)
-        patchBundleRepository.reloadApiBundles()
         patchBundleRepository.updateCheck()
     }
 
@@ -363,31 +358,6 @@ class AdvancedSettingsViewModel(
         viewModelScope.launch(Dispatchers.Default) {
             prefs.patchSelectionHiddenActions.update(hidden)
         }
-
-    fun restoreOfficialBundle() = viewModelScope.launch(Dispatchers.Default) {
-        val hasBundle = patchBundleRepository.sources.first().any { it.isDefault }
-        if (hasBundle) {
-            withContext(Dispatchers.Main) {
-                app.toast(app.getString(R.string.restore_official_bundle_already))
-            }
-            return@launch
-        }
-
-        runCatching {
-            patchBundleRepository.restoreDefaultBundle()
-            patchBundleRepository.refreshDefaultBundle()
-        }.onSuccess {
-            withContext(Dispatchers.Main) {
-                app.toast(app.getString(R.string.restore_official_bundle_success))
-            }
-        }.onFailure { error ->
-            Log.e(tag, "Failed to restore official bundle", error)
-            val message = error.simpleMessage() ?: error.javaClass.simpleName.orEmpty()
-            withContext(Dispatchers.Main) {
-                app.toast(app.getString(R.string.restore_official_bundle_failed, message))
-            }
-        }
-    }
 
     fun addCustomInstaller(component: ComponentName, onResult: (Boolean) -> Unit = {}) =
         viewModelScope.launch(Dispatchers.Default) {

@@ -47,7 +47,7 @@ class PatcherJvm private constructor(
 
     /** Warm the installation without keeping an unused worker or SDK heap alive. */
     fun startAhead() = scope.launch {
-        if (isEnabled()) runCatching { installation.install("upm-patcher-core") }
+        if (isEnabled()) runCatching { installation.prepareRuntime() }
     }
 
     suspend fun run(engine: RuntimeEngine, runtimeClassPath: String?, request: File,
@@ -59,7 +59,7 @@ class PatcherJvm private constructor(
             }
             checkCancelled()
             val installed = installation.install(requireNotNull(engine.host),
-                if (engine == RuntimeEngine.REVANCED21 || engine == RuntimeEngine.REVANCED_LEGACY)
+                if (engine == RuntimeEngine.REVANCED21 || engine == RuntimeEngine.REVANCED_LEGACY || engine == RuntimeEngine.REVANCED22)
                     runtimeClassPath?.let(::File) else null)
             if (JarFile(installed.hostJar).use {
                     it.getJarEntry("app/universal/patch/manager/patcher/host/GcOverheadWatch.class") == null
@@ -90,7 +90,7 @@ class PatcherJvm private constructor(
                 runtime.use {
                     checkCancelled()
                     onMessage("log", mapOf("level" to "INFO", "message" to
-                        "Runtime mode: bound JVM worker (OpenJDK ${BuildConfig.EMBEDDED_JVM_FEATURE}); requested memory budget: ${requestedHeapMb}MB"))
+                        "Runtime mode: bound JVM worker (OpenJDK ${installation.feature}); requested memory budget: ${requestedHeapMb}MB"))
                     onMessage("log", mapOf("level" to "INFO", "message" to
                         "Patcher process: pid=${runtime.pid} vm=JVM engine=${engine.name} heap=requested-${requestedHeapMb}MB bits=${if (Process.is64Bit()) 64 else 32} age=0s"))
                     onMessage("log", mapOf("level" to "INFO", "message" to

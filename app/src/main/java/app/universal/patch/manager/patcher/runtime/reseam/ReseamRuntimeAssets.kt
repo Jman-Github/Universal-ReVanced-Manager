@@ -3,19 +3,33 @@ package app.universal.patch.manager.patcher.runtime.reseam
 import android.content.Context
 import android.os.Build
 import android.os.Process
-import app.universal.patch.manager.network.runtime.PatcherRuntimeKind
-import app.universal.patch.manager.patcher.runtime.PatcherRuntimePluginRegistry
 import app.universal.patch.manager.util.managerStorageContext
 import java.io.File
-import java.io.IOException
+import app.universal.patch.manager.patcher.runtime.RuntimePreparationCache
 
 object ReseamRuntimeAssets {
-    fun isAvailable(context: Context): Boolean =
-        PatcherRuntimePluginRegistry.runtimeFor(PatcherRuntimeKind.RESEAM) != null
+    private data class Prepared(val files: ReseamRuntimeFiles, val apkSize: Long, val nativeSize: Long)
+    private val bundled = RuntimePreparationCache<Prepared>()
 
-    fun ensureRuntimeClassPath(context: Context): File =
-        PatcherRuntimePluginRegistry.runtimeFor(PatcherRuntimeKind.RESEAM)?.apkFile
-            ?: throw IOException("Reseam runtime plugin is not installed or trusted.")
+    // These files originate in this app's packaged assets and are published read-only.
+    // External override paths continue through full content hashing in prepareRuntime.
+    internal fun prepareBundledRuntime(context: Context): ReseamRuntimeFiles {
+        val apk = ensureRuntimeClassPath(context)
+        val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS
+        val key = "${context.managerStorageContext.codeCacheDir.canonicalPath}:${apk.canonicalPath}:${apk.length()}:${apk.lastModified()}:${abis.joinToString()}"
+        return bundled.get(key, { cached ->
+            val library = cached.files.nativeLibraryDirectory.resolve("libreseam-sdk-native.so")
+            cached.files.apkFile.isFile && cached.files.apkFile.length() == cached.apkSize &&
+                library.isFile && library.length() == cached.nativeSize
+        }) {
+            val files = prepareRuntime(context, apk)
+            Prepared(files, files.apkFile.length(), files.nativeLibraryDirectory.resolve("libreseam-sdk-native.so").length())
+        }.files
+    }
+
+    fun isAvailable(context: Context): Boolean = BundledReseamRuntimeAssets.isAvailable(context)
+
+    fun ensureRuntimeClassPath(context: Context): File = BundledReseamRuntimeAssets.ensureRuntimeApk(context)
 
     internal fun prepareRuntime(context: Context, apk: File): ReseamRuntimeFiles {
         val abis = if (Process.is64Bit()) Build.SUPPORTED_64_BIT_ABIS else Build.SUPPORTED_32_BIT_ABIS

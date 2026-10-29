@@ -58,8 +58,6 @@ import app.universal.patch.manager.R
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
 import app.universal.patch.manager.domain.bundles.PatchBundleChangelogEntry
 import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.asRemoteOrNull
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isPreinstalled
 import app.universal.patch.manager.data.platform.NetworkInfo
 import app.universal.patch.manager.domain.repository.PatchBundleRepository
 import app.universal.patch.manager.domain.repository.PatchBundleRepository.DisplayNameUpdateResult
@@ -362,8 +360,7 @@ fun BundleItem(
                     }
                     if (src is RemotePatchBundle) {
                         CatalogIcon(bundleIcon.url, bundleIcon.avatar, src.displayTitle,
-                            isOfficial = src.isDefault || src is app.universal.patch.manager.domain.bundles.APIPatchBundle ||
-                                bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL)
+                            isOfficial = bundleIcon.url == BundleIconRepository.OFFICIAL_ICON_URL)
                     }
                     val titleScrollState = rememberScrollState()
                     Text(
@@ -385,7 +382,7 @@ fun BundleItem(
                     }
                 }
                 val sourceTypeLabel = when {
-                    src.isPreinstalled -> R.string.bundle_type_preinstalled
+
                     src.asRemoteOrNull != null -> R.string.bundle_type_remote
                     else -> R.string.bundle_type_local
                 }

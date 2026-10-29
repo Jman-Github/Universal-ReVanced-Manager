@@ -20,7 +20,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.runCatching
 
-class ReVancedAPI(
+class UpmAPI(
     private val client: HttpService,
     private val prefs: PreferencesManager
 ) {
@@ -224,9 +224,6 @@ class ReVancedAPI(
             { apiRequest(legacyRoute, version = "v4") }
         )
     }
-
-    suspend fun getPatchesUpdate(): APIResponse<ReVancedAsset> =
-        getPatchesUpdate(prefs.usePatchesPrereleases.get())
 
     suspend fun getAnnouncements(): APIResponse<List<ReVancedAnnouncement>> =
         apiRequest("announcements", version = "v5")

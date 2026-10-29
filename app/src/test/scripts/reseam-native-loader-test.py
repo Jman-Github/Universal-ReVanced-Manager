@@ -1,7 +1,7 @@
 """Run focused JVM tests and an optional real-Reseam JNI regression on an Android emulator.
 
 No Gradle tasks are invoked. Run before the final assembleRelease validation.
-Use --emulator SERIAL with an existing reseam-plugin.apk; only a unique /data/local/tmp
+Use --emulator SERIAL with an existing reseam-runtime.apk; only a unique /data/local/tmp
 harness directory is created and removed. Installed apps and their data are untouched.
 """
 import argparse
@@ -18,7 +18,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[4]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--emulator")
-parser.add_argument("--plugin", type=Path, default=ROOT / "reseam-runtime-plugin/build/outputs/apk/release/reseam-plugin.apk")
+parser.add_argument("--runtime", "--plugin", dest="plugin", type=Path, default=ROOT / "reseam-runtime/build/outputs/apk/release/reseam-runtime.apk")
 args = parser.parse_args()
 java_home = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Java\jdk-17"))
 java = java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
@@ -74,10 +74,10 @@ with tempfile.TemporaryDirectory(prefix="reseam-native-loader-", dir=ROOT / "bui
         d8 = artifact("com.android.tools", "r8")
         adb = sdk / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
         assert android.is_file() and d8.is_file() and adb.is_file(), "Android SDK 37/build-tools 36 required"
-        assert args.plugin.is_file(), "Pass --plugin with a previously assembled Reseam runtime APK"
+        assert args.plugin.is_file(), "Pass --runtime with a previously assembled Reseam runtime APK"
         fixture = ROOT / "app/src/test/fixtures/reseam-native-loader"
-        sources = pure_sources + [main / "reseam/ReseamRuntimeBridge.kt", main / "runtime/reseam/ReseamRuntimeAssets.kt",
-            main / "runtime/PatcherRuntimePluginRegistry.kt", ROOT / "shared/runtime-plugin/src/main/java/app/universal/patch/manager/patcher/logger/Logger.kt"]
+        sources = pure_sources + [main / "reseam/ReseamRuntimeBridge.kt", main / "runtime/reseam/ReseamRuntimeAssets.kt", main / "runtime/reseam/BundledReseamRuntimeAssets.kt",
+            main / "runtime/RuntimePreparationCache.kt", main / "runtime/PatcherRuntimePluginRegistry.kt", ROOT / "shared/runtime-plugin/src/main/java/app/universal/patch/manager/patcher/logger/Logger.kt"]
         sources += sorted(fixture.glob("*.kt"))
         harness = work / "harness.jar"
         run([java, "-cp", cp(compiler), "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect",

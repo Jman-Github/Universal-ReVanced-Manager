@@ -1,8 +1,7 @@
 package app.universal.patch.manager.domain.bundles
 
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.network.api.ExternalBundlesApi
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.utils.getOrNull
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +12,7 @@ import kotlinx.coroutines.withContext
 /** Resolve only on tap; reuse results across the details and quick-action buttons. */
 class BundleReleasePageRepository(
     private val api: ExternalBundlesApi,
-    private val github: ReVancedAPI,
+    private val github: UpmAPI,
 ) {
     private data class Cached(val url: String?, val expiresAt: Long)
     private val cache = linkedMapOf<String, Cached>()
@@ -32,8 +31,7 @@ class BundleReleasePageRepository(
             }.getOrNull()
             val matchingMetadata = metadata?.takeIf { version == null ||
                 it.version.removePrefix("v") == version.removePrefix("v") }
-            val repository = if (source.isDefault || source is APIPatchBundle) OFFICIAL_PATCH_REPOSITORY
-                else bundleRepositoryUrl(metadata?.sourceUrl, source.patchBundle?.manifestAttributes?.source,
+            val repository = bundleRepositoryUrl(metadata?.sourceUrl, source.patchBundle?.manifestAttributes?.source,
                     remote?.endpoint, installedUrl, matchingMetadata?.downloadUrl,
                     metadata?.takeIf { !it.ownerName.isNullOrBlank() && !it.repoName.isNullOrBlank() }
                         ?.let { "https://github.com/${it.ownerName}/${it.repoName}" })

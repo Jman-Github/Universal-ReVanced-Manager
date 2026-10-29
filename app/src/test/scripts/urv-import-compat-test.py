@@ -128,13 +128,18 @@ def main():
         else:
             base = ROOT / "app/src/main/java/app/universal/patch/manager"
             files += [base / "domain/manager/LegacyManagerImport.kt",
+                      base / "domain/bundles/LegacyBundleCompatibility.kt",
+                      base / "domain/bundles/RepositoryBundleSettings.kt",
+                      base / "network/api/ExternalBundlesEndpoints.kt",
+                      base / "ui/viewmodel/PatchBundleImportCompatibility.kt",
                       base / "domain/manager/KeystoreRecovery.kt",
                       base / "domain/repository/RuntimePluginInstalledTrust.kt",
                       base / "domain/repository/RuntimePluginTrust.kt"]
             tests = ROOT / "app/src/test/java/app/universal/patch/manager"
             files += [tests / "domain/manager/LegacyManagerImportTest.kt",
                       tests / "domain/manager/KeystoreRecoveryTest.kt",
-                      tests / "ui/viewmodel/LegacyUrVBackupTest.kt"]
+                      tests / "ui/viewmodel/LegacyUrVBackupTest.kt",
+                      tests / "ui/viewmodel/PatchBundleImportCompatibilityTest.kt"]
         subprocess.run(list(map(str, [JAVA, "-cp", classpath(compiler),
             "org.jetbrains.kotlin.cli.jvm.K2JVMCompiler", "-no-stdlib", "-no-reflect", "-jvm-target", "17",
             "-classpath", classpath(deps), "-Xplugin=" + str(plugin), "-d", classes, *files])),
@@ -148,7 +153,8 @@ def main():
                 "-cp", classpath([classes] + deps), "org.junit.runner.JUnitCore",
                 "app.universal.patch.manager.domain.manager.LegacyManagerImportTest",
                 "app.universal.patch.manager.domain.manager.KeystoreRecoveryTest",
-                "app.universal.patch.manager.ui.viewmodel.LegacyUrVBackupTest"])), check=True, timeout=120)
+                "app.universal.patch.manager.ui.viewmodel.LegacyUrVBackupTest",
+                "app.universal.patch.manager.ui.viewmodel.PatchBundleImportCompatibilityTest"])), check=True, timeout=120)
 
 if __name__ == "__main__":
     main()

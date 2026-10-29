@@ -99,7 +99,7 @@ android {
 androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
-            output.outputFileName.set("reseam-plugin.apk")
+            output.outputFileName.set("reseam-runtime.apk")
         }
     }
 }

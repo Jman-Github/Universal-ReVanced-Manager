@@ -750,7 +750,7 @@ fun PatchProfilesScreen(
                             }
                             val selectedBundleTypeLabel = stringResource(
                                 when (detail.type) {
-                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+
                                     BundleSourceType.Remote -> R.string.bundle_type_remote
                                     else -> R.string.bundle_type_local
                                 }
@@ -773,7 +773,7 @@ fun PatchProfilesScreen(
                                                 ?: context.getString(R.string.patches_name_fallback)
                                             val tabTypeLabel = context.getString(
                                                 when (bundleDetail.type) {
-                                                    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+
                                                     BundleSourceType.Remote -> R.string.bundle_type_remote
                                                     else -> R.string.bundle_type_local
                                                 }

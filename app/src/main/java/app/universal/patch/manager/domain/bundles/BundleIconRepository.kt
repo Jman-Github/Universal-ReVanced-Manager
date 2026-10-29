@@ -36,8 +36,6 @@ class BundleIconRepository(
     private val cacheDir = File(app.cacheDir, "bundle_icons").also { it.mkdirs() }
 
     suspend fun resolve(source: PatchBundleSource): BundleIcon = withContext(Dispatchers.IO) {
-        if (source.uid == 0 || source is APIPatchBundle)
-            return@withContext BundleIcon(OFFICIAL_ICON_URL)
         val remote = source as? RemotePatchBundle ?: return@withContext BundleIcon()
         mutex.withLock {
             val external = ExternalBundleMetadataStore.read(source.bundleDirectory)
@@ -88,9 +86,7 @@ class BundleIconRepository(
                     }
                 } else {
                     withTimeoutOrNull(ExternalBundlesEndpoints.HOST_QUERY_TIMEOUT_MS) {
-                        fromRepository(if (source is APIPatchBundle)
-                            "https://github.com/ReVanced/revanced-patches"
-                            else bundleRepositoryUrl(remote.endpoint, external?.sourceUrl, external?.downloadUrl) ?: remote.endpoint,
+                        fromRepository(bundleRepositoryUrl(remote.endpoint, external?.sourceUrl, external?.downloadUrl) ?: remote.endpoint,
                             now) { avatar ->
                             // Keep the fetched avatar if the root-image probe fails or times out.
                             fallback = BundleIcon(cached?.url, avatar ?: cached?.avatar)

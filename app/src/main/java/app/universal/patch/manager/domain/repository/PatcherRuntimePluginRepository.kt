@@ -13,7 +13,7 @@ import android.content.IntentFilter
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.platform.NetworkInfo
 import app.universal.patch.manager.domain.manager.PreferencesManager
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.api.successOrThrow
 import app.universal.patch.manager.network.dto.GitHubAsset
 import app.universal.patch.manager.network.dto.GitHubRelease
@@ -51,7 +51,7 @@ class PatcherRuntimePluginRepository(
     private val pm: PM,
     private val prefs: PreferencesManager,
     private val app: Application,
-    private val api: ReVancedAPI,
+    private val api: UpmAPI,
     private val httpService: HttpService,
     private val networkInfo: NetworkInfo,
     private val downloadProgressNotifier: DownloadProgressNotifier
@@ -145,7 +145,7 @@ class PatcherRuntimePluginRepository(
 
     suspend fun reload() = reloadMutex.withLock {
         val installedPackages = withContext(Dispatchers.IO) {
-            pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE)
+            pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE).filterNot { it.packageName in RETIRED_RUNTIME_PACKAGES }
         }
         val installedPlugins = withContext(Dispatchers.IO) {
             installedPackages.associate { it.packageName to loadInstalledPlugin(it.packageName) }
@@ -189,7 +189,7 @@ class PatcherRuntimePluginRepository(
     }
 
     suspend fun reloadIfChanged(): Boolean = withContext(Dispatchers.IO) {
-        val currentPackages = pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE)
+        val currentPackages = pm.getPackagesWithFeature(RUNTIME_PLUGIN_FEATURE).filterNot { it.packageName in RETIRED_RUNTIME_PACKAGES }
         val currentPackageNames = currentPackages.map { it.packageName }.toSet()
         val knownPackageNames = installedPluginPackageNames.value
 
@@ -480,6 +480,12 @@ class PatcherRuntimePluginRepository(
     }
 
     private fun resolvePlugin(packageInfo: PackageInfo, sourceId: String?): LoadedPatcherRuntimePlugin {
+        @Suppress("DEPRECATION")
+        val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) packageInfo.longVersionCode
+            else packageInfo.versionCode.toLong()
+        require(!runtimePluginRequiresUpdate(packageInfo.packageName, versionCode)) {
+            "Update the ReVanced v21 runtime plugin to 1.8.1 or newer to use it with this UPM version."
+        }
         val applicationInfo = packageInfo.applicationInfo
             ?: throw IllegalStateException("Missing ApplicationInfo for ${packageInfo.packageName}")
         val kind = PatcherRuntimeKind.fromId(
@@ -529,7 +535,9 @@ class PatcherRuntimePluginRepository(
         val raw = prefs.patcherRuntimePluginSourcesJson.get()
         if (raw.isBlank()) return emptyList()
         return runCatching {
-            json.decodeFromString<List<PatcherRuntimePluginSourceEntry>>(raw)
+            json.decodeFromString<List<PatcherRuntimePluginSourceEntry>>(raw).filterNot {
+                canonicalAssetSelector(it.assetSelector) in setOf("reseam-plugin", "reseam-runtime")
+            }
         }.getOrElse {
             Log.e(tag, "Failed to decode patcher runtime source entries", it)
             emptyList()
@@ -931,6 +939,10 @@ class PatcherRuntimePluginRepository(
 
     private companion object {
         private val json = Json { ignoreUnknownKeys = true }
+        val RETIRED_RUNTIME_PACKAGES = setOf(
+            "app.universal.revanced.manager.reseam.runtime",
+            "app.universal.patch.manager.reseam.runtime"
+        )
         const val RUNTIME_PLUGIN_FEATURE = "app.universal.patch.manager.patcher.runtime"
         const val METADATA_RUNTIME_KIND = "app.universal.patch.manager.patcher.runtime.kind"
         private val PACKAGE_ACTIONS = setOf(

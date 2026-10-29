@@ -10,6 +10,7 @@ sealed class Source {
         override fun toString() = SENTINEL
     }
 
+    // Decode-only marker for databases created before bundles became user-managed.
     object API : Source() {
         const val SENTINEL = "api"
 

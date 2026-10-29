@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix="upm-bundle-isolation-", dir=args.gradle
              "morphe-runtime/src/main/java/app/universal/patch/manager/patcher/morphe/MorphePatchBundleLoader.kt",
              "app.universal.patch.manager.patcher.morphe.MorphePatchBundleLoader", "app.morphe.patcher.patch"),
             ("revanced", "revanced22-patcher-core",
-             "app/src/main/java/app/universal/patch/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
+             "shared/revanced22/src/main/java/app/universal/patch/manager/patcher/revanced/RevancedPatchBundleLoader.kt",
              "app.universal.patch.manager.patcher.revanced.RevancedPatchBundleLoader", "app.revanced.patcher.patch"),
         ):
             core = (args.core_dir / root.name / f"{module}.jar") if args.core_dir else root / module / "build/libs" / f"{module}.jar"

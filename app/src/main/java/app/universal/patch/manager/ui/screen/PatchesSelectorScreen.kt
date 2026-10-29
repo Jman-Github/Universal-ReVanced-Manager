@@ -2562,7 +2562,7 @@ private fun SaveFabIcon(
 }
 
 private fun bundleTypeLabelRes(type: BundleSourceType?): Int = when (type) {
-    BundleSourceType.Preinstalled -> R.string.bundle_type_preinstalled
+
     BundleSourceType.Remote -> R.string.bundle_type_remote
     else -> R.string.bundle_type_local
 }

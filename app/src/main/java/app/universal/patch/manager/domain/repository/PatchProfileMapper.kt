@@ -1,5 +1,7 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.domain.bundles.toLegacyAwareBundleIndex
+
 import android.util.Log
 import app.universal.patch.manager.data.room.options.Option
 import app.universal.patch.manager.data.room.profile.PatchProfilePayload
@@ -104,7 +106,7 @@ fun PatchProfilePayload.remapAndExtractSelection(
         source.asRemoteOrNull?.endpoint
             ?.normalizedBundleEndpoint()
             ?.let { it to source }
-    }.toMap()
+    }.toLegacyAwareBundleIndex()
     val selection = buildMap<Int, Set<String>> {
         remapped.bundles.forEach { bundle ->
             val resolvedUid = if (sourceMap.containsKey(bundle.bundleUid)) {
@@ -151,7 +153,7 @@ internal fun PatchSelection.mergeWithRemappedSelection(
         source.asRemoteOrNull?.endpoint
             ?.normalizedBundleEndpoint()
             ?.let { it to source }
-    }.toMap()
+    }.toLegacyAwareBundleIndex()
     originalPayload.bundles.forEach { bundle ->
         if (sourceMap.containsKey(bundle.bundleUid)) return@forEach
         val resolvedUid = bundle.sourceEndpoint
@@ -193,7 +195,7 @@ fun PatchProfilePayload.toConfiguration(
         (source as? RemotePatchBundle)?.endpoint
             ?.normalizedBundleEndpoint()
             ?.let { endpoint -> endpoint to source }
-    }.toMap()
+    }.toLegacyAwareBundleIndex()
 
     bundles.forEach { bundle ->
         var resolvedUid = bundle.bundleUid
@@ -290,7 +292,7 @@ fun PatchProfilePayload.remapLocalBundles(
         source.asRemoteOrNull?.endpoint
             ?.normalizedBundleEndpoint()
             ?.let { it to source }
-    }.toMap()
+    }.toLegacyAwareBundleIndex()
 
     var changed = false
 
@@ -405,7 +407,7 @@ fun Map<Int, PatchBundleInfo.Global>.toSignatureMap() =
     }
 
 private fun String.normalizedBundleEndpoint(): String? =
-    trim().trimEnd('/').takeIf(String::isNotBlank)
+    app.universal.patch.manager.domain.bundles.bundleEndpointIdentity(this).trimEnd('/').takeIf(String::isNotBlank)
 
 private fun Collection<String>.signatureHash(): String? {
     if (isEmpty()) return null

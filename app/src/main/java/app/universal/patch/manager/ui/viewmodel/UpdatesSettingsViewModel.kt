@@ -10,7 +10,7 @@ import app.universal.patch.manager.domain.manager.BundleUpdateDeliveryMode
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.domain.manager.SearchForUpdatesBackgroundInterval
 import app.universal.patch.manager.domain.worker.WorkerRepository
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.patcher.worker.AnnouncementNotificationWorker
 import app.universal.patch.manager.util.toast
 import app.universal.patch.manager.util.uiSafe
@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 class UpdatesSettingsViewModel(
     prefs: PreferencesManager,
     private val app: Application,
-    private val reVancedAPI: ReVancedAPI,
+    private val reVancedAPI: UpmAPI,
     private val network: NetworkInfo,
     private val workerRepository: WorkerRepository,
 ) : ViewModel() {

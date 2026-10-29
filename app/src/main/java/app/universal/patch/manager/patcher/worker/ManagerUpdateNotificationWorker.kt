@@ -15,7 +15,7 @@ import app.universal.patch.manager.MainActivity
 import app.universal.patch.manager.data.platform.NetworkInfo
 import app.universal.patch.manager.domain.manager.PreferencesManager
 import app.universal.patch.manager.domain.worker.Worker
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.util.ManagerUpdateDeepLinkIntent
 import app.universal.patch.manager.util.permission.hasNotificationPermission
 import org.koin.core.component.KoinComponent
@@ -25,7 +25,7 @@ class ManagerUpdateNotificationWorker(
     context: Context,
     parameters: WorkerParameters
 ) : Worker<ManagerUpdateNotificationWorker.Args>(context, parameters), KoinComponent {
-    private val reVancedAPI: ReVancedAPI by inject()
+    private val reVancedAPI: UpmAPI by inject()
     private val prefs: PreferencesManager by inject()
     private val networkInfo: NetworkInfo by inject()
 

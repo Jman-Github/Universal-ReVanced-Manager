@@ -23,7 +23,7 @@ import app.universal.patch.manager.BuildConfig
 import app.universal.patch.manager.R
 import app.universal.patch.manager.data.platform.Filesystem
 import app.universal.patch.manager.data.platform.NetworkInfo
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.dto.ReVancedAsset
 import app.universal.patch.manager.network.service.HttpService
 import app.universal.patch.manager.domain.installer.InstallCancelledException
@@ -61,7 +61,7 @@ class UpdateViewModel(
     private val downloadOnScreenEntry: Boolean
 ) : ViewModel(), KoinComponent {
     private val app: Application by inject()
-    private val reVancedAPI: ReVancedAPI by inject()
+    private val reVancedAPI: UpmAPI by inject()
     private val http: HttpService by inject()
     private val pm: PM by inject()
     private val shizukuInstaller: ShizukuInstaller by inject()

@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
 import app.universal.patch.manager.domain.bundles.PatchBundleSource
-import app.universal.patch.manager.domain.bundles.PatchBundleSource.Extensions.isDefault
 import app.universal.patch.manager.domain.bundles.RemotePatchBundle
 import app.universal.patch.manager.network.service.HttpService
 import app.universal.patch.manager.network.utils.APIResponse
@@ -118,7 +117,9 @@ object PatchListCatalog {
             .mapNotNull { normalize(it).takeIf(String::isNotBlank) }
             .distinct()
 
-        return if (source.isDefault) normalized else normalized.filterNot { it == REVANCED_SHORTCUT_KEY }
+        return if (remoteEndpoint?.trimEnd('/').equals(
+            app.universal.patch.manager.domain.bundles.LEGACY_OFFICIAL_PATCHES_URL, ignoreCase = true
+        )) normalized else normalized.filterNot { it == REVANCED_SHORTCUT_KEY }
     }
 
     private val endpointSuffixes = listOf(

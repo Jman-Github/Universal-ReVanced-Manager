@@ -8,6 +8,8 @@ kotlin {
     }
     sourceSets.main {
         kotlin.srcDir("../app/src/main/java")
+        kotlin.srcDir("../shared/runtime-framework/src/main/java")
+        kotlin.srcDir("../shared/revanced22/src/main/java")
         kotlin.srcDir("../shared/merger/src/main/java")
         kotlin.include(
             "app/universal/patch/manager/patcher/aapt/AaptSelector.kt",
@@ -47,12 +49,16 @@ dependencies {
 
 val hostJar = tasks.register<Jar>("hostJar") {
     // Refresh fat JARs cached before framework/reflection packaging changed.
-    inputs.property("hostPackagingVersion", 1)
+    inputs.property("hostPackagingVersion", 2)
+    dependsOn(":app:androidArscLib")
+    from({ zipTree(project(":app").layout.buildDirectory.file("libs/ARSCLib-android.jar").get().asFile) }) {
+        include("frameworks/**")
+    }
     archiveFileName.set("${project.name}.jar")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(sourceSets.main.map { it.output })
     from(configurations.runtimeClasspath.map { files -> files.map { if (it.isDirectory) it else zipTree(it) } })
-    exclude("frameworks/**")
+    // Standalone plugins must carry their own framework resources.
     // QName comes from java.xml on the embedded JVM, not an Android compatibility JAR.
     exclude("javax/xml/namespace/**")
     exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class", "META-INF/versions/**")
@@ -76,7 +82,7 @@ val shrunkHostJar = tasks.register<ShrinkJarTask>("shrinkHostJar") {
     excludes.addAll("META-INF/proguard/**", "META-INF/com.android.tools/**", "META-INF/maven/**")
     jdk.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(17)) })
     proguardClasspath.from(proguard)
-    restoreFrameworks.set(false)
+    restoreFrameworks.set(true)
     outputJar.set(layout.buildDirectory.file("shrunk-host/${project.name}.jar"))
 }
 

@@ -47,7 +47,7 @@ import app.universal.patch.manager.domain.repository.PatchBundleRepository
 import app.universal.patch.manager.domain.repository.PatcherRuntimePluginRepository
 import app.universal.patch.manager.domain.storage.CacheCleanupGuard
 import app.universal.patch.manager.network.downloader.LoadedDownloaderPlugin
-import app.universal.patch.manager.network.api.ReVancedAPI
+import app.universal.patch.manager.network.api.UpmAPI
 import app.universal.patch.manager.network.dto.ReVancedAnnouncement
 import app.universal.patch.manager.patcher.patch.ReseamBundleFormat
 import app.universal.patch.manager.network.dto.ReVancedAsset
@@ -139,7 +139,7 @@ class DashboardViewModel(
     private val downloaderPluginRepository: DownloaderPluginRepository,
     private val patcherRuntimePluginRepository: PatcherRuntimePluginRepository,
     private val announcementRepository: AnnouncementRepository,
-    private val reVancedAPI: ReVancedAPI,
+    private val reVancedAPI: UpmAPI,
     private val networkInfo: NetworkInfo,
     val prefs: PreferencesManager,
     private val keystoreManager: KeystoreManager,
@@ -363,24 +363,13 @@ class DashboardViewModel(
         }
     }
 
-    fun applyAutoUpdatePrefs(manager: Boolean, patches: Boolean) = viewModelScope.launch {
+    fun applyAutoUpdatePrefs(manager: Boolean) = viewModelScope.launch {
         prefs.firstLaunch.update(false)
 
         prefs.managerAutoUpdates.update(manager)
 
         if (manager) checkForManagerUpdates()
 
-        if (patches) {
-            with(patchBundleRepository) {
-                sources
-                    .first()
-                    .find { it.uid == 0 }
-                    ?.asRemoteOrNull
-                    ?.setAutoUpdate(true)
-
-                updateCheck()
-            }
-        }
     }
 
     private fun sendEvent(event: BundleListViewModel.Event) {

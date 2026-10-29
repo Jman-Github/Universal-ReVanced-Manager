@@ -48,19 +48,21 @@ object Revanced22RuntimeBridge {
         appContext = context.applicationContext ?: context
     }
 
-    fun loadMetadata(bundlePath: String): List<PatchInfo> {
+    fun loadMetadata(bundlePath: String): List<PatchInfo> = synchronized(lock) {
+        ensureClassLoader()
         val method = ensureLoadMetadataForBundleMethod()
         val raw = method.invoke(null, bundlePath) as? List<*> ?: emptyList<Any?>()
-        return raw.mapNotNull { entry ->
+        raw.mapNotNull { entry ->
             val map = entry as? Map<*, *> ?: return@mapNotNull null
             PatchInfo.fromMorpheMetadata(map as Map<String, Any?>)
         }
     }
 
-    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> {
+    fun loadMetadata(bundlePaths: List<String>): Map<String, List<PatchInfo>> = synchronized(lock) {
+        ensureClassLoader()
         val method = ensureLoadMetadataMethod()
         val raw = method.invoke(null, bundlePaths) as? Map<*, *> ?: emptyMap<String, List<PatchInfo>>()
-        return raw.mapNotNull { (key, value) ->
+        raw.mapNotNull { (key, value) ->
             val path = key as? String ?: return@mapNotNull null
             val metadata = value as? List<*> ?: return@mapNotNull path to emptyList()
             val patches = metadata.mapNotNull { entry ->
@@ -77,8 +79,10 @@ object Revanced22RuntimeBridge {
         onEvent: (ProgressEvent) -> Unit,
         isCancelled: () -> Boolean = { false }
     ): String? {
-        val entry = ensureEntryClass()
-        val callback = ensureCallbackClass()
+        val (entry, callback, method) = synchronized(lock) {
+            ensureClassLoader()
+            Triple(ensureEntryClass(), ensureCallbackClass(), ensureRunPatcherMethod())
+        }
         val proxy = Proxy.newProxyInstance(
             entry.classLoader,
             arrayOf(callback)
@@ -102,7 +106,6 @@ object Revanced22RuntimeBridge {
             }
         }
 
-        val method = ensureRunPatcherMethod()
         val result = method.invoke(null, params, proxy) as? String
         if (result == CANCELLATION_SENTINEL) {
             throw CancellationException("Patching cancelled")

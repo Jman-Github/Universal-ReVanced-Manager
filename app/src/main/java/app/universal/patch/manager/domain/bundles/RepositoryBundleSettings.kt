@@ -20,6 +20,10 @@ data class RepositoryBundleSettings(
             else -> RepositoryBundleReleaseChannel.RELEASE
         }
 
+    /** Only the original API source used a global channel preference. */
+    fun forLegacyOfficialMigration(apiSource: Boolean, legacyPrereleases: Boolean) =
+        if (apiSource) copy(usePrereleases = legacyPrereleases, useLatest = false) else this
+
     fun withVersionSelection(enabled: Boolean, asset: ReVancedAsset? = null) = copy(
         useSpecificVersion = enabled,
         selectedVersion = asset ?: selectedVersion
