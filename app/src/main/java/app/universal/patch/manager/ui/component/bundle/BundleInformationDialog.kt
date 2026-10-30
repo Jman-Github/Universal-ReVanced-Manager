@@ -482,6 +482,8 @@ fun BundleInformationDialog(
                     )
                 }
 
+                remoteSource?.let { DiscoveryBundleReleaseSettings(it) }
+
                 (src as? JsonPatchBundle)?.takeIf { it.supportsPrereleases }?.let { repositoryBundle ->
                     BundleListItem(
                         headlineText = stringResource(R.string.repository_bundle_prereleases),

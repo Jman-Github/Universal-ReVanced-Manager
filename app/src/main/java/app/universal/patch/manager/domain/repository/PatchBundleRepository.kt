@@ -1820,6 +1820,18 @@ class PatchBundleRepository(
         src: RemotePatchBundle,
         newUrl: String,
         onProgress: PatchBundleDownloadProgress? = null,
+        discoverySettings: RepositoryBundleSettings? = null,
+    ): Boolean = scope.async {
+        // The accepted change and its download must survive the details screen closing.
+        // Return failures to the caller without cancelling the repository's store scope.
+        runCatching { updateRemoteEndpointInternal(src, newUrl, onProgress, discoverySettings) }
+    }.await().getOrThrow()
+
+    private suspend fun updateRemoteEndpointInternal(
+        src: RemotePatchBundle,
+        newUrl: String,
+        onProgress: PatchBundleDownloadProgress?,
+        discoverySettings: RepositoryBundleSettings?,
     ): Boolean {
         val normalizedUrl = try {
             normalizeRemoteBundleUrl(newUrl)
@@ -1831,19 +1843,30 @@ class PatchBundleRepository(
         }
 
         var endpointChanged = false
-        withRemoteUpdateReservation {
+        withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
             dispatchAction("Update bundle url (${src.uid})") { state ->
                 val currentSource = state.sources[src.uid] as? RemotePatchBundle
                     ?: return@dispatchAction state
-                if (normalizedUrl == currentSource.endpoint) return@dispatchAction state
+                if (normalizedUrl == currentSource.endpoint) {
+                    if (discoverySettings != null) {
+                        RepositoryBundleSettingsStore.write(directoryOf(src.uid), discoverySettings)
+                        // Retry if the previous download failed after saving the endpoint.
+                        endpointChanged = true
+                    }
+                    return@dispatchAction state
+                }
                 val props = dao.getProps(src.uid) ?: return@dispatchAction state
                 val now = System.currentTimeMillis()
                 changelogHistoryMutex.withLock {
                     writeChangelogHistoryInternal(src.uid, emptyList())
                     writeChangelogHistoryIdentityInternal(src.uid, null)
                 }
-                ExternalBundleMetadataStore.clear(directoryOf(src.uid))
-                RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
+                if (discoverySettings != null) {
+                    RepositoryBundleSettingsStore.write(directoryOf(src.uid), discoverySettings)
+                } else {
+                    ExternalBundleMetadataStore.clear(directoryOf(src.uid))
+                    RepositoryBundleSettingsStore.clear(directoryOf(src.uid))
+                }
                 updateDb(src.uid) {
                     it.copy(
                         source = SourceInfo.from(normalizedUrl),
