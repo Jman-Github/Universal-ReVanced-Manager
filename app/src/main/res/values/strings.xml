@@ -2563,4 +2563,6 @@ Details: %2$s</string>
     <string name="art_memory_search_keywords">ART memory RAM heap Reseam fallback 2 GB</string>
     <string name="patcher_heap_memory_usage">Heap memory</string>
     <string name="patcher_heap_process_detail">Total process memory, including native: %1$d MB</string>
+    <string name="about_donate">Support UP Manager</string>
+    <string name="about_donate_description">Donate to Jman-Github through GitHub Sponsors</string>
 </resources>
