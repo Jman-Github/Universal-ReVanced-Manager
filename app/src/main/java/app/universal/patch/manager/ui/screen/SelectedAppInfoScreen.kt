@@ -490,6 +490,7 @@ fun SelectedAppInfoScreen(
                 labelOverride = vm.selectedAppInfoLabelOverride,
                 iconOverride = vm.selectedAppInfoIconOverride,
                 placeholderLabel = packageName,
+                packageName = packageName,
                 placeholderMetaLines = 0,
                 showExtraContentWhenLoading = true
             ) {

@@ -160,7 +160,8 @@ class AppSelectorViewModel(
 
     fun loadLabel(app: PackageInfo?): String {
         val fallback = this.app.getString(R.string.not_installed)
-        return resolveAppDisplayLabel(this.app, app, fallback) ?: fallback
+        return resolveAppDisplayLabel(this.app, app, app?.packageName ?: fallback, requireMetadataLabel = true)
+            ?: app?.packageName ?: fallback
     }
 
     fun dismissNonSuggestedVersionDialog() {

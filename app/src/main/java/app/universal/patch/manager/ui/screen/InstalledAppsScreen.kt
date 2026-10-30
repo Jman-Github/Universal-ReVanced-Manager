@@ -373,6 +373,7 @@ private fun InstalledAppCard(
                 }
                 AppIcon(
                     packageInfo = packageInfo,
+                    packageName = displayPackageName,
                     contentDescription = null,
                     modifier = Modifier.size(32.dp)
                 )

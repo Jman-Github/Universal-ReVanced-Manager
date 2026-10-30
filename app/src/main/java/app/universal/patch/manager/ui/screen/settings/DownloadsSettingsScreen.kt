@@ -1227,6 +1227,7 @@ private fun DownloadedAppCard(
                 }
                 AppIcon(
                     packageInfo = displayInfo?.packageInfo,
+                    packageName = app.packageName,
                     contentDescription = null,
                     iconOverride = displayInfo?.icon,
                     modifier = Modifier.size(32.dp)
