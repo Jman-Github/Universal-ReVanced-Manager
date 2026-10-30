@@ -1,5 +1,7 @@
 package app.universal.patch.manager.domain.repository
 
+import app.universal.patch.manager.util.selectSuggestedPatchVersion
+
 import android.app.Application
 import android.content.Context
 import android.util.Log
@@ -3540,21 +3542,8 @@ class PatchBundleRepository(
             val selectedVersions = stableVersions.ifEmpty {
                 versions.mapValues { (_, stats) -> stats.totalPatchCount }
             }
-            selectSuggestedMorpheVersion(selectedVersions)
+            selectSuggestedPatchVersion(selectedVersions)
         }
-    }
-
-    private fun selectSuggestedMorpheVersion(versions: Map<String, Int>): String? {
-        if (versions.isEmpty()) return null
-        if (versions.keys.size < 2) return versions.keys.firstOrNull()
-
-        var currentHighestPatchCount = -1
-        return versions.entries.last { (_, patchCount) ->
-            if (patchCount >= currentHighestPatchCount) {
-                currentHighestPatchCount = patchCount
-                true
-            } else false
-        }.key
     }
 
     private data class MorpheVersionStats(

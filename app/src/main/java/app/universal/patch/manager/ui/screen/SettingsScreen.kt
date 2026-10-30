@@ -127,6 +127,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
                     R.string.inject_signature_metadata_after_patching,
                     R.string.patcher_log_mode,
                     R.string.patcher_jvm_enable,
+                    R.string.process_memory_limit,
                     R.string.morphe_bytecode_mode,
                     R.string.patcher_memory_usage_graph_title,
                     R.string.patcher_resource_graphs_compact_title,
@@ -477,6 +478,13 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.inject_signature_metadata_after_patching, R.string.inject_signature_metadata_after_patching_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_log_mode, R.string.patcher_log_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_jvm_enable, R.string.patcher_jvm_description, R.string.patcher_category, Settings.Patcher),
+            SearchEntry(
+                R.string.process_memory_limit,
+                R.string.art_memory_description,
+                R.string.patcher_category,
+                Settings.Patcher,
+                keywords = listOf(R.string.art_memory_search_keywords)
+            ),
             SearchEntry(R.string.morphe_bytecode_mode, R.string.morphe_bytecode_mode_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_memory_usage_graph_title, R.string.patcher_memory_usage_graph_description, R.string.patcher_category, Settings.Patcher),
             SearchEntry(R.string.patcher_resource_graphs_compact_title, R.string.patcher_resource_graphs_compact_description, R.string.patcher_category, Settings.Patcher),

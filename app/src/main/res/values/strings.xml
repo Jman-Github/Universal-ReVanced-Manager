@@ -1547,11 +1547,11 @@ Patch profiles are not affected.</string>
     <!-- Code adapted from Morphe, see third-party/NOTICE for more information -->
     <!-- https://github.com/MorpheApp/morphe-manager/blob/a2c3d31bd7ab42e6bc4b9dd528ed856fc72fb948/app/src/main/res/values/strings.xml -->
     <string name="separate_processes_section">Separate processes</string>
-    <string name="process_memory_limit">Separate process memory limit</string>
-    <string name="process_memory_limit_subtitle">Memory available to separate-process tools and runtimes</string>
-    <string name="process_memory_limit_description">Applies to patching runtimes, split merging, and other separate-process tools</string>
-    <string name="process_memory_limit_warning">A low memory limit may cause memory-intensive tools and runtimes to fail</string>
-    <string name="process_memory_limit_high_warning">A memory limit above 1280 MB may be too high for this device and can cause separate processes to fail</string>
+    <string name="process_memory_limit">ART memory limit</string>
+    <string name="process_memory_limit_subtitle">Memory available for ART patching</string>
+    <string name="process_memory_limit_description">Increase this if ART patching runs out of memory. Higher limits use more RAM. Requires Android 11 or newer; some devices may use a lower limit. JVM memory is separate</string>
+    <string name="process_memory_limit_warning">Too little memory can cause patching to fail</string>
+    <string name="process_memory_limit_high_warning">Higher limits may fail if your device does not have enough available memory</string>
     <string name="process_memory_limit_value">%1$d MB</string>
     <string name="process_memory_limit_oom_title">Separate process ran out of memory</string>
     <string name="process_memory_limit_adjusted_message">The separate process memory limit was reduced from %1$d MB to %2$d MB for future attempts. Try again.</string>
@@ -2559,4 +2559,8 @@ Details: %2$s</string>
     <string name="manager_rebrand_notice_description">URV has been rebranded in this update to UPM (Universal Patch Manager).\n\nUPM installs as a second app because its package name is different. It will not replace URV, and your data will not move automatically.\n\nIn URV, open %1$s &gt; %2$s &gt; %3$s and save the backup. In UPM, open %1$s &gt; %2$s &gt; %4$s and select that backup.\n\nExport everything does not include your signing keystore. Use %5$s in URV and %6$s in UPM on the same settings page if you want to keep signing APKs with the same key.\n\nKeep URV installed until you have checked that your data and signing key were imported successfully.</string>
     <string name="manager_rebrand_continue_countdown">Continue (%1$d)</string>
     <string name="manager_update_unexpected_package">The downloaded APK is not a supported manager update.</string>
+    <string name="art_memory_description">Choose how much memory Reseam and other ART patching runs can use</string>
+    <string name="art_memory_search_keywords">ART memory RAM heap Reseam fallback 2 GB</string>
+    <string name="patcher_heap_memory_usage">Heap memory</string>
+    <string name="patcher_heap_process_detail">Total process memory, including native: %1$d MB</string>
 </resources>

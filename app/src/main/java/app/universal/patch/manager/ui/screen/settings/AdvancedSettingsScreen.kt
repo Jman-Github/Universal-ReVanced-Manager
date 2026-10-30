@@ -1321,6 +1321,18 @@ fun AdvancedSettingsScreen(
             val morpheBytecodeMode by viewModel.prefs.morpheBytecodeMode.getAsState()
             val patcherLogMode by viewModel.prefs.patcherLogMode.getAsState()
             val useJvmRuntime by viewModel.prefs.useJvmRuntime.getAsState()
+            val artMemoryLimit by viewModel.prefs.artMemoryLimit.getAsState()
+            var showArtMemoryDialog by remember { mutableStateOf(false) }
+            if (showArtMemoryDialog) {
+                app.universal.patch.manager.ui.component.settings.ProcessMemoryLimitDialog(
+                    currentLimit = artMemoryLimit,
+                    onDismiss = { showArtMemoryDialog = false },
+                    onLimitChange = { limit -> viewModel.viewModelScope.launch {
+                        viewModel.prefs.artMemoryLimit.update(limit)
+                    } }
+                )
+            }
+
             if (showMorpheBytecodeModeDialog) {
                 MorpheBytecodeModeDialog(
                     current = morpheBytecodeMode,
@@ -1349,6 +1361,22 @@ fun AdvancedSettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
             ) {
+                SettingsSearchHighlight(
+                    targetKey = R.string.process_memory_limit,
+                    activeKey = highlightTarget,
+                    onHighlightComplete = { highlightTarget = null }
+                ) { highlightModifier ->
+                    ExpressiveSettingsItem(
+                        modifier = highlightModifier,
+                        headlineContent = stringResource(R.string.process_memory_limit),
+                        supportingContent = stringResource(R.string.art_memory_description),
+                        trailingContent = {
+                            Text(stringResource(R.string.process_memory_limit_value, artMemoryLimit))
+                        },
+                        onClick = { showArtMemoryDialog = true }
+                    )
+                }
+                ExpressiveSettingsDivider()
                 SettingsSearchHighlight(
                     targetKey = R.string.patcher_jvm_enable,
                     activeKey = highlightTarget,
@@ -5329,7 +5357,7 @@ private fun GitHubPatDialog(
                     },
                     visualTransformation = VisualTransformation { original ->
                         val masked = original.text.let { s ->
-                            if (s.length <= 5) s else s.take(5) + "•".repeat(s.length - 5)
+                            if (s.length <= 5) s else s.take(5) + "\u2022".repeat(s.length - 5)
                         }
                         TransformedText(AnnotatedString(masked), OffsetMapping.Identity)
                     }

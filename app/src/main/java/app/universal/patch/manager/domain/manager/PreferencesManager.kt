@@ -116,6 +116,7 @@ class PreferencesManager(
     val skipSplitMergeSigning = booleanPreference("skip_split_merge_signing", false)
     val disableApkSignatureChecks = booleanPreference("disable_apk_signature_checks", false)
     val injectSignatureMetadataAfterPatching = booleanPreference("inject_signature_metadata_after_patching", false)
+    val artMemoryLimit = intPreference("patcher_art_memory_mb", 1024)
     val useJvmRuntime = booleanPreference("patcher_jvm", true)
     val morpheBytecodeMode = enumPreference("morphe_bytecode_mode", MorpheBytecodeMode.FAST)
     val patcherLogMode = enumPreference("patcher_log_mode", PatcherLogMode.DEFAULT)
@@ -639,6 +640,7 @@ class PreferencesManager(
         val skipSplitMergeSigning: Boolean? = null,
         val disableApkSignatureChecks: Boolean? = null,
         val injectSignatureMetadataAfterPatching: Boolean? = null,
+        val artMemoryLimit: Int? = null,
         val useJvmRuntime: Boolean? = null,
         val morpheBytecodeMode: String? = null,
         val patcherLogMode: PatcherLogMode? = null,
@@ -920,6 +922,7 @@ class PreferencesManager(
             skipSplitMergeSigning = skipSplitMergeSigning.value,
             disableApkSignatureChecks = disableApkSignatureChecks.value,
             injectSignatureMetadataAfterPatching = injectSignatureMetadataAfterPatching.value,
+            artMemoryLimit = artMemoryLimit.value,
             useJvmRuntime = useJvmRuntime.value,
             morpheBytecodeMode = morpheBytecodeMode.value.runtimeValue,
             patcherLogMode = patcherLogMode.value,
@@ -1159,6 +1162,7 @@ class PreferencesManager(
         snapshot.skipSplitMergeSigning?.let { skipSplitMergeSigning.value = it }
         snapshot.disableApkSignatureChecks?.let { disableApkSignatureChecks.value = it }
         snapshot.injectSignatureMetadataAfterPatching?.let { injectSignatureMetadataAfterPatching.value = it }
+        snapshot.artMemoryLimit?.let { artMemoryLimit.value = it.coerceIn(512, 2048) }
         snapshot.useJvmRuntime?.let { useJvmRuntime.value = it }
         snapshot.morpheBytecodeMode?.let {
             morpheBytecodeMode.value = MorpheBytecodeMode.fromRuntimeValue(it)
