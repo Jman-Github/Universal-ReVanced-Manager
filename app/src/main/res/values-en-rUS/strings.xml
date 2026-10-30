@@ -2562,4 +2562,6 @@ Details: %2$s</string>
     <string name="patcher_heap_process_detail">Total process memory, including native: %1$d MB</string>
     <string name="about_donate">Support UP Manager</string>
     <string name="about_donate_description">Donate to Jman-Github through GitHub Sponsors</string>
+    <string name="bundle_update_offline">No internet connection. Connect and try again.</string>
+    <string name="bundle_update_metered">Updates on metered connections are disabled in settings.</string>
 </resources>

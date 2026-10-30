@@ -1913,6 +1913,7 @@ class PatchBundleRepository(
         val updated = try {
             updateNow(
                 force = true,
+                showToast = true,
                 allowUnsafeNetwork = allowUnsafeDownload,
                 onPerBundleProgress = { bundle, bytesRead, bytesTotal ->
                     if (bundle.uid == updatedSource.uid) {
@@ -2671,6 +2672,7 @@ class PatchBundleRepository(
         force: Boolean = false,
         allowUnsafeNetwork: Boolean = false,
         showProgress: Boolean = true,
+        showToast: Boolean = false,
         onPerBundleProgress: ((bundle: RemotePatchBundle, bytesRead: Long, bytesTotal: Long?) -> Unit)? = null,
         onBundleUpdated: ((bundle: RemotePatchBundle, updatedName: String?, updatedVersion: String) -> Unit)? = null,
         predicate: (bundle: RemotePatchBundle) -> Boolean = { true },
@@ -2679,7 +2681,7 @@ class PatchBundleRepository(
             val operation = async(start = CoroutineStart.LAZY) {
                 performRemoteUpdate(
                     force = force,
-                    showToast = false,
+                    showToast = showToast,
                     allowUnsafeNetwork = allowUnsafeNetwork,
                     showProgress = showProgress,
                     onPerBundleProgress = onPerBundleProgress,
@@ -2781,9 +2783,9 @@ class PatchBundleRepository(
     /**
      * Updates all bundles that should be automatically updated.
      */
-    suspend fun updateCheck() {
+    suspend fun updateCheck(showToast: Boolean = false) {
         awaitReady()
-        store.dispatch(Update { it.updatesAutomatically })
+        store.dispatch(Update(showToast = showToast) { it.updatesAutomatically })
         checkManualUpdates()
     }
 
@@ -2986,7 +2988,8 @@ class PatchBundleRepository(
                     (bundle is ExternalGraphqlPatchBundle &&
                         metadata?.apiHost == ExternalBundlesEndpoints.REGISTRY_HOST &&
                         (!metadata.iconUrl.isNullOrBlank() || !metadata.ownerAvatarUrl.isNullOrBlank())))) continue
-                val canLookup = allowUnsafeNetwork || prefs.allowMeteredUpdates.get() || networkInfo.isConnected()
+                val canLookup = bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                    networkInfo.isUnmetered(), prefs.allowMeteredUpdates.get(), allowUnsafeNetwork) == null
                 var migration = if (legacy != null) discoveryRegistryMigration(
                     legacy, metadata?.sourceUrl, metadata?.ownerName, metadata?.repoName, metadata?.isPrerelease,
                     metadata?.downloadUrl
@@ -3082,7 +3085,8 @@ class PatchBundleRepository(
         }
 
         val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-        if (!allowMeteredUpdates && !networkInfo.isSafe()) {
+        if (bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                networkInfo.isUnmetered(), allowMeteredUpdates) != null) {
             Log.d(tag, "Skipping manual update check because the network is down or metered.")
             return@coroutineScope
         }
@@ -3256,13 +3260,19 @@ class PatchBundleRepository(
         predicate: (bundle: RemotePatchBundle) -> Boolean,
     ): Boolean = coroutineScope {
         val progressStartedOrder = if (showProgress) bundleUpdateProgressOrder() else 0L
+        var updateFailed = false
         try {
             if (showProgress) {
                 cancelBundleUpdateAutoClear()
             }
             val allowMeteredUpdates = prefs.allowMeteredUpdates.get()
-            if (!allowUnsafeNetwork && !allowMeteredUpdates && !networkInfo.isSafe()) {
+            val networkBlock = bundleUpdateNetworkBlock(networkInfo.isConnected(),
+                networkInfo.isUnmetered(), allowMeteredUpdates, allowUnsafeNetwork)
+            if (networkBlock != null) {
                 Log.d(tag, "Skipping update check because the network is down or metered.")
+                updateFailed = true
+                if (showToast) toast(R.string.patches_download_fail, app.getString(
+                    if (networkBlock == BundleUpdateNetworkBlock.METERED) R.string.bundle_update_metered else R.string.bundle_update_offline))
                 if (showProgress) {
                     cancelBundleUpdateAutoClear()
                     bundleUpdateProgressFlow.value = null
@@ -3394,6 +3404,7 @@ class PatchBundleRepository(
                     } catch (e: TimeoutCancellationException) {
                         bundleFailed = true
                         hadBundleFailures = true
+                        updateFailed = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Timed out while updating patch bundle: ${bundle.name}", e)
                         null
@@ -3403,6 +3414,7 @@ class PatchBundleRepository(
                     } catch (e: Exception) {
                         bundleFailed = true
                         hadBundleFailures = true
+                        updateFailed = true
                         if (lastUpdateError == null) lastUpdateError = e
                         Log.e(tag, "Failed to update patch bundle: ${bundle.name}", e)
                         null
@@ -3460,18 +3472,17 @@ class PatchBundleRepository(
                 throw e
             } catch (e: Exception) {
                 Log.e(tag, "Failed to update patches", e)
-                toast(R.string.patches_download_fail, e.simpleMessage())
+                updateFailed = true
+                hadBundleFailures = true
+                if (lastUpdateError == null) lastUpdateError = e
                 emptyMap()
-            } finally {
-                if (showProgress) {
-                    scheduleBundleUpdateProgressClear()
-                }
             }
 
             if (updated.isEmpty()) {
                 if (showToast) {
                     if (hadBundleFailures) {
-                        toast(R.string.patches_download_fail, "Some bundles failed to update")
+                        toast(R.string.patches_download_fail, lastUpdateError?.simpleMessage()
+                            ?: app.getString(R.string.patch_bundle_discovery_error))
                     } else {
                         toast(R.string.patches_update_unavailable)
                     }
@@ -3511,11 +3522,34 @@ class PatchBundleRepository(
                 runCatching {
                     removeUpdatedBundleNotifications(app, updatedUids)
                 }.onFailure { error -> Log.w(tag, "Failed to refresh bundle update notification", error) }
-                if (showToast) toast(R.string.patches_update_success)
+                if (showToast) {
+                    if (hadBundleFailures) toast(R.string.patches_download_fail,
+                        lastUpdateError?.simpleMessage() ?: app.getString(R.string.patch_bundle_discovery_error))
+                    else toast(R.string.patches_update_success)
+                }
             }
             true
+        } catch (cancel: CancellationException) {
+            updateFailed = true
+            throw cancel
+        } catch (error: Exception) {
+            updateFailed = true
+            Log.e(tag, "Failed to update patch bundles", error)
+            if (showToast) toast(R.string.patches_download_fail, error.simpleMessage())
+            return@coroutineScope false
         } finally {
-            clearActiveUpdateState()
+            withContext(NonCancellable) {
+                if (showProgress) {
+                    val progress = bundleUpdateProgressFlow.value
+                    if (updateFailed || progress == null || progress.completed < progress.total) {
+                        cancelBundleUpdateAutoClear()
+                        bundleUpdateProgressFlow.value = null
+                    } else {
+                        scheduleBundleUpdateProgressClear()
+                    }
+                }
+                clearActiveUpdateState()
+            }
         }
     }
 
