@@ -2788,6 +2788,7 @@ private fun PatchProfileNameDialog(
                     )
 
                     LazyColumnWithScrollbar(
+                        thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(max = 240.dp),
