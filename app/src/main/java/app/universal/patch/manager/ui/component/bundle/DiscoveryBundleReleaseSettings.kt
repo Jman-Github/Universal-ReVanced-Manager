@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import app.universal.patch.manager.R
@@ -55,7 +56,7 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
                 ?.takeUnless { it.equals("latest", true) || it.isBlank() }
             val stored = RepositoryBundleSettingsStore.read(source.bundleDirectory)
             val settings = if (version != null) stored.copy(useSpecificVersion = true)
-                else stored.copy(usePrereleases = registry.prerelease == true,
+                else stored.copy(usePrereleases = registry.prerelease ?: stored.usePrereleases,
                     useLatest = registry.prerelease == null, useSpecificVersion = false)
             DiscoveryReleaseState(registry.sourceUrl, settings, version, metadata)
         }
@@ -113,15 +114,16 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
             trailingContent = {
                 ExpressiveSettingsSwitch(checked = checked, enabled = enabled && !busy,
                     onCheckedChange = { change() })
-            }, modifier = Modifier.clickable(enabled = enabled && !busy, onClick = change))
+            }, modifier = Modifier.alpha(if (enabled && !busy) 1f else 0.38f)
+                .clickable(enabled = enabled && !busy, onClick = change))
     }
     Toggle(R.string.repository_bundle_prereleases, R.string.repository_bundle_prereleases_description,
-        settings.usePrereleases, !settings.useSpecificVersion && !settings.useLatest) {
+        settings.usePrereleases && !settings.useLatest && !settings.useSpecificVersion, !settings.useSpecificVersion && !settings.useLatest) {
         apply(settings.copy(usePrereleases = !settings.usePrereleases, useLatest = false))
     }
     Toggle(R.string.repository_bundle_latest, R.string.repository_bundle_latest_description,
-        settings.useLatest, !settings.useSpecificVersion) {
-        apply(settings.copy(useLatest = !settings.useLatest, usePrereleases = false))
+        settings.useLatest && !settings.useSpecificVersion, !settings.useSpecificVersion) {
+        apply(settings.copy(useLatest = !settings.useLatest))
     }
     Toggle(R.string.bundle_use_specific_version, R.string.bundle_use_specific_version_description,
         settings.useSpecificVersion, true) {
@@ -129,7 +131,8 @@ internal fun DiscoveryBundleReleaseSettings(source: RemotePatchBundle) {
     }
     BundleListItem(headlineText = stringResource(R.string.bundle_select_version),
         supportingText = state.version ?: stringResource(R.string.field_not_set),
-        modifier = Modifier.clickable(enabled = settings.useSpecificVersion && !busy) { openHistory() })
+        modifier = Modifier.alpha(if (settings.useSpecificVersion && !busy) 1f else 0.38f)
+            .clickable(enabled = settings.useSpecificVersion && !busy) { openHistory() })
 
     history?.let { bundle ->
         val viewModel: BundleDiscoveryViewModel = koinViewModel()

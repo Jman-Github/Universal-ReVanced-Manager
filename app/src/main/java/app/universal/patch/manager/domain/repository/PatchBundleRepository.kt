@@ -1450,8 +1450,8 @@ class PatchBundleRepository(
                     searchUpdate,
                     lastNotifiedVersion,
                     enabled,
-                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.PRERELEASE,
-                    repositorySettings.releaseChannel == RepositoryBundleReleaseChannel.LATEST,
+                    repositorySettings.usePrereleases,
+                    repositorySettings.useLatest,
                     repositorySettings.useSpecificVersion,
                     repositorySettings.selectedVersion,
                 ).let { jsonBundle ->
@@ -2193,7 +2193,7 @@ class PatchBundleRepository(
             RepositoryBundleSettingsStore.write(
                 directoryOf(entity.uid),
                 RepositoryBundleSettings(
-                    usePrereleases = usePrereleases && !useLatest,
+                    usePrereleases = usePrereleases,
                     useLatest = useLatest,
                     useSpecificVersion = useSpecificVersion,
                     selectedVersion = selectedVersion,
@@ -2531,7 +2531,8 @@ class PatchBundleRepository(
     }
 
     suspend fun JsonPatchBundle.setRepositoryReleaseChannel(
-        channel: RepositoryBundleReleaseChannel
+        channel: RepositoryBundleReleaseChannel,
+        restorePrereleases: Boolean = false
     ): JsonPatchBundle {
         var updatedSource = this
         withRemoteUpdateReservation(onQueued = ::notifyQueuedBundleSetting) {
@@ -2541,18 +2542,22 @@ class PatchBundleRepository(
                     updatedSource = source
                     return@dispatchAction state
                 }
-                if (source.releaseChannel == channel) {
+                val effectiveChannel = if (restorePrereleases && source.usePrereleases) {
+                    RepositoryBundleReleaseChannel.PRERELEASE
+                } else channel
+                if (source.releaseChannel == effectiveChannel) {
                     updatedSource = source
                     return@dispatchAction state
                 }
                 RepositoryBundleSettingsStore.write(
                     directoryOf(uid),
                     RepositoryBundleSettingsStore.read(directoryOf(uid)).copy(
-                        usePrereleases = channel == RepositoryBundleReleaseChannel.PRERELEASE,
-                        useLatest = channel == RepositoryBundleReleaseChannel.LATEST
+                        usePrereleases = if (effectiveChannel == RepositoryBundleReleaseChannel.LATEST) source.usePrereleases
+                        else effectiveChannel == RepositoryBundleReleaseChannel.PRERELEASE,
+                        useLatest = effectiveChannel == RepositoryBundleReleaseChannel.LATEST
                     )
                 )
-                updatedSource = source.withReleaseChannel(channel)
+                updatedSource = source.withReleaseChannel(effectiveChannel)
                 manualUpdateInfoFlow.update { current -> current - uid }
                 state.copy(sources = state.sources.put(uid, updatedSource))
             }
@@ -2610,7 +2615,8 @@ class PatchBundleRepository(
     suspend fun JsonPatchBundle.setUseLatest(value: Boolean): JsonPatchBundle =
         setRepositoryReleaseChannel(
             if (value) RepositoryBundleReleaseChannel.LATEST
-            else RepositoryBundleReleaseChannel.RELEASE
+            else RepositoryBundleReleaseChannel.RELEASE,
+            restorePrereleases = !value
         )
 
     private suspend fun updateLastNotifiedVersion(

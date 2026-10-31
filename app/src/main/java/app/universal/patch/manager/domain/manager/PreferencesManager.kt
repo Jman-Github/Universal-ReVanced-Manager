@@ -403,9 +403,22 @@ class PreferencesManager(
     val patchSelectionShowOptionPreviews =
         booleanPreference("patch_selection_show_option_previews", true)
 
+    private val patchSelectionDisplayRestoreFlags = intPreference("patch_selection_display_restore_flags", 0)
+
     suspend fun setMinimalPatchSelectionView(enabled: Boolean) = edit {
-        patchSelectionShowVersionTags.value = !enabled
-        patchSelectionShowOptionPreviews.value = !enabled
+        if (enabled) {
+            val flags = (if (patchSelectionShowVersionTags.value) 1 else 0) or
+                (if (patchSelectionShowOptionPreviews.value) 2 else 0)
+            if (flags != 0) patchSelectionDisplayRestoreFlags.value = flags
+            patchSelectionShowVersionTags.value = false
+            patchSelectionShowOptionPreviews.value = false
+        } else {
+            // Zero means minimal view was reached by disabling both details separately.
+            val flags = patchSelectionDisplayRestoreFlags.value.takeIf { it in 1..3 } ?: 3
+            patchSelectionShowVersionTags.value = flags and 1 != 0
+            patchSelectionShowOptionPreviews.value = flags and 2 != 0
+            patchSelectionDisplayRestoreFlags.value = 0
+        }
     }
 
     val pathSelectorFavorites = stringSetPreference("path_selector_favorites", emptySet())
@@ -730,6 +743,7 @@ class PreferencesManager(
         val patchSelectionHiddenActions: Set<String>? = null,
         val patchSelectionShowVersionTags: Boolean? = null,
         val patchSelectionShowOptionPreviews: Boolean? = null,
+        val patchSelectionDisplayRestoreFlags: Int? = null,
         val patchBundleActionOrder: String? = null,
         val patchBundleHiddenActions: Set<String>? = null,
         val batchResultActionOrder: String? = null,
@@ -991,6 +1005,7 @@ class PreferencesManager(
             patchSelectionHiddenActions = patchSelectionHiddenActions.value,
             patchSelectionShowVersionTags = patchSelectionShowVersionTags.value,
             patchSelectionShowOptionPreviews = patchSelectionShowOptionPreviews.value,
+            patchSelectionDisplayRestoreFlags = patchSelectionDisplayRestoreFlags.value,
             patchBundleActionOrder = patchBundleActionOrder.value,
             patchBundleHiddenActions = patchBundleHiddenActions.value,
             batchResultActionOrder = batchResultActionOrder.value,
@@ -1266,6 +1281,10 @@ class PreferencesManager(
         snapshot.patchSelectionSortSelectionMode?.let { patchSelectionSortSelectionMode.value = it }
         snapshot.patchSelectionActionOrder?.let { patchSelectionActionOrder.value = it }
         snapshot.patchSelectionHiddenActions?.let { patchSelectionHiddenActions.value = it }
+        if (snapshot.patchSelectionShowVersionTags != null || snapshot.patchSelectionShowOptionPreviews != null) {
+            patchSelectionDisplayRestoreFlags.value =
+                snapshot.patchSelectionDisplayRestoreFlags?.takeIf { it in 0..3 } ?: 0
+        }
         snapshot.patchSelectionShowVersionTags?.let { patchSelectionShowVersionTags.value = it }
         snapshot.patchSelectionShowOptionPreviews?.let {
             patchSelectionShowOptionPreviews.value = it

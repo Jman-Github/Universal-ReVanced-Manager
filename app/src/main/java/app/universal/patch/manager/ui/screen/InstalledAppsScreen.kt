@@ -772,6 +772,7 @@ private fun AppsOrderDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 LazyColumnWithScrollbar(
+                    thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 320.dp),

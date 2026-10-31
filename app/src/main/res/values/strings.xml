@@ -778,9 +778,9 @@ Patch profiles are not affected.</string>
     <string name="downloader_import_url_hint">https://github.com/...</string>
     <string name="downloader_no_url_sources">No URL sources added.</string>
     <string name="downloader_source_auto_update">Auto update</string>
-    <string name="downloader_source_latest">Latest</string>
+    <string name="downloader_source_latest">Use latest</string>
     <string name="downloader_source_latest_description">Use the newest release from this repository, whether it is stable or pre-release</string>
-    <string name="downloader_source_prerelease">Pre-release</string>
+    <string name="downloader_source_prerelease">Use pre-releases</string>
     <string name="downloader_source_prerelease_description">Use pre-release versions from this repository when checking for updates</string>
     <string name="downloader_source_repo_url">Repository URL</string>
     <string name="downloader_source_settings_title">%1$s settings</string>
@@ -983,7 +983,7 @@ Patch profiles are not affected.</string>
     <string name="patcher_memory_usage_graph_description">Show live memory, CPU and storage I/O usage above the patcher progress steps</string>
     <string name="patcher_auto_collapse_steps">Auto-collapse completed patcher steps</string>
     <string name="patcher_auto_collapse_steps_description">Automatically collapse each patcher progress widget after all of its steps finish</string>
-    <string name="patcher_auto_expand_steps">Auto-expand running steps</string>
+    <string name="patcher_auto_expand_steps">Auto-expand running patcher steps</string>
     <string name="patcher_auto_expand_steps_description">Automatically expand a patcher progress widget when it starts running</string>
     <string name="patcher_auto_expand_running_steps_exclusive">Only auto-expand active main category</string>
     <string name="patcher_auto_expand_running_steps_exclusive_description">When auto-expand is enabled, keep only the currently running main patcher category expanded and do not auto-expand sub-steps</string>
@@ -2303,7 +2303,7 @@ Details: %2$s</string>
     <string name="patcher_runtime_uninstall_description">Are you sure you want to uninstall %1$s?</string>
     <string name="patcher_runtime_uninstall_success">Uninstalled %1$s</string>
     <string name="patcher_runtime_uninstall_failed">Failed to uninstall %1$s</string>
-    <string name="patcher_runtime_type_label">Type:</string>
+    <string name="patcher_runtime_type_label">Plugin type:</string>
     <string name="patcher_runtime_trust_dialog_title">Trust</string>
     <string name="patcher_runtime_trust_dialog_body">Continuing will allow this runtime plugin to run patcher code inside UP Manager.\n\nOnly enable this runtime plugin if you trust it. Runtime plugins can execute arbitrary code and may compromise your device.</string>
     <string name="import_button">Import</string>

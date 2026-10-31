@@ -344,11 +344,6 @@ fun AdvancedSettingsScreen(
     var autoPatchShizukuConflictOptionsExpanded by rememberSaveable {
         mutableStateOf(false)
     }
-    LaunchedEffect(highlightTarget) {
-        if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
-            autoPatchShizukuConflictOptionsExpanded = true
-        }
-    }
     val appLanguage by viewModel.prefs.appLanguage.getAsState()
     var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
     var pendingLanguageRestart by rememberSaveable { mutableStateOf<String?>(null) }
@@ -483,6 +478,7 @@ fun AdvancedSettingsScreen(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         ColumnWithScrollbar(
+            thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -494,10 +490,17 @@ fun AdvancedSettingsScreen(
             val searchEngineHost by viewModel.prefs.searchEngineHost.getAsState()
             val announcementSystemEnabled by viewModel.prefs.announcementSystemEnabled.getAsState()
             var showSearchEngineDialog by rememberSaveable { mutableStateOf(false) }
-            GroupHeader(
-                stringResource(R.string.app_behavior_section),
-                icon = SettingsSectionIcons.AppBehavior
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.app_behavior_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.app_behavior_section),
+                    icon = SettingsSectionIcons.AppBehavior,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -574,10 +577,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.network_integrations_section),
-                icon = SettingsSectionIcons.NetworkIntegrations
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.network_integrations_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.network_integrations_section),
+                    icon = SettingsSectionIcons.NetworkIntegrations,
+                    modifier = highlightModifier
+                )
+            }
 
             val apiUrl by viewModel.prefs.api.getAsState()
             val gitHubPat by viewModel.prefs.gitHubPat.getAsState()
@@ -668,10 +678,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.installer_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.installer_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.installer_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             val installTarget = InstallerManager.InstallTarget.PATCHER
             val primaryPreference by viewModel.prefs.installerPrimary.getAsState()
             val fallbackPreference by viewModel.prefs.installerFallback.getAsState()
@@ -684,6 +701,13 @@ fun AdvancedSettingsScreen(
                 viewModel.prefs.autoPatchInstallWithShizuku.getAsState()
             val autoPatchUninstallOnConflictWithShizuku by
                 viewModel.prefs.autoPatchUninstallOnConflictWithShizuku.getAsState()
+            LaunchedEffect(autoPatchEnabled, autoPatchInstallWithShizuku, highlightTarget) {
+                if (!autoPatchEnabled || !autoPatchInstallWithShizuku) {
+                    autoPatchShizukuConflictOptionsExpanded = false
+                } else if (highlightTarget == R.string.auto_patch_shizuku_uninstall_on_conflict) {
+                    autoPatchShizukuConflictOptionsExpanded = true
+                }
+            }
             val autoPatchRequiresCharging by viewModel.prefs.autoPatchRequiresCharging.getAsState()
             val autoPatchInterval by viewModel.prefs.autoPatchInterval.getAsState()
             val allowExternalBatchActions by viewModel.prefs.allowExternalBatchActions.getAsState()
@@ -965,10 +989,17 @@ fun AdvancedSettingsScreen(
 
             // Code adapted from Morphe, see third-party/NOTICE for more information
             // https://github.com/MorpheApp/morphe-manager/pull/795
-            GroupHeader(
-                stringResource(R.string.auto_patch_section),
-                icon = SettingsSectionIcons.Installer
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.auto_patch_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.auto_patch_section),
+                    icon = SettingsSectionIcons.Installer,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1000,7 +1031,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     val controlEnabled = !pendingAutoPatchShizukuPermission &&
-                        (autoPatchEnabled || autoPatchInstallWithShizuku)
+                        autoPatchEnabled
                     ExpressiveSettingsItem(
                         modifier = highlightModifier,
                         headlineContent = stringResource(
@@ -1012,13 +1043,8 @@ fun AdvancedSettingsScreen(
                         enabled = controlEnabled,
                         trailingContent = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                ExpressiveSettingsSwitch(
-                                    checked = autoPatchInstallWithShizuku,
-                                    enabled = controlEnabled,
-                                    onCheckedChange = setAutoPatchInstallWithShizuku
-                                )
                                 IconButton(
-                                    enabled = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled && autoPatchInstallWithShizuku,
                                     onClick = {
                                         autoPatchShizukuConflictOptionsExpanded =
                                             !autoPatchShizukuConflictOptionsExpanded
@@ -1033,6 +1059,11 @@ fun AdvancedSettingsScreen(
                                         contentDescription = null
                                     )
                                 }
+                                ExpressiveSettingsSwitch(
+                                    checked = autoPatchInstallWithShizuku,
+                                    enabled = controlEnabled,
+                                    onCheckedChange = setAutoPatchInstallWithShizuku
+                                )
                             }
                         },
                         onClick = {
@@ -1042,7 +1073,7 @@ fun AdvancedSettingsScreen(
                         }
                     )
                 }
-                if (autoPatchShizukuConflictOptionsExpanded) {
+                if (autoPatchShizukuConflictOptionsExpanded && autoPatchEnabled && autoPatchInstallWithShizuku) {
                     ExpressiveSettingsDivider()
                     SettingsSearchHighlight(
                         targetKey = R.string.auto_patch_shizuku_uninstall_on_conflict,
@@ -1050,9 +1081,7 @@ fun AdvancedSettingsScreen(
                         onHighlightComplete = { highlightTarget = null }
                     ) { highlightModifier ->
                         ExpressiveSettingsItem(
-                            modifier = highlightModifier
-                                .padding(start = 24.dp)
-                                .alpha(if (autoPatchInstallWithShizuku) 1f else 0.5f),
+                            modifier = highlightModifier.padding(start = 24.dp),
                             headlineContent = stringResource(
                                 R.string.auto_patch_shizuku_uninstall_on_conflict
                             ),
@@ -1086,8 +1115,7 @@ fun AdvancedSettingsScreen(
                     onHighlightComplete = { highlightTarget = null }
                 ) { highlightModifier ->
                     ExpressiveSettingsItem(
-                        modifier = highlightModifier
-                            .alpha(if (autoPatchEnabled) 1f else 0.5f),
+                        modifier = highlightModifier,
                         headlineContent = stringResource(
                             R.string.auto_patch_requires_charging
                         ),
@@ -1128,7 +1156,7 @@ fun AdvancedSettingsScreen(
                         },
                         secondaryActionEnabled = autoPatchEnabled &&
                             autoPatchInterval != viewModel.prefs.autoPatchInterval.default,
-                        primaryActionLabel = stringResource(R.string.configure),
+                        primaryActionLabel = stringResource(R.string.settings),
                         onPrimaryAction = { showAutoPatchIntervalDialog = true },
                         primaryActionEnabled = autoPatchEnabled
                     )
@@ -1203,10 +1231,17 @@ fun AdvancedSettingsScreen(
             }
 
             if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-            GroupHeader(
-                stringResource(R.string.safeguards_compatibility_section),
-                icon = SettingsSectionIcons.SafeguardsCompatibility
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.safeguards_compatibility_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.safeguards_compatibility_section),
+                    icon = SettingsSectionIcons.SafeguardsCompatibility,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1353,10 +1388,17 @@ fun AdvancedSettingsScreen(
                     }
                 )
             }
-            GroupHeader(
-                stringResource(R.string.patching_engine_section),
-                icon = SettingsSectionIcons.PatchingEngine
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_engine_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_engine_section),
+                    icon = SettingsSectionIcons.PatchingEngine,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1532,10 +1574,17 @@ fun AdvancedSettingsScreen(
             val autoExpandRunningStepsExclusive by
                 viewModel.prefs.autoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.patching_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patching_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patching_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1675,10 +1724,17 @@ fun AdvancedSettingsScreen(
             val splitMergeAutoExpandRunningStepsExclusive by
                 viewModel.prefs.splitMergeAutoExpandRunningStepsExclusive.getAsState()
 
-            GroupHeader(
-                stringResource(R.string.merge_split_flow_section),
-                icon = SettingsSectionIcons.PatchingFlow
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.merge_split_flow_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.merge_split_flow_section),
+                    icon = SettingsSectionIcons.PatchingFlow,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -1799,10 +1855,17 @@ fun AdvancedSettingsScreen(
                 }
             }
 
-            GroupHeader(
-                stringResource(R.string.saved_apps_section),
-                icon = SettingsSectionIcons.SavedApps
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.saved_apps_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.saved_apps_section),
+                    icon = SettingsSectionIcons.SavedApps,
+                    modifier = highlightModifier
+                )
+            }
             val savedAppsEnabled by viewModel.prefs.enableSavedApps.getAsState()
             val disableSavedAppOverwrite by viewModel.prefs.disableSavedAppOverwrite.getAsState()
             ExpressiveSettingsCard(
@@ -1869,10 +1932,17 @@ fun AdvancedSettingsScreen(
             val minimalPatchSelectionView =
                 !showPatchSelectionVersionTags && !showPatchSelectionOptionPreviews
 
-            GroupHeader(
-                stringResource(R.string.patch_list_display_section),
-                icon = SettingsSectionIcons.ActionButtonsPatchList
-            )
+            SettingsSearchHighlight(
+                targetKey = R.string.patch_list_display_section,
+                activeKey = highlightTarget,
+                onHighlightComplete = { highlightTarget = null }
+            ) { highlightModifier ->
+                GroupHeader(
+                    stringResource(R.string.patch_list_display_section),
+                    icon = SettingsSectionIcons.ActionButtonsPatchList,
+                    modifier = highlightModifier
+                )
+            }
             ExpressiveSettingsCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1938,10 +2008,17 @@ fun AdvancedSettingsScreen(
         }
 
         if (mode == AdvancedSettingsMode.ADVANCED_SYSTEM) {
-        GroupHeader(
-            stringResource(R.string.diagnostics_output_section),
-            icon = SettingsSectionIcons.DiagnosticsOutput
-        )
+        SettingsSearchHighlight(
+            targetKey = R.string.diagnostics_output_section,
+            activeKey = highlightTarget,
+            onHighlightComplete = { highlightTarget = null }
+        ) { highlightModifier ->
+            GroupHeader(
+                stringResource(R.string.diagnostics_output_section),
+                icon = SettingsSectionIcons.DiagnosticsOutput,
+                modifier = highlightModifier
+            )
+        }
         ExpressiveSettingsCard(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
@@ -2131,6 +2208,7 @@ private fun LanguageDialog(
         text = {
             val scrollState = rememberScrollState()
             ColumnWithScrollbar(
+                thumbLength = app.universal.patch.manager.ui.component.DASHBOARD_SCROLLBAR_THUMB_LENGTH,
                 state = scrollState,
                 modifier = Modifier
                     .heightIn(max = 360.dp)

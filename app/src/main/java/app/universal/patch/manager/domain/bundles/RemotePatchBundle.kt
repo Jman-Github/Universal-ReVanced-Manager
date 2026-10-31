@@ -541,7 +541,8 @@ class JsonPatchBundle(
         searchUpdate,
         lastNotifiedVersion,
         enabled,
-        channel == RepositoryBundleReleaseChannel.PRERELEASE,
+        if (channel == RepositoryBundleReleaseChannel.LATEST) usePrereleases
+        else channel == RepositoryBundleReleaseChannel.PRERELEASE,
         channel == RepositoryBundleReleaseChannel.LATEST,
         useSpecificVersion,
         selectedVersion,

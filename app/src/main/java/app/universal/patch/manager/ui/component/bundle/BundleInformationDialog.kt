@@ -490,7 +490,7 @@ fun BundleInformationDialog(
                         supportingText = stringResource(R.string.repository_bundle_prereleases_description),
                         trailingContent = {
                             ExpressiveSettingsSwitch(
-                                checked = repositoryBundle.usePrereleases,
+                                checked = repositoryBundle.usePrereleases && !repositoryBundle.useLatest && !repositoryBundle.useSpecificVersion,
                                 enabled = !repositoryBundle.useSpecificVersion && !repositoryBundle.useLatest,
                                 onCheckedChange = ::onRepositoryPrereleasesChange
                             )
@@ -507,7 +507,7 @@ fun BundleInformationDialog(
                         supportingText = stringResource(R.string.repository_bundle_latest_description),
                         trailingContent = {
                             ExpressiveSettingsSwitch(
-                                checked = repositoryBundle.useLatest,
+                                checked = repositoryBundle.useLatest && !repositoryBundle.useSpecificVersion,
                                 enabled = !repositoryBundle.useSpecificVersion,
                                 onCheckedChange = ::onRepositoryLatestChange
                             )
