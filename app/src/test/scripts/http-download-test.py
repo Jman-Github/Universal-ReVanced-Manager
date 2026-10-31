@@ -53,8 +53,8 @@ with tempfile.TemporaryDirectory(prefix="http-download-", dir=ROOT / "build") as
     deps.append(okhttp)
     (work / "Log.kt").write_text(
         'package android.util\nobject Log {\n'
-        'fun e(tag: String, message: String, error: Throwable? = null): Int = 0\n'
-        'fun w(tag: String, message: String, error: Throwable? = null): Int = 0\n}\n')
+        'fun e(tag: String, message: String, error: Throwable? = null): Int = error("Android logging is unavailable in JVM tests")\n'
+        'fun w(tag: String, message: String, error: Throwable? = null): Int = error("Android logging is unavailable in JVM tests")\n}\n')
     (work / "Tag.kt").write_text('package app.universal.patch.manager.util\nval Any.tag: String get() = "test"\n')
     sources = [work / "Log.kt", work / "Tag.kt",
                ROOT / "app/src/main/java/app/universal/patch/manager/network/utils/APIResponse.kt",

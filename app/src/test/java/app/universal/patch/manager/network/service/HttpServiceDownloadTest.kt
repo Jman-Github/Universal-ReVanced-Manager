@@ -74,7 +74,7 @@ class HttpServiceDownloadTest {
         val file = Files.createTempFile("upm-download", ".bin").toFile()
         try {
             client().use { client ->
-                runBlocking { HttpService(Json, client).downloadToFile(file, threads, { url(address) }) }
+                runBlocking { HttpService(Json, client, downloadWarning = { _, _ -> }).downloadToFile(file, threads, { url(address) }) }
             }
             return file.readBytes()
         } finally { file.delete() }
@@ -188,7 +188,7 @@ class HttpServiceDownloadTest {
                 client().use { client ->
                     runBlocking {
                         try {
-                            HttpService(Json, client).downloadToFile(file, 1, { url(address) })
+                            HttpService(Json, client, downloadWarning = { _, _ -> }).downloadToFile(file, 1, { url(address) })
                             fail("Truncated response must fail")
                         } catch (_: java.io.IOException) {
                             assertFalse(file.exists())
@@ -211,7 +211,7 @@ class HttpServiceDownloadTest {
                 client().use { client ->
                     runBlocking {
                         val job = launch {
-                            HttpService(Json, client).downloadToFile(file, builder = { url(address) })
+                            HttpService(Json, client, downloadWarning = { _, _ -> }).downloadToFile(file, builder = { url(address) })
                         }
                         withTimeout(3_000) { entered.await() }
                         withTimeout(3_000) { job.cancelAndJoin() }
@@ -230,7 +230,7 @@ class HttpServiceDownloadTest {
                 runBlocking {
                     var returned = false
                     val job = launch {
-                        HttpService(Json, client).request<String> { url(address) }
+                        HttpService(Json, client, downloadWarning = { _, _ -> }).request<String> { url(address) }
                         returned = true
                     }
                     withTimeout(3_000) { entered.await() }
@@ -253,7 +253,7 @@ class HttpServiceDownloadTest {
                 client().use { client ->
                     runBlocking {
                         val failure = runCatching {
-                            HttpService(Json, client).downloadToFile(target, builder = { url(address) },
+                            HttpService(Json, client, downloadWarning = { _, _ -> }).downloadToFile(target, builder = { url(address) },
                                 onProgress = { read, _ ->
                                     if (cancel && read > 0) throw CancellationException("Stop")
                                 })
@@ -289,7 +289,7 @@ class HttpServiceDownloadTest {
                 client().use { client ->
                     runBlocking {
                         try {
-                            HttpService(Json, client).downloadToFile(file, builder = { url(address) },
+                            HttpService(Json, client, downloadWarning = { _, _ -> }).downloadToFile(file, builder = { url(address) },
                                 onProgress = { read, _ -> if (read > 0) throw CancellationException("Stop") })
                             fail("Cancellation should escape")
                         } catch (_: CancellationException) {

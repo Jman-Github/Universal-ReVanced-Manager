@@ -46,6 +46,9 @@ import kotlin.math.abs
 class HttpService(
     val json: Json,
     val http: HttpClient,
+    private val downloadWarning: (String, Throwable) -> Unit = { message, error ->
+        Log.w("HttpService", message, error)
+    },
 ) {
     suspend inline fun <reified T> request(crossinline builder: HttpRequestBuilder.() -> Unit = {}): APIResponse<T> {
         var body: String? = null
@@ -217,10 +220,10 @@ class HttpService(
                         throw cancel
                     } catch (failure: IOException) {
                         // coroutineScope has joined every range worker before this file is truncated.
-                        Log.w(tag, "Parallel download failed; restarting with one stream", failure)
+                        downloadWarning("Parallel download failed; restarting with one stream", failure)
                         false
                     } catch (failure: HttpException) {
-                        Log.w(tag, "Parallel download rejected; restarting with one stream", failure)
+                        downloadWarning("Parallel download rejected; restarting with one stream", failure)
                         false
                     }
                 } else false
