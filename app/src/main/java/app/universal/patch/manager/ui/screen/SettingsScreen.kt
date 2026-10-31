@@ -426,6 +426,7 @@ fun SettingsScreen(onBackClick: () -> Unit, navigate: (Settings.Destination) -> 
             SearchEntry(R.string.storage_custom_backgrounds, R.string.storage_custom_backgrounds_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_temporary_workspace, R.string.storage_temporary_workspace_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_ui_temporary_workspace, R.string.storage_ui_temporary_workspace_description, R.string.storage_cache_management, Settings.Storage),
+            SearchEntry(R.string.storage_shared_apks, R.string.storage_shared_apks_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_other_internal_data, R.string.storage_other_internal_data_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_external_cache, R.string.storage_external_cache_description, R.string.storage_cache_management, Settings.Storage),
             SearchEntry(R.string.storage_external_files, R.string.storage_external_files_description, R.string.storage_cache_management, Settings.Storage),

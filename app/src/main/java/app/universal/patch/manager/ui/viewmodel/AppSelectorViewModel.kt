@@ -57,11 +57,11 @@ class AppSelectorViewModel(
     var storageSelectionInProgress by mutableStateOf(false)
         private set
 
-    val suggestedAppVersions = patchBundleRepository.suggestedVersions.flowOn(Dispatchers.Default)
+    val suggestedAppVersions = patchBundleRepository.appListSuggestedVersions.flowOn(Dispatchers.Default)
     val bundleSuggestionsByApp =
         combine(
-            patchBundleRepository.bundleInfoFlow,
-            patchBundleRepository.suggestedVersionsByBundle,
+            patchBundleRepository.appListBundleInfoFlow,
+            patchBundleRepository.appListSuggestedVersionsByBundle,
             patchBundleRepository.sources
         ) { bundleInfo, bundleVersions, sources ->
             val result = mutableMapOf<String, MutableList<BundleVersionSuggestion>>()

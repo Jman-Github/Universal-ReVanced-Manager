@@ -1,5 +1,6 @@
 package app.universal.patch.manager.ui.viewmodel
 
+import app.universal.patch.manager.data.platform.SharedApkFiles
 import android.app.Activity
 import android.app.Application
 import android.content.Intent
@@ -125,7 +126,7 @@ class MainViewModel(
         val sourcePath = sourceRecord.repatchSourcePath
             ?.takeIf(String::isNotBlank)
             ?: return null
-        val file = File(sourcePath).takeIf(File::isFile) ?: return null
+        val file = SharedApkFiles.resolve(File(sourcePath)).takeIf(File::isFile) ?: return null
         return SelectedApp.Local(
             packageName = packageName,
             version = sourceRecord.version,

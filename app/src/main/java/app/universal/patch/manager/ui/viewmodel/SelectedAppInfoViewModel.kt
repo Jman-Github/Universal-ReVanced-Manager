@@ -457,6 +457,9 @@ class SelectedAppInfoViewModel(
         allowUniversalPatches = prefs.disableUniversalPatchCheck.getBlocking()
 
         viewModelScope.launch {
+            // Cached app-list previews can open this screen before execution metadata is ready.
+            // Do not prune a remembered selection against the initial empty bundle state.
+            bundleRepository.awaitReady()
             selectedAppState
                 .flatMapLatest { app ->
                     bundleRepository.scopedBundleInfoFlow(app.packageName, app.version, app.versionCode)
@@ -606,6 +609,7 @@ class SelectedAppInfoViewModel(
 
     private fun loadProfileConfiguration(id: Int) {
         viewModelScope.launch(Dispatchers.Default) {
+            bundleRepository.awaitReady()
             val profile = patchProfileRepository.getProfile(id) ?: run {
                 withContext(Dispatchers.Main) {
                     app.toast(app.getString(R.string.patch_profile_launch_error))
@@ -714,6 +718,7 @@ class SelectedAppInfoViewModel(
     private fun applySavedSelectionPayload(payload: PatchProfilePayload) {
         val hasPayloadOptions = payload.bundles.any { it.options.isNotEmpty() }
         viewModelScope.launch(Dispatchers.Default) {
+            bundleRepository.awaitReady()
             val sourcesList = bundleRepository.sources.first()
             val bundleInfoSnapshot = bundleRepository.bundleInfoFlow.first()
             val signatureMap = bundleInfoSnapshot.mapValues { (_, info) ->

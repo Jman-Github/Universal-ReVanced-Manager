@@ -84,6 +84,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -137,7 +138,7 @@ class PatchBundleRepository(
     private val bundlesDir = filesystem.patchBundlesDir
 
     private val scope = CoroutineScope(Dispatchers.Default)
-    private val store = Store(scope, State())
+    private val store = Store(scope, State(metadataLoaded = false))
     private val bundleDigestHashCache = ConcurrentHashMap<Int, String>()
 
     val sources = store.state.map { it.sources.values.toList() }
@@ -145,6 +146,11 @@ class PatchBundleRepository(
         it.sources.mapNotNull { (uid, src) ->
             uid to (src.patchBundle ?: return@mapNotNull null)
         }.toMap()
+    }
+    private val cachedAppList = MutableStateFlow<Map<Int, PatchBundleInfo.Global>>(emptyMap())
+    // Preview metadata is never exposed to patch execution or option editors.
+    val appListBundleInfoFlow = kotlinx.coroutines.flow.combine(cachedAppList, store.state) { cached, state ->
+        (if (state.metadataLoaded) state.info else cached).filterValues { it.enabled }
     }
     val allBundlesInfoFlow = store.state.map { it.info }
     val enabledBundlesInfoFlow = allBundlesInfoFlow.map { info ->
@@ -223,7 +229,7 @@ class PatchBundleRepository(
 
     val patchCountsFlow = allBundlesInfoFlow.map { it.mapValues { (_, info) -> info.patches.size } }
 
-    val suggestedVersions = enabledBundlesInfoFlow.map { bundleInfos ->
+    private fun suggestedVersionsForFlow(flow: Flow<Map<Int, PatchBundleInfo.Global>>) = flow.map { bundleInfos ->
         val revancedPatches = bundleInfos.values
             .filter { it.bundleType == PatchBundleType.REVANCED }
             .flatMap { info -> info.patches.map(PatchInfo::toPatcherPatch) }
@@ -236,7 +242,7 @@ class PatchBundleRepository(
         morpheSuggested + revancedSuggested
     }
 
-    val suggestedVersionsByBundle = enabledBundlesInfoFlow.map { bundleInfos ->
+    private fun suggestedVersionsByBundleForFlow(flow: Flow<Map<Int, PatchBundleInfo.Global>>) = flow.map { bundleInfos ->
         bundleInfos.mapValues { (_, info) ->
             when (info.bundleType) {
                 PatchBundleType.REVANCED -> {
@@ -251,6 +257,11 @@ class PatchBundleRepository(
             }
         }
     }
+
+    val suggestedVersions = suggestedVersionsForFlow(enabledBundlesInfoFlow)
+    val suggestedVersionsByBundle = suggestedVersionsByBundleForFlow(enabledBundlesInfoFlow)
+    val appListSuggestedVersions = suggestedVersionsForFlow(appListBundleInfoFlow)
+    val appListSuggestedVersionsByBundle = suggestedVersionsByBundleForFlow(appListBundleInfoFlow)
 
     private val manualUpdateInfoFlow = MutableStateFlow<Map<Int, ManualBundleUpdateInfo>>(emptyMap())
     val manualUpdateInfo: StateFlow<Map<Int, ManualBundleUpdateInfo>> = manualUpdateInfoFlow.asStateFlow()
@@ -743,6 +754,13 @@ class PatchBundleRepository(
         val entities = loadFromDb()
 
         val sources = entities.associate { it.uid to it.load() }.toMutableMap()
+        cachedAppList.value = withContext(Dispatchers.IO) {
+            sources.mapNotNull { (uid, source) ->
+                if (source.patchBundle == null) return@mapNotNull null
+                PatchableAppCache.read(directoryOf(uid), uid, source.displayTitle, source.version, source.enabled)
+                    ?.let { uid to it }
+            }.toMap()
+        }
         val entityByUid = entities.associateBy { it.uid }
         sources.forEach { (uid, source) ->
             val remote = source as? RemotePatchBundle ?: return@forEach
@@ -1266,6 +1284,9 @@ class PatchBundleRepository(
                     src.enabled,
                     patches
                 )
+                withContext(Dispatchers.IO) {
+                    PatchableAppCache.write(directoryOf(src.uid), metadata.getValue(src.uid))
+                }
             } catch (error: Throwable) {
                 detectDeclaredBundleType(bundle, src)?.let { declaredType ->
                     metadata[src.uid] = PatchBundleInfo.Global(
@@ -3656,7 +3677,8 @@ class PatchBundleRepository(
 
     data class State(
         val sources: PersistentMap<Int, PatchBundleSource> = persistentMapOf(),
-        val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf()
+        val info: PersistentMap<Int, PatchBundleInfo.Global> = persistentMapOf(),
+        val metadataLoaded: Boolean = true
     )
 
     data class BundleUpdateProgress(

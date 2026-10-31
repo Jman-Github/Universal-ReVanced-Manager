@@ -46,7 +46,13 @@ class BoundRuntimeClient(private val context: Context) {
         val request = File.createTempFile("runtime-request-", ".json", context.cacheDir)
         try {
             withContext(Dispatchers.IO) {
-                request.writeText(RuntimeProtocol.encode(params + ("device" to deviceFacts())).toString())
+                // Tools jobs (split merging/signature operations) do not supply a patcher cache.
+                // Standalone ART needs one before loading any runtime, including built-in tools.
+                val requestParams = params + mapOf(
+                    "cacheDir" to ((params["cacheDir"] as? String) ?: context.cacheDir.path),
+                    "device" to deviceFacts()
+                )
+                request.writeText(RuntimeProtocol.encode(requestParams).toString())
             }
             if (engine.host != null && PatcherJvm.get(context).isEnabled()) {
                 try {
